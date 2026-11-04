@@ -6,7 +6,6 @@
 //! resource-owned projection. Roles, groups and bindings stay separate from
 //! instance management permissions.
 
-pub mod binding;
 pub mod client;
 pub mod cursor;
 pub mod group;
@@ -18,14 +17,8 @@ pub mod role;
 pub mod scope;
 pub mod service;
 pub mod service_group;
+pub mod user_role;
 
-pub use binding::{
-    AssignUserRolesCommand, EffectiveGroupPermissionSourceRecord, EffectivePermissionOrder,
-    EffectivePermissionPage, EffectivePermissionPageItem, EffectivePermissionPageRequest,
-    EffectivePermissionRecord, EffectivePermissionSourceRecord, RevokeUserRolesCommand,
-    RoleUserPageRequest, UserRoleBindingMutationResult, UserRoleBindingOrder, UserRoleBindingPage,
-    UserRoleBindingPageItem, UserRoleBindingRecord, UserRolePageRequest,
-};
 pub use client::{
     ClientScopeAssignment, ClientScopePage, ClientScopePageItem, ClientScopePageRequest,
     ClientScopeSetResult, ClientScopeTargetFilter, ClientScopeTargetOrder, ClientScopeTargetPage,
@@ -37,10 +30,9 @@ pub use group::{
     GroupMembershipFilter, GroupMembershipMutationResult, GroupMembershipOrder,
     GroupMembershipPage, GroupMembershipPageItem, GroupMembershipPageRequest,
     GroupMembershipRecord, GroupOrder, GroupPage, GroupPageItem, GroupPageRequest, GroupRecord,
-    GroupRoleBindingRecord, GroupRoleFilter, GroupRoleMutationResult, GroupRoleOrder,
-    GroupRolePage, GroupRolePageItem, GroupRolePageRequest, GroupStateCommand,
-    MAX_GROUP_MEMBERSHIPS, MAX_GROUP_ROLES, RemoveGroupMemberCommand, SetGroupRolesCommand,
-    UpdateGroupCommand,
+    GroupRoleFilter, GroupRoleMutationResult, GroupRoleOrder, GroupRolePage, GroupRolePageItem,
+    GroupRolePageRequest, GroupRoleRecord, GroupStateCommand, MAX_GROUP_MEMBERSHIPS,
+    MAX_GROUP_ROLES, RemoveGroupMemberCommand, SetGroupRolesCommand, UpdateGroupCommand,
 };
 pub use group_repository::{
     AddGroupMemberTransaction, CreateGroupTransaction, DeleteGroupTransaction, GroupEntityKind,
@@ -59,8 +51,8 @@ pub use repository::{
     ResourceQuery, ResourceStateTransaction, RevokeUserRolesTransaction, RolePageEntry, RoleQuery,
     RoleStateTransaction, ScopePageEntry, ScopeQuery, ScopeStateTransaction,
     SetClientScopesTransaction, SetRolePermissionsTransaction, SharedRbacManagementRepository,
-    UpdateResourceTransaction, UpdateRoleTransaction, UpdateScopeTransaction,
-    UserRoleBindingPageData, UserRoleBindingPageEntry, UserRoleBindingQuery,
+    UpdateResourceTransaction, UpdateRoleTransaction, UpdateScopeTransaction, UserRolePageData,
+    UserRolePageEntry, UserRoleQuery,
 };
 pub use resource::{
     ApiResourceRecord, CreateResourceCommand, ResourceFilter, ResourceOrder, ResourcePage,
@@ -76,3 +68,10 @@ pub use scope::{
 };
 pub use service::RbacManagementService;
 pub use service_group::GroupManagementService;
+pub use user_role::{
+    AssignUserRolesCommand, EffectiveGroupPermissionSourceRecord, EffectivePermissionOrder,
+    EffectivePermissionPage, EffectivePermissionPageItem, EffectivePermissionPageRequest,
+    EffectivePermissionRecord, EffectivePermissionSourceRecord, RevokeUserRolesCommand,
+    RoleUserPageRequest, UserRoleMutationResult, UserRoleOrder, UserRolePage, UserRolePageItem,
+    UserRolePageRequest, UserRoleRecord,
+};

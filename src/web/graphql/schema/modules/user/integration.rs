@@ -54,6 +54,20 @@ fn record_parts(record: UserManagementMutationResult) -> User {
     record.user
 }
 
+/// Users referenced by one page of relation edges.
+pub(crate) async fn find_users(
+    request: &RequestContext,
+    users: Vec<UserOid>,
+) -> Result<Vec<User>, AppError> {
+    let records = request
+        .state
+        .services()
+        .user_management()
+        .find_users(users)
+        .await?;
+    Ok(records.into_iter().map(|record| record.user).collect())
+}
+
 pub(crate) async fn find_user(
     request: &RequestContext,
     user: UserOid,

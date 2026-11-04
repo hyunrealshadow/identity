@@ -3,12 +3,11 @@
 use identity_application::rbac::{
     GroupEntityKind, GroupFilter, GroupManagementRepositoryError, GroupMembershipPageEntry,
     GroupMembershipQuery, GroupMembershipRecord, GroupOrder, GroupPageData, GroupPageEntry,
-    GroupQuery, GroupRecord, GroupRoleBindingRecord, GroupRoleOrder, GroupRolePageEntry,
-    GroupRoleQuery,
+    GroupQuery, GroupRecord, GroupRoleOrder, GroupRolePageEntry, GroupRoleQuery, GroupRoleRecord,
     cursor::{RbacPageDirection, RbacSortKey, RbacTie},
 };
 use identity_domain::{
-    rbac::{GroupMembershipOid, GroupOid, GroupRoleBindingOid, RoleOid},
+    rbac::{GroupMembershipOid, GroupOid, GroupRoleOid, RoleOid},
     user::UserOid,
 };
 use sea_orm::{ConnectionTrait, DatabaseTransaction, DbBackend, Statement};
@@ -100,9 +99,9 @@ pub(crate) fn membership_from_row(
 
 pub(crate) fn group_role_from_row(
     row: &sea_orm::QueryResult,
-) -> Result<(GroupRoleBindingRecord, String), GroupManagementRepositoryError> {
-    let record = GroupRoleBindingRecord {
-        oid: GroupRoleBindingOid(row.try_get::<Uuid>("", "oid").map_err(storage)?),
+) -> Result<(GroupRoleRecord, String), GroupManagementRepositoryError> {
+    let record = GroupRoleRecord {
+        oid: GroupRoleOid(row.try_get::<Uuid>("", "oid").map_err(storage)?),
         group_oid: GroupOid(row.try_get::<Uuid>("", "group_oid").map_err(storage)?),
         role_oid: RoleOid(row.try_get::<Uuid>("", "role_oid").map_err(storage)?),
         granted_by_user_oid: row
@@ -157,39 +156,6 @@ pub(crate) async fn load_membership_by_oid<C: ConnectionTrait>(
         .map_err(storage)?
         .ok_or_else(|| not_found(GroupEntityKind::Membership))?;
     membership_from_row(&row)
-}
-
-pub(crate) async fn find_membership_by_oid<C: ConnectionTrait>(
-    db: &C,
-    oid: GroupMembershipOid,
-) -> Result<Option<GroupMembershipRecord>, GroupManagementRepositoryError> {
-    let row = db
-        .query_one_raw(Statement::from_sql_and_values(
-            DbBackend::Postgres,
-            format!("{MEMBERSHIP_SELECT} WHERE gm.oid = $1 AND g.deleted_at IS NULL"),
-            [Uuid::from(oid).into()],
-        ))
-        .await
-        .map_err(storage)?;
-    row.as_ref().map(membership_from_row).transpose()
-}
-
-pub(crate) async fn find_group_role_by_oid<C: ConnectionTrait>(
-    db: &C,
-    oid: GroupRoleBindingOid,
-) -> Result<Option<GroupRoleBindingRecord>, GroupManagementRepositoryError> {
-    let row = db
-        .query_one_raw(Statement::from_sql_and_values(
-            DbBackend::Postgres,
-            format!("{GROUP_ROLE_SELECT} WHERE grb.oid = $1 AND g.deleted_at IS NULL"),
-            [Uuid::from(oid).into()],
-        ))
-        .await
-        .map_err(storage)?;
-    row.as_ref()
-        .map(group_role_from_row)
-        .transpose()
-        .map(|value| value.map(|(record, _)| record))
 }
 
 pub(crate) async fn load_group_by_id_locked(
@@ -292,20 +258,6 @@ impl GroupManagementRepositoryImpl {
         oid: GroupOid,
     ) -> Result<Option<GroupRecord>, GroupManagementRepositoryError> {
         load_group_by_oid(&self.db, oid).await
-    }
-
-    pub(crate) async fn membership_find(
-        &self,
-        oid: GroupMembershipOid,
-    ) -> Result<Option<GroupMembershipRecord>, GroupManagementRepositoryError> {
-        find_membership_by_oid(&self.db, oid).await
-    }
-
-    pub(crate) async fn group_role_find(
-        &self,
-        oid: GroupRoleBindingOid,
-    ) -> Result<Option<GroupRoleBindingRecord>, GroupManagementRepositoryError> {
-        find_group_role_by_oid(&self.db, oid).await
     }
 
     pub(crate) async fn group_list(

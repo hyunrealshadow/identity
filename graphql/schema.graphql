@@ -259,12 +259,14 @@ type DeleteGroupPayload {
 	clientMutationId: String
 }
 
+"""
+A role granted through one of the user's active groups.
+"""
 type EffectiveGroupPermissionSource {
 	groupId: ID!
-	membershipId: ID!
-	groupRoleBindingId: ID!
 	roleId: ID!
 	group: Group @access(policy: {scopes: ["management.group.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	role: Role @access(policy: {scopes: ["management.role.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 }
 
 type EffectivePermission {
@@ -297,9 +299,12 @@ enum EffectivePermissionOrder {
 	CODE_DESC
 }
 
+"""
+A role assigned directly to the user that grants the permission.
+"""
 type EffectivePermissionSource {
-	bindingId: ID!
 	roleId: ID!
+	role: Role @access(policy: {scopes: ["management.role.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 }
 
 type EffectivePermissions {
@@ -321,8 +326,14 @@ type Group implements Node {
 	version: UUID!
 	createdAt: DateTime!
 	updatedAt: DateTime
-	members(filter: GroupMembershipFilter, orderBy: GroupMembershipOrder, first: Int, after: String, last: Int, before: String): GroupMembershipConnection! @access(policy: {scopes: ["management.group_membership.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
-	roles(filter: GroupRoleFilter, orderBy: GroupRoleOrder, first: Int, after: String, last: Int, before: String): GroupRoleBindingConnection! @access(policy: {scopes: ["management.group_role.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
+	Users in the group, with the membership facts on each edge.
+	"""
+	members(filter: GroupMembershipFilter, orderBy: GroupMembershipOrder, first: Int, after: String, last: Int, before: String): GroupMemberConnection! @access(policy: {scopes: ["management.group_membership.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true}) @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
+	Roles granted to the group, with the group-role facts on each edge.
+	"""
+	roles(filter: GroupRoleFilter, orderBy: GroupRoleOrder, first: Int, after: String, last: Int, before: String): GroupRoleConnection! @access(policy: {scopes: ["management.group_role.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true}) @access(policy: {scopes: ["management.role.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 }
 
 type GroupConnection {
@@ -363,30 +374,7 @@ input GroupFilter {
 	roleId: ID
 }
 
-type GroupMemberPayload {
-	groupId: ID!
-	userId: ID!
-	membershipId: ID!
-	groupVersion: UUID!
-	membershipVersion: UUID!
-	clientMutationId: String
-}
-
-type GroupMembership implements Node {
-	id: ID!
-	groupId: ID!
-	userId: ID!
-	user: User @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
-	grantedByUserId: ID
-	reason: String!
-	enabled: Boolean!
-	revokedAt: DateTime
-	version: UUID!
-	createdAt: DateTime!
-	updatedAt: DateTime
-}
-
-type GroupMembershipConnection {
+type GroupMemberConnection {
 	"""
 	Information to aid in pagination.
 	"""
@@ -394,25 +382,48 @@ type GroupMembershipConnection {
 	"""
 	A list of edges.
 	"""
-	edges: [GroupMembershipEdge!]!
+	edges: [GroupMemberEdge!]!
 	"""
 	A list of nodes.
 	"""
-	nodes: [GroupMembership!]!
+	nodes: [User!]!
 }
 
 """
 An edge in a connection.
 """
-type GroupMembershipEdge {
+type GroupMemberEdge {
 	"""
 	The item at the end of the edge
 	"""
-	node: GroupMembership!
+	node: User!
+	"""
+	Whether the relation is active. Revoked relations remain as history.
+	"""
+	enabled: Boolean!
+	revokedAt: DateTime
+	reason: String!
+	"""
+	When the relation was granted.
+	"""
+	createdAt: DateTime!
+	updatedAt: DateTime
+	"""
+	The user who granted the relation, when one was recorded and still
+	exists.
+	"""
+	grantedBy: User @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	"""
 	A cursor for use in pagination
 	"""
 	cursor: String!
+}
+
+type GroupMemberPayload {
+	groupId: ID!
+	userId: ID!
+	groupVersion: UUID!
+	clientMutationId: String
 }
 
 input GroupMembershipFilter {
@@ -436,21 +447,7 @@ type GroupPayload {
 	clientMutationId: String
 }
 
-type GroupRoleBinding implements Node {
-	id: ID!
-	groupId: ID!
-	roleId: ID!
-	role: Role @access(policy: {scopes: ["management.role.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
-	grantedByUserId: ID
-	reason: String!
-	enabled: Boolean!
-	revokedAt: DateTime
-	version: UUID!
-	createdAt: DateTime!
-	updatedAt: DateTime
-}
-
-type GroupRoleBindingConnection {
+type GroupRoleConnection {
 	"""
 	Information to aid in pagination.
 	"""
@@ -458,21 +455,37 @@ type GroupRoleBindingConnection {
 	"""
 	A list of edges.
 	"""
-	edges: [GroupRoleBindingEdge!]!
+	edges: [GroupRoleEdge!]!
 	"""
 	A list of nodes.
 	"""
-	nodes: [GroupRoleBinding!]!
+	nodes: [Role!]!
 }
 
 """
 An edge in a connection.
 """
-type GroupRoleBindingEdge {
+type GroupRoleEdge {
 	"""
 	The item at the end of the edge
 	"""
-	node: GroupRoleBinding!
+	node: Role!
+	"""
+	Whether the relation is active. Revoked relations remain as history.
+	"""
+	enabled: Boolean!
+	revokedAt: DateTime
+	reason: String!
+	"""
+	When the relation was granted.
+	"""
+	createdAt: DateTime!
+	updatedAt: DateTime
+	"""
+	The user who granted the relation, when one was recorded and still
+	exists.
+	"""
+	grantedBy: User @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	"""
 	A cursor for use in pagination
 	"""
@@ -608,8 +621,8 @@ type MutationRoot {
 	enableRole(input: RoleStateInput!): RolePayload! @access(policy: {scopes: ["management.role.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
 	disableRole(input: RoleStateInput!): RolePayload! @access(policy: {scopes: ["management.role.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
 	setRolePermissions(input: SetRolePermissionsInput!): RolePayload! @access(policy: {scopes: ["management.role.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
-	assignUserRoles(input: AssignUserRolesInput!): UserRoleBindingPayload! @access(policy: {scopes: ["management.role_assignment.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
-	revokeUserRoles(input: RevokeUserRolesInput!): UserRoleBindingPayload! @access(policy: {scopes: ["management.role_assignment.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	assignUserRoles(input: AssignUserRolesInput!): UserRolesPayload! @access(policy: {scopes: ["management.role_assignment.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	revokeUserRoles(input: RevokeUserRolesInput!): UserRolesPayload! @access(policy: {scopes: ["management.role_assignment.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
 	setClientScopes(input: SetClientScopesInput!): ClientScopeSetPayload! @access(policy: {scopes: ["management.client.scope"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 }
 
@@ -699,9 +712,6 @@ type QueryRoot {
 	scopes(filter: ScopeFilter, orderBy: ScopeOrder, first: Int, after: String, last: Int, before: String): ScopeConnection! @access(policy: {scopes: ["management.scope.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	role(id: ID!): Role @access(policy: {scopes: ["management.role.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	roles(filter: RoleFilter, orderBy: RoleOrder, first: Int, after: String, last: Int, before: String): RoleConnection! @access(policy: {scopes: ["management.role.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
-	userRoles(userId: ID!, enabled: Boolean, orderBy: UserRoleBindingOrder, first: Int, after: String, last: Int, before: String): UserRoleBindingConnection! @access(policy: {scopes: ["management.role_assignment.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
-	roleUsers(roleId: ID!, enabled: Boolean, orderBy: UserRoleBindingOrder, first: Int, after: String, last: Int, before: String): UserRoleBindingConnection! @access(policy: {scopes: ["management.role_assignment.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
-	userPermissions(userId: ID!, resourceId: ID!, orderBy: EffectivePermissionOrder, first: Int, after: String, last: Int, before: String): EffectivePermissionConnection! @access(policy: {scopes: ["management.role_assignment.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	"""
 	Self-only account summary. This field deliberately carries only the
 	existing `account.read` self-service scope and accepts no caller-supplied
@@ -850,7 +860,10 @@ type Role implements Node {
 	authorization meaning; nodes are canonical `Scope` identities.
 	"""
 	permissions(filter: ScopeFilter, orderBy: ScopeOrder, first: Int, after: String, last: Int, before: String): ScopeConnection! @access(policy: {scopes: ["management.scope.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
-	users(enabled: Boolean, orderBy: UserRoleBindingOrder, first: Int, after: String, last: Int, before: String): UserRoleBindingConnection! @access(policy: {scopes: ["management.role_assignment.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
+	Users assigned this role, with the assignment facts on each edge.
+	"""
+	users(enabled: Boolean, orderBy: UserRoleOrder, first: Int, after: String, last: Int, before: String): RoleUserConnection! @access(policy: {scopes: ["management.role_assignment.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true}) @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 }
 
 type RoleConnection {
@@ -912,6 +925,51 @@ input RoleStateInput {
 	expectedVersion: UUID!
 	reason: String! = ""
 	clientMutationId: String
+}
+
+type RoleUserConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [RoleUserEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [User!]!
+}
+
+"""
+An edge in a connection.
+"""
+type RoleUserEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: User!
+	"""
+	Whether the relation is active. Revoked relations remain as history.
+	"""
+	enabled: Boolean!
+	revokedAt: DateTime
+	reason: String!
+	"""
+	When the relation was granted.
+	"""
+	createdAt: DateTime!
+	updatedAt: DateTime
+	"""
+	The user who granted the relation, when one was recorded and still
+	exists.
+	"""
+	grantedBy: User @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
 }
 
 type Scope implements Node {
@@ -1212,7 +1270,11 @@ input UpdateUsernameInput {
 type User implements Node {
 	id: ID!
 	groups(filter: GroupFilter, orderBy: GroupOrder, first: Int, after: String, last: Int, before: String): GroupConnection! @access(policy: {scopes: ["management.group.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true}) @access(policy: {scopes: ["management.group_membership.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
-	roleBindings(enabled: Boolean, orderBy: UserRoleBindingOrder, first: Int, after: String, last: Int, before: String): UserRoleBindingConnection! @access(policy: {scopes: ["management.role_assignment.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
+	Roles assigned directly to the user, with the assignment facts on each
+	edge. `userVersion` is the expected version for assigning or revoking.
+	"""
+	roles(enabled: Boolean, orderBy: UserRoleOrder, first: Int, after: String, last: Int, before: String): UserRoleConnection! @access(policy: {scopes: ["management.role_assignment.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true}) @access(policy: {scopes: ["management.role.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	effectivePermissions(resourceId: ID!, orderBy: EffectivePermissionOrder, first: Int, after: String, last: Int, before: String): EffectivePermissionConnection! @access(policy: {scopes: ["management.role_assignment.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	username: String!
 	email: String!
@@ -1309,23 +1371,7 @@ input UserProfilePatchInput {
 	addressCountry: String
 }
 
-type UserRoleBinding {
-	id: ID!
-	userId: ID!
-	user: User @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
-	roleId: ID!
-	role: Role @access(policy: {scopes: ["management.role.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
-	grantedByUserId: ID
-	reason: String!
-	enabled: Boolean!
-	revokedAt: DateTime
-	version: UUID!
-	userVersion: UUID!
-	createdAt: DateTime!
-	updatedAt: DateTime
-}
-
-type UserRoleBindingConnection {
+type UserRoleConnection {
 	"""
 	Information to aid in pagination.
 	"""
@@ -1333,45 +1379,60 @@ type UserRoleBindingConnection {
 	"""
 	A list of edges.
 	"""
-	edges: [UserRoleBindingEdge!]!
+	edges: [UserRoleEdge!]!
 	"""
 	A list of nodes.
 	"""
-	nodes: [UserRoleBinding!]!
-	userVersion: UUID @access(policy: {scopes: ["management.role_assignment.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	nodes: [Role!]!
+	userVersion: UUID!
 }
 
 """
 An edge in a connection.
 """
-type UserRoleBindingEdge {
+type UserRoleEdge {
 	"""
 	The item at the end of the edge
 	"""
-	node: UserRoleBinding!
+	node: Role!
+	"""
+	Whether the relation is active. Revoked relations remain as history.
+	"""
+	enabled: Boolean!
+	revokedAt: DateTime
+	reason: String!
+	"""
+	When the relation was granted.
+	"""
+	createdAt: DateTime!
+	updatedAt: DateTime
+	"""
+	The user who granted the relation, when one was recorded and still
+	exists.
+	"""
+	grantedBy: User @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	"""
 	A cursor for use in pagination
 	"""
 	cursor: String!
 }
 
-enum UserRoleBindingOrder {
+enum UserRoleOrder {
 	CREATED_AT_ASC
 	CREATED_AT_DESC
 }
 
-type UserRoleBindingPayload {
+type UserRolesPayload {
 	userId: ID!
 	userVersion: UUID!
-	bindingIds: [ID!]!
 	createdCount: Int!
 	revokedCount: Int!
 	"""
-	Expanded bindings for the server-produced IDs returned by this
-	mutation. Scalar payload fields stay unguarded so a writer without read
-	authority can still confirm the write; only this read object is guarded.
+	The changed user, for refetching `roles`. Scalar payload fields stay
+	unguarded so a writer without read authority can still confirm the
+	write.
 	"""
-	bindings: [UserRoleBinding!] @access(policy: {scopes: ["management.role_assignment.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	user: User @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	clientMutationId: String
 }
 

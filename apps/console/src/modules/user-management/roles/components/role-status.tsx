@@ -71,7 +71,7 @@ export function RoleStatusChip({
   )
 }
 
-export function BindingStatusChip({
+export function AssignmentStatusChip({
   enabled,
   revokedAt,
   roleEnabled,
@@ -84,20 +84,20 @@ export function BindingStatusChip({
   if (!enabled || revokedAt) {
     return (
       <Chip size="sm" variant="soft" color="default">
-        <Chip.Label>{t('bindingRevoked')}</Chip.Label>
+        <Chip.Label>{t('assignmentRevoked')}</Chip.Label>
       </Chip>
     )
   }
   if (roleEnabled === false) {
     return (
       <Chip size="sm" variant="soft" color="warning">
-        <Chip.Label>{t('bindingActiveRoleDisabled')}</Chip.Label>
+        <Chip.Label>{t('assignmentActiveRoleDisabled')}</Chip.Label>
       </Chip>
     )
   }
   return (
     <Chip size="sm" variant="soft" color="success">
-      <Chip.Label>{t('bindingActive')}</Chip.Label>
+      <Chip.Label>{t('assignmentActive')}</Chip.Label>
     </Chip>
   )
 }

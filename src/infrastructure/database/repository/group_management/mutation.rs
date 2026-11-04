@@ -15,9 +15,7 @@ use identity_application::rbac::{
 };
 use identity_domain::{
     authorization::ManagementScope,
-    rbac::{
-        GroupMembershipOid, GroupRoleBindingOid, LocalizedMetadata, LocalizedTextError, RoleOid,
-    },
+    rbac::{GroupMembershipOid, GroupRoleOid, LocalizedMetadata, LocalizedTextError, RoleOid},
     user::UserOid,
 };
 use sea_orm::{
@@ -661,11 +659,11 @@ impl GroupManagementRepositoryImpl {
             ))
             .await
             .map_err(storage)?;
-        let mut current_bindings: BTreeMap<i64, GroupRoleBindingOid> = BTreeMap::new();
+        let mut current_bindings: BTreeMap<i64, GroupRoleOid> = BTreeMap::new();
         for row in current_rows {
             current_bindings.insert(
                 row.try_get::<i64>("", "role_id").map_err(storage)?,
-                GroupRoleBindingOid(row.try_get::<Uuid>("", "oid").map_err(storage)?),
+                GroupRoleOid(row.try_get::<Uuid>("", "oid").map_err(storage)?),
             );
         }
         let proposed_ids: BTreeSet<i64> = roles.iter().map(|role| role.id).collect();
@@ -708,7 +706,7 @@ impl GroupManagementRepositoryImpl {
             .map_err(storage)?;
         }
         for role in roles.iter().filter(|role| added_ids.contains(&role.id)) {
-            let binding_oid = GroupRoleBindingOid::new();
+            let binding_oid = GroupRoleOid::new();
             txn.execute_raw(Statement::from_sql_and_values(
                 DbBackend::Postgres,
                 "INSERT INTO group_role(oid, group_id, role_id, granted_by_user_id, \

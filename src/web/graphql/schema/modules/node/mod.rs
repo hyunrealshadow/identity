@@ -9,7 +9,7 @@ use identity_domain::{
     auth::SessionOid,
     authorization::ManagementScope,
     openid_connect::ApiScope,
-    rbac::{GroupMembershipOid, GroupOid, GroupRoleBindingOid, ResourceOid, RoleOid},
+    rbac::{GroupOid, ResourceOid, RoleOid},
     user::UserOid,
 };
 use identity_infrastructure::graphql::id::DecodedGlobalId;
@@ -19,10 +19,7 @@ use super::{
     account::{UserGlobalId, UserNode},
     group::{
         integration as group_integration,
-        types::{
-            GroupGlobalId, GroupMembershipGlobalId, GroupMembershipNode, GroupNode,
-            GroupRoleBindingGlobalId, GroupRoleBindingNode,
-        },
+        types::{GroupGlobalId, GroupNode},
     },
     resource::{
         integration as resource_integration,
@@ -81,8 +78,6 @@ enum Node {
     Scope(Box<ScopeNode>),
     Role(Box<RoleNode>),
     Group(Box<GroupNode>),
-    GroupMembership(Box<GroupMembershipNode>),
-    GroupRoleBinding(Box<GroupRoleBindingNode>),
 }
 
 async fn load_node(ctx: &Context<'_>, id: &ID) -> Result<Option<Node>> {
@@ -179,42 +174,6 @@ async fn load_node(ctx: &Context<'_>, id: &ID) -> Result<Option<Node>> {
             .await
             .map_err(|error| app_error(ctx, error))?;
         Ok(record.map(GroupNode::new).map(Box::new).map(Node::from))
-    } else if decoded.is::<GroupMembershipGlobalId>() {
-        let oid = decoded
-            .into_typed::<GroupMembershipGlobalId>()
-            .map_err(|_| coded_error(ctx, GraphqlErrorCode::InvalidGlobalId, ErrorParams::new()))?
-            .oid();
-        ManagementGuard::new(
-            ManagementScope::GroupMembershipsRead,
-            ManagementTarget::instance(),
-        )
-        .check(ctx)
-        .await?;
-        let record = group_integration::find_group_membership(request, GroupMembershipOid(oid))
-            .await
-            .map_err(|error| app_error(ctx, error))?;
-        Ok(record
-            .map(GroupMembershipNode::new)
-            .map(Box::new)
-            .map(Node::from))
-    } else if decoded.is::<GroupRoleBindingGlobalId>() {
-        let oid = decoded
-            .into_typed::<GroupRoleBindingGlobalId>()
-            .map_err(|_| coded_error(ctx, GraphqlErrorCode::InvalidGlobalId, ErrorParams::new()))?
-            .oid();
-        ManagementGuard::new(
-            ManagementScope::GroupRolesRead,
-            ManagementTarget::instance(),
-        )
-        .check(ctx)
-        .await?;
-        let record = group_integration::find_group_role_binding(request, GroupRoleBindingOid(oid))
-            .await
-            .map_err(|error| app_error(ctx, error))?;
-        Ok(record
-            .map(GroupRoleBindingNode::new)
-            .map(Box::new)
-            .map(Node::from))
     } else {
         Err(coded_error(
             ctx,

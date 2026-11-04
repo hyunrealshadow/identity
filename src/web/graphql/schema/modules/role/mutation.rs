@@ -10,14 +10,12 @@ use identity_application::{
 use identity_domain::{authorization::ManagementScope, rbac::RoleOid};
 
 use super::{
-    binding::{
-        AssignUserRolesInput, RevokeUserRolesInput, UserRoleBindingPayload, decode_user_oid,
-    },
     integration,
     types::{
         CreateRoleInput, RolePayload, RoleStateInput, SetRolePermissionsInput, UpdateRoleInput,
         decode_role_oid, decode_scope_ids,
     },
+    user_role::{AssignUserRolesInput, RevokeUserRolesInput, UserRolesPayload, decode_user_oid},
 };
 use crate::graphql::schema::{
     authorization::request_context,
@@ -168,7 +166,7 @@ impl RoleMutation {
         &self,
         ctx: &Context<'_>,
         input: AssignUserRolesInput,
-    ) -> Result<UserRoleBindingPayload> {
+    ) -> Result<UserRolesPayload> {
         let AssignUserRolesInput {
             user_id,
             role_ids,
@@ -192,7 +190,7 @@ impl RoleMutation {
         )
         .await
         .map_err(|error| app_error(ctx, error))?;
-        Ok(UserRoleBindingPayload::new(result, client_mutation_id))
+        Ok(UserRolesPayload::new(result, client_mutation_id))
     }
 
     #[graphql(
@@ -203,7 +201,7 @@ impl RoleMutation {
         &self,
         ctx: &Context<'_>,
         input: RevokeUserRolesInput,
-    ) -> Result<UserRoleBindingPayload> {
+    ) -> Result<UserRolesPayload> {
         let RevokeUserRolesInput {
             user_id,
             role_ids,
@@ -227,7 +225,7 @@ impl RoleMutation {
         )
         .await
         .map_err(|error| app_error(ctx, error))?;
-        Ok(UserRoleBindingPayload::new(result, client_mutation_id))
+        Ok(UserRolesPayload::new(result, client_mutation_id))
     }
 }
 

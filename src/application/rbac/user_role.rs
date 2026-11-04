@@ -3,8 +3,8 @@
 use chrono::{DateTime, Utc};
 use identity_domain::{
     rbac::{
-        GroupMembershipOid, GroupOid, GroupRoleBindingOid, ResourceOid, ResourcePermissionOid,
-        RoleOid, UserRoleBindingOid,
+        GroupMembershipOid, GroupOid, GroupRoleOid, ResourceOid, ResourcePermissionOid, RoleOid,
+        UserRoleOid,
     },
     user::UserOid,
 };
@@ -12,7 +12,7 @@ use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EffectivePermissionSourceRecord {
-    pub binding_oid: UserRoleBindingOid,
+    pub user_role_oid: UserRoleOid,
     pub role_oid: RoleOid,
 }
 
@@ -20,7 +20,7 @@ pub struct EffectivePermissionSourceRecord {
 pub struct EffectiveGroupPermissionSourceRecord {
     pub group_oid: GroupOid,
     pub membership_oid: GroupMembershipOid,
-    pub group_role_binding_oid: GroupRoleBindingOid,
+    pub group_role_oid: GroupRoleOid,
     pub role_oid: RoleOid,
 }
 
@@ -92,8 +92,8 @@ pub struct EffectivePermissionPage {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct UserRoleBindingRecord {
-    pub oid: UserRoleBindingOid,
+pub struct UserRoleRecord {
+    pub oid: UserRoleOid,
     pub user_oid: UserOid,
     pub role_oid: RoleOid,
     pub granted_by_user_oid: Option<UserOid>,
@@ -107,13 +107,13 @@ pub struct UserRoleBindingRecord {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub enum UserRoleBindingOrder {
+pub enum UserRoleOrder {
     CreatedAtAsc,
     #[default]
     CreatedAtDesc,
 }
 
-impl UserRoleBindingOrder {
+impl UserRoleOrder {
     #[must_use]
     pub const fn as_u8(self) -> u8 {
         match self {
@@ -141,7 +141,7 @@ impl UserRoleBindingOrder {
 pub struct UserRolePageRequest {
     pub user_oid: UserOid,
     pub enabled: Option<bool>,
-    pub order: UserRoleBindingOrder,
+    pub order: UserRoleOrder,
     pub first: Option<u32>,
     pub after: Option<String>,
     pub last: Option<u32>,
@@ -152,7 +152,7 @@ pub struct UserRolePageRequest {
 pub struct RoleUserPageRequest {
     pub role_oid: RoleOid,
     pub enabled: Option<bool>,
-    pub order: UserRoleBindingOrder,
+    pub order: UserRoleOrder,
     pub first: Option<u32>,
     pub after: Option<String>,
     pub last: Option<u32>,
@@ -160,14 +160,14 @@ pub struct RoleUserPageRequest {
 }
 
 #[derive(Debug, Clone)]
-pub struct UserRoleBindingPageItem {
-    pub record: UserRoleBindingRecord,
+pub struct UserRolePageItem {
+    pub record: UserRoleRecord,
     pub cursor: String,
 }
 
 #[derive(Debug, Clone)]
-pub struct UserRoleBindingPage {
-    pub items: Vec<UserRoleBindingPageItem>,
+pub struct UserRolePage {
+    pub items: Vec<UserRolePageItem>,
     pub has_previous_page: bool,
     pub has_next_page: bool,
     /// `Some` for `list_user_roles` (including an empty binding page) and
@@ -194,10 +194,10 @@ pub struct RevokeUserRolesCommand {
 }
 
 #[derive(Debug, Clone)]
-pub struct UserRoleBindingMutationResult {
+pub struct UserRoleMutationResult {
     pub user_oid: UserOid,
     pub user_version: Uuid,
-    pub binding_oids: Vec<UserRoleBindingOid>,
+    pub user_role_oids: Vec<UserRoleOid>,
     pub created_count: u32,
     pub revoked_count: u32,
 }
@@ -206,17 +206,17 @@ pub struct UserRoleBindingMutationResult {
 mod tests {
     use uuid::Uuid;
 
-    use super::{RoleUserPageRequest, UserRoleBindingOrder, UserRolePageRequest};
+    use super::{RoleUserPageRequest, UserRoleOrder, UserRolePageRequest};
     use crate::{
         domain::{rbac::RoleOid, user::UserOid},
-        rbac::cursor::{CURSOR_KIND_BINDING, filter_fingerprint},
+        rbac::cursor::{CURSOR_KIND_USER_ROLE, filter_fingerprint},
     };
 
     fn user_request(user_oid: UserOid, enabled: Option<bool>) -> UserRolePageRequest {
         UserRolePageRequest {
             user_oid,
             enabled,
-            order: UserRoleBindingOrder::CreatedAtDesc,
+            order: UserRoleOrder::CreatedAtDesc,
             first: Some(20),
             after: None,
             last: None,
@@ -228,7 +228,7 @@ mod tests {
         RoleUserPageRequest {
             role_oid,
             enabled,
-            order: UserRoleBindingOrder::CreatedAtDesc,
+            order: UserRoleOrder::CreatedAtDesc,
             first: Some(20),
             after: None,
             last: None,
@@ -242,20 +242,20 @@ mod tests {
         let role_oid = RoleOid(Uuid::new_v4());
         let user_page = user_request(user_oid, None);
         let role_page = role_request(role_oid, None);
-        let order = UserRoleBindingOrder::CreatedAtDesc;
+        let order = UserRoleOrder::CreatedAtDesc;
 
         let user_fingerprint = filter_fingerprint(
-            CURSOR_KIND_BINDING,
+            CURSOR_KIND_USER_ROLE,
             order.as_u8(),
             &(Some(user_page.user_oid), None::<RoleOid>, user_page.enabled),
         );
         let role_fingerprint = filter_fingerprint(
-            CURSOR_KIND_BINDING,
+            CURSOR_KIND_USER_ROLE,
             order.as_u8(),
             &(None::<UserOid>, Some(role_page.role_oid), role_page.enabled),
         );
         let user_disabled_fingerprint = filter_fingerprint(
-            CURSOR_KIND_BINDING,
+            CURSOR_KIND_USER_ROLE,
             order.as_u8(),
             &(Some(user_oid), None::<RoleOid>, Some(false)),
         );

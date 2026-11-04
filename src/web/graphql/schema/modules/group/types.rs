@@ -1,6 +1,6 @@
 use crate::graphql::schema::access::access;
 use async_graphql::{
-    Context, Enum, ID, InputObject, Object, Result as GraphqlResult, connection::Connection,
+    Context, Enum, ID, InputObject, Object, Result as GraphqlResult, connection::EmptyFields,
 };
 use chrono::{DateTime, Utc};
 use identity_application::{
@@ -8,14 +8,13 @@ use identity_application::{
     rbac::{
         GroupFilter as RbacGroupFilter, GroupMembershipFilter as RbacGroupMembershipFilter,
         GroupMembershipMutationResult, GroupMembershipOrder as RbacGroupMembershipOrder,
-        GroupMembershipRecord, GroupOrder as RbacGroupOrder, GroupRecord, GroupRoleBindingRecord,
-        GroupRoleFilter as RbacGroupRoleFilter, GroupRoleMutationResult,
-        GroupRoleOrder as RbacGroupRoleOrder,
+        GroupOrder as RbacGroupOrder, GroupRecord, GroupRoleFilter as RbacGroupRoleFilter,
+        GroupRoleMutationResult, GroupRoleOrder as RbacGroupRoleOrder,
     },
 };
 use identity_domain::{
     authorization::ManagementScope,
-    rbac::{GroupMembershipOid, GroupOid, GroupRoleBindingOid, LocalizedText, RoleOid},
+    rbac::{GroupOid, LocalizedText, RoleOid},
     user::UserOid,
 };
 use identity_infrastructure::graphql::id::{GlobalId, GlobalIdType};
@@ -23,15 +22,16 @@ use uuid::Uuid;
 
 use super::super::{
     account::{UserGlobalId, UserNode},
-    resource::support::{RbacConnectionCursor, decode_oid, decode_oids, page_args},
-    role::{
-        integration as role_integration,
-        types::{RoleNode, decode_role_oid as decode_role_oid_from_id},
-    },
+    resource::support::{decode_oid, decode_oids, page_args},
+    role::types::{RoleNode, decode_role_oid as decode_role_oid_from_id},
 };
 use crate::graphql::schema::{
-    authorization::request_context, error::app_error, management_guard::ManagementGuard,
-    modules::user::integration as user_integration,
+    authorization::request_context,
+    management_guard::ManagementGuard,
+    modules::relation::{
+        GroupMemberConnectionName, GroupMemberEdgeName, GroupRoleConnectionName, GroupRoleEdgeName,
+        RelationConnection,
+    },
 };
 
 use super::{
@@ -45,18 +45,6 @@ impl GlobalIdType for GroupGlobalId {
     const TYPE_NAME: &'static str = "Group";
 }
 
-pub(crate) struct GroupMembershipGlobalId;
-
-impl GlobalIdType for GroupMembershipGlobalId {
-    const TYPE_NAME: &'static str = "GroupMembership";
-}
-
-pub(crate) struct GroupRoleBindingGlobalId;
-
-impl GlobalIdType for GroupRoleBindingGlobalId {
-    const TYPE_NAME: &'static str = "GroupRoleBinding";
-}
-
 pub(crate) fn group_global_id(oid: GroupOid) -> ID {
     GlobalId::<GroupGlobalId>::new(oid.0).into()
 }
@@ -65,13 +53,13 @@ pub(crate) fn group_user_global_id(oid: UserOid) -> ID {
     GlobalId::<UserGlobalId>::new(oid.0).into()
 }
 
-pub(crate) fn membership_global_id(oid: GroupMembershipOid) -> ID {
-    GlobalId::<GroupMembershipGlobalId>::new(oid.0).into()
-}
+/// `Group.members`: user nodes with the membership facts on each edge.
+pub(crate) type GroupMemberConnection =
+    RelationConnection<UserNode, EmptyFields, GroupMemberConnectionName, GroupMemberEdgeName>;
 
-pub(crate) fn group_role_global_id(oid: GroupRoleBindingOid) -> ID {
-    GlobalId::<GroupRoleBindingGlobalId>::new(oid.0).into()
-}
+/// `Group.roles`: role nodes with the group-role facts on each edge.
+pub(crate) type GroupRoleConnection =
+    RelationConnection<RoleNode, EmptyFields, GroupRoleConnectionName, GroupRoleEdgeName>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]
 pub(crate) enum GroupOrder {
@@ -289,9 +277,11 @@ impl GroupNode {
         self.record.updated_at
     }
 
+    /// Users in the group, with the membership facts on each edge.
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::GroupMembershipsRead, ManagementTarget::instance())",
+        guard = "ManagementGuard::new(ManagementScope::GroupMembershipsRead, ManagementTarget::instance()).and(ManagementGuard::new(ManagementScope::UsersRead, ManagementTarget::instance()))",
         directive = access::apply(ManagementGuard::policy(ManagementScope::GroupMembershipsRead)),
+        directive = access::apply(ManagementGuard::policy(ManagementScope::UsersRead)),
         complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
     )]
     #[allow(clippy::too_many_arguments)]
@@ -304,10 +294,10 @@ impl GroupNode {
         after: Option<String>,
         #[graphql(validator(minimum = 1, maximum = 100))] last: Option<i32>,
         before: Option<String>,
-    ) -> GraphqlResult<Connection<RbacConnectionCursor, GroupMembershipNode>> {
+    ) -> GraphqlResult<GroupMemberConnection> {
         let page = page_args(ctx, first, after, last, before)?;
         let request = request_context(ctx)?;
-        query::load_membership_connection(
+        query::load_group_members(
             ctx,
             request,
             self.record.oid,
@@ -318,9 +308,11 @@ impl GroupNode {
         .await
     }
 
+    /// Roles granted to the group, with the group-role facts on each edge.
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::GroupRolesRead, ManagementTarget::instance())",
+        guard = "ManagementGuard::new(ManagementScope::GroupRolesRead, ManagementTarget::instance()).and(ManagementGuard::new(ManagementScope::RolesRead, ManagementTarget::instance()))",
         directive = access::apply(ManagementGuard::policy(ManagementScope::GroupRolesRead)),
+        directive = access::apply(ManagementGuard::policy(ManagementScope::RolesRead)),
         complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
     )]
     #[allow(clippy::too_many_arguments)]
@@ -333,10 +325,10 @@ impl GroupNode {
         after: Option<String>,
         #[graphql(validator(minimum = 1, maximum = 100))] last: Option<i32>,
         before: Option<String>,
-    ) -> GraphqlResult<Connection<RbacConnectionCursor, GroupRoleBindingNode>> {
+    ) -> GraphqlResult<GroupRoleConnection> {
         let page = page_args(ctx, first, after, last, before)?;
         let request = request_context(ctx)?;
-        query::load_group_role_connection(
+        query::load_group_roles(
             ctx,
             request,
             self.record.oid,
@@ -389,144 +381,6 @@ impl GroupRoleFilter {
             enabled: self.enabled,
             role_oid,
         })
-    }
-}
-
-pub(crate) struct GroupMembershipNode {
-    id: ID,
-    record: GroupMembershipRecord,
-}
-
-impl GroupMembershipNode {
-    pub(crate) fn new(record: GroupMembershipRecord) -> Self {
-        Self {
-            id: membership_global_id(record.oid),
-            record,
-        }
-    }
-}
-
-#[Object(name = "GroupMembership")]
-impl GroupMembershipNode {
-    pub(crate) async fn id(&self) -> &ID {
-        &self.id
-    }
-
-    async fn group_id(&self) -> ID {
-        group_global_id(self.record.group_oid)
-    }
-
-    async fn user_id(&self) -> ID {
-        group_user_global_id(self.record.user_oid)
-    }
-
-    #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::UsersRead, ManagementTarget::instance())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::UsersRead))
-    )]
-    async fn user(&self, ctx: &Context<'_>) -> GraphqlResult<Option<UserNode>> {
-        let request = request_context(ctx)?;
-        let record = user_integration::find_user(request, self.record.user_oid)
-            .await
-            .map_err(|error| app_error(ctx, error))?;
-        Ok(record.map(UserNode::managed))
-    }
-
-    async fn granted_by_user_id(&self) -> Option<ID> {
-        self.record.granted_by_user_oid.map(group_user_global_id)
-    }
-
-    async fn reason(&self) -> &str {
-        &self.record.reason
-    }
-
-    async fn enabled(&self) -> bool {
-        self.record.enabled
-    }
-
-    async fn revoked_at(&self) -> Option<DateTime<Utc>> {
-        self.record.revoked_at
-    }
-
-    async fn version(&self) -> Uuid {
-        self.record.version
-    }
-
-    async fn created_at(&self) -> DateTime<Utc> {
-        self.record.created_at
-    }
-
-    async fn updated_at(&self) -> Option<DateTime<Utc>> {
-        self.record.updated_at
-    }
-}
-
-pub(crate) struct GroupRoleBindingNode {
-    id: ID,
-    record: GroupRoleBindingRecord,
-}
-
-impl GroupRoleBindingNode {
-    pub(crate) fn new(record: GroupRoleBindingRecord) -> Self {
-        Self {
-            id: group_role_global_id(record.oid),
-            record,
-        }
-    }
-}
-
-#[Object(name = "GroupRoleBinding")]
-impl GroupRoleBindingNode {
-    pub(crate) async fn id(&self) -> &ID {
-        &self.id
-    }
-
-    async fn group_id(&self) -> ID {
-        group_global_id(self.record.group_oid)
-    }
-
-    async fn role_id(&self) -> ID {
-        types::role_global_id(self.record.role_oid)
-    }
-
-    #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::RolesRead, ManagementTarget::instance())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::RolesRead))
-    )]
-    async fn role(&self, ctx: &Context<'_>) -> GraphqlResult<Option<RoleNode>> {
-        let request = request_context(ctx)?;
-        let record = role_integration::find_role(request, self.record.role_oid)
-            .await
-            .map_err(|error| app_error(ctx, error))?;
-        Ok(record.map(RoleNode::new))
-    }
-
-    async fn granted_by_user_id(&self) -> Option<ID> {
-        self.record.granted_by_user_oid.map(group_user_global_id)
-    }
-
-    async fn reason(&self) -> &str {
-        &self.record.reason
-    }
-
-    async fn enabled(&self) -> bool {
-        self.record.enabled
-    }
-
-    async fn revoked_at(&self) -> Option<DateTime<Utc>> {
-        self.record.revoked_at
-    }
-
-    async fn version(&self) -> Uuid {
-        self.record.version
-    }
-
-    async fn created_at(&self) -> DateTime<Utc> {
-        self.record.created_at
-    }
-
-    async fn updated_at(&self) -> Option<DateTime<Utc>> {
-        self.record.updated_at
     }
 }
 
@@ -688,9 +542,7 @@ impl DeleteGroupPayload {
 pub(crate) struct GroupMemberPayload {
     group_id: ID,
     user_id: ID,
-    membership_id: ID,
     group_version: Uuid,
-    membership_version: Uuid,
     client_mutation_id: Option<String>,
 }
 
@@ -702,9 +554,7 @@ impl GroupMemberPayload {
         Self {
             group_id: group_global_id(result.group_oid),
             user_id: group_user_global_id(result.membership.user_oid),
-            membership_id: membership_global_id(result.membership.oid),
             group_version: result.group_version,
-            membership_version: result.membership.version,
             client_mutation_id,
         }
     }
@@ -720,16 +570,8 @@ impl GroupMemberPayload {
         &self.user_id
     }
 
-    async fn membership_id(&self) -> &ID {
-        &self.membership_id
-    }
-
     async fn group_version(&self) -> Uuid {
         self.group_version
-    }
-
-    async fn membership_version(&self) -> Uuid {
-        self.membership_version
     }
 
     async fn client_mutation_id(&self) -> Option<&str> {

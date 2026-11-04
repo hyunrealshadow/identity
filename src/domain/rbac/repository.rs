@@ -9,8 +9,8 @@ use std::error::Error as StdError;
 use crate::{
     authorization::ids::AuthorizationVersion,
     rbac::{
-        ids::{ResourceOid, ResourcePermissionOid, RoleOid, RolePermissionOid, UserRoleBindingOid},
-        model::{EffectivePermission, Role, RolePermission, UserRoleBinding},
+        ids::{ResourceOid, ResourcePermissionOid, RoleOid, RolePermissionOid, UserRoleOid},
+        model::{EffectivePermission, Role, RolePermission, UserRole},
     },
     user::UserOid,
 };
@@ -65,24 +65,22 @@ pub trait RoleRepository: Send + Sync {
 }
 
 #[async_trait::async_trait]
-pub trait UserRoleBindingRepository: Send + Sync {
-    async fn find_binding(
-        &self,
-        oid: UserRoleBindingOid,
-    ) -> Result<Option<UserRoleBinding>, RbacRepositoryError>;
+pub trait UserRoleRepository: Send + Sync {
+    async fn find_binding(&self, oid: UserRoleOid)
+    -> Result<Option<UserRole>, RbacRepositoryError>;
 
     async fn list_active_bindings_for_user(
         &self,
         user: UserOid,
-    ) -> Result<Vec<UserRoleBinding>, RbacRepositoryError>;
+    ) -> Result<Vec<UserRole>, RbacRepositoryError>;
 
-    async fn insert_binding(&self, binding: &UserRoleBinding) -> Result<(), RbacRepositoryError>;
+    async fn insert_binding(&self, binding: &UserRole) -> Result<(), RbacRepositoryError>;
 
     async fn revoke_binding(
         &self,
-        binding: UserRoleBindingOid,
+        binding: UserRoleOid,
         expected_version: AuthorizationVersion,
-    ) -> Result<UserRoleBinding, RbacRepositoryError>;
+    ) -> Result<UserRole, RbacRepositoryError>;
 }
 
 #[async_trait::async_trait]

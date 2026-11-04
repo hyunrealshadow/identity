@@ -10,9 +10,8 @@ use std::{collections::BTreeSet, sync::Arc};
 use identity_domain::{
     rbac,
     rbac::{
-        GroupMembershipOid, GroupOid, GroupRoleBindingOid, GroupValidationError, LocalizedMetadata,
-        LocalizedTextError, RoleOid, group, group::MAX_GROUP_REASON_LENGTH,
-        validate_group_descriptions, validate_group_names,
+        GroupOid, GroupValidationError, LocalizedMetadata, LocalizedTextError, RoleOid, group,
+        group::MAX_GROUP_REASON_LENGTH, validate_group_descriptions, validate_group_names,
     },
 };
 
@@ -29,11 +28,10 @@ use crate::{
         group::{
             AddGroupMemberCommand, CreateGroupCommand, DeleteGroupCommand, DeleteGroupResult,
             GroupFilter, GroupMembershipMutationResult, GroupMembershipPage,
-            GroupMembershipPageItem, GroupMembershipPageRequest, GroupMembershipRecord, GroupPage,
-            GroupPageItem, GroupPageRequest, GroupRecord, GroupRoleBindingRecord,
-            GroupRoleMutationResult, GroupRolePage, GroupRolePageItem, GroupRolePageRequest,
-            GroupStateCommand, MAX_GROUP_ROLES, RemoveGroupMemberCommand, SetGroupRolesCommand,
-            UpdateGroupCommand,
+            GroupMembershipPageItem, GroupMembershipPageRequest, GroupPage, GroupPageItem,
+            GroupPageRequest, GroupRecord, GroupRoleMutationResult, GroupRolePage,
+            GroupRolePageItem, GroupRolePageRequest, GroupStateCommand, MAX_GROUP_ROLES,
+            RemoveGroupMemberCommand, SetGroupRolesCommand, UpdateGroupCommand,
         },
         group_repository::{
             AddGroupMemberTransaction, CreateGroupTransaction, DeleteGroupTransaction,
@@ -82,28 +80,6 @@ impl GroupManagementService {
     pub async fn find_group(&self, oid: GroupOid) -> Result<Option<GroupRecord>, AppError> {
         self.repository
             .find_group(oid)
-            .await
-            .map_err(map_repository_error)
-    }
-
-    #[tracing::instrument(skip_all, name = "rbac.group.membership.find")]
-    pub async fn find_group_membership(
-        &self,
-        oid: GroupMembershipOid,
-    ) -> Result<Option<GroupMembershipRecord>, AppError> {
-        self.repository
-            .find_group_membership(oid)
-            .await
-            .map_err(map_repository_error)
-    }
-
-    #[tracing::instrument(skip_all, name = "rbac.group.role_binding.find")]
-    pub async fn find_group_role_binding(
-        &self,
-        oid: GroupRoleBindingOid,
-    ) -> Result<Option<GroupRoleBindingRecord>, AppError> {
-        self.repository
-            .find_group_role_binding(oid)
             .await
             .map_err(map_repository_error)
     }

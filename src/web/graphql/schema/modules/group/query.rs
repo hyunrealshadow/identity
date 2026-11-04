@@ -16,8 +16,8 @@ use identity_domain::{authorization::ManagementScope, rbac::GroupOid};
 use super::{
     integration,
     types::{
-        GroupFilter, GroupMembershipFilter as GroupMembershipFilterInput, GroupMembershipNode,
-        GroupMembershipOrder, GroupNode, GroupOrder, GroupRoleBindingNode,
+        GroupFilter, GroupMemberConnection, GroupMembershipFilter as GroupMembershipFilterInput,
+        GroupMembershipOrder, GroupNode, GroupOrder, GroupRoleConnection,
         GroupRoleFilter as GroupRoleFilterInput, GroupRoleOrder, decode_group_oid,
     },
 };
@@ -28,7 +28,13 @@ use crate::graphql::schema::{
     connection::ConnectionTotal,
     error::app_error,
     management_guard::ManagementGuard,
-    modules::resource::support::{PageArgs, RbacConnectionCursor, page_args},
+    modules::{
+        account::UserNode,
+        relation::{RelationFacts, index_by},
+        resource::support::{PageArgs, RbacConnectionCursor, page_args},
+        role::{integration as role_integration, types::RoleNode},
+        user::integration as user_integration,
+    },
 };
 
 #[derive(Default)]
@@ -140,14 +146,14 @@ async fn ensure_relationship_read_guards(ctx: &Context<'_>, filter: &GroupFilter
     Ok(())
 }
 
-pub(crate) async fn load_membership_connection(
+pub(crate) async fn load_group_members(
     ctx: &Context<'_>,
     request: &RequestContext,
     group_oid: GroupOid,
     filter: GroupMembershipFilterInput,
     order: GroupMembershipOrder,
     page: PageArgs,
-) -> Result<Connection<RbacConnectionCursor, GroupMembershipNode>> {
+) -> Result<GroupMemberConnection> {
     let filter = filter.into_application(ctx)?;
     let page = integration::list_group_memberships(
         request,
@@ -163,24 +169,42 @@ pub(crate) async fn load_membership_connection(
     )
     .await
     .map_err(|error| app_error(ctx, error))?;
-    let mut connection = Connection::new(page.has_previous_page, page.has_next_page);
-    connection.edges.extend(page.items.into_iter().map(|item| {
-        Edge::new(
-            RbacConnectionCursor::from_backend(item.cursor),
-            GroupMembershipNode::new(item.record),
-        )
-    }));
+    let users = user_integration::find_users(
+        request,
+        page.items.iter().map(|item| item.record.user_oid).collect(),
+    )
+    .await
+    .map_err(|error| app_error(ctx, error))?;
+    let mut users = index_by(users, |user| user.oid.0);
+    let mut connection = GroupMemberConnection::new(page.has_previous_page, page.has_next_page);
+    for item in page.items {
+        if let Some(user) = users.remove(&item.record.user_oid.0) {
+            let record = item.record;
+            connection.edges.push(Edge::with_additional_fields(
+                RbacConnectionCursor::from_backend(item.cursor),
+                UserNode::managed(user),
+                RelationFacts {
+                    granted_by_user_oid: record.granted_by_user_oid,
+                    reason: record.reason,
+                    enabled: record.enabled,
+                    revoked_at: record.revoked_at,
+                    created_at: record.created_at,
+                    updated_at: record.updated_at,
+                },
+            ));
+        }
+    }
     Ok(connection)
 }
 
-pub(crate) async fn load_group_role_connection(
+pub(crate) async fn load_group_roles(
     ctx: &Context<'_>,
     request: &RequestContext,
     group_oid: GroupOid,
     filter: GroupRoleFilterInput,
     order: GroupRoleOrder,
     page: PageArgs,
-) -> Result<Connection<RbacConnectionCursor, GroupRoleBindingNode>> {
+) -> Result<GroupRoleConnection> {
     let filter = filter.into_application(ctx)?;
     let page = integration::list_group_roles(
         request,
@@ -196,12 +220,30 @@ pub(crate) async fn load_group_role_connection(
     )
     .await
     .map_err(|error| app_error(ctx, error))?;
-    let mut connection = Connection::new(page.has_previous_page, page.has_next_page);
-    connection.edges.extend(page.items.into_iter().map(|item| {
-        Edge::new(
-            RbacConnectionCursor::from_backend(item.cursor),
-            GroupRoleBindingNode::new(item.record),
-        )
-    }));
+    let roles = role_integration::find_roles(
+        request,
+        page.items.iter().map(|item| item.record.role_oid).collect(),
+    )
+    .await
+    .map_err(|error| app_error(ctx, error))?;
+    let mut roles = index_by(roles, |role| role.oid.0);
+    let mut connection = GroupRoleConnection::new(page.has_previous_page, page.has_next_page);
+    for item in page.items {
+        if let Some(role) = roles.remove(&item.record.role_oid.0) {
+            let record = item.record;
+            connection.edges.push(Edge::with_additional_fields(
+                RbacConnectionCursor::from_backend(item.cursor),
+                RoleNode::new(role),
+                RelationFacts {
+                    granted_by_user_oid: record.granted_by_user_oid,
+                    reason: record.reason,
+                    enabled: record.enabled,
+                    revoked_at: record.revoked_at,
+                    created_at: record.created_at,
+                    updated_at: record.updated_at,
+                },
+            ));
+        }
+    }
     Ok(connection)
 }

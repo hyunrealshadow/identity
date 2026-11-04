@@ -345,15 +345,19 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "ID",
           "policies": []
         },
-        "groupRoleBindingId": {
-          "name": "groupRoleBindingId",
-          "returnType": "ID",
-          "policies": []
-        },
-        "membershipId": {
-          "name": "membershipId",
-          "returnType": "ID",
-          "policies": []
+        "role": {
+          "name": "role",
+          "returnType": "Role",
+          "policies": [
+            {
+              "scopes": [
+                "management.role.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
         },
         "roleId": {
           "name": "roleId",
@@ -484,10 +488,19 @@ export const schemaMetadata: SchemaMetadata = {
       "interfaces": [],
       "possibleTypes": [],
       "fields": {
-        "bindingId": {
-          "name": "bindingId",
-          "returnType": "ID",
-          "policies": []
+        "role": {
+          "name": "role",
+          "returnType": "Role",
+          "policies": [
+            {
+              "scopes": [
+                "management.role.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
         },
         "roleId": {
           "name": "roleId",
@@ -567,11 +580,19 @@ export const schemaMetadata: SchemaMetadata = {
         },
         "members": {
           "name": "members",
-          "returnType": "GroupMembershipConnection",
+          "returnType": "GroupMemberConnection",
           "policies": [
             {
               "scopes": [
                 "management.group_membership.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            },
+            {
+              "scopes": [
+                "management.user.read"
               ],
               "authentication": "AAL2",
               "userOnly": false,
@@ -591,11 +612,19 @@ export const schemaMetadata: SchemaMetadata = {
         },
         "roles": {
           "name": "roles",
-          "returnType": "GroupRoleBindingConnection",
+          "returnType": "GroupRoleConnection",
           "policies": [
             {
               "scopes": [
                 "management.group_role.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            },
+            {
+              "scopes": [
+                "management.role.read"
               ],
               "authentication": "AAL2",
               "userOnly": false,
@@ -659,6 +688,84 @@ export const schemaMetadata: SchemaMetadata = {
         }
       }
     },
+    "GroupMemberConnection": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "edges": {
+          "name": "edges",
+          "returnType": "GroupMemberEdge",
+          "policies": []
+        },
+        "nodes": {
+          "name": "nodes",
+          "returnType": "User",
+          "policies": []
+        },
+        "pageInfo": {
+          "name": "pageInfo",
+          "returnType": "PageInfo",
+          "policies": []
+        }
+      }
+    },
+    "GroupMemberEdge": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "createdAt": {
+          "name": "createdAt",
+          "returnType": "DateTime",
+          "policies": []
+        },
+        "cursor": {
+          "name": "cursor",
+          "returnType": "String",
+          "policies": []
+        },
+        "enabled": {
+          "name": "enabled",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "grantedBy": {
+          "name": "grantedBy",
+          "returnType": "User",
+          "policies": [
+            {
+              "scopes": [
+                "management.user.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
+        },
+        "node": {
+          "name": "node",
+          "returnType": "User",
+          "policies": []
+        },
+        "reason": {
+          "name": "reason",
+          "returnType": "String",
+          "policies": []
+        },
+        "revokedAt": {
+          "name": "revokedAt",
+          "returnType": "DateTime",
+          "policies": []
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "returnType": "DateTime",
+          "policies": []
+        }
+      }
+    },
     "GroupMemberPayload": {
       "kind": "OBJECT",
       "interfaces": [],
@@ -679,131 +786,9 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "UUID",
           "policies": []
         },
-        "membershipId": {
-          "name": "membershipId",
-          "returnType": "ID",
-          "policies": []
-        },
-        "membershipVersion": {
-          "name": "membershipVersion",
-          "returnType": "UUID",
-          "policies": []
-        },
         "userId": {
           "name": "userId",
           "returnType": "ID",
-          "policies": []
-        }
-      }
-    },
-    "GroupMembership": {
-      "kind": "OBJECT",
-      "interfaces": [
-        "Node"
-      ],
-      "possibleTypes": [],
-      "fields": {
-        "createdAt": {
-          "name": "createdAt",
-          "returnType": "DateTime",
-          "policies": []
-        },
-        "enabled": {
-          "name": "enabled",
-          "returnType": "Boolean",
-          "policies": []
-        },
-        "grantedByUserId": {
-          "name": "grantedByUserId",
-          "returnType": "ID",
-          "policies": []
-        },
-        "groupId": {
-          "name": "groupId",
-          "returnType": "ID",
-          "policies": []
-        },
-        "id": {
-          "name": "id",
-          "returnType": "ID",
-          "policies": []
-        },
-        "reason": {
-          "name": "reason",
-          "returnType": "String",
-          "policies": []
-        },
-        "revokedAt": {
-          "name": "revokedAt",
-          "returnType": "DateTime",
-          "policies": []
-        },
-        "updatedAt": {
-          "name": "updatedAt",
-          "returnType": "DateTime",
-          "policies": []
-        },
-        "user": {
-          "name": "user",
-          "returnType": "User",
-          "policies": [
-            {
-              "scopes": [
-                "management.user.read"
-              ],
-              "authentication": "AAL2",
-              "userOnly": false,
-              "runtime": true
-            }
-          ]
-        },
-        "userId": {
-          "name": "userId",
-          "returnType": "ID",
-          "policies": []
-        },
-        "version": {
-          "name": "version",
-          "returnType": "UUID",
-          "policies": []
-        }
-      }
-    },
-    "GroupMembershipConnection": {
-      "kind": "OBJECT",
-      "interfaces": [],
-      "possibleTypes": [],
-      "fields": {
-        "edges": {
-          "name": "edges",
-          "returnType": "GroupMembershipEdge",
-          "policies": []
-        },
-        "nodes": {
-          "name": "nodes",
-          "returnType": "GroupMembership",
-          "policies": []
-        },
-        "pageInfo": {
-          "name": "pageInfo",
-          "returnType": "PageInfo",
-          "policies": []
-        }
-      }
-    },
-    "GroupMembershipEdge": {
-      "kind": "OBJECT",
-      "interfaces": [],
-      "possibleTypes": [],
-      "fields": {
-        "cursor": {
-          "name": "cursor",
-          "returnType": "String",
-          "policies": []
-        },
-        "node": {
-          "name": "node",
-          "returnType": "GroupMembership",
           "policies": []
         }
       }
@@ -830,11 +815,31 @@ export const schemaMetadata: SchemaMetadata = {
         }
       }
     },
-    "GroupRoleBinding": {
+    "GroupRoleConnection": {
       "kind": "OBJECT",
-      "interfaces": [
-        "Node"
-      ],
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "edges": {
+          "name": "edges",
+          "returnType": "GroupRoleEdge",
+          "policies": []
+        },
+        "nodes": {
+          "name": "nodes",
+          "returnType": "Role",
+          "policies": []
+        },
+        "pageInfo": {
+          "name": "pageInfo",
+          "returnType": "PageInfo",
+          "policies": []
+        }
+      }
+    },
+    "GroupRoleEdge": {
+      "kind": "OBJECT",
+      "interfaces": [],
       "possibleTypes": [],
       "fields": {
         "createdAt": {
@@ -842,24 +847,33 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "DateTime",
           "policies": []
         },
+        "cursor": {
+          "name": "cursor",
+          "returnType": "String",
+          "policies": []
+        },
         "enabled": {
           "name": "enabled",
           "returnType": "Boolean",
           "policies": []
         },
-        "grantedByUserId": {
-          "name": "grantedByUserId",
-          "returnType": "ID",
-          "policies": []
+        "grantedBy": {
+          "name": "grantedBy",
+          "returnType": "User",
+          "policies": [
+            {
+              "scopes": [
+                "management.user.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
         },
-        "groupId": {
-          "name": "groupId",
-          "returnType": "ID",
-          "policies": []
-        },
-        "id": {
-          "name": "id",
-          "returnType": "ID",
+        "node": {
+          "name": "node",
+          "returnType": "Role",
           "policies": []
         },
         "reason": {
@@ -872,72 +886,9 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "DateTime",
           "policies": []
         },
-        "role": {
-          "name": "role",
-          "returnType": "Role",
-          "policies": [
-            {
-              "scopes": [
-                "management.role.read"
-              ],
-              "authentication": "AAL2",
-              "userOnly": false,
-              "runtime": true
-            }
-          ]
-        },
-        "roleId": {
-          "name": "roleId",
-          "returnType": "ID",
-          "policies": []
-        },
         "updatedAt": {
           "name": "updatedAt",
           "returnType": "DateTime",
-          "policies": []
-        },
-        "version": {
-          "name": "version",
-          "returnType": "UUID",
-          "policies": []
-        }
-      }
-    },
-    "GroupRoleBindingConnection": {
-      "kind": "OBJECT",
-      "interfaces": [],
-      "possibleTypes": [],
-      "fields": {
-        "edges": {
-          "name": "edges",
-          "returnType": "GroupRoleBindingEdge",
-          "policies": []
-        },
-        "nodes": {
-          "name": "nodes",
-          "returnType": "GroupRoleBinding",
-          "policies": []
-        },
-        "pageInfo": {
-          "name": "pageInfo",
-          "returnType": "PageInfo",
-          "policies": []
-        }
-      }
-    },
-    "GroupRoleBindingEdge": {
-      "kind": "OBJECT",
-      "interfaces": [],
-      "possibleTypes": [],
-      "fields": {
-        "cursor": {
-          "name": "cursor",
-          "returnType": "String",
-          "policies": []
-        },
-        "node": {
-          "name": "node",
-          "returnType": "GroupRoleBinding",
           "policies": []
         }
       }
@@ -1220,7 +1171,7 @@ export const schemaMetadata: SchemaMetadata = {
         },
         "assignUserRoles": {
           "name": "assignUserRoles",
-          "returnType": "UserRoleBindingPayload",
+          "returnType": "UserRolesPayload",
           "policies": [
             {
               "scopes": [
@@ -1740,7 +1691,7 @@ export const schemaMetadata: SchemaMetadata = {
         },
         "revokeUserRoles": {
           "name": "revokeUserRoles",
-          "returnType": "UserRoleBindingPayload",
+          "returnType": "UserRolesPayload",
           "policies": [
             {
               "scopes": [
@@ -1996,8 +1947,6 @@ export const schemaMetadata: SchemaMetadata = {
       "interfaces": [],
       "possibleTypes": [
         "Group",
-        "GroupMembership",
-        "GroupRoleBinding",
         "Resource",
         "Role",
         "Scope",
@@ -2261,20 +2210,6 @@ export const schemaMetadata: SchemaMetadata = {
             }
           ]
         },
-        "roleUsers": {
-          "name": "roleUsers",
-          "returnType": "UserRoleBindingConnection",
-          "policies": [
-            {
-              "scopes": [
-                "management.role_assignment.read"
-              ],
-              "authentication": "AAL2",
-              "userOnly": false,
-              "runtime": true
-            }
-          ]
-        },
         "roles": {
           "name": "roles",
           "returnType": "RoleConnection",
@@ -2352,34 +2287,6 @@ export const schemaMetadata: SchemaMetadata = {
             {
               "scopes": [
                 "management.user.read"
-              ],
-              "authentication": "AAL2",
-              "userOnly": false,
-              "runtime": true
-            }
-          ]
-        },
-        "userPermissions": {
-          "name": "userPermissions",
-          "returnType": "EffectivePermissionConnection",
-          "policies": [
-            {
-              "scopes": [
-                "management.role_assignment.read"
-              ],
-              "authentication": "AAL2",
-              "userOnly": false,
-              "runtime": true
-            }
-          ]
-        },
-        "userRoles": {
-          "name": "userRoles",
-          "returnType": "UserRoleBindingConnection",
-          "policies": [
-            {
-              "scopes": [
-                "management.role_assignment.read"
               ],
               "authentication": "AAL2",
               "userOnly": false,
@@ -2699,11 +2606,19 @@ export const schemaMetadata: SchemaMetadata = {
         },
         "users": {
           "name": "users",
-          "returnType": "UserRoleBindingConnection",
+          "returnType": "RoleUserConnection",
           "policies": [
             {
               "scopes": [
                 "management.role_assignment.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            },
+            {
+              "scopes": [
+                "management.user.read"
               ],
               "authentication": "AAL2",
               "userOnly": false,
@@ -2794,6 +2709,84 @@ export const schemaMetadata: SchemaMetadata = {
         "version": {
           "name": "version",
           "returnType": "UUID",
+          "policies": []
+        }
+      }
+    },
+    "RoleUserConnection": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "edges": {
+          "name": "edges",
+          "returnType": "RoleUserEdge",
+          "policies": []
+        },
+        "nodes": {
+          "name": "nodes",
+          "returnType": "User",
+          "policies": []
+        },
+        "pageInfo": {
+          "name": "pageInfo",
+          "returnType": "PageInfo",
+          "policies": []
+        }
+      }
+    },
+    "RoleUserEdge": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "createdAt": {
+          "name": "createdAt",
+          "returnType": "DateTime",
+          "policies": []
+        },
+        "cursor": {
+          "name": "cursor",
+          "returnType": "String",
+          "policies": []
+        },
+        "enabled": {
+          "name": "enabled",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "grantedBy": {
+          "name": "grantedBy",
+          "returnType": "User",
+          "policies": [
+            {
+              "scopes": [
+                "management.user.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
+        },
+        "node": {
+          "name": "node",
+          "returnType": "User",
+          "policies": []
+        },
+        "reason": {
+          "name": "reason",
+          "returnType": "String",
+          "policies": []
+        },
+        "revokedAt": {
+          "name": "revokedAt",
+          "returnType": "DateTime",
+          "policies": []
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "returnType": "DateTime",
           "policies": []
         }
       }
@@ -3325,13 +3318,21 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "String",
           "policies": []
         },
-        "roleBindings": {
-          "name": "roleBindings",
-          "returnType": "UserRoleBindingConnection",
+        "roles": {
+          "name": "roles",
+          "returnType": "UserRoleConnection",
           "policies": [
             {
               "scopes": [
                 "management.role_assignment.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            },
+            {
+              "scopes": [
+                "management.role.read"
               ],
               "authentication": "AAL2",
               "userOnly": false,
@@ -3424,7 +3425,34 @@ export const schemaMetadata: SchemaMetadata = {
         }
       }
     },
-    "UserRoleBinding": {
+    "UserRoleConnection": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "edges": {
+          "name": "edges",
+          "returnType": "UserRoleEdge",
+          "policies": []
+        },
+        "nodes": {
+          "name": "nodes",
+          "returnType": "Role",
+          "policies": []
+        },
+        "pageInfo": {
+          "name": "pageInfo",
+          "returnType": "PageInfo",
+          "policies": []
+        },
+        "userVersion": {
+          "name": "userVersion",
+          "returnType": "UUID",
+          "policies": []
+        }
+      }
+    },
+    "UserRoleEdge": {
       "kind": "OBJECT",
       "interfaces": [],
       "possibleTypes": [],
@@ -3434,19 +3462,33 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "DateTime",
           "policies": []
         },
+        "cursor": {
+          "name": "cursor",
+          "returnType": "String",
+          "policies": []
+        },
         "enabled": {
           "name": "enabled",
           "returnType": "Boolean",
           "policies": []
         },
-        "grantedByUserId": {
-          "name": "grantedByUserId",
-          "returnType": "ID",
-          "policies": []
+        "grantedBy": {
+          "name": "grantedBy",
+          "returnType": "User",
+          "policies": [
+            {
+              "scopes": [
+                "management.user.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
         },
-        "id": {
-          "name": "id",
-          "returnType": "ID",
+        "node": {
+          "name": "node",
+          "returnType": "Role",
           "policies": []
         },
         "reason": {
@@ -3459,28 +3501,31 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "DateTime",
           "policies": []
         },
-        "role": {
-          "name": "role",
-          "returnType": "Role",
-          "policies": [
-            {
-              "scopes": [
-                "management.role.read"
-              ],
-              "authentication": "AAL2",
-              "userOnly": false,
-              "runtime": true
-            }
-          ]
-        },
-        "roleId": {
-          "name": "roleId",
-          "returnType": "ID",
-          "policies": []
-        },
         "updatedAt": {
           "name": "updatedAt",
           "returnType": "DateTime",
+          "policies": []
+        }
+      }
+    },
+    "UserRolesPayload": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "clientMutationId": {
+          "name": "clientMutationId",
+          "returnType": "String",
+          "policies": []
+        },
+        "createdCount": {
+          "name": "createdCount",
+          "returnType": "Int",
+          "policies": []
+        },
+        "revokedCount": {
+          "name": "revokedCount",
+          "returnType": "Int",
           "policies": []
         },
         "user": {
@@ -3496,115 +3541,6 @@ export const schemaMetadata: SchemaMetadata = {
               "runtime": true
             }
           ]
-        },
-        "userId": {
-          "name": "userId",
-          "returnType": "ID",
-          "policies": []
-        },
-        "userVersion": {
-          "name": "userVersion",
-          "returnType": "UUID",
-          "policies": []
-        },
-        "version": {
-          "name": "version",
-          "returnType": "UUID",
-          "policies": []
-        }
-      }
-    },
-    "UserRoleBindingConnection": {
-      "kind": "OBJECT",
-      "interfaces": [],
-      "possibleTypes": [],
-      "fields": {
-        "edges": {
-          "name": "edges",
-          "returnType": "UserRoleBindingEdge",
-          "policies": []
-        },
-        "nodes": {
-          "name": "nodes",
-          "returnType": "UserRoleBinding",
-          "policies": []
-        },
-        "pageInfo": {
-          "name": "pageInfo",
-          "returnType": "PageInfo",
-          "policies": []
-        },
-        "userVersion": {
-          "name": "userVersion",
-          "returnType": "UUID",
-          "policies": [
-            {
-              "scopes": [
-                "management.role_assignment.read"
-              ],
-              "authentication": "AAL2",
-              "userOnly": false,
-              "runtime": true
-            }
-          ]
-        }
-      }
-    },
-    "UserRoleBindingEdge": {
-      "kind": "OBJECT",
-      "interfaces": [],
-      "possibleTypes": [],
-      "fields": {
-        "cursor": {
-          "name": "cursor",
-          "returnType": "String",
-          "policies": []
-        },
-        "node": {
-          "name": "node",
-          "returnType": "UserRoleBinding",
-          "policies": []
-        }
-      }
-    },
-    "UserRoleBindingPayload": {
-      "kind": "OBJECT",
-      "interfaces": [],
-      "possibleTypes": [],
-      "fields": {
-        "bindingIds": {
-          "name": "bindingIds",
-          "returnType": "ID",
-          "policies": []
-        },
-        "bindings": {
-          "name": "bindings",
-          "returnType": "UserRoleBinding",
-          "policies": [
-            {
-              "scopes": [
-                "management.role_assignment.read"
-              ],
-              "authentication": "AAL2",
-              "userOnly": false,
-              "runtime": true
-            }
-          ]
-        },
-        "clientMutationId": {
-          "name": "clientMutationId",
-          "returnType": "String",
-          "policies": []
-        },
-        "createdCount": {
-          "name": "createdCount",
-          "returnType": "Int",
-          "policies": []
-        },
-        "revokedCount": {
-          "name": "revokedCount",
-          "returnType": "Int",
-          "policies": []
         },
         "userId": {
           "name": "userId",

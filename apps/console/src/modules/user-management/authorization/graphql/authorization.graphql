@@ -1,44 +1,37 @@
 query ConsoleUserRoles(
   $userId: ID!
   $enabled: Boolean
-  $orderBy: UserRoleBindingOrder
+  $orderBy: UserRoleOrder
   $first: Int
   $after: String
   $last: Int
   $before: String
-  $includeRole: Boolean!
 ) {
-  userRoles(
-    userId: $userId
-    enabled: $enabled
-    orderBy: $orderBy
-    first: $first
-    after: $after
-    last: $last
-    before: $before
-  ) {
-    userVersion
-    pageInfo {
-      hasNextPage
-      hasPreviousPage
-      startCursor
-      endCursor
-    }
-    edges {
-      cursor
-      node {
-        id
-        userId
-        roleId
-        grantedByUserId
-        reason
+  user(id: $userId) {
+    id
+    roles(
+      enabled: $enabled
+      orderBy: $orderBy
+      first: $first
+      after: $after
+      last: $last
+      before: $before
+    ) {
+      userVersion
+      pageInfo {
+        hasNextPage
+        hasPreviousPage
+        startCursor
+        endCursor
+      }
+      edges {
+        cursor
         enabled
         revokedAt
-        version
-        userVersion
+        reason
         createdAt
         updatedAt
-        role @include(if: $includeRole) {
+        node {
           id
           name
           description
@@ -54,8 +47,11 @@ query ConsoleUserRoles(
 }
 
 query ConsoleUserRoleVersion($userId: ID!) {
-  userRoles(userId: $userId, first: 1) {
-    userVersion
+  user(id: $userId) {
+    id
+    roles(first: 1) {
+      userVersion
+    }
   }
 }
 
@@ -68,38 +64,37 @@ query ConsoleUserPermissions(
   $last: Int
   $before: String
 ) {
-  userPermissions(
-    userId: $userId
-    resourceId: $resourceId
-    orderBy: $orderBy
-    first: $first
-    after: $after
-    last: $last
-    before: $before
-  ) {
-    totalCount
-    userVersion
-    pageInfo {
-      hasNextPage
-      hasPreviousPage
-      startCursor
-      endCursor
-    }
-    edges {
-      cursor
-      node {
-        permissionId
-        resourceId
-        code
-        sources {
-          bindingId
-          roleId
-        }
-        groupSources {
-          groupId
-          membershipId
-          groupRoleBindingId
-          roleId
+  user(id: $userId) {
+    id
+    effectivePermissions(
+      resourceId: $resourceId
+      orderBy: $orderBy
+      first: $first
+      after: $after
+      last: $last
+      before: $before
+    ) {
+      totalCount
+      userVersion
+      pageInfo {
+        hasNextPage
+        hasPreviousPage
+        startCursor
+        endCursor
+      }
+      edges {
+        cursor
+        node {
+          permissionId
+          resourceId
+          code
+          sources {
+            roleId
+          }
+          groupSources {
+            groupId
+            roleId
+          }
         }
       }
     }
@@ -110,7 +105,6 @@ mutation ConsoleAssignUserRoles($input: AssignUserRolesInput!) {
   assignUserRoles(input: $input) {
     userId
     userVersion
-    bindingIds
     createdCount
     revokedCount
   }
@@ -120,7 +114,6 @@ mutation ConsoleRevokeUserRoles($input: RevokeUserRolesInput!) {
   revokeUserRoles(input: $input) {
     userId
     userVersion
-    bindingIds
     createdCount
     revokedCount
   }

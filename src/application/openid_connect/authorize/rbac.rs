@@ -13,8 +13,8 @@ use identity_domain::{
     openid_connect::{AuthorizationRequestData, CodeChallengeMethod, ResponseType, ScopeSet},
     rbac::{
         BusinessAuthorizationSnapshot, EffectivePermission, RbacAuthorizationError,
-        RbacAuthorizationState, RoleAuthorizationSnapshot, UserRoleBindingSnapshot,
-        effective_permissions, effective_scope_names,
+        RbacAuthorizationState, RoleAuthorizationSnapshot, UserRoleSnapshot, effective_permissions,
+        effective_scope_names,
     },
     user::UserOid,
 };
@@ -246,7 +246,7 @@ fn build_approval_snapshot(
         .filter(|permission| granted.contains(&permission.scope))
     {
         for source in &permission.sources {
-            binding_oids.insert(source.binding_oid);
+            binding_oids.insert(source.user_role_oid);
             role_oids.insert(source.role_oid);
         }
     }
@@ -265,7 +265,7 @@ fn build_approval_snapshot(
             return Err(AppError::from_code(AuthorizeErrorCode::ScopeInvalid)
                 .with_source(RbacApprovalError::InactiveBinding));
         }
-        bindings.push(UserRoleBindingSnapshot::from_binding(binding));
+        bindings.push(UserRoleSnapshot::from_binding(binding));
     }
     let mut roles = Vec::with_capacity(role_oids.len());
     for role_oid in &role_oids {

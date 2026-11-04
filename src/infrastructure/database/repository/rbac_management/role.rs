@@ -194,6 +194,31 @@ impl RbacManagementRepositoryImpl {
         row.as_ref().map(role_from_row).transpose()
     }
 
+    pub(crate) async fn roles_find(
+        &self,
+        oids: Vec<RoleOid>,
+    ) -> Result<Vec<RoleRecord>, RbacManagementRepositoryError> {
+        if oids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut binds = Binds::new();
+        let placeholders = oids
+            .into_iter()
+            .map(|oid| binds.push(Uuid::from(oid)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let rows = self
+            .db
+            .query_all_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                format!("{ROLE_SELECT} WHERE r.oid IN ({placeholders})"),
+                binds.into_values(),
+            ))
+            .await
+            .map_err(storage)?;
+        rows.iter().map(role_from_row).collect()
+    }
+
     pub(crate) async fn role_list(
         &self,
         query: RoleQuery,

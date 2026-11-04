@@ -30,7 +30,7 @@ import { cursorPage } from '#/modules/user-management/lib/cursor-page'
 
 import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
-import { BindingStatusChip } from '#/modules/user-management/roles/components/role-status'
+import { AssignmentStatusChip } from '#/modules/user-management/roles/components/role-status'
 import {
   UserSelectField,
   UserTextField,
@@ -49,7 +49,7 @@ export function GroupRolesPage({ groupId }: { groupId: string }) {
     () => rbacScope(workspace.data?.effectivePermissions),
     [workspace.data?.effectivePermissions],
   )
-  const canRead = scope.groupsRead && scope.groupRolesRead
+  const canRead = scope.groupsRead && scope.groupRolesRead && scope.rolesRead
   const [status, setStatus] = useState<RelationStatus>('any')
   const [after, setAfter] = useState<string | undefined>()
   const [before, setBefore] = useState<string | undefined>()
@@ -64,10 +64,9 @@ export function GroupRolesPage({ groupId }: { groupId: string }) {
             filter: status === 'any' ? {} : { enabled: status === 'enabled' },
             orderBy: 'ROLE_NAME_ASC',
             ...cursorPage(PAGE_SIZE, after, before),
-            includeRole: scope.rolesRead,
           }
         : null,
-    [after, before, canRead, groupId, scope.rolesRead, status],
+    [after, before, canRead, groupId, status],
   )
   const roles = useGroupRoles(variables)
   const group = roles.data?.group ?? null
@@ -77,12 +76,18 @@ export function GroupRolesPage({ groupId }: { groupId: string }) {
       <ConsoleWorkspaceGate>
         <RbacAccessRestricted
           title={
-            !scope.groupsRead ? 'groupsNoReadTitle' : 'groupRolesNoReadTitle'
+            !scope.groupsRead
+              ? 'groupsNoReadTitle'
+              : !scope.groupRolesRead
+                ? 'groupRolesNoReadTitle'
+                : 'rolesNoReadTitle'
           }
           description={
             !scope.groupsRead
               ? 'groupsNoReadDescription'
-              : 'groupRolesNoReadDescription'
+              : !scope.groupRolesRead
+                ? 'groupRolesNoReadDescription'
+                : 'rolesNoReadDescription'
           }
 
           onBack={() => void navigate({ to: '/groups' })}
@@ -145,13 +150,10 @@ export function GroupRolesPage({ groupId }: { groupId: string }) {
     readyGroup.name ??
     readyGroup.id
   const normalizedSearch = search.trim().toLowerCase()
-  const edges = readyGroup.roles.edges.filter(({ node }) => {
+  const edges = readyGroup.roles.edges.filter(({ node: role }) => {
     if (!normalizedSearch) return true
-    const role = scope.rolesRead ? (node.role ?? null) : null
-    const name = role
-      ? (resolveLocalizedText(role.names, locale) ?? role.name ?? role.id)
-      : ''
-    return [name, node.roleId, node.id]
+    const name = resolveLocalizedText(role.names, locale) ?? role.name
+    return [name, role.id]
       .join(' ')
       .toLowerCase()
       .includes(normalizedSearch)
@@ -172,23 +174,6 @@ export function GroupRolesPage({ groupId }: { groupId: string }) {
               <Alert.Description>
                 {t('groupRolesBuiltInDescription')}
               </Alert.Description>
-            </Alert.Content>
-          </Alert>
-        ) : null}
-
-        {!scope.rolesRead ? (
-          <Alert status="warning">
-            <Alert.Indicator />
-            <Alert.Content>
-              <Alert.Title>{t('groupRolesNoRoleReadTitle')}</Alert.Title>
-              <Alert.Description>
-                {t('groupRolesNoRoleReadDescription')}
-              </Alert.Description>
-              {!readyGroup.builtIn ? (
-                <p className="mt-2 text-xs text-muted">
-                  {t('groupRolesSelectionNoRolesRead')}
-                </p>
-              ) : null}
             </Alert.Content>
           </Alert>
         ) : null}
@@ -324,69 +309,42 @@ export function GroupRolesPage({ groupId }: { groupId: string }) {
                 ]}
               >
                 <DataTable.Body>
-                  {edges.map(({ node }) => {
-                    const role = scope.rolesRead ? (node.role ?? null) : null
-                    const name = role
-                      ? (resolveLocalizedText(role.names, locale) ??
-                        role.name ??
-                        role.name ??
-                        role.id)
-                      : null
+                  {edges.map((edge) => {
+                    const role = edge.node
+                    const name =
+                      resolveLocalizedText(role.names, locale) ?? role.name
                     return (
-                      <DataTable.Row key={node.id} id={node.id}>
+                      <DataTable.Row key={role.id} id={role.id}>
                         <DataTable.Cell>
                           <div className="min-w-56">
-                            {role && name ? (
-                              <>
-                                <Link
-                                  to="/roles/$roleId"
-                                  params={{ roleId: role.id }}
-                                  className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-                                >
-                                  {name}
-                                </Link>
-                                <div className="mt-1 flex flex-wrap gap-1">
-                                  {role.builtIn ? (
-                                    <Chip
-                                      size="sm"
-                                      variant="soft"
-                                      color="accent"
-                                    >
-                                      <Chip.Label>
-                                        {t('groupRolesBuiltInRoleLabel')}
-                                      </Chip.Label>
-                                    </Chip>
-                                  ) : null}
-                                  {!role.enabled ? (
-                                    <Chip
-                                      size="sm"
-                                      variant="soft"
-                                      color="warning"
-                                    >
-                                      <Chip.Label>
-                                        {t('rolesDisabled')}
-                                      </Chip.Label>
-                                    </Chip>
-                                  ) : null}
-                                </div>
-                              </>
-                            ) : (
-                              <>
-                                <p className="break-all font-mono text-xs">
-                                  {node.roleId}
-                                </p>
-                                <p className="mt-0.5 text-[11px] text-muted">
-                                  {t('groupRolesRoleIdOnly')}
-                                </p>
-                              </>
-                            )}
+                            <Link
+                              to="/roles/$roleId"
+                              params={{ roleId: role.id }}
+                              className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                            >
+                              {name}
+                            </Link>
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {role.builtIn ? (
+                                <Chip size="sm" variant="soft" color="accent">
+                                  <Chip.Label>
+                                    {t('groupRolesBuiltInRoleLabel')}
+                                  </Chip.Label>
+                                </Chip>
+                              ) : null}
+                              {!role.enabled ? (
+                                <Chip size="sm" variant="soft" color="warning">
+                                  <Chip.Label>{t('rolesDisabled')}</Chip.Label>
+                                </Chip>
+                              ) : null}
+                            </div>
                           </div>
                         </DataTable.Cell>
                         <DataTable.Cell>
-                          <BindingStatusChip
-                            enabled={node.enabled}
-                            revokedAt={node.revokedAt}
-                            roleEnabled={role?.enabled}
+                          <AssignmentStatusChip
+                            enabled={edge.enabled}
+                            revokedAt={edge.revokedAt}
+                            roleEnabled={role.enabled}
                           />
                         </DataTable.Cell>
                       </DataTable.Row>

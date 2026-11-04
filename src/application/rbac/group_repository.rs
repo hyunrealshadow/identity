@@ -10,7 +10,7 @@ use std::{error::Error as StdError, sync::Arc};
 
 use async_trait::async_trait;
 use identity_domain::{
-    rbac::{GroupMembershipOid, GroupOid, GroupRoleBindingOid, LocalizedText, RoleOid},
+    rbac::{GroupOid, LocalizedText, RoleOid},
     user::UserOid,
 };
 use uuid::Uuid;
@@ -21,8 +21,8 @@ use super::{
     cursor::{RbacPageDirection, RbacSortKey},
     group::{
         DeleteGroupResult, GroupFilter, GroupMembershipFilter, GroupMembershipMutationResult,
-        GroupMembershipOrder, GroupMembershipRecord, GroupOrder, GroupRecord,
-        GroupRoleBindingRecord, GroupRoleFilter, GroupRoleMutationResult, GroupRoleOrder,
+        GroupMembershipOrder, GroupMembershipRecord, GroupOrder, GroupRecord, GroupRoleFilter,
+        GroupRoleMutationResult, GroupRoleOrder, GroupRoleRecord,
     },
     model::RbacManagementAuthority,
 };
@@ -87,7 +87,7 @@ pub struct GroupMembershipPageEntry {
 #[derive(Debug, Clone)]
 pub struct GroupRolePageEntry {
     pub sort_key: RbacSortKey,
-    pub record: GroupRoleBindingRecord,
+    pub record: GroupRoleRecord,
 }
 
 #[derive(Debug, Clone)]
@@ -211,16 +211,6 @@ pub trait GroupManagementRepository: Send + Sync {
         &self,
         oid: GroupOid,
     ) -> Result<Option<GroupRecord>, GroupManagementRepositoryError>;
-
-    async fn find_group_membership(
-        &self,
-        oid: GroupMembershipOid,
-    ) -> Result<Option<GroupMembershipRecord>, GroupManagementRepositoryError>;
-
-    async fn find_group_role_binding(
-        &self,
-        oid: GroupRoleBindingOid,
-    ) -> Result<Option<GroupRoleBindingRecord>, GroupManagementRepositoryError>;
 
     async fn list_group_memberships(
         &self,

@@ -6,7 +6,6 @@
 
 mod audit;
 mod authority;
-mod binding;
 mod catalog;
 mod client;
 mod delegation;
@@ -14,6 +13,7 @@ mod resource;
 mod role;
 mod scope;
 mod support;
+mod user_role;
 
 use async_trait::async_trait;
 use identity_application::rbac::{
@@ -26,12 +26,11 @@ use identity_application::rbac::{
     RoleRecord, RoleStateTransaction, ScopeFilter, ScopeOid, ScopePageEntry, ScopeQuery,
     ScopeRecord, ScopeStateTransaction, SetClientScopesTransaction, SetRolePermissionsTransaction,
     UpdateResourceTransaction, UpdateRoleTransaction, UpdateScopeTransaction,
-    UserRoleBindingMutationResult, UserRoleBindingPageData, UserRoleBindingQuery,
-    UserRoleBindingRecord,
+    UserRoleMutationResult, UserRolePageData, UserRoleQuery,
 };
 use identity_domain::{
     client::model::ClientOid,
-    rbac::{ResourceOid, RoleOid, UserRoleBindingOid},
+    rbac::{ResourceOid, RoleOid},
     user::UserOid,
 };
 use sea_orm::DatabaseConnection;
@@ -181,11 +180,11 @@ impl RbacManagementRepository for RbacManagementRepositoryImpl {
         self.role_set_permissions(command).await
     }
 
-    async fn list_user_role_bindings(
+    async fn list_user_roles(
         &self,
-        query: UserRoleBindingQuery,
-    ) -> Result<UserRoleBindingPageData, RbacManagementRepositoryError> {
-        self.binding_list(query).await
+        query: UserRoleQuery,
+    ) -> Result<UserRolePageData, RbacManagementRepositoryError> {
+        self.user_role_list(query).await
     }
 
     async fn find_user_version(
@@ -195,11 +194,11 @@ impl RbacManagementRepository for RbacManagementRepositoryImpl {
         self.user_version(user_oid).await
     }
 
-    async fn find_user_role_bindings(
+    async fn find_roles(
         &self,
-        binding_oids: Vec<UserRoleBindingOid>,
-    ) -> Result<Vec<UserRoleBindingRecord>, RbacManagementRepositoryError> {
-        self.bindings_by_oids(&binding_oids).await
+        oids: Vec<RoleOid>,
+    ) -> Result<Vec<RoleRecord>, RbacManagementRepositoryError> {
+        self.roles_find(oids).await
     }
 
     async fn count_effective_permissions(
@@ -220,15 +219,15 @@ impl RbacManagementRepository for RbacManagementRepositoryImpl {
     async fn assign_user_roles(
         &self,
         command: AssignUserRolesTransaction,
-    ) -> Result<UserRoleBindingMutationResult, RbacManagementRepositoryError> {
-        self.binding_assign(command).await
+    ) -> Result<UserRoleMutationResult, RbacManagementRepositoryError> {
+        self.user_role_assign(command).await
     }
 
     async fn revoke_user_roles(
         &self,
         command: RevokeUserRolesTransaction,
-    ) -> Result<UserRoleBindingMutationResult, RbacManagementRepositoryError> {
-        self.binding_revoke(command).await
+    ) -> Result<UserRoleMutationResult, RbacManagementRepositoryError> {
+        self.user_role_revoke(command).await
     }
 
     async fn list_client_scope_targets(

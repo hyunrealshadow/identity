@@ -21,8 +21,8 @@ use identity_domain::{
         BusinessAuthorizationSnapshot, RbacAuthorizationError, RbacAuthorizationRepository,
         RbacAuthorizationState, RbacResourceState, ResourceOid, ResourcePermission,
         ResourcePermissionOid, Role, RoleAuthorizationSnapshot, RoleOid, RolePermission,
-        RolePermissionOid, STANDARD_OIDC_SCOPES, UserRoleBinding, UserRoleBindingOid,
-        UserRoleBindingSnapshot, validate_business_snapshot,
+        RolePermissionOid, STANDARD_OIDC_SCOPES, UserRole, UserRoleOid, UserRoleSnapshot,
+        validate_business_snapshot,
     },
     user::UserOid,
 };
@@ -230,15 +230,8 @@ pub(in crate::openid_connect) fn delegated_user_state(
 ) -> RbacAuthorizationState {
     let now = Utc::now();
     let role = Role::new(RoleOid::new(), "Business reader", "", now).expect("test role");
-    let binding = UserRoleBinding::new(
-        UserRoleBindingOid::new(),
-        user,
-        role.oid,
-        None,
-        "test grant",
-        now,
-    )
-    .expect("test binding");
+    let binding = UserRole::new(UserRoleOid::new(), user, role.oid, None, "test grant", now)
+        .expect("test binding");
     let memberships = resource
         .permissions
         .iter()
@@ -276,7 +269,7 @@ pub(in crate::openid_connect) fn delegated_snapshot(
         state
             .bindings
             .iter()
-            .map(UserRoleBindingSnapshot::from_binding)
+            .map(UserRoleSnapshot::from_binding)
             .collect(),
         state
             .roles

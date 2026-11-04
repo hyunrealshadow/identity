@@ -104,49 +104,42 @@ mutation ConsoleSetRolePermissions($input: SetRolePermissionsInput!) {
 query ConsoleRoleUsers(
   $roleId: ID!
   $enabled: Boolean
-  $orderBy: UserRoleBindingOrder
+  $orderBy: UserRoleOrder
   $first: Int
   $after: String
   $last: Int
   $before: String
-  $includeUser: Boolean!
 ) {
-  roleUsers(
-    roleId: $roleId
-    enabled: $enabled
-    orderBy: $orderBy
-    first: $first
-    after: $after
-    last: $last
-    before: $before
-  ) {
-    userVersion
-    pageInfo {
-      hasNextPage
-      hasPreviousPage
-      startCursor
-      endCursor
-    }
-    edges {
-      cursor
-      node {
-        id
-        userId
-        roleId
-        grantedByUserId
-        reason
+  role(id: $roleId) {
+    id
+    users(
+      enabled: $enabled
+      orderBy: $orderBy
+      first: $first
+      after: $after
+      last: $last
+      before: $before
+    ) {
+      pageInfo {
+        hasNextPage
+        hasPreviousPage
+        startCursor
+        endCursor
+      }
+      edges {
+        cursor
         enabled
         revokedAt
-        version
-        userVersion
+        reason
         createdAt
         updatedAt
-        user @include(if: $includeUser) {
+        node {
           id
           username
           email
           enabled
           locked
+          version
         }
       }
     }

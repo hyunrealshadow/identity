@@ -22,8 +22,8 @@ use crate::{
     rbac::{
         boundary::BusinessScopeBoundaryError,
         ids::{
-            GroupMembershipOid, GroupOid, GroupRoleBindingOid, ResourceOid, ResourcePermissionOid,
-            RoleOid, RolePermissionOid, UserRoleBindingOid,
+            GroupMembershipOid, GroupOid, GroupRoleOid, ResourceOid, ResourcePermissionOid,
+            RoleOid, RolePermissionOid, UserRoleOid,
         },
         metadata::{LocalizedMetadata, LocalizedTextError},
     },
@@ -340,8 +340,8 @@ pub struct RolePermission {
 /// User-role grant with independent identity and lifecycle. Revoking and
 /// granting again creates a new OID/version; the old binding is never revived.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct UserRoleBinding {
-    pub oid: UserRoleBindingOid,
+pub struct UserRole {
+    pub oid: UserRoleOid,
     pub user_oid: UserOid,
     pub role_oid: RoleOid,
     pub granted_by_user_oid: Option<UserOid>,
@@ -353,9 +353,9 @@ pub struct UserRoleBinding {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
-impl UserRoleBinding {
+impl UserRole {
     pub fn new(
-        oid: UserRoleBindingOid,
+        oid: UserRoleOid,
         user_oid: UserOid,
         role_oid: RoleOid,
         granted_by_user_oid: Option<UserOid>,
@@ -401,19 +401,19 @@ impl UserRoleBinding {
 /// One role/binding source explaining why a permission is effective.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EffectivePermissionSource {
-    pub binding_oid: UserRoleBindingOid,
+    pub user_role_oid: UserRoleOid,
     pub role_oid: RoleOid,
 }
 
 /// One active group path explaining group-derived authority. It keeps the
 /// membership and group-role relation identities distinct from direct
-/// `UserRoleBinding` sources; a group path is never rewritten as a synthetic
+/// `UserRole` sources; a group path is never rewritten as a synthetic
 /// direct binding.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct GroupRolePath {
     pub membership_oid: GroupMembershipOid,
     pub group_oid: GroupOid,
-    pub group_role_binding_oid: GroupRoleBindingOid,
+    pub group_role_oid: GroupRoleOid,
     pub role_oid: RoleOid,
 }
 
@@ -421,7 +421,7 @@ pub struct GroupRolePath {
 pub struct EffectiveGroupSource {
     pub membership_oid: GroupMembershipOid,
     pub group_oid: GroupOid,
-    pub group_role_binding_oid: GroupRoleBindingOid,
+    pub group_role_oid: GroupRoleOid,
     pub role_oid: RoleOid,
 }
 
@@ -464,7 +464,7 @@ pub struct EffectivePermissionSources<'a> {
     pub requested_resource: ResourceOid,
     pub expected_authorization_version: AuthorizationVersion,
     pub current_authorization_version: AuthorizationVersion,
-    pub bindings: &'a [UserRoleBinding],
+    pub bindings: &'a [UserRole],
     pub group_paths: &'a [GroupRolePath],
     pub roles: &'a [Role],
     pub memberships: &'a [RolePermission],
@@ -476,7 +476,7 @@ pub struct EffectivePermissionSources<'a> {
 ///
 /// Bindings from another user, disabled or revoked bindings, disabled roles
 /// and disabled permissions are excluded. Group provenance is returned
-/// separately from direct bindings; no synthetic `UserRoleBinding` is created
+/// separately from direct bindings; no synthetic `UserRole` is created
 /// for it.
 pub fn project_effective_permissions(
     sources: EffectivePermissionSources<'_>,
@@ -544,7 +544,7 @@ pub fn project_effective_permissions(
                 scope_owner.insert(permission.scope.clone(), identity.clone());
             }
             let source = EffectivePermissionSource {
-                binding_oid: binding.oid,
+                user_role_oid: binding.oid,
                 role_oid: role.oid,
             };
             merged
@@ -553,7 +553,7 @@ pub fn project_effective_permissions(
                     if !effective
                         .sources
                         .iter()
-                        .any(|existing| existing.binding_oid == source.binding_oid)
+                        .any(|existing| existing.user_role_oid == source.user_role_oid)
                     {
                         effective.sources.push(source.clone());
                     }
@@ -599,7 +599,7 @@ pub fn project_effective_permissions(
             let source = EffectiveGroupSource {
                 membership_oid: path.membership_oid,
                 group_oid: path.group_oid,
-                group_role_binding_oid: path.group_role_binding_oid,
+                group_role_oid: path.group_role_oid,
                 role_oid: path.role_oid,
             };
             merged
@@ -607,7 +607,7 @@ pub fn project_effective_permissions(
                 .and_modify(|effective| {
                     if !effective.group_sources.iter().any(|existing| {
                         existing.membership_oid == source.membership_oid
-                            && existing.group_role_binding_oid == source.group_role_binding_oid
+                            && existing.group_role_oid == source.group_role_oid
                     }) {
                         effective.group_sources.push(source.clone());
                     }
@@ -627,13 +627,13 @@ pub fn project_effective_permissions(
     for permission in &mut effective {
         permission
             .sources
-            .sort_by_key(|source| (source.role_oid.0, source.binding_oid.0));
+            .sort_by_key(|source| (source.role_oid.0, source.user_role_oid.0));
         permission.group_sources.sort_by_key(|source| {
             (
                 source.role_oid.0,
                 source.group_oid.0,
                 source.membership_oid.0,
-                source.group_role_binding_oid.0,
+                source.group_role_oid.0,
             )
         });
     }
@@ -690,16 +690,14 @@ mod tests {
 
     use super::{
         EffectivePermissionError, EffectivePermissionSources, PermissionCode, RbacLifecycleError,
-        RbacValidationError, ResourcePermission, Role, RolePermission, UserRoleBinding,
+        RbacValidationError, ResourcePermission, Role, RolePermission, UserRole,
         project_effective_permissions, project_scope_names,
     };
     use crate::{
         authorization::ids::AuthorizationVersion,
         rbac::{
             LocalizedMetadata,
-            ids::{
-                ResourceOid, ResourcePermissionOid, RoleOid, RolePermissionOid, UserRoleBindingOid,
-            },
+            ids::{ResourceOid, ResourcePermissionOid, RoleOid, RolePermissionOid, UserRoleOid},
         },
         user::UserOid,
     };
@@ -713,9 +711,9 @@ mod tests {
     }
 
     #[test]
-    fn user_role_binding_accepts_blank_reason_as_empty_annotation() {
-        let binding = UserRoleBinding::new(
-            UserRoleBindingOid::new(),
+    fn user_role_accepts_blank_reason_as_empty_annotation() {
+        let binding = UserRole::new(
+            UserRoleOid::new(),
             UserOid(Uuid::new_v4()),
             RoleOid::new(),
             None,
@@ -739,8 +737,8 @@ mod tests {
         );
 
         let role = Role::new(RoleOid::new(), "Orders", "", at()).unwrap();
-        let binding = UserRoleBinding::new(
-            UserRoleBindingOid::new(),
+        let binding = UserRole::new(
+            UserRoleOid::new(),
             UserOid(Uuid::new_v4()),
             role.oid,
             None,
@@ -786,15 +784,8 @@ mod tests {
         let resource = ResourceOid::new();
         let permission = permission(resource, "orders.read");
         let mut role = Role::new(RoleOid::new(), "Orders", "", at()).unwrap();
-        let mut binding = UserRoleBinding::new(
-            UserRoleBindingOid::new(),
-            user,
-            role.oid,
-            None,
-            "assign",
-            at(),
-        )
-        .unwrap();
+        let mut binding =
+            UserRole::new(UserRoleOid::new(), user, role.oid, None, "assign", at()).unwrap();
         let membership = RolePermission {
             oid: RolePermissionOid::new(),
             role_oid: role.oid,
@@ -834,15 +825,8 @@ mod tests {
             .is_empty()
         );
 
-        let mut binding = UserRoleBinding::new(
-            UserRoleBindingOid::new(),
-            user,
-            role.oid,
-            None,
-            "assign",
-            at(),
-        )
-        .unwrap();
+        let mut binding =
+            UserRole::new(UserRoleOid::new(), user, role.oid, None, "assign", at()).unwrap();
         role.set_enabled(false, at()).unwrap();
         assert!(
             project_effective_permissions(EffectivePermissionSources {
@@ -894,24 +878,10 @@ mod tests {
         let permission = permission(resource, "orders.read");
         let role_a = Role::new(RoleOid::new(), "Reader", "", at()).unwrap();
         let role_b = Role::new(RoleOid::new(), "Auditor", "", at()).unwrap();
-        let binding_a = UserRoleBinding::new(
-            UserRoleBindingOid::new(),
-            user,
-            role_a.oid,
-            None,
-            "assign",
-            at(),
-        )
-        .unwrap();
-        let binding_b = UserRoleBinding::new(
-            UserRoleBindingOid::new(),
-            user,
-            role_b.oid,
-            None,
-            "assign",
-            at(),
-        )
-        .unwrap();
+        let binding_a =
+            UserRole::new(UserRoleOid::new(), user, role_a.oid, None, "assign", at()).unwrap();
+        let binding_b =
+            UserRole::new(UserRoleOid::new(), user, role_b.oid, None, "assign", at()).unwrap();
         let memberships = [
             RolePermission {
                 oid: RolePermissionOid::new(),

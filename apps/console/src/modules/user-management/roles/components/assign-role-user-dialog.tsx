@@ -120,7 +120,7 @@ export function AssignUserDialog({
         { userId: selectedUserId },
         'ConsoleUserRoleVersion',
       )
-      const version = versionResult.data?.userRoles.userVersion ?? ''
+      const version = versionResult.data?.user?.roles.userVersion ?? ''
       if (
         !mutation.accept(
           versionResult,

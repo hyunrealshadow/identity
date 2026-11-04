@@ -74,7 +74,6 @@ query ConsoleGroupMembers(
   $after: String
   $last: Int
   $before: String
-  $includeUser: Boolean!
 ) {
   group(id: $groupId) {
     id
@@ -102,23 +101,20 @@ query ConsoleGroupMembers(
       }
       edges {
         cursor
+        enabled
+        revokedAt
+        createdAt
+        updatedAt
+        grantedBy {
+          id
+          username
+        }
         node {
           id
-          groupId
-          userId
-          grantedByUserId
+          username
+          email
           enabled
-          revokedAt
-          version
-          createdAt
-          updatedAt
-          user @include(if: $includeUser) {
-            id
-            username
-            email
-            enabled
-            locked
-          }
+          locked
         }
       }
     }
@@ -133,7 +129,6 @@ query ConsoleGroupRoles(
   $after: String
   $last: Int
   $before: String
-  $includeRole: Boolean!
 ) {
   group(id: $groupId) {
     id
@@ -161,32 +156,25 @@ query ConsoleGroupRoles(
       }
       edges {
         cursor
+        enabled
+        revokedAt
+        createdAt
+        updatedAt
         node {
           id
-          groupId
-          roleId
-          grantedByUserId
-          enabled
-          revokedAt
-          version
-          createdAt
-          updatedAt
-          role @include(if: $includeRole) {
-            id
-            name
-            builtIn
-            description
-            names {
-              locale
-              value
-            }
-            descriptions {
-              locale
-              value
-            }
-            enabled
-            version
+          name
+          builtIn
+          description
+          names {
+            locale
+            value
           }
+          descriptions {
+            locale
+            value
+          }
+          enabled
+          version
         }
       }
     }
@@ -208,10 +196,10 @@ query ConsoleGroupRoleIds($groupId: ID!, $first: Int!, $after: String) {
         endCursor
       }
       edges {
+        enabled
+        revokedAt
         node {
-          roleId
-          enabled
-          revokedAt
+          id
         }
       }
     }
@@ -236,9 +224,7 @@ mutation ConsoleAddGroupMember($input: AddGroupMemberInput!) {
   addGroupMember(input: $input) {
     groupId
     userId
-    membershipId
     groupVersion
-    membershipVersion
   }
 }
 
@@ -246,9 +232,7 @@ mutation ConsoleRemoveGroupMember($input: RemoveGroupMemberInput!) {
   removeGroupMember(input: $input) {
     groupId
     userId
-    membershipId
     groupVersion
-    membershipVersion
   }
 }
 

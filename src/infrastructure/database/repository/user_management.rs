@@ -608,6 +608,24 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         }
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "user_management.find_many"))]
+    async fn find_users(
+        &self,
+        user_oids: Vec<UserOid>,
+    ) -> Result<Vec<UserManagementRecord>, UserManagementRepositoryError> {
+        if user_oids.is_empty() {
+            return Ok(Vec::new());
+        }
+        UserEntity::find()
+            .filter(UserColumn::Oid.is_in(user_oids.into_iter().map(Uuid::from)))
+            .all(&self.db)
+            .await
+            .map_err(storage)?
+            .into_iter()
+            .map(record_from_model)
+            .collect()
+    }
+
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "user_management.create"))]
     async fn create_user(
         &self,

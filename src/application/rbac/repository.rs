@@ -15,15 +15,11 @@ use uuid::Uuid;
 use crate::authorization::ManagementAuthorizationError;
 use identity_domain::{
     client::model::ClientOid,
-    rbac::{LocalizedMetadata, LocalizedText, ResourceOid, RoleOid, UserRoleBindingOid},
+    rbac::{LocalizedMetadata, LocalizedText, ResourceOid, RoleOid},
     user::UserOid,
 };
 
 use super::{
-    binding::{
-        EffectivePermissionOrder, EffectivePermissionRecord, UserRoleBindingMutationResult,
-        UserRoleBindingOrder, UserRoleBindingRecord,
-    },
     client::{
         ClientScopeAssignment, ClientScopeSetResult, ClientScopeTargetFilter,
         ClientScopeTargetOrder, ClientScopeTargetRecord,
@@ -33,6 +29,10 @@ use super::{
     resource::{ApiResourceRecord, ResourceFilter, ResourceOrder},
     role::{RoleFilter, RoleOrder, RoleRecord},
     scope::{ScopeFilter, ScopeOrder, ScopeRecord},
+    user_role::{
+        EffectivePermissionOrder, EffectivePermissionRecord, UserRoleMutationResult, UserRoleOrder,
+        UserRoleRecord,
+    },
 };
 
 #[derive(Debug, Clone)]
@@ -68,9 +68,9 @@ pub struct RolePageEntry {
 }
 
 #[derive(Debug, Clone)]
-pub struct UserRoleBindingPageEntry {
+pub struct UserRolePageEntry {
     pub sort_key: RbacSortKey,
-    pub record: UserRoleBindingRecord,
+    pub record: UserRoleRecord,
 }
 
 #[derive(Debug, Clone)]
@@ -84,8 +84,8 @@ pub struct EffectivePermissionPageEntry {
 /// `user_version` is `Some` for a user-filtered page (including an empty page)
 /// and `None` for a role-filtered page spanning several users.
 #[derive(Debug, Clone)]
-pub struct UserRoleBindingPageData {
-    pub items: Vec<UserRoleBindingPageEntry>,
+pub struct UserRolePageData {
+    pub items: Vec<UserRolePageEntry>,
     pub has_previous_page: bool,
     pub has_next_page: bool,
     pub user_version: Option<Uuid>,
@@ -136,11 +136,11 @@ pub struct RoleQuery {
 }
 
 #[derive(Debug, Clone)]
-pub struct UserRoleBindingQuery {
+pub struct UserRoleQuery {
     pub user_oid: Option<UserOid>,
     pub role_oid: Option<RoleOid>,
     pub enabled: Option<bool>,
-    pub order: UserRoleBindingOrder,
+    pub order: UserRoleOrder,
     pub direction: RbacPageDirection,
     pub after: Option<RbacSortKey>,
     pub before: Option<RbacSortKey>,
@@ -475,10 +475,10 @@ pub trait RbacManagementRepository: Send + Sync {
     /// One snapshot read: page rows and (for a user filter) the current
     /// generation are returned together so the page and its CAS metadata
     /// cannot diverge.
-    async fn list_user_role_bindings(
+    async fn list_user_roles(
         &self,
-        query: UserRoleBindingQuery,
-    ) -> Result<UserRoleBindingPageData, RbacManagementRepositoryError>;
+        query: UserRoleQuery,
+    ) -> Result<UserRolePageData, RbacManagementRepositoryError>;
 
     /// Current core user UUID version for one real user.
     ///
@@ -488,14 +488,12 @@ pub trait RbacManagementRepository: Send + Sync {
         user_oid: UserOid,
     ) -> Result<Uuid, RbacManagementRepositoryError>;
 
-    /// Read the bindings identified by server-produced IDs.
-    ///
-    /// Bounded to 100 entries. This is not a general search API: callers pass
-    /// only IDs returned by a guarded mutation or an active connection edge.
-    async fn find_user_role_bindings(
+    /// Roles referenced by one page of relation edges. Unknown OIDs are
+    /// omitted; callers bound the list to one page.
+    async fn find_roles(
         &self,
-        binding_oids: Vec<UserRoleBindingOid>,
-    ) -> Result<Vec<UserRoleBindingRecord>, RbacManagementRepositoryError>;
+        oids: Vec<RoleOid>,
+    ) -> Result<Vec<RoleRecord>, RbacManagementRepositoryError>;
 
     /// Full live permission union for one user and API resource, independent of cursors.
     async fn count_effective_permissions(
@@ -512,12 +510,12 @@ pub trait RbacManagementRepository: Send + Sync {
     async fn assign_user_roles(
         &self,
         command: AssignUserRolesTransaction,
-    ) -> Result<UserRoleBindingMutationResult, RbacManagementRepositoryError>;
+    ) -> Result<UserRoleMutationResult, RbacManagementRepositoryError>;
 
     async fn revoke_user_roles(
         &self,
         command: RevokeUserRolesTransaction,
-    ) -> Result<UserRoleBindingMutationResult, RbacManagementRepositoryError>;
+    ) -> Result<UserRoleMutationResult, RbacManagementRepositoryError>;
 
     async fn list_client_scope_targets(
         &self,

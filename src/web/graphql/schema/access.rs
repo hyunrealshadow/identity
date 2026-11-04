@@ -219,7 +219,7 @@ mod tests {
                     "lockedUntil",
                     "failedAttempts",
                     "groups",
-                    "roleBindings",
+                    "roles",
                     "effectivePermissions",
                 ][..],
             ),

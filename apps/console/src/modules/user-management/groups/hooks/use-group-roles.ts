@@ -113,8 +113,7 @@ export function useGroupRoleMutations() {
             }
           }
           for (const edge of connection.edges) {
-            const node = edge.node
-            if (node.enabled && !node.revokedAt) ids.add(node.roleId)
+            if (edge.enabled && !edge.revokedAt) ids.add(edge.node.id)
           }
           if (!connection.pageInfo.hasNextPage) {
             return {

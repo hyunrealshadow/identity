@@ -6,12 +6,11 @@ use identity_application::{
         AssignUserRolesCommand, CreateRoleCommand, EffectivePermissionPage,
         EffectivePermissionPageRequest, RevokeUserRolesCommand, RoleFilter,
         RoleOrder as ApplicationOrder, RolePage, RolePageRequest, RoleRecord, RoleStateCommand,
-        RoleUserPageRequest, SetRolePermissionsCommand, UpdateRoleCommand,
-        UserRoleBindingMutationResult, UserRoleBindingPage, UserRoleBindingRecord,
-        UserRolePageRequest,
+        RoleUserPageRequest, SetRolePermissionsCommand, UpdateRoleCommand, UserRoleMutationResult,
+        UserRolePage, UserRolePageRequest,
     },
 };
-use identity_domain::rbac::{RoleOid, UserRoleBindingOid};
+use identity_domain::rbac::RoleOid;
 
 use super::super::resource::support::{PageArgs, request_authority};
 use crate::graphql::schema::RequestContext;
@@ -117,7 +116,7 @@ pub(crate) async fn set_role_permissions(
 pub(crate) async fn list_user_roles(
     request: &RequestContext,
     request_page: UserRolePageRequest,
-) -> Result<UserRoleBindingPage, AppError> {
+) -> Result<UserRolePage, AppError> {
     request
         .state
         .services()
@@ -129,7 +128,7 @@ pub(crate) async fn list_user_roles(
 pub(crate) async fn list_role_users(
     request: &RequestContext,
     request_page: RoleUserPageRequest,
-) -> Result<UserRoleBindingPage, AppError> {
+) -> Result<UserRolePage, AppError> {
     request
         .state
         .services()
@@ -138,19 +137,16 @@ pub(crate) async fn list_role_users(
         .await
 }
 
-/// Expand mutation-produced binding IDs for the guarded payload field.
-///
-/// The caller only ever passes OIDs taken from the service result, never
-/// caller input, and the adapter bounds the request to 100 entries.
-pub(crate) async fn find_user_role_bindings(
+/// Roles referenced by one page of relation edges.
+pub(crate) async fn find_roles(
     request: &RequestContext,
-    binding_oids: Vec<UserRoleBindingOid>,
-) -> Result<Vec<UserRoleBindingRecord>, AppError> {
+    oids: Vec<RoleOid>,
+) -> Result<Vec<RoleRecord>, AppError> {
     request
         .state
         .services()
         .rbac_management()
-        .find_user_role_bindings(binding_oids)
+        .find_roles(oids)
         .await
 }
 
@@ -169,7 +165,7 @@ pub(crate) async fn list_effective_permissions(
 pub(crate) async fn assign_user_roles(
     request: &RequestContext,
     command: AssignUserRolesCommand,
-) -> Result<UserRoleBindingMutationResult, AppError> {
+) -> Result<UserRoleMutationResult, AppError> {
     let authority = request_authority(request).await?;
     request
         .state
@@ -182,7 +178,7 @@ pub(crate) async fn assign_user_roles(
 pub(crate) async fn revoke_user_roles(
     request: &RequestContext,
     command: RevokeUserRolesCommand,
-) -> Result<UserRoleBindingMutationResult, AppError> {
+) -> Result<UserRoleMutationResult, AppError> {
     let authority = request_authority(request).await?;
     request
         .state

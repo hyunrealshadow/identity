@@ -26,10 +26,10 @@ use crate::{
         ids::{ResourceOid, RoleOid},
         model::{
             EffectivePermission, EffectivePermissionError, EffectivePermissionSources,
-            GroupRolePath, ResourcePermission, Role, RolePermission, UserRoleBinding,
+            GroupRolePath, ResourcePermission, Role, RolePermission, UserRole,
             project_effective_permissions,
         },
-        snapshot::{BindingSnapshotError, UserAuthorizationSnapshot, UserRoleBindingSnapshot},
+        snapshot::{BindingSnapshotError, UserAuthorizationSnapshot, UserRoleSnapshot},
     },
     user::UserOid,
 };
@@ -69,8 +69,8 @@ pub struct RbacAuthorizationState {
     /// The user's active direct bindings. Repository adapters may return only
     /// active rows; an absent snapshot binding is still rejected as no longer
     /// valid. Group authority is never rewritten into this list.
-    pub bindings: Vec<UserRoleBinding>,
-    /// Active group paths (`GroupMembership` + `GroupRoleBinding`) for the same
+    pub bindings: Vec<UserRole>,
+    /// Active group paths (`GroupMembership` + `GroupRole`) for the same
     /// user. They keep their own provenance and are not synthetic bindings.
     pub group_paths: Vec<GroupRolePath>,
     pub roles: Vec<Role>,
@@ -93,7 +93,7 @@ pub struct BusinessAuthorizationSnapshot {
     pub policy_version: AuthorizationVersion,
     pub user_oid: Option<UserOid>,
     pub user_authorization_version: Option<AuthorizationVersion>,
-    pub bindings: Vec<UserRoleBindingSnapshot>,
+    pub bindings: Vec<UserRoleSnapshot>,
     pub roles: Vec<RoleAuthorizationSnapshot>,
 }
 
@@ -103,7 +103,7 @@ impl BusinessAuthorizationSnapshot {
         resource: &RbacResourceState,
         user_oid: UserOid,
         user_authorization_version: AuthorizationVersion,
-        bindings: Vec<UserRoleBindingSnapshot>,
+        bindings: Vec<UserRoleSnapshot>,
         roles: Vec<RoleAuthorizationSnapshot>,
     ) -> Self {
         Self {
@@ -363,11 +363,9 @@ mod tests {
         authorization::ids::AuthorizationVersion,
         rbac::{
             LocalizedMetadata,
-            ids::{
-                ResourceOid, ResourcePermissionOid, RoleOid, RolePermissionOid, UserRoleBindingOid,
-            },
-            model::{ResourcePermission, Role, RolePermission, UserRoleBinding},
-            snapshot::UserRoleBindingSnapshot,
+            ids::{ResourceOid, ResourcePermissionOid, RoleOid, RolePermissionOid, UserRoleOid},
+            model::{ResourcePermission, Role, RolePermission, UserRole},
+            snapshot::UserRoleSnapshot,
         },
         user::UserOid,
     };
@@ -399,7 +397,7 @@ mod tests {
     fn user_state() -> (
         UserOid,
         Role,
-        UserRoleBinding,
+        UserRole,
         RolePermission,
         RbacResourceState,
         AuthorizationVersion,
@@ -416,15 +414,8 @@ mod tests {
         )
         .unwrap();
         resource.permissions = vec![permission.clone()];
-        let binding = UserRoleBinding::new(
-            UserRoleBindingOid::new(),
-            user,
-            role.oid,
-            None,
-            "grant",
-            at(),
-        )
-        .unwrap();
+        let binding =
+            UserRole::new(UserRoleOid::new(), user, role.oid, None, "grant", at()).unwrap();
         let membership = RolePermission {
             oid: RolePermissionOid::new(),
             role_oid: role.oid,
@@ -440,7 +431,7 @@ mod tests {
     fn build_state(
         user: UserOid,
         role: &Role,
-        binding: &UserRoleBinding,
+        binding: &UserRole,
         membership: &RolePermission,
         resource: RbacResourceState,
         user_authorization_version: AuthorizationVersion,
@@ -461,7 +452,7 @@ mod tests {
     fn snapshot(
         user: UserOid,
         role: &Role,
-        binding: &UserRoleBinding,
+        binding: &UserRole,
         resource: &RbacResourceState,
         user_authorization_version: AuthorizationVersion,
     ) -> BusinessAuthorizationSnapshot {
@@ -469,7 +460,7 @@ mod tests {
             resource,
             user,
             user_authorization_version,
-            vec![UserRoleBindingSnapshot::from_binding(binding)],
+            vec![UserRoleSnapshot::from_binding(binding)],
             vec![RoleAuthorizationSnapshot { role_oid: role.oid }],
         )
     }
@@ -581,15 +572,8 @@ mod tests {
         let (user, role, binding, membership, resource, authority_version) = user_state();
         let snapshot = snapshot(user, &role, &binding, &resource, authority_version);
 
-        let regranted = UserRoleBinding::new(
-            UserRoleBindingOid::new(),
-            user,
-            role.oid,
-            None,
-            "regrant",
-            at(),
-        )
-        .unwrap();
+        let regranted =
+            UserRole::new(UserRoleOid::new(), user, role.oid, None, "regrant", at()).unwrap();
         let state = build_state(
             user,
             &role,

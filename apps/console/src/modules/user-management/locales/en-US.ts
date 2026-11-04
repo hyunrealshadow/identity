@@ -501,21 +501,21 @@ const enUS = {
     'Manage users assigned to this role and review assignment history.',
   roleUsersNoReadTitle: 'Role assignments cannot be read',
   roleUsersNoReadDescription:
-    'This account does not have management.role_assignment.read, so user-role bindings were not requested.',
+    'This account does not have management.role_assignment.read, so user-role assignments were not requested.',
   rolesUsersStepUpNote:
     'Stronger authentication is required before assigning or revoking a user role.',
-  roleUsersListTitle: 'User bindings',
+  roleUsersListTitle: 'User assignments',
   roleUsersListDescription:
     'Review current assignments and previously revoked assignments.',
   roleUsersLoading: 'Loading role users…',
-  roleUsersEmptyTitle: 'No user bindings',
+  roleUsersEmptyTitle: 'No user assignments',
   roleUsersEmptyDescription:
     'No user has been assigned this role, including revoked history.',
   roleUsersEmptyFilteredDescription:
-    'No user bindings match the selected status.',
+    'No user assignments match the selected status.',
   roleUsersTableLabel: 'Role users',
   roleUsersColumnUser: 'User',
-  roleUsersColumnStatus: 'Binding status',
+  roleUsersColumnStatus: 'Assignment status',
   roleUsersColumnCreated: 'Granted',
   roleUsersColumnActions: 'Actions',
   roleUsersPagination: 'Role user pagination',
@@ -530,32 +530,32 @@ const enUS = {
   roleUsersAssignConfirm: 'Assign role',
   roleUserAssignedTitle: 'User role assigned',
   roleUserAssignedDescription:
-    'The user-role binding was refreshed from the server.',
+    'The user-role assignment was refreshed from the server.',
   roleUserAssignedToast: 'User role assigned',
   roleUserAssignedCommitted:
-    '{count, plural, one {# new binding created} other {# new bindings created}}.',
+    '{count, plural, one {# new assignment created} other {# new assignments created}}.',
   roleUserAlreadyAssigned:
-    'The user already had an active binding; no second binding was created.',
+    'The user already had an active assignment, so none was added.',
   roleUsersRevokeAction: 'Revoke',
   roleUsersRevokeFor: 'Revoke this role from {user}',
-  roleUsersRevokeTitle: 'Revoke this user-role binding?',
+  roleUsersRevokeTitle: 'Revoke this user-role assignment?',
   roleUsersRevokeDescription:
-    'Revoke this role from {user}. The binding remains as a revocation history record and a later assignment creates a new binding.',
+    'Revoke this role from {user}. The assignment remains as revocation history, and assigning the role again creates a new one.',
   roleUsersRevokeConfirm: 'Revoke role',
   roleUserRevokedTitle: 'User role revoked',
   roleUserRevokedDescription:
-    'The binding was refreshed from the server and remains visible in history.',
+    'The assignment was refreshed from the server and remains visible in history.',
   roleUserRevokedToast: 'User role revoked',
   roleUserRevokedCommitted:
-    '{count, plural, one {# binding revoked} other {# bindings revoked}}.',
-  bindingFilterAll: 'All bindings',
-  bindingFilterActive: 'Active',
-  bindingFilterRevoked: 'Revoked',
-  bindingActive: 'Active',
-  bindingRevoked: 'Revoked',
-  bindingActiveRoleDisabled: 'Active · role disabled',
-  bindingRoleDisabledHint:
-    'The role is disabled. The binding itself is still active and is not shown as revoked.',
+    '{count, plural, one {# assignment revoked} other {# assignments revoked}}.',
+  assignmentFilterAll: 'All assignments',
+  assignmentFilterActive: 'Active',
+  assignmentFilterRevoked: 'Revoked',
+  assignmentActive: 'Active',
+  assignmentRevoked: 'Revoked',
+  assignmentActiveRoleDisabled: 'Active · role disabled',
+  assignmentRoleDisabledHint:
+    'The role is disabled. The assignment itself is still active and is not shown as revoked.',
 
   userAuthorizationUsersReadDescription:
     'This account does not have management.user.read, so the user record and related authorization pages are not requested.',
@@ -564,7 +564,7 @@ const enUS = {
     'Review direct roles and revoked assignments. See Permissions for access inherited through groups.',
   userRolesNoReadTitle: 'User roles cannot be read',
   userRolesNoReadDescription:
-    'This account does not have management.role_assignment.read, so role bindings were not requested.',
+    'This account does not have management.role_assignment.read, so role assignments were not requested.',
   userRolesStepUpNote:
     'Stronger authentication is required before assigning or revoking roles for this user.',
   userRolesListTitle: 'Roles',
@@ -574,10 +574,10 @@ const enUS = {
   userRolesEmptyDescription:
     'Permissions inherited from groups are shown on the Permissions tab',
   userRolesEmptyFilteredDescription:
-    'No role bindings match the selected status.',
+    'No role assignments match the selected status.',
   userRolesTableLabel: 'User roles',
   userRolesColumnRole: 'Role',
-  userRolesColumnStatus: 'Binding status',
+  userRolesColumnStatus: 'Assignment status',
   userRolesColumnCreated: 'Granted',
   userRolesColumnActions: 'Actions',
   userRolesPagination: 'User role pagination',
@@ -592,22 +592,22 @@ const enUS = {
   userRolesAssignConfirm: 'Assign roles',
   userRolesAssignedTitle: 'Roles assigned',
   userRolesAssignedDescription:
-    'The user’s role bindings were refreshed from the server.',
+    'The user’s role assignments were refreshed from the server.',
   userRolesAssignedToast: 'Roles assigned',
   userRolesAssignedCommitted:
-    '{count, plural, one {# new binding created} other {# new bindings created}}.',
+    '{count, plural, one {# new assignment created} other {# new assignments created}}.',
   userRolesRevokeAction: 'Revoke',
   userRolesRevokeFor: 'Revoke {role} from this user',
-  userRolesRevokeTitle: 'Revoke this role binding?',
+  userRolesRevokeTitle: 'Revoke this role assignment?',
   userRolesRevokeDescription:
-    'Revoke {role} from this user. The binding remains in history and a later assignment creates a new binding.',
+    'Revoke {role} from this user. The assignment remains in history, and assigning the role again creates a new one.',
   userRolesRevokeConfirm: 'Revoke role',
-  userRolesRevokedTitle: 'Role binding revoked',
+  userRolesRevokedTitle: 'Role assignment revoked',
   userRolesRevokedDescription:
-    'The role bindings were refreshed from the server and history remains visible.',
+    'The role assignments were refreshed from the server and history remains visible.',
   userRolesRevokedToast: 'Role revoked',
   userRolesRevokedCommitted:
-    '{count, plural, one {# binding revoked} other {# bindings revoked}}.',
+    '{count, plural, one {# assignment revoked} other {# assignments revoked}}.',
 
   userPermissionsTitle: 'Permissions',
   userPermissionsDescription:
@@ -633,7 +633,7 @@ const enUS = {
   userPermissionsSelectResourceDescription:
     'Effective permissions are calculated for one API resource at a time.',
   userPermissionsEffectiveDescription:
-    'Explicit permissions and every direct role binding or group role source that contributes them.',
+    'Explicit permissions and every direct role assignment or group role source that contributes them.',
   userPermissionsPagination: 'Effective permission pagination',
   userPermissionsBoundaryTitle: 'Effective permission boundary',
   userPermissionsBoundaryDescription:
@@ -642,7 +642,7 @@ const enUS = {
   userPermissionsLoading: 'Loading effective permissions…',
   userPermissionsEmptyTitle: 'No effective permissions',
   userPermissionsEmptyDescription:
-    'No active direct or group role binding currently grants a permission on this resource.',
+    'No active direct or group role assignment currently grants a permission on this resource.',
   userPermissionsPartialTitle:
     'Some effective permission data could not be loaded',
   userPermissionsPartialDescription:
@@ -651,14 +651,13 @@ const enUS = {
   userPermissionsColumnPermission: 'Permission',
   userPermissionsColumnScope: 'Scope',
   userPermissionsColumnSources: 'Permission sources',
-  userPermissionsSourcesDirect: 'Direct role bindings',
+  userPermissionsSourcesDirect: 'Direct role assignments',
   userPermissionsSourcesGroups: 'Group-derived sources',
   userPermissionsGroupLabel: 'Group',
   userPermissionsGroupRoleLabel: 'Role',
   userPermissionsGroupIdLabel: 'Group ID',
   userPermissionsGroupRoleIdLabel: 'Role ID',
   userPermissionsGroupMembershipIdLabel: 'Membership ID',
-  userPermissionsGroupRoleBindingIdLabel: 'Group role binding ID',
   userPermissionsGroupHidden:
     'Group display names require management.group.read.',
 
@@ -892,11 +891,8 @@ const enUS = {
     'This built-in group’s metadata and role links are fixed, but its memberships can still be adjusted with the membership write permission.',
   groupMembersNoUsersReadTitle: 'User profiles are not available',
   groupMembersNoUsersReadDescription:
-    'You can view membership records, but user details and user search are not available with your permissions.',
-  groupMembersUserHidden:
-    'User details are not available with your permissions.',
-  groupMembersMembershipIdLabel: 'Membership ID',
-  groupMembersGrantedByLabel: 'Granted by user ID',
+    'This account does not have management.user.read, so group members are not requested.',
+  groupMembersGrantedByLabel: 'Granted by',
   groupMembersStatusActive: 'Active',
   groupMembersStatusRemoved: 'Removed',
   groupMembersRevokedAt: 'Removed {date}',
@@ -950,17 +946,11 @@ const enUS = {
   groupRolesBuiltInTitle: 'Built-in group role links are fixed',
   groupRolesBuiltInDescription:
     'This built-in group’s role links are defined by the system version. They are shown for reference and cannot be edited here.',
-  groupRolesNoRoleReadTitle: 'Role details are limited',
-  groupRolesNoRoleReadDescription:
-    'You can view role links, but role details are not available with your permissions.',
-  groupRolesSelectionNoRolesRead:
-    'You need permission to view roles before changing these links.',
   groupRolesNoWritePermission: 'You can view role links but cannot change them',
   groupRolesNoWriteDescription:
     'You can view role links but cannot change them.',
   groupRolesWriteStepUpNote:
     'Your pending role selection is kept. After verifying, return and submit again; the change is never replayed automatically.',
-  groupRolesRoleIdOnly: 'Role details are not available with your permissions.',
   groupRolesBuiltInRoleLabel: 'Built-in role',
   groupRolesEditAction: 'Edit role links',
   groupRolesEditTitle: 'Replace the group role set',

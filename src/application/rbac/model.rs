@@ -110,6 +110,6 @@ pub(crate) const MAX_DISPLAY_NAME_LENGTH: usize = 256;
 pub(crate) const MAX_DESCRIPTION_LENGTH: usize = 1_024;
 pub(crate) const MAX_ROLE_PERMISSIONS: usize = 1_000;
 pub(crate) const MAX_USER_ROLES: usize = 100;
-pub(crate) const MAX_BINDING_LOOKUPS: usize = 100;
+pub(crate) const MAX_BATCH_LOOKUPS: usize = 100;
 pub(crate) const MAX_SCOPE_ASSIGNMENTS: usize = 1_000;
 pub(crate) const MAX_DESCRIPTION_LOCALES: usize = 20;

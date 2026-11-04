@@ -6,8 +6,8 @@ use identity_application::rbac::{
     AssignUserRolesTransaction, EffectiveGroupPermissionSourceRecord, EffectivePermissionPageData,
     EffectivePermissionPageEntry, EffectivePermissionQuery, EffectivePermissionRecord,
     EffectivePermissionSourceRecord, RbacEntityKind, RbacManagementRepositoryError,
-    RevokeUserRolesTransaction, UserRoleBindingMutationResult, UserRoleBindingPageData,
-    UserRoleBindingPageEntry, UserRoleBindingQuery, UserRoleBindingRecord,
+    RevokeUserRolesTransaction, UserRoleMutationResult, UserRolePageData, UserRolePageEntry,
+    UserRoleQuery, UserRoleRecord,
     cursor::{RbacPageDirection, RbacSortKey, RbacTie},
 };
 use identity_domain::{
@@ -15,8 +15,8 @@ use identity_domain::{
     openid_connect::API_RESOURCE,
     rbac,
     rbac::{
-        GroupMembershipOid, GroupOid, GroupRoleBindingOid, ResourceOid, ResourcePermissionOid,
-        RoleOid, UserRoleBindingOid,
+        GroupMembershipOid, GroupOid, GroupRoleOid, ResourceOid, ResourcePermissionOid, RoleOid,
+        UserRoleOid,
     },
     user::UserOid,
 };
@@ -48,9 +48,9 @@ const BINDING_SELECT: &str = "SELECT urb.id, urb.oid, urb.user_id, u.oid AS user
 
 fn binding_from_row(
     row: &sea_orm::QueryResult,
-) -> Result<UserRoleBindingRecord, RbacManagementRepositoryError> {
-    Ok(UserRoleBindingRecord {
-        oid: UserRoleBindingOid(row.try_get::<Uuid>("", "oid").map_err(storage)?),
+) -> Result<UserRoleRecord, RbacManagementRepositoryError> {
+    Ok(UserRoleRecord {
+        oid: UserRoleOid(row.try_get::<Uuid>("", "oid").map_err(storage)?),
         user_oid: UserOid(row.try_get::<Uuid>("", "user_oid").map_err(storage)?),
         role_oid: RoleOid(row.try_get::<Uuid>("", "role_oid").map_err(storage)?),
         granted_by_user_oid: row
@@ -201,38 +201,10 @@ impl RbacManagementRepositoryImpl {
         row.try_get::<Uuid>("", "version").map_err(storage)
     }
 
-    pub(crate) async fn bindings_by_oids(
+    pub(crate) async fn user_role_list(
         &self,
-        binding_oids: &[UserRoleBindingOid],
-    ) -> Result<Vec<UserRoleBindingRecord>, RbacManagementRepositoryError> {
-        if binding_oids.is_empty() {
-            return Ok(Vec::new());
-        }
-        let mut binds = Binds::new();
-        let placeholders = binding_oids
-            .iter()
-            .map(|oid| binds.push(Uuid::from(*oid)))
-            .collect::<Vec<_>>()
-            .join(", ");
-        let rows = self
-            .db
-            .query_all_raw(Statement::from_sql_and_values(
-                DbBackend::Postgres,
-                format!("{BINDING_SELECT} WHERE urb.oid IN ({placeholders})"),
-                binds.into_values(),
-            ))
-            .await
-            .map_err(storage)?;
-        if rows.len() != binding_oids.len() {
-            return Err(not_found(RbacEntityKind::Binding));
-        }
-        rows.iter().map(binding_from_row).collect()
-    }
-
-    pub(crate) async fn binding_list(
-        &self,
-        query: UserRoleBindingQuery,
-    ) -> Result<UserRoleBindingPageData, RbacManagementRepositoryError> {
+        query: UserRoleQuery,
+    ) -> Result<UserRolePageData, RbacManagementRepositoryError> {
         // Page rows and the single-user version are read from one
         // REPEATABLE READ snapshot. A separate version query after the page
         // would let a concurrent assignment revoke the cursor's CAS metadata.
@@ -314,7 +286,7 @@ impl RbacManagementRepositoryImpl {
                 created_at: record.created_at,
                 tie: RbacTie::Id(id),
             };
-            items.push(UserRoleBindingPageEntry { sort_key, record });
+            items.push(UserRolePageEntry { sort_key, record });
         }
         let (has_previous_page, has_next_page) = page_flags(
             query.direction,
@@ -323,7 +295,7 @@ impl RbacManagementRepositoryImpl {
             query.before.is_some(),
         );
         txn.commit().await.map_err(storage)?;
-        Ok(UserRoleBindingPageData {
+        Ok(UserRolePageData {
             items,
             has_previous_page,
             has_next_page,
@@ -479,7 +451,7 @@ impl RbacManagementRepositoryImpl {
                 .query_all_raw(Statement::from_sql_and_values(
                     DbBackend::Postgres,
                     format!(
-                        "SELECT urb.oid AS binding_oid, r.oid AS role_oid, \
+                        "SELECT urb.oid AS user_role_oid, r.oid AS role_oid, \
                                 rp_membership.scope_id \
                          FROM user_role urb \
                   JOIN \"role\" r ON r.id = urb.role_id AND r.enabled = true \
@@ -496,15 +468,15 @@ impl RbacManagementRepositoryImpl {
             for row in source_rows {
                 let permission_id = row.try_get::<i64>("", "scope_id").map_err(storage)?;
                 let source = EffectivePermissionSourceRecord {
-                    binding_oid: UserRoleBindingOid(
-                        row.try_get::<Uuid>("", "binding_oid").map_err(storage)?,
+                    user_role_oid: UserRoleOid(
+                        row.try_get::<Uuid>("", "user_role_oid").map_err(storage)?,
                     ),
                     role_oid: RoleOid(row.try_get::<Uuid>("", "role_oid").map_err(storage)?),
                 };
                 map.entry(permission_id).or_default().push(source);
             }
             for sources in map.values_mut() {
-                sources.sort_by_key(|source| (source.role_oid.0, source.binding_oid.0));
+                sources.sort_by_key(|source| (source.role_oid.0, source.user_role_oid.0));
             }
             map
         };
@@ -521,7 +493,7 @@ impl RbacManagementRepositoryImpl {
             let source_rows = txn.query_all_raw(Statement::from_sql_and_values(
                 DbBackend::Postgres,
                 format!("SELECT rp.scope_id, ug.oid AS group_oid, gm.oid AS membership_oid, \
-                    grb.oid AS group_role_binding_oid, r.oid AS role_oid \
+                    grb.oid AS group_role_oid, r.oid AS role_oid \
                     FROM group_membership gm \
                     JOIN user_group ug ON ug.id = gm.group_id AND ug.enabled = true AND ug.deleted_at IS NULL \
                     JOIN group_role grb ON grb.group_id = ug.id AND grb.enabled = true AND grb.revoked_at IS NULL \
@@ -539,9 +511,8 @@ impl RbacManagementRepositoryImpl {
                         membership_oid: GroupMembershipOid(
                             row.try_get::<Uuid>("", "membership_oid").map_err(storage)?,
                         ),
-                        group_role_binding_oid: GroupRoleBindingOid(
-                            row.try_get::<Uuid>("", "group_role_binding_oid")
-                                .map_err(storage)?,
+                        group_role_oid: GroupRoleOid(
+                            row.try_get::<Uuid>("", "group_role_oid").map_err(storage)?,
                         ),
                         role_oid: RoleOid(row.try_get::<Uuid>("", "role_oid").map_err(storage)?),
                     },
@@ -552,7 +523,7 @@ impl RbacManagementRepositoryImpl {
                     (
                         source.group_oid.0,
                         source.membership_oid.0,
-                        source.group_role_binding_oid.0,
+                        source.group_role_oid.0,
                     )
                 });
             }
@@ -595,10 +566,10 @@ impl RbacManagementRepositoryImpl {
         })
     }
 
-    pub(crate) async fn binding_assign(
+    pub(crate) async fn user_role_assign(
         &self,
         command: AssignUserRolesTransaction,
-    ) -> Result<UserRoleBindingMutationResult, RbacManagementRepositoryError> {
+    ) -> Result<UserRoleMutationResult, RbacManagementRepositoryError> {
         let txn = self.db.begin().await.map_err(storage)?;
         recheck_authority(
             &txn,
@@ -629,7 +600,7 @@ impl RbacManagementRepositoryImpl {
                 role_oid: disabled.oid,
             });
         }
-        let mut existing: BTreeMap<i64, UserRoleBindingOid> = BTreeMap::new();
+        let mut existing: BTreeMap<i64, UserRoleOid> = BTreeMap::new();
         if !roles.is_empty() {
             let mut binds = Binds::new();
             let user_placeholder = binds.push(user_id);
@@ -653,7 +624,7 @@ impl RbacManagementRepositoryImpl {
             for row in rows {
                 existing.insert(
                     row.try_get::<i64>("", "role_id").map_err(storage)?,
-                    UserRoleBindingOid(row.try_get::<Uuid>("", "oid").map_err(storage)?),
+                    UserRoleOid(row.try_get::<Uuid>("", "oid").map_err(storage)?),
                 );
             }
         }
@@ -688,20 +659,20 @@ impl RbacManagementRepositoryImpl {
             ActorPrincipal::Client { .. } => None,
         };
         let mut created = Vec::new();
-        let mut binding_oids = Vec::with_capacity(roles.len());
+        let mut user_role_oids = Vec::with_capacity(roles.len());
         for role in &roles {
-            if let Some(binding_oid) = existing.get(&role.id) {
-                binding_oids.push(*binding_oid);
+            if let Some(user_role_oid) = existing.get(&role.id) {
+                user_role_oids.push(*user_role_oid);
                 continue;
             }
-            let binding_oid = UserRoleBindingOid::new();
+            let user_role_oid = UserRoleOid::new();
             txn.execute_raw(Statement::from_sql_and_values(
                 DbBackend::Postgres,
                 "INSERT INTO user_role(oid, user_id, role_id, granted_by_user_id, reason, \
                     enabled, version, created_at) \
                  VALUES($1, $2, $3, $4, $5, true, gen_random_uuid(), now())",
                 [
-                    Uuid::from(binding_oid).into(),
+                    Uuid::from(user_role_oid).into(),
                     user_id.into(),
                     role.id.into(),
                     Value::BigInt(actor_user_id),
@@ -710,8 +681,8 @@ impl RbacManagementRepositoryImpl {
             ))
             .await
             .map_err(storage)?;
-            created.push((binding_oid, role.oid));
-            binding_oids.push(binding_oid);
+            created.push((user_role_oid, role.oid));
+            user_role_oids.push(user_role_oid);
         }
         let version = if created.is_empty() {
             current
@@ -734,32 +705,32 @@ impl RbacManagementRepositoryImpl {
             )
             .await?;
         } else {
-            for (binding_oid, _role_oid) in &created {
+            for (user_role_oid, _role_oid) in &created {
                 append_semantic_audit(
                     &txn,
                     &command.authority,
                     "rbac.user.roles.assign",
                     "user_role",
-                    Uuid::from(*binding_oid),
+                    Uuid::from(*user_role_oid),
                     &command.reason,
                 )
                 .await?;
             }
         }
         txn.commit().await.map_err(storage)?;
-        Ok(UserRoleBindingMutationResult {
+        Ok(UserRoleMutationResult {
             user_oid: command.user_oid,
             user_version: version,
-            binding_oids,
+            user_role_oids,
             created_count: created.len() as u32,
             revoked_count: 0,
         })
     }
 
-    pub(crate) async fn binding_revoke(
+    pub(crate) async fn user_role_revoke(
         &self,
         command: RevokeUserRolesTransaction,
-    ) -> Result<UserRoleBindingMutationResult, RbacManagementRepositoryError> {
+    ) -> Result<UserRoleMutationResult, RbacManagementRepositoryError> {
         let txn = self.db.begin().await.map_err(storage)?;
         recheck_authority(
             &txn,
@@ -785,7 +756,7 @@ impl RbacManagementRepositoryImpl {
             });
         }
         let roles = lock_roles(&txn, &command.role_oids).await?;
-        let mut binding_oids = Vec::with_capacity(roles.len());
+        let mut user_role_oids = Vec::with_capacity(roles.len());
         for role in &roles {
             let row = txn
                 .query_one_raw(Statement::from_sql_and_values(
@@ -800,19 +771,19 @@ impl RbacManagementRepositoryImpl {
             let Some(row) = row else {
                 return Err(RbacManagementRepositoryError::RoleNotAssigned { role_oid: role.oid });
             };
-            let binding_oid = UserRoleBindingOid(row.try_get::<Uuid>("", "oid").map_err(storage)?);
+            let user_role_oid = UserRoleOid(row.try_get::<Uuid>("", "oid").map_err(storage)?);
             txn.execute_raw(Statement::from_sql_and_values(
                 DbBackend::Postgres,
                 "UPDATE user_role SET enabled = false, revoked_at = now(), \
                   version = gen_random_uuid(), updated_at = now() \
                  WHERE oid = $1",
-                [Uuid::from(binding_oid).into()],
+                [Uuid::from(user_role_oid).into()],
             ))
             .await
             .map_err(storage)?;
-            binding_oids.push(binding_oid);
+            user_role_oids.push(user_role_oid);
         }
-        let version = if binding_oids.is_empty() {
+        let version = if user_role_oids.is_empty() {
             current
         } else {
             // Revoking a direct grant is a permanent boundary: running CAS plus
@@ -823,22 +794,22 @@ impl RbacManagementRepositoryImpl {
                 .map_err(storage)?
                 .as_uuid()
         };
-        for binding_oid in &binding_oids {
+        for user_role_oid in &user_role_oids {
             append_semantic_audit(
                 &txn,
                 &command.authority,
                 "rbac.user.roles.revoke",
                 "user_role",
-                Uuid::from(*binding_oid),
+                Uuid::from(*user_role_oid),
                 &command.reason,
             )
             .await?;
         }
         txn.commit().await.map_err(storage)?;
-        Ok(UserRoleBindingMutationResult {
+        Ok(UserRoleMutationResult {
             user_oid: command.user_oid,
             user_version: version,
-            binding_oids,
+            user_role_oids,
             created_count: 0,
             revoked_count: roles.len() as u32,
         })

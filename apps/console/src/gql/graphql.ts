@@ -299,7 +299,7 @@ export type UserProfilePatchInput = {
   zoneInfo?: string | null | undefined;
 };
 
-export type UserRoleBindingOrder =
+export type UserRoleOrder =
   | 'CREATED_AT_ASC'
   | 'CREATED_AT_DESC';
 
@@ -431,23 +431,22 @@ export type InstanceDashboardQuery = { instanceOverview: { generatedAt: string, 
 export type ConsoleUserRolesQueryVariables = Exact<{
   userId: string | number;
   enabled?: boolean | null | undefined;
-  orderBy?: UserRoleBindingOrder | null | undefined;
+  orderBy?: UserRoleOrder | null | undefined;
   first?: number | null | undefined;
   after?: string | null | undefined;
   last?: number | null | undefined;
   before?: string | null | undefined;
-  includeRole: boolean;
 }>;
 
 
-export type ConsoleUserRolesQuery = { userRoles: { userVersion: string | null, pageInfo: { hasNextPage: boolean, hasPreviousPage: boolean, startCursor: string | null, endCursor: string | null }, edges: Array<{ cursor: string, node: { id: string, userId: string, roleId: string, grantedByUserId: string | null, reason: string, enabled: boolean, revokedAt: string | null, version: string, userVersion: string, createdAt: string, updatedAt: string | null, role?: { id: string, name: string, description: string, enabled: boolean, names: Array<{ locale: string, value: string }> } | null } }> } };
+export type ConsoleUserRolesQuery = { user: { id: string, roles: { userVersion: string, pageInfo: { hasNextPage: boolean, hasPreviousPage: boolean, startCursor: string | null, endCursor: string | null }, edges: Array<{ cursor: string, enabled: boolean, revokedAt: string | null, reason: string, createdAt: string, updatedAt: string | null, node: { id: string, name: string, description: string, enabled: boolean, names: Array<{ locale: string, value: string }> } }> } } | null };
 
 export type ConsoleUserRoleVersionQueryVariables = Exact<{
   userId: string | number;
 }>;
 
 
-export type ConsoleUserRoleVersionQuery = { userRoles: { userVersion: string | null } };
+export type ConsoleUserRoleVersionQuery = { user: { id: string, roles: { userVersion: string } } | null };
 
 export type ConsoleUserPermissionsQueryVariables = Exact<{
   userId: string | number;
@@ -460,21 +459,21 @@ export type ConsoleUserPermissionsQueryVariables = Exact<{
 }>;
 
 
-export type ConsoleUserPermissionsQuery = { userPermissions: { totalCount: number, userVersion: string, pageInfo: { hasNextPage: boolean, hasPreviousPage: boolean, startCursor: string | null, endCursor: string | null }, edges: Array<{ cursor: string, node: { permissionId: string, resourceId: string, code: string, sources: Array<{ bindingId: string, roleId: string }>, groupSources: Array<{ groupId: string, membershipId: string, groupRoleBindingId: string, roleId: string }> } }> } };
+export type ConsoleUserPermissionsQuery = { user: { id: string, effectivePermissions: { totalCount: number, userVersion: string, pageInfo: { hasNextPage: boolean, hasPreviousPage: boolean, startCursor: string | null, endCursor: string | null }, edges: Array<{ cursor: string, node: { permissionId: string, resourceId: string, code: string, sources: Array<{ roleId: string }>, groupSources: Array<{ groupId: string, roleId: string }> } }> } } | null };
 
 export type ConsoleAssignUserRolesMutationVariables = Exact<{
   input: AssignUserRolesInput;
 }>;
 
 
-export type ConsoleAssignUserRolesMutation = { assignUserRoles: { userId: string, userVersion: string, bindingIds: Array<string>, createdCount: number, revokedCount: number } };
+export type ConsoleAssignUserRolesMutation = { assignUserRoles: { userId: string, userVersion: string, createdCount: number, revokedCount: number } };
 
 export type ConsoleRevokeUserRolesMutationVariables = Exact<{
   input: RevokeUserRolesInput;
 }>;
 
 
-export type ConsoleRevokeUserRolesMutation = { revokeUserRoles: { userId: string, userVersion: string, bindingIds: Array<string>, createdCount: number, revokedCount: number } };
+export type ConsoleRevokeUserRolesMutation = { revokeUserRoles: { userId: string, userVersion: string, createdCount: number, revokedCount: number } };
 
 export type ConsoleAuthorizationLabelsQueryVariables = Exact<{
   ids: Array<string | number> | string | number;
@@ -483,8 +482,6 @@ export type ConsoleAuthorizationLabelsQueryVariables = Exact<{
 
 export type ConsoleAuthorizationLabelsQuery = { nodes: Array<
     | { __typename: 'Group', name: string, id: string, names: Array<{ locale: string, value: string }> }
-    | { __typename: 'GroupMembership', id: string }
-    | { __typename: 'GroupRoleBinding', id: string }
     | { __typename: 'Resource', id: string }
     | { __typename: 'Role', name: string, description: string, id: string, names: Array<{ locale: string, value: string }> }
     | { __typename: 'Scope', code: string, name: string, description: string, id: string, names: Array<{ locale: string, value: string }>, descriptions: Array<{ locale: string, value: string }> }
@@ -519,11 +516,10 @@ export type ConsoleGroupMembersQueryVariables = Exact<{
   after?: string | null | undefined;
   last?: number | null | undefined;
   before?: string | null | undefined;
-  includeUser: boolean;
 }>;
 
 
-export type ConsoleGroupMembersQuery = { group: { id: string, builtIn: boolean, name: string, description: string, version: string, names: Array<{ locale: string, value: string }>, members: { pageInfo: { hasNextPage: boolean, hasPreviousPage: boolean, startCursor: string | null, endCursor: string | null }, edges: Array<{ cursor: string, node: { id: string, groupId: string, userId: string, grantedByUserId: string | null, enabled: boolean, revokedAt: string | null, version: string, createdAt: string, updatedAt: string | null, user?: { id: string, username: string, email: string, enabled: boolean | null, locked: boolean | null } | null } }> } } | null };
+export type ConsoleGroupMembersQuery = { group: { id: string, builtIn: boolean, name: string, description: string, version: string, names: Array<{ locale: string, value: string }>, members: { pageInfo: { hasNextPage: boolean, hasPreviousPage: boolean, startCursor: string | null, endCursor: string | null }, edges: Array<{ cursor: string, enabled: boolean, revokedAt: string | null, createdAt: string, updatedAt: string | null, grantedBy: { id: string, username: string } | null, node: { id: string, username: string, email: string, enabled: boolean | null, locked: boolean | null } }> } } | null };
 
 export type ConsoleGroupRolesQueryVariables = Exact<{
   groupId: string | number;
@@ -533,11 +529,10 @@ export type ConsoleGroupRolesQueryVariables = Exact<{
   after?: string | null | undefined;
   last?: number | null | undefined;
   before?: string | null | undefined;
-  includeRole: boolean;
 }>;
 
 
-export type ConsoleGroupRolesQuery = { group: { id: string, builtIn: boolean, name: string, description: string, version: string, names: Array<{ locale: string, value: string }>, roles: { pageInfo: { hasNextPage: boolean, hasPreviousPage: boolean, startCursor: string | null, endCursor: string | null }, edges: Array<{ cursor: string, node: { id: string, groupId: string, roleId: string, grantedByUserId: string | null, enabled: boolean, revokedAt: string | null, version: string, createdAt: string, updatedAt: string | null, role?: { id: string, name: string, builtIn: boolean, description: string, enabled: boolean, version: string, names: Array<{ locale: string, value: string }>, descriptions: Array<{ locale: string, value: string }> } | null } }> } } | null };
+export type ConsoleGroupRolesQuery = { group: { id: string, builtIn: boolean, name: string, description: string, version: string, names: Array<{ locale: string, value: string }>, roles: { pageInfo: { hasNextPage: boolean, hasPreviousPage: boolean, startCursor: string | null, endCursor: string | null }, edges: Array<{ cursor: string, enabled: boolean, revokedAt: string | null, createdAt: string, updatedAt: string | null, node: { id: string, name: string, builtIn: boolean, description: string, enabled: boolean, version: string, names: Array<{ locale: string, value: string }>, descriptions: Array<{ locale: string, value: string }> } }> } } | null };
 
 export type ConsoleGroupRoleIdsQueryVariables = Exact<{
   groupId: string | number;
@@ -546,7 +541,7 @@ export type ConsoleGroupRoleIdsQueryVariables = Exact<{
 }>;
 
 
-export type ConsoleGroupRoleIdsQuery = { group: { id: string, version: string, roles: { pageInfo: { hasNextPage: boolean, endCursor: string | null }, edges: Array<{ node: { roleId: string, enabled: boolean, revokedAt: string | null } }> } } | null };
+export type ConsoleGroupRoleIdsQuery = { group: { id: string, version: string, roles: { pageInfo: { hasNextPage: boolean, endCursor: string | null }, edges: Array<{ enabled: boolean, revokedAt: string | null, node: { id: string } }> } } | null };
 
 export type ConsoleCreateGroupMutationVariables = Exact<{
   input: CreateGroupInput;
@@ -567,14 +562,14 @@ export type ConsoleAddGroupMemberMutationVariables = Exact<{
 }>;
 
 
-export type ConsoleAddGroupMemberMutation = { addGroupMember: { groupId: string, userId: string, membershipId: string, groupVersion: string, membershipVersion: string } };
+export type ConsoleAddGroupMemberMutation = { addGroupMember: { groupId: string, userId: string, groupVersion: string } };
 
 export type ConsoleRemoveGroupMemberMutationVariables = Exact<{
   input: RemoveGroupMemberInput;
 }>;
 
 
-export type ConsoleRemoveGroupMemberMutation = { removeGroupMember: { groupId: string, userId: string, membershipId: string, groupVersion: string, membershipVersion: string } };
+export type ConsoleRemoveGroupMemberMutation = { removeGroupMember: { groupId: string, userId: string, groupVersion: string } };
 
 export type ConsoleSetGroupRolesMutationVariables = Exact<{
   input: SetGroupRolesInput;
@@ -679,16 +674,15 @@ export type ConsoleSetRolePermissionsMutation = { setRolePermissions: { roleId: 
 export type ConsoleRoleUsersQueryVariables = Exact<{
   roleId: string | number;
   enabled?: boolean | null | undefined;
-  orderBy?: UserRoleBindingOrder | null | undefined;
+  orderBy?: UserRoleOrder | null | undefined;
   first?: number | null | undefined;
   after?: string | null | undefined;
   last?: number | null | undefined;
   before?: string | null | undefined;
-  includeUser: boolean;
 }>;
 
 
-export type ConsoleRoleUsersQuery = { roleUsers: { userVersion: string | null, pageInfo: { hasNextPage: boolean, hasPreviousPage: boolean, startCursor: string | null, endCursor: string | null }, edges: Array<{ cursor: string, node: { id: string, userId: string, roleId: string, grantedByUserId: string | null, reason: string, enabled: boolean, revokedAt: string | null, version: string, userVersion: string, createdAt: string, updatedAt: string | null, user?: { id: string, username: string, email: string, enabled: boolean | null, locked: boolean | null } | null } }> } };
+export type ConsoleRoleUsersQuery = { role: { id: string, users: { pageInfo: { hasNextPage: boolean, hasPreviousPage: boolean, startCursor: string | null, endCursor: string | null }, edges: Array<{ cursor: string, enabled: boolean, revokedAt: string | null, reason: string, createdAt: string, updatedAt: string | null, node: { id: string, username: string, email: string, enabled: boolean | null, locked: boolean | null, version: string } }> } } | null };
 
 export type ConsoleResourceOptionsQueryVariables = Exact<{
   filter?: ResourceFilter | null | undefined;
@@ -1091,38 +1085,32 @@ export const InstanceDashboardDocument = new TypedDocumentString(`
 }
     `) as unknown as TypedDocumentString<InstanceDashboardQuery, InstanceDashboardQueryVariables>;
 export const ConsoleUserRolesDocument = new TypedDocumentString(`
-    query ConsoleUserRoles($userId: ID!, $enabled: Boolean, $orderBy: UserRoleBindingOrder, $first: Int, $after: String, $last: Int, $before: String, $includeRole: Boolean!) {
-  userRoles(
-    userId: $userId
-    enabled: $enabled
-    orderBy: $orderBy
-    first: $first
-    after: $after
-    last: $last
-    before: $before
-  ) {
-    userVersion
-    pageInfo {
-      hasNextPage
-      hasPreviousPage
-      startCursor
-      endCursor
-    }
-    edges {
-      cursor
-      node {
-        id
-        userId
-        roleId
-        grantedByUserId
-        reason
+    query ConsoleUserRoles($userId: ID!, $enabled: Boolean, $orderBy: UserRoleOrder, $first: Int, $after: String, $last: Int, $before: String) {
+  user(id: $userId) {
+    id
+    roles(
+      enabled: $enabled
+      orderBy: $orderBy
+      first: $first
+      after: $after
+      last: $last
+      before: $before
+    ) {
+      userVersion
+      pageInfo {
+        hasNextPage
+        hasPreviousPage
+        startCursor
+        endCursor
+      }
+      edges {
+        cursor
         enabled
         revokedAt
-        version
-        userVersion
+        reason
         createdAt
         updatedAt
-        role @include(if: $includeRole) {
+        node {
           id
           name
           description
@@ -1139,45 +1127,47 @@ export const ConsoleUserRolesDocument = new TypedDocumentString(`
     `) as unknown as TypedDocumentString<ConsoleUserRolesQuery, ConsoleUserRolesQueryVariables>;
 export const ConsoleUserRoleVersionDocument = new TypedDocumentString(`
     query ConsoleUserRoleVersion($userId: ID!) {
-  userRoles(userId: $userId, first: 1) {
-    userVersion
+  user(id: $userId) {
+    id
+    roles(first: 1) {
+      userVersion
+    }
   }
 }
     `) as unknown as TypedDocumentString<ConsoleUserRoleVersionQuery, ConsoleUserRoleVersionQueryVariables>;
 export const ConsoleUserPermissionsDocument = new TypedDocumentString(`
     query ConsoleUserPermissions($userId: ID!, $resourceId: ID!, $orderBy: EffectivePermissionOrder, $first: Int, $after: String, $last: Int, $before: String) {
-  userPermissions(
-    userId: $userId
-    resourceId: $resourceId
-    orderBy: $orderBy
-    first: $first
-    after: $after
-    last: $last
-    before: $before
-  ) {
-    totalCount
-    userVersion
-    pageInfo {
-      hasNextPage
-      hasPreviousPage
-      startCursor
-      endCursor
-    }
-    edges {
-      cursor
-      node {
-        permissionId
-        resourceId
-        code
-        sources {
-          bindingId
-          roleId
-        }
-        groupSources {
-          groupId
-          membershipId
-          groupRoleBindingId
-          roleId
+  user(id: $userId) {
+    id
+    effectivePermissions(
+      resourceId: $resourceId
+      orderBy: $orderBy
+      first: $first
+      after: $after
+      last: $last
+      before: $before
+    ) {
+      totalCount
+      userVersion
+      pageInfo {
+        hasNextPage
+        hasPreviousPage
+        startCursor
+        endCursor
+      }
+      edges {
+        cursor
+        node {
+          permissionId
+          resourceId
+          code
+          sources {
+            roleId
+          }
+          groupSources {
+            groupId
+            roleId
+          }
         }
       }
     }
@@ -1189,7 +1179,6 @@ export const ConsoleAssignUserRolesDocument = new TypedDocumentString(`
   assignUserRoles(input: $input) {
     userId
     userVersion
-    bindingIds
     createdCount
     revokedCount
   }
@@ -1200,7 +1189,6 @@ export const ConsoleRevokeUserRolesDocument = new TypedDocumentString(`
   revokeUserRoles(input: $input) {
     userId
     userVersion
-    bindingIds
     createdCount
     revokedCount
   }
@@ -1306,7 +1294,7 @@ export const ConsoleGroupDocument = new TypedDocumentString(`
 }
     `) as unknown as TypedDocumentString<ConsoleGroupQuery, ConsoleGroupQueryVariables>;
 export const ConsoleGroupMembersDocument = new TypedDocumentString(`
-    query ConsoleGroupMembers($groupId: ID!, $filter: GroupMembershipFilter, $orderBy: GroupMembershipOrder, $first: Int, $after: String, $last: Int, $before: String, $includeUser: Boolean!) {
+    query ConsoleGroupMembers($groupId: ID!, $filter: GroupMembershipFilter, $orderBy: GroupMembershipOrder, $first: Int, $after: String, $last: Int, $before: String) {
   group(id: $groupId) {
     id
     builtIn
@@ -1333,23 +1321,20 @@ export const ConsoleGroupMembersDocument = new TypedDocumentString(`
       }
       edges {
         cursor
+        enabled
+        revokedAt
+        createdAt
+        updatedAt
+        grantedBy {
+          id
+          username
+        }
         node {
           id
-          groupId
-          userId
-          grantedByUserId
+          username
+          email
           enabled
-          revokedAt
-          version
-          createdAt
-          updatedAt
-          user @include(if: $includeUser) {
-            id
-            username
-            email
-            enabled
-            locked
-          }
+          locked
         }
       }
     }
@@ -1357,7 +1342,7 @@ export const ConsoleGroupMembersDocument = new TypedDocumentString(`
 }
     `) as unknown as TypedDocumentString<ConsoleGroupMembersQuery, ConsoleGroupMembersQueryVariables>;
 export const ConsoleGroupRolesDocument = new TypedDocumentString(`
-    query ConsoleGroupRoles($groupId: ID!, $filter: GroupRoleFilter, $orderBy: GroupRoleOrder, $first: Int, $after: String, $last: Int, $before: String, $includeRole: Boolean!) {
+    query ConsoleGroupRoles($groupId: ID!, $filter: GroupRoleFilter, $orderBy: GroupRoleOrder, $first: Int, $after: String, $last: Int, $before: String) {
   group(id: $groupId) {
     id
     builtIn
@@ -1384,32 +1369,25 @@ export const ConsoleGroupRolesDocument = new TypedDocumentString(`
       }
       edges {
         cursor
+        enabled
+        revokedAt
+        createdAt
+        updatedAt
         node {
           id
-          groupId
-          roleId
-          grantedByUserId
-          enabled
-          revokedAt
-          version
-          createdAt
-          updatedAt
-          role @include(if: $includeRole) {
-            id
-            name
-            builtIn
-            description
-            names {
-              locale
-              value
-            }
-            descriptions {
-              locale
-              value
-            }
-            enabled
-            version
+          name
+          builtIn
+          description
+          names {
+            locale
+            value
           }
+          descriptions {
+            locale
+            value
+          }
+          enabled
+          version
         }
       }
     }
@@ -1432,10 +1410,10 @@ export const ConsoleGroupRoleIdsDocument = new TypedDocumentString(`
         endCursor
       }
       edges {
+        enabled
+        revokedAt
         node {
-          roleId
-          enabled
-          revokedAt
+          id
         }
       }
     }
@@ -1463,9 +1441,7 @@ export const ConsoleAddGroupMemberDocument = new TypedDocumentString(`
   addGroupMember(input: $input) {
     groupId
     userId
-    membershipId
     groupVersion
-    membershipVersion
   }
 }
     `) as unknown as TypedDocumentString<ConsoleAddGroupMemberMutation, ConsoleAddGroupMemberMutationVariables>;
@@ -1474,9 +1450,7 @@ export const ConsoleRemoveGroupMemberDocument = new TypedDocumentString(`
   removeGroupMember(input: $input) {
     groupId
     userId
-    membershipId
     groupVersion
-    membershipVersion
   }
 }
     `) as unknown as TypedDocumentString<ConsoleRemoveGroupMemberMutation, ConsoleRemoveGroupMemberMutationVariables>;
@@ -1692,43 +1666,37 @@ export const ConsoleSetRolePermissionsDocument = new TypedDocumentString(`
 }
     `) as unknown as TypedDocumentString<ConsoleSetRolePermissionsMutation, ConsoleSetRolePermissionsMutationVariables>;
 export const ConsoleRoleUsersDocument = new TypedDocumentString(`
-    query ConsoleRoleUsers($roleId: ID!, $enabled: Boolean, $orderBy: UserRoleBindingOrder, $first: Int, $after: String, $last: Int, $before: String, $includeUser: Boolean!) {
-  roleUsers(
-    roleId: $roleId
-    enabled: $enabled
-    orderBy: $orderBy
-    first: $first
-    after: $after
-    last: $last
-    before: $before
-  ) {
-    userVersion
-    pageInfo {
-      hasNextPage
-      hasPreviousPage
-      startCursor
-      endCursor
-    }
-    edges {
-      cursor
-      node {
-        id
-        userId
-        roleId
-        grantedByUserId
-        reason
+    query ConsoleRoleUsers($roleId: ID!, $enabled: Boolean, $orderBy: UserRoleOrder, $first: Int, $after: String, $last: Int, $before: String) {
+  role(id: $roleId) {
+    id
+    users(
+      enabled: $enabled
+      orderBy: $orderBy
+      first: $first
+      after: $after
+      last: $last
+      before: $before
+    ) {
+      pageInfo {
+        hasNextPage
+        hasPreviousPage
+        startCursor
+        endCursor
+      }
+      edges {
+        cursor
         enabled
         revokedAt
-        version
-        userVersion
+        reason
         createdAt
         updatedAt
-        user @include(if: $includeUser) {
+        node {
           id
           username
           email
           enabled
           locked
+          version
         }
       }
     }

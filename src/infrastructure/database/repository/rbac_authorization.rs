@@ -21,12 +21,11 @@ use identity_domain::{
         authorization::{BusinessAuthorizationSnapshot, validate_business_snapshot},
         deterministic_oid,
         ids::{
-            GroupMembershipOid, GroupOid, GroupRoleBindingOid, ResourceOid, ResourcePermissionOid,
-            RoleOid, RolePermissionOid, UserRoleBindingOid,
+            GroupMembershipOid, GroupOid, GroupRoleOid, ResourceOid, ResourcePermissionOid,
+            RoleOid, RolePermissionOid, UserRoleOid,
         },
         model::{
-            GroupRolePath, PermissionCode, ResourcePermission, Role, RolePermission,
-            UserRoleBinding,
+            GroupRolePath, PermissionCode, ResourcePermission, Role, RolePermission, UserRole,
         },
     },
     user::UserOid,
@@ -290,7 +289,7 @@ WHERE u.oid = $1
 async fn load_bindings<C: ConnectionTrait>(
     db: &C,
     user_id: i64,
-) -> Result<Vec<UserRoleBinding>, RbacAuthorizationError> {
+) -> Result<Vec<UserRole>, RbacAuthorizationError> {
     let rows = db
         .query_all_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,
@@ -334,8 +333,8 @@ ORDER BY binding.id
             .try_get::<Option<DateTimeWithTimeZone>>("", "updated_at")
             .map_err(storage)?
             .map(|value| value.with_timezone(&Utc));
-        bindings.push(UserRoleBinding {
-            oid: UserRoleBindingOid(row.try_get("", "binding_oid").map_err(storage)?),
+        bindings.push(UserRole {
+            oid: UserRoleOid(row.try_get("", "binding_oid").map_err(storage)?),
             user_oid: UserOid(row.try_get("", "user_oid").map_err(storage)?),
             role_oid: RoleOid(row.try_get("", "role_oid").map_err(storage)?),
             granted_by_user_oid: row
@@ -365,7 +364,7 @@ async fn load_group_paths<C: ConnectionTrait>(
             r#"
 SELECT membership.oid AS membership_oid,
        user_group_row.oid AS group_oid,
-       group_relation.oid AS group_role_binding_oid,
+       group_relation.oid AS group_role_oid,
        role_row.oid AS role_oid
 FROM group_membership membership
 JOIN user_group user_group_row
@@ -391,9 +390,8 @@ ORDER BY user_group_row.id, group_relation.id, membership.id
                 row.try_get::<Uuid>("", "membership_oid").map_err(storage)?,
             ),
             group_oid: GroupOid(row.try_get::<Uuid>("", "group_oid").map_err(storage)?),
-            group_role_binding_oid: GroupRoleBindingOid(
-                row.try_get::<Uuid>("", "group_role_binding_oid")
-                    .map_err(storage)?,
+            group_role_oid: GroupRoleOid(
+                row.try_get::<Uuid>("", "group_role_oid").map_err(storage)?,
             ),
             role_oid: RoleOid(row.try_get::<Uuid>("", "role_oid").map_err(storage)?),
         });

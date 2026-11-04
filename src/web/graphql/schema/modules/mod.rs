@@ -20,6 +20,7 @@ mod group;
 mod instance;
 mod localized;
 mod node;
+mod relation;
 mod resource;
 mod role;
 mod scope;

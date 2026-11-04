@@ -42,7 +42,7 @@ import { UserSelectField } from '#/modules/user-management/users/components/user
 const PAGE_SIZE = 10
 
 type GroupNode = NonNullable<ConsoleGroupMembersQuery['group']>
-type MemberNode = GroupNode['members']['edges'][number]['node']
+type MemberEdge = GroupNode['members']['edges'][number]
 type MemberStatus = 'any' | 'enabled' | 'disabled'
 
 export function GroupMembersPage({ groupId }: { groupId: string }) {
@@ -54,7 +54,8 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
     () => rbacScope(workspace.data?.effectivePermissions),
     [workspace.data?.effectivePermissions],
   )
-  const canRead = scope.groupsRead && scope.groupMembershipsRead
+  const canRead =
+    scope.groupsRead && scope.groupMembershipsRead && scope.usersRead
   const [status, setStatus] = useState<MemberStatus>('any')
   const [after, setAfter] = useState<string | undefined>()
   const [before, setBefore] = useState<string | undefined>()
@@ -68,10 +69,9 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
             filter: status === 'any' ? {} : { enabled: status === 'enabled' },
             orderBy: 'CREATED_AT_DESC',
             ...cursorPage(PAGE_SIZE, after, before),
-            includeUser: scope.usersRead,
           }
         : null,
-    [after, before, canRead, groupId, scope.usersRead, status],
+    [after, before, canRead, groupId, status],
   )
   const members = useGroupMembers(variables)
   const group = members.data?.group ?? null
@@ -81,12 +81,18 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
       <ConsoleWorkspaceGate>
         <RbacAccessRestricted
           title={
-            !scope.groupsRead ? 'groupsNoReadTitle' : 'groupMembersNoReadTitle'
+            !scope.groupsRead
+              ? 'groupsNoReadTitle'
+              : !scope.groupMembershipsRead
+                ? 'groupMembersNoReadTitle'
+                : 'groupMembersNoUsersReadTitle'
           }
           description={
             !scope.groupsRead
               ? 'groupsNoReadDescription'
-              : 'groupMembersNoReadDescription'
+              : !scope.groupMembershipsRead
+                ? 'groupMembersNoReadDescription'
+                : 'groupMembersNoUsersReadDescription'
           }
 
           onBack={() => void navigate({ to: '/groups' })}
@@ -168,18 +174,6 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
           </Alert>
         ) : null}
 
-        {scope.usersRead ? null : (
-          <Alert status="warning">
-            <Alert.Indicator />
-            <Alert.Content>
-              <Alert.Title>{t('groupMembersNoUsersReadTitle')}</Alert.Title>
-              <Alert.Description>
-                {t('groupMembersNoUsersReadDescription')}
-              </Alert.Description>
-            </Alert.Content>
-          </Alert>
-        )}
-
         <section className="space-y-4">
           <header className="flex flex-col gap-3 py-2 sm:flex-row sm:items-end sm:justify-between">
             <div>
@@ -214,7 +208,7 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
                   ]}
                 />
               </div>
-              {scope.groupMembershipsWrite && scope.usersRead ? (
+              {scope.groupMembershipsWrite ? (
                 <AddMemberDialog
                   groupId={readyGroup.id}
                   groupVersion={readyGroup.version}
@@ -328,11 +322,11 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
         ]}
       >
         <DataTable.Body>
-          {edges.map(({ node }) => (
-            <DataTable.Row key={node.id} id={node.id}>
-              <DataTable.Cell>{renderMemberIdentity(node)}</DataTable.Cell>
+          {edges.map((edge) => (
+            <DataTable.Row key={edge.node.id} id={edge.node.id}>
+              <DataTable.Cell>{renderMemberIdentity(edge)}</DataTable.Cell>
               <DataTable.Cell>
-                {node.enabled && !node.revokedAt ? (
+                {edge.enabled && !edge.revokedAt ? (
                   <Chip size="sm" variant="soft" color="success">
                     <Chip.Label>{t('groupMembersStatusActive')}</Chip.Label>
                   </Chip>
@@ -344,19 +338,21 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
               </DataTable.Cell>
               <DataTable.Cell>
                 <span className="whitespace-nowrap text-sm">
-                  {formatDateTime(node.createdAt, locale, timeZone)}
+                  {formatDateTime(edge.createdAt, locale, timeZone)}
                 </span>
-                {node.revokedAt ? (
+                {edge.revokedAt ? (
                   <span className="mt-0.5 block whitespace-nowrap text-xs text-muted">
-                    {formatDateTime(node.revokedAt, locale, timeZone)}
+                    {formatDateTime(edge.revokedAt, locale, timeZone)}
                   </span>
                 ) : null}
               </DataTable.Cell>
               <DataTable.Cell>
-                {node.enabled && !node.revokedAt ? (
+                {edge.enabled && !edge.revokedAt ? (
                   scope.groupMembershipsWrite ? (
                     <RemoveMemberDialog
-                      node={node}
+                      groupId={readyGroup.id}
+                      userId={edge.node.id}
+                      username={edge.node.username}
                       groupVersion={readyGroup.version}
                       onRemoved={() => {
                         setNotice({
@@ -377,7 +373,7 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
                 ) : (
                   <span className="text-xs text-muted">
                     {t('groupMembersRevokedAt', {
-                      date: formatDateTime(node.revokedAt, locale, timeZone),
+                      date: formatDateTime(edge.revokedAt, locale, timeZone),
                     })}
                   </span>
                 )}
@@ -389,44 +385,23 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
     )
   }
 
-  function renderMemberIdentity(node: MemberNode) {
-    const user = scope.usersRead ? (node.user ?? null) : null
+  function renderMemberIdentity(edge: MemberEdge) {
+    const user = edge.node
     return (
       <div className="min-w-52">
-        {user ? (
-          <>
-            <Link
-              to="/users/$userId"
-              params={{ userId: user.id }}
-              className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-            >
-              {user.username}
-            </Link>
-            {user.email ? (
-              <p className="mt-0.5 break-all text-xs text-muted">
-                {user.email}
-              </p>
-            ) : null}
-            <p className="mt-1 break-all font-mono text-[11px] text-muted">
-              {t('groupMembersMembershipIdLabel')}: {node.id}
-            </p>
-          </>
-        ) : (
-          <>
-            <p className="break-all font-mono text-xs">{node.userId}</p>
-            <p className="mt-1 break-all font-mono text-[11px] text-muted">
-              {t('groupMembersMembershipIdLabel')}: {node.id}
-            </p>
-            {scope.usersRead ? null : (
-              <p className="mt-1 text-[11px] text-muted">
-                {t('groupMembersUserHidden')}
-              </p>
-            )}
-          </>
-        )}
-        {node.grantedByUserId ? (
+        <Link
+          to="/users/$userId"
+          params={{ userId: user.id }}
+          className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+        >
+          {user.username}
+        </Link>
+        {user.email ? (
+          <p className="mt-0.5 break-all text-xs text-muted">{user.email}</p>
+        ) : null}
+        {edge.grantedBy ? (
           <p className="mt-1 break-all text-[11px] text-muted">
-            {t('groupMembersGrantedByLabel')}: {node.grantedByUserId}
+            {t('groupMembersGrantedByLabel')}: {edge.grantedBy.username}
           </p>
         ) : null}
       </div>

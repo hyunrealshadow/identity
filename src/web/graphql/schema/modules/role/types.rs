@@ -21,10 +21,7 @@ use super::super::{
         support,
         support::{RbacConnectionCursor, decode_oid, page_args},
     },
-    role::{
-        binding::{UserRoleBindingConnectionFields, UserRoleBindingNode, UserRoleBindingOrder},
-        query::{BindingTarget, load_binding_connection},
-    },
+    role::user_role::{RoleUserConnection, UserRoleOrder, load_role_users},
     scope::{
         connection::ScopeConnection,
         query::load_scope_connection,
@@ -220,9 +217,11 @@ impl RoleNode {
         .await
     }
 
+    /// Users assigned this role, with the assignment facts on each edge.
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::RoleAssignmentsRead, ManagementTarget::instance())",
+        guard = "ManagementGuard::new(ManagementScope::RoleAssignmentsRead, ManagementTarget::instance()).and(ManagementGuard::new(ManagementScope::UsersRead, ManagementTarget::instance()))",
         directive = access::apply(ManagementGuard::policy(ManagementScope::RoleAssignmentsRead)),
+        directive = access::apply(ManagementGuard::policy(ManagementScope::UsersRead)),
         complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
     )]
     #[allow(clippy::too_many_arguments)]
@@ -230,22 +229,20 @@ impl RoleNode {
         &self,
         ctx: &Context<'_>,
         enabled: Option<bool>,
-        order_by: Option<UserRoleBindingOrder>,
+        order_by: Option<UserRoleOrder>,
         #[graphql(validator(minimum = 1, maximum = 100))] first: Option<i32>,
         after: Option<String>,
         #[graphql(validator(minimum = 1, maximum = 100))] last: Option<i32>,
         before: Option<String>,
-    ) -> GraphqlResult<
-        Connection<RbacConnectionCursor, UserRoleBindingNode, UserRoleBindingConnectionFields>,
-    > {
+    ) -> GraphqlResult<RoleUserConnection> {
         let page = page_args(ctx, first, after, last, before)?;
         let request = request_context(ctx)?;
-        load_binding_connection(
+        load_role_users(
             ctx,
             request,
-            BindingTarget::Role(self.record.oid),
+            self.record.oid,
             enabled,
-            order_by.unwrap_or_else(UserRoleBindingOrder::default_order),
+            order_by.unwrap_or_else(UserRoleOrder::default_order),
             page,
         )
         .await

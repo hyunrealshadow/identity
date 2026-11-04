@@ -103,8 +103,7 @@ pub async fn ensure_built_in_rbac(transaction: &DatabaseTransaction) -> Result<(
             .get(&role)
             .ok_or_else(|| internal("built-in role id is missing"))?;
         let group_id = ensure_group(transaction, role).await?;
-        ensure_group_role_binding(transaction, group_id, role_id, built_in_group_oid(role).0)
-            .await?;
+        ensure_group_role(transaction, group_id, role_id, built_in_group_oid(role).0).await?;
     }
 
     Ok(())
@@ -459,7 +458,7 @@ async fn ensure_group(
     row.try_get::<i64>("", "id").map_err(AppError::internal)
 }
 
-async fn ensure_group_role_binding(
+async fn ensure_group_role(
     transaction: &DatabaseTransaction,
     group_id: i64,
     role_id: i64,

@@ -122,6 +122,28 @@ impl UserManagementService {
             .map_err(map_repository_error)
     }
 
+    /// Users referenced by one page of relation edges, for a field already
+    /// admitted with `management.user.read`.
+    #[tracing::instrument(skip_all, name = "user.management.find_many")]
+    pub async fn find_users(
+        &self,
+        user_oids: Vec<UserOid>,
+    ) -> Result<Vec<UserManagementRecord>, AppError> {
+        let user_oids = user_oids
+            .into_iter()
+            .map(Uuid::from)
+            .collect::<std::collections::BTreeSet<_>>();
+        if user_oids.len() > MAX_PAGE_SIZE as usize {
+            return Err(AppError::from_code(
+                UserManagementErrorCode::ValidationFailed,
+            ));
+        }
+        self.repository
+            .find_users(user_oids.into_iter().map(UserOid).collect())
+            .await
+            .map_err(map_repository_error)
+    }
+
     /// Read a keyset page for a root already admitted with
     /// `management.user.read`.
     #[tracing::instrument(skip_all, name = "user.management.list")]
@@ -665,6 +687,13 @@ mod tests {
             _user_oid: UserOid,
         ) -> Result<Option<UserManagementRecord>, UserManagementRepositoryError> {
             Ok(None)
+        }
+
+        async fn find_users(
+            &self,
+            _user_oids: Vec<UserOid>,
+        ) -> Result<Vec<UserManagementRecord>, UserManagementRepositoryError> {
+            Ok(Vec::new())
         }
 
         async fn create_user(

@@ -1,6 +1,6 @@
 use super::{
     super::resource::support::RbacConnectionCursor,
-    binding::{EffectivePermissionNode, EffectivePermissionVersionGuard},
+    user_role::{EffectivePermissionNode, EffectivePermissionVersionGuard},
 };
 use crate::graphql::schema::access::{AccessPolicy, access};
 use async_graphql::{

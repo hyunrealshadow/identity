@@ -473,3 +473,48 @@ async fn postgres_client_scope_grant_separates_client_and_user_ceilings() {
     })
     .await;
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured PostgreSQL test database"]
+async fn postgres_relation_node_batches_return_only_existing_records() {
+    use identity_application::user::management::UserManagementRepository;
+    use identity_domain::{rbac::RoleOid, user::UserOid};
+    use identity_infrastructure::database::repository::user_management::UserManagementRepositoryImpl;
+
+    isolated(|db| async move {
+        let (_, first_user) = user(&db, "batch_one").await;
+        let (_, second_user) = user(&db, "batch_two").await;
+        let (first_role, second_role) = (Uuid::new_v4(), Uuid::new_v4());
+        sql(&db, &format!("INSERT INTO role(oid,name,names) VALUES('{first_role}','First','{{}}'),('{second_role}','Second','{{}}')")).await;
+        let missing = Uuid::new_v4();
+
+        let rbac = RbacManagementRepositoryImpl::new(db.clone());
+        let mut roles = rbac
+            .find_roles(vec![RoleOid(first_role), RoleOid(missing), RoleOid(second_role)])
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|role| (Uuid::from(role.oid), role.name))
+            .collect::<Vec<_>>();
+        roles.sort();
+        let mut expected = vec![(first_role, "First".to_owned()), (second_role, "Second".to_owned())];
+        expected.sort();
+        assert_eq!(roles, expected);
+        assert!(rbac.find_roles(Vec::new()).await.unwrap().is_empty());
+
+        let users = UserManagementRepositoryImpl::new(db.clone());
+        let mut found = users
+            .find_users(vec![UserOid(second_user), UserOid(missing), UserOid(first_user)])
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|record| record.user.oid.0)
+            .collect::<Vec<_>>();
+        found.sort();
+        let mut expected = vec![first_user, second_user];
+        expected.sort();
+        assert_eq!(found, expected);
+        assert!(users.find_users(Vec::new()).await.unwrap().is_empty());
+    })
+    .await;
+}

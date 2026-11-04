@@ -2,12 +2,14 @@ use std::collections::BTreeSet;
 
 use super::*;
 
+use crate::rbac::role::RoleRecord;
+
 impl RbacManagementService {
     #[tracing::instrument(skip_all, name = "rbac.user_roles.list")]
     pub async fn list_user_roles(
         &self,
         request: UserRolePageRequest,
-    ) -> Result<UserRoleBindingPage, AppError> {
+    ) -> Result<UserRolePage, AppError> {
         let user_oid = request.user_oid;
         // The repository returns the page rows and the live generation from one
         // REPEATABLE READ snapshot. `userRoles` therefore has the generation
@@ -30,7 +32,7 @@ impl RbacManagementService {
     pub async fn list_role_users(
         &self,
         request: RoleUserPageRequest,
-    ) -> Result<UserRoleBindingPage, AppError> {
+    ) -> Result<UserRolePage, AppError> {
         let role_oid = request.role_oid;
         self.list_bindings(
             None,
@@ -45,27 +47,12 @@ impl RbacManagementService {
         .await
     }
 
-    /// Expand server-produced binding IDs for a guarded mutation payload.
-    ///
-    /// This is deliberately not a search endpoint: the caller can only pass
-    /// IDs returned by a successful mutation, and the lookup is bounded.
-    #[tracing::instrument(skip_all, name = "rbac.user_role_bindings.find_many")]
-    pub async fn find_user_role_bindings(
-        &self,
-        binding_oids: Vec<UserRoleBindingOid>,
-    ) -> Result<Vec<UserRoleBindingRecord>, AppError> {
-        let binding_oids = binding_oids
-            .into_iter()
-            .collect::<BTreeSet<_>>()
-            .into_iter()
-            .collect::<Vec<_>>();
-        if binding_oids.len() > MAX_BINDING_LOOKUPS {
-            return Err(AppError::from_code(RbacErrorCode::InvalidCollectionSize)
-                .with_param("max", MAX_BINDING_LOOKUPS.to_string())
-                .with_field("bindingIds"));
-        }
+    /// Roles referenced by one page of relation edges.
+    #[tracing::instrument(skip_all, name = "rbac.role.find_many")]
+    pub async fn find_roles(&self, oids: Vec<RoleOid>) -> Result<Vec<RoleRecord>, AppError> {
+        let oids = dedupe_batch(oids)?;
         self.repository
-            .find_user_role_bindings(binding_oids)
+            .find_roles(oids)
             .await
             .map_err(map_repository_error)
     }
@@ -76,16 +63,16 @@ impl RbacManagementService {
         user_oid: Option<UserOid>,
         role_oid: Option<RoleOid>,
         enabled: Option<bool>,
-        order: UserRoleBindingOrder,
+        order: UserRoleOrder,
         first: Option<u32>,
         after: Option<String>,
         last: Option<u32>,
         before: Option<String>,
-    ) -> Result<UserRoleBindingPage, AppError> {
+    ) -> Result<UserRolePage, AppError> {
         let fingerprint_input = (user_oid, role_oid, enabled);
         let prepared = prepare_page(
             self.data_protector.as_ref(),
-            CURSOR_KIND_BINDING,
+            CURSOR_KIND_USER_ROLE,
             order.as_u8(),
             &fingerprint_input,
             PageArguments {
@@ -98,7 +85,7 @@ impl RbacManagementService {
         .await?;
         let data = self
             .repository
-            .list_user_role_bindings(UserRoleBindingQuery {
+            .list_user_roles(UserRoleQuery {
                 user_oid,
                 role_oid,
                 enabled,
@@ -114,18 +101,18 @@ impl RbacManagementService {
         for entry in data.items {
             let cursor = encode_cursor(
                 self.data_protector.as_ref(),
-                CURSOR_KIND_BINDING,
+                CURSOR_KIND_USER_ROLE,
                 order.as_u8(),
                 &prepared.filter_fingerprint,
                 &entry.sort_key,
             )
             .await?;
-            items.push(UserRoleBindingPageItem {
+            items.push(UserRolePageItem {
                 record: entry.record,
                 cursor,
             });
         }
-        Ok(UserRoleBindingPage {
+        Ok(UserRolePage {
             items,
             has_previous_page: data.has_previous_page,
             has_next_page: data.has_next_page,
@@ -206,7 +193,7 @@ impl RbacManagementService {
         &self,
         authority: &RbacManagementAuthority,
         command: AssignUserRolesCommand,
-    ) -> Result<UserRoleBindingMutationResult, AppError> {
+    ) -> Result<UserRoleMutationResult, AppError> {
         let result = async {
             let reason = validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
@@ -234,7 +221,7 @@ impl RbacManagementService {
         &self,
         authority: &RbacManagementAuthority,
         command: RevokeUserRolesCommand,
-    ) -> Result<UserRoleBindingMutationResult, AppError> {
+    ) -> Result<UserRoleMutationResult, AppError> {
         let result = async {
             let reason = validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
@@ -256,4 +243,14 @@ impl RbacManagementService {
         self.emit_result("rbac.user_roles.revoke", &result, "user_oid");
         result
     }
+}
+
+/// Deduplicate a page-bounded batch lookup and reject oversized input.
+fn dedupe_batch<T: Ord>(oids: Vec<T>) -> Result<Vec<T>, AppError> {
+    let oids = oids.into_iter().collect::<BTreeSet<_>>();
+    if oids.len() > MAX_BATCH_LOOKUPS {
+        return Err(AppError::from_code(RbacErrorCode::InvalidCollectionSize)
+            .with_param("max", MAX_BATCH_LOOKUPS.to_string()));
+    }
+    Ok(oids.into_iter().collect())
 }

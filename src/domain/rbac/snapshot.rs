@@ -11,8 +11,8 @@
 use crate::{
     authorization::ids::AuthorizationVersion,
     rbac::{
-        ids::{RoleOid, UserRoleBindingOid},
-        model::UserRoleBinding,
+        ids::{RoleOid, UserRoleOid},
+        model::UserRole,
     },
 };
 
@@ -20,16 +20,16 @@ use crate::{
 /// record version is an optimistic lock and is intentionally not part of
 /// credential identity.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct UserRoleBindingSnapshot {
-    pub binding_oid: UserRoleBindingOid,
+pub struct UserRoleSnapshot {
+    pub user_role_oid: UserRoleOid,
     pub role_oid: RoleOid,
 }
 
-impl UserRoleBindingSnapshot {
+impl UserRoleSnapshot {
     #[must_use]
-    pub fn from_binding(binding: &UserRoleBinding) -> Self {
+    pub fn from_binding(binding: &UserRole) -> Self {
         Self {
-            binding_oid: binding.oid,
+            user_role_oid: binding.oid,
             role_oid: binding.role_oid,
         }
     }
@@ -52,8 +52,8 @@ pub enum BindingSnapshotError {
 /// Validate one binding snapshot against current authoritative state. Exact OID
 /// equality means a recreated/re-granted binding is always rejected.
 pub fn validate_binding_snapshot(
-    snapshot: &UserRoleBindingSnapshot,
-    current: Option<&UserRoleBinding>,
+    snapshot: &UserRoleSnapshot,
+    current: Option<&UserRole>,
 ) -> Result<(), BindingSnapshotError> {
     let Some(current) = current else {
         return Err(BindingSnapshotError::NotFound);
@@ -61,7 +61,7 @@ pub fn validate_binding_snapshot(
     if !current.is_active() {
         return Err(BindingSnapshotError::Tombstoned);
     }
-    if snapshot.binding_oid != current.oid {
+    if snapshot.user_role_oid != current.oid {
         return Err(BindingSnapshotError::OidMismatch);
     }
     if snapshot.role_oid != current.role_oid {
@@ -75,14 +75,14 @@ pub fn validate_binding_snapshot(
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UserAuthorizationSnapshot {
     pub user_authorization_version: AuthorizationVersion,
-    pub bindings: Vec<UserRoleBindingSnapshot>,
+    pub bindings: Vec<UserRoleSnapshot>,
 }
 
 impl UserAuthorizationSnapshot {
     pub fn validate(
         &self,
         current_user_version: AuthorizationVersion,
-        bindings: &[UserRoleBinding],
+        bindings: &[UserRole],
     ) -> Result<(), BindingSnapshotError> {
         if self.user_authorization_version != current_user_version {
             return Err(BindingSnapshotError::UserAuthorizationVersionMismatch);
@@ -90,7 +90,7 @@ impl UserAuthorizationSnapshot {
         for snapshot in &self.bindings {
             let current = bindings
                 .iter()
-                .find(|binding| binding.oid == snapshot.binding_oid);
+                .find(|binding| binding.oid == snapshot.user_role_oid);
             validate_binding_snapshot(snapshot, current)?;
         }
         Ok(())
@@ -103,14 +103,14 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
-        BindingSnapshotError, UserAuthorizationSnapshot, UserRoleBindingSnapshot,
+        BindingSnapshotError, UserAuthorizationSnapshot, UserRoleSnapshot,
         validate_binding_snapshot,
     };
     use crate::{
         authorization::ids::AuthorizationVersion,
         rbac::{
-            ids::{RoleOid, UserRoleBindingOid},
-            model::UserRoleBinding,
+            ids::{RoleOid, UserRoleOid},
+            model::UserRole,
         },
         user::UserOid,
     };
@@ -123,10 +123,8 @@ mod tests {
     fn revoked_then_regranted_binding_is_a_new_identity() {
         let user = UserOid(Uuid::new_v4());
         let role = RoleOid::new();
-        let first =
-            UserRoleBinding::new(UserRoleBindingOid::new(), user, role, None, "grant", at())
-                .unwrap();
-        let snapshot = UserRoleBindingSnapshot::from_binding(&first);
+        let first = UserRole::new(UserRoleOid::new(), user, role, None, "grant", at()).unwrap();
+        let snapshot = UserRoleSnapshot::from_binding(&first);
         let mut first = first;
         first.revoke(at()).unwrap();
         assert_eq!(
@@ -135,8 +133,7 @@ mod tests {
         );
 
         let regranted =
-            UserRoleBinding::new(UserRoleBindingOid::new(), user, role, None, "regrant", at())
-                .unwrap();
+            UserRole::new(UserRoleOid::new(), user, role, None, "regrant", at()).unwrap();
         assert_eq!(
             validate_binding_snapshot(&snapshot, Some(&regranted)),
             Err(BindingSnapshotError::OidMismatch)
@@ -146,8 +143,8 @@ mod tests {
     #[test]
     fn record_version_change_does_not_replace_binding_identity() {
         let user = UserOid(Uuid::new_v4());
-        let binding = UserRoleBinding::new(
-            UserRoleBindingOid::new(),
+        let binding = UserRole::new(
+            UserRoleOid::new(),
             user,
             RoleOid::new(),
             None,
@@ -155,7 +152,7 @@ mod tests {
             at(),
         )
         .unwrap();
-        let snapshot = UserRoleBindingSnapshot::from_binding(&binding);
+        let snapshot = UserRoleSnapshot::from_binding(&binding);
 
         // The row's optimistic-lock version is CAS metadata, not the grant's
         // identity. Rotating it must not invalidate the issued snapshot.
@@ -169,8 +166,8 @@ mod tests {
     #[test]
     fn binding_role_replacement_is_rejected() {
         let user = UserOid(Uuid::new_v4());
-        let binding = UserRoleBinding::new(
-            UserRoleBindingOid::new(),
+        let binding = UserRole::new(
+            UserRoleOid::new(),
             user,
             RoleOid::new(),
             None,
@@ -178,7 +175,7 @@ mod tests {
             at(),
         )
         .unwrap();
-        let snapshot = UserRoleBindingSnapshot::from_binding(&binding);
+        let snapshot = UserRoleSnapshot::from_binding(&binding);
 
         let mut replaced_role = binding.clone();
         replaced_role.role_oid = RoleOid::new();
@@ -191,8 +188,8 @@ mod tests {
     #[test]
     fn stale_user_authority_fingerprint_is_rejected() {
         let user = UserOid(Uuid::new_v4());
-        let binding = UserRoleBinding::new(
-            UserRoleBindingOid::new(),
+        let binding = UserRole::new(
+            UserRoleOid::new(),
             user,
             RoleOid::new(),
             None,
@@ -200,7 +197,7 @@ mod tests {
             at(),
         )
         .unwrap();
-        let snapshot = UserRoleBindingSnapshot::from_binding(&binding);
+        let snapshot = UserRoleSnapshot::from_binding(&binding);
         let stale = AuthorizationVersion::new();
         let current = AuthorizationVersion::new();
         assert!(matches!(

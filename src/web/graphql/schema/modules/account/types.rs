@@ -18,13 +18,9 @@ use super::super::{
     },
     resource::{support, support::RbacConnectionCursor},
     role::{
-        binding::{
-            EffectivePermissionOrder, UserRoleBindingConnectionFields, UserRoleBindingNode,
-            UserRoleBindingOrder,
-        },
         connection::EffectivePermissionConnection,
         query as role_query,
-        query::BindingTarget,
+        user_role::{EffectivePermissionOrder, UserRoleConnection, UserRoleOrder, load_user_roles},
     },
     user::access::ensure_user_management_read,
 };
@@ -125,31 +121,32 @@ impl UserNode {
         .await
     }
 
+    /// Roles assigned directly to the user, with the assignment facts on each
+    /// edge. `userVersion` is the expected version for assigning or revoking.
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::RoleAssignmentsRead, ManagementTarget::instance())",
+        guard = "ManagementGuard::new(ManagementScope::RoleAssignmentsRead, ManagementTarget::instance()).and(ManagementGuard::new(ManagementScope::RolesRead, ManagementTarget::instance()))",
         directive = access::apply(ManagementGuard::policy(ManagementScope::RoleAssignmentsRead)),
+        directive = access::apply(ManagementGuard::policy(ManagementScope::RolesRead)),
         complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
     )]
     #[allow(clippy::too_many_arguments)]
-    async fn role_bindings(
+    async fn roles(
         &self,
         ctx: &Context<'_>,
         enabled: Option<bool>,
-        order_by: Option<UserRoleBindingOrder>,
+        order_by: Option<UserRoleOrder>,
         #[graphql(validator(minimum = 1, maximum = 100))] first: Option<i32>,
         after: Option<String>,
         #[graphql(validator(minimum = 1, maximum = 100))] last: Option<i32>,
         before: Option<String>,
-    ) -> GraphqlResult<
-        Connection<RbacConnectionCursor, UserRoleBindingNode, UserRoleBindingConnectionFields>,
-    > {
+    ) -> GraphqlResult<UserRoleConnection> {
         let page = support::page_args(ctx, first, after, last, before)?;
-        role_query::load_binding_connection(
+        load_user_roles(
             ctx,
             request_context(ctx)?,
-            BindingTarget::User(self.oid()),
+            self.oid(),
             enabled,
-            order_by.unwrap_or_else(UserRoleBindingOrder::default_order),
+            order_by.unwrap_or_else(UserRoleOrder::default_order),
             page,
         )
         .await

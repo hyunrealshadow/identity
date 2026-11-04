@@ -1,77 +1,79 @@
 use crate::graphql::schema::access::access;
 use async_graphql::{
     Context, Enum, Guard, GuardExt, ID, InputObject, Object, Result as GraphqlResult,
+    connection::{Edge, EmptyFields},
 };
-use chrono::{DateTime, Utc};
 use identity_application::{
     authorization::ManagementTarget,
     rbac::{
         EffectiveGroupPermissionSourceRecord,
         EffectivePermissionOrder as RbacEffectivePermissionOrder, EffectivePermissionRecord,
-        EffectivePermissionSourceRecord, ScopeOid, UserRoleBindingMutationResult,
-        UserRoleBindingOrder as RbacUserRoleBindingOrder, UserRoleBindingRecord,
+        EffectivePermissionSourceRecord, RoleUserPageRequest, ScopeOid, UserRoleMutationResult,
+        UserRoleOrder as RbacUserRoleOrder, UserRolePage, UserRolePageRequest, UserRoleRecord,
     },
 };
 use identity_domain::{
-    authorization::ManagementScope, openid_connect::ApiScope, rbac::UserRoleBindingOid,
-    user::UserOid,
+    authorization::ManagementScope, openid_connect::ApiScope, rbac::RoleOid, user::UserOid,
 };
-use identity_infrastructure::graphql::id::{GlobalId, GlobalIdType};
+use identity_infrastructure::graphql::id::GlobalId;
 use uuid::Uuid;
 
 use super::{
     super::{
         account::{UserGlobalId, UserNode},
         group::{integration as group_integration, types as group_types, types::GroupNode},
-        resource::{support::decode_oid, types as resource_types},
+        resource::support::{PageArgs, RbacConnectionCursor, decode_oid},
+        resource::types as resource_types,
         role::{integration, types::RoleNode},
         scope::types as scope_types,
     },
     types,
 };
 use crate::graphql::schema::{
+    RequestContext,
     authorization::{ScopeGuard, UserPrincipalGuard, request_context},
     error::app_error,
     management_guard::ManagementGuard,
-    modules::user::integration as user_integration,
+    modules::{
+        relation::{
+            RelationConnection, RelationFacts, RoleUserConnectionName, RoleUserEdgeName,
+            UserRoleConnectionName, UserRoleEdgeName, UserVersionFields, index_by,
+        },
+        user::integration as user_integration,
+    },
 };
 
-/// Bound for server-produced binding IDs expanded by a mutation payload.
-const MAX_PAYLOAD_BINDINGS: usize = 100;
+/// `User.roles`: role nodes with the user's assignment facts on each edge.
+pub(crate) type UserRoleConnection =
+    RelationConnection<RoleNode, UserVersionFields, UserRoleConnectionName, UserRoleEdgeName>;
 
-pub(crate) struct BindingGlobalId;
-
-impl GlobalIdType for BindingGlobalId {
-    const TYPE_NAME: &'static str = "UserRoleBinding";
-}
-
-pub(crate) fn binding_global_id(oid: UserRoleBindingOid) -> ID {
-    GlobalId::<BindingGlobalId>::new(oid.0).into()
-}
+/// `Role.users`: user nodes with the role assignment facts on each edge.
+pub(crate) type RoleUserConnection =
+    RelationConnection<UserNode, EmptyFields, RoleUserConnectionName, RoleUserEdgeName>;
 
 fn user_global_id(oid: UserOid) -> ID {
     GlobalId::<UserGlobalId>::new(oid.0).into()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]
-pub(crate) enum UserRoleBindingOrder {
+pub(crate) enum UserRoleOrder {
     #[graphql(name = "CREATED_AT_ASC")]
     CreatedAtAsc,
     #[graphql(name = "CREATED_AT_DESC")]
     CreatedAtDesc,
 }
 
-impl UserRoleBindingOrder {
+impl UserRoleOrder {
     pub(crate) const fn default_order() -> Self {
         Self::CreatedAtDesc
     }
 }
 
-impl From<UserRoleBindingOrder> for RbacUserRoleBindingOrder {
-    fn from(order: UserRoleBindingOrder) -> Self {
+impl From<UserRoleOrder> for RbacUserRoleOrder {
+    fn from(order: UserRoleOrder) -> Self {
         match order {
-            UserRoleBindingOrder::CreatedAtAsc => Self::CreatedAtAsc,
-            UserRoleBindingOrder::CreatedAtDesc => Self::CreatedAtDesc,
+            UserRoleOrder::CreatedAtAsc => Self::CreatedAtAsc,
+            UserRoleOrder::CreatedAtDesc => Self::CreatedAtDesc,
         }
     }
 }
@@ -99,31 +101,6 @@ impl From<EffectivePermissionOrder> for RbacEffectivePermissionOrder {
     }
 }
 
-/// Additional connection field for `userRoles`/`roleUsers`.
-///
-/// It is nullable because a multi-user list has no single current user
-/// version. `userRoles` returns the server value even for an empty page.
-pub(crate) struct UserRoleBindingConnectionFields {
-    user_version: Option<Uuid>,
-}
-
-impl UserRoleBindingConnectionFields {
-    pub(crate) const fn new(user_version: Option<Uuid>) -> Self {
-        Self { user_version }
-    }
-}
-
-#[Object(name = "UserRoleBindingConnectionFields")]
-impl UserRoleBindingConnectionFields {
-    #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::RoleAssignmentsRead, ManagementTarget::instance())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::RoleAssignmentsRead))
-    )]
-    async fn user_version(&self) -> Option<Uuid> {
-        self.user_version
-    }
-}
-
 pub(crate) struct EffectivePermissionVersionGuard;
 
 impl Guard for EffectivePermissionVersionGuard {
@@ -145,89 +122,125 @@ impl Guard for EffectivePermissionVersionGuard {
     }
 }
 
-pub(crate) struct UserRoleBindingNode {
-    id: ID,
-    record: UserRoleBindingRecord,
+fn facts(record: &UserRoleRecord) -> RelationFacts {
+    RelationFacts {
+        granted_by_user_oid: record.granted_by_user_oid,
+        reason: record.reason.clone(),
+        enabled: record.enabled,
+        revoked_at: record.revoked_at,
+        created_at: record.created_at,
+        updated_at: record.updated_at,
+    }
 }
 
-impl UserRoleBindingNode {
-    pub(crate) fn new(record: UserRoleBindingRecord) -> Self {
-        Self {
-            id: binding_global_id(record.oid),
-            record,
+/// One page of a user's role assignments, with each role loaded in a single
+/// batch.
+pub(crate) async fn load_user_roles(
+    ctx: &Context<'_>,
+    request: &RequestContext,
+    user_oid: UserOid,
+    enabled: Option<bool>,
+    order: UserRoleOrder,
+    page: PageArgs,
+) -> GraphqlResult<UserRoleConnection> {
+    let page = integration::list_user_roles(
+        request,
+        UserRolePageRequest {
+            user_oid,
+            enabled,
+            order: order.into(),
+            first: page.first,
+            after: page.after,
+            last: page.last,
+            before: page.before,
+        },
+    )
+    .await
+    .map_err(|error| app_error(ctx, error))?;
+    let user_version = match page.user_version {
+        Some(version) => version,
+        None => current_user_version(ctx, request, user_oid).await?,
+    };
+    let roles = integration::find_roles(
+        request,
+        page.items.iter().map(|item| item.record.role_oid).collect(),
+    )
+    .await
+    .map_err(|error| app_error(ctx, error))?;
+    let mut roles = index_by(roles, |role| role.oid.0);
+    let mut connection = UserRoleConnection::with_additional_fields(
+        page.has_previous_page,
+        page.has_next_page,
+        UserVersionFields { user_version },
+    );
+    for item in page.items {
+        if let Some(role) = roles.remove(&item.record.role_oid.0) {
+            connection.edges.push(Edge::with_additional_fields(
+                RbacConnectionCursor::from_backend(item.cursor),
+                RoleNode::new(role),
+                facts(&item.record),
+            ));
         }
     }
+    Ok(connection)
 }
 
-#[Object(name = "UserRoleBinding")]
-impl UserRoleBindingNode {
-    async fn id(&self) -> &ID {
-        &self.id
-    }
+/// `list_user_roles` always reports the single user's version; this only
+/// guards against an adapter that omits it.
+async fn current_user_version(
+    ctx: &Context<'_>,
+    request: &RequestContext,
+    user_oid: UserOid,
+) -> GraphqlResult<Uuid> {
+    user_integration::find_user(request, user_oid)
+        .await
+        .map_err(|error| app_error(ctx, error))?
+        .map(|user| user.version)
+        .ok_or_else(|| "user not found".into())
+}
 
-    async fn user_id(&self) -> ID {
-        user_global_id(self.record.user_oid)
+/// One page of a role's user assignments, with each user loaded in a single
+/// batch.
+pub(crate) async fn load_role_users(
+    ctx: &Context<'_>,
+    request: &RequestContext,
+    role_oid: RoleOid,
+    enabled: Option<bool>,
+    order: UserRoleOrder,
+    page: PageArgs,
+) -> GraphqlResult<RoleUserConnection> {
+    let page: UserRolePage = integration::list_role_users(
+        request,
+        RoleUserPageRequest {
+            role_oid,
+            enabled,
+            order: order.into(),
+            first: page.first,
+            after: page.after,
+            last: page.last,
+            before: page.before,
+        },
+    )
+    .await
+    .map_err(|error| app_error(ctx, error))?;
+    let users = user_integration::find_users(
+        request,
+        page.items.iter().map(|item| item.record.user_oid).collect(),
+    )
+    .await
+    .map_err(|error| app_error(ctx, error))?;
+    let mut users = index_by(users, |user| user.oid.0);
+    let mut connection = RoleUserConnection::new(page.has_previous_page, page.has_next_page);
+    for item in page.items {
+        if let Some(user) = users.remove(&item.record.user_oid.0) {
+            connection.edges.push(Edge::with_additional_fields(
+                RbacConnectionCursor::from_backend(item.cursor),
+                UserNode::managed(user),
+                facts(&item.record),
+            ));
+        }
     }
-
-    #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::UsersRead, ManagementTarget::instance())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::UsersRead))
-    )]
-    async fn user(&self, ctx: &Context<'_>) -> GraphqlResult<Option<UserNode>> {
-        let request = request_context(ctx)?;
-        let record = user_integration::find_user(request, self.record.user_oid)
-            .await
-            .map_err(|error| app_error(ctx, error))?;
-        Ok(record.map(UserNode::managed))
-    }
-
-    async fn role_id(&self) -> ID {
-        types::role_global_id(self.record.role_oid)
-    }
-
-    #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::RolesRead, ManagementTarget::instance())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::RolesRead))
-    )]
-    async fn role(&self, ctx: &Context<'_>) -> GraphqlResult<Option<RoleNode>> {
-        let request = request_context(ctx)?;
-        let record = integration::find_role(request, self.record.role_oid)
-            .await
-            .map_err(|error| app_error(ctx, error))?;
-        Ok(record.map(RoleNode::new))
-    }
-
-    async fn granted_by_user_id(&self) -> Option<ID> {
-        self.record.granted_by_user_oid.map(user_global_id)
-    }
-
-    async fn reason(&self) -> &str {
-        &self.record.reason
-    }
-
-    async fn enabled(&self) -> bool {
-        self.record.enabled
-    }
-
-    async fn revoked_at(&self) -> Option<DateTime<Utc>> {
-        self.record.revoked_at
-    }
-
-    async fn version(&self) -> Uuid {
-        self.record.version
-    }
-
-    async fn user_version(&self) -> Uuid {
-        self.record.user_version
-    }
-
-    async fn created_at(&self) -> DateTime<Utc> {
-        self.record.created_at
-    }
-
-    async fn updated_at(&self) -> Option<DateTime<Utc>> {
-        self.record.updated_at
-    }
+    Ok(connection)
 }
 
 pub(crate) struct EffectivePermissionSourceNode {
@@ -240,16 +253,20 @@ impl From<EffectivePermissionSourceRecord> for EffectivePermissionSourceNode {
     }
 }
 
+/// A role assigned directly to the user that grants the permission.
 #[Object(name = "EffectivePermissionSource")]
 impl EffectivePermissionSourceNode {
     #[graphql(complexity = 0)]
-    async fn binding_id(&self) -> ID {
-        binding_global_id(self.record.binding_oid)
-    }
-
-    #[graphql(complexity = 0)]
     async fn role_id(&self) -> ID {
         types::role_global_id(self.record.role_oid)
+    }
+
+    #[graphql(
+        guard = "ManagementGuard::new(ManagementScope::RolesRead, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::RolesRead))
+    )]
+    async fn role(&self, ctx: &Context<'_>) -> GraphqlResult<Option<RoleNode>> {
+        find_role(ctx, self.record.role_oid).await
     }
 }
 
@@ -267,21 +284,12 @@ impl From<EffectiveGroupPermissionSourceRecord> for EffectiveGroupPermissionSour
     }
 }
 
+/// A role granted through one of the user's active groups.
 #[Object(name = "EffectiveGroupPermissionSource")]
 impl EffectiveGroupPermissionSourceNode {
     #[graphql(complexity = 0)]
     async fn group_id(&self) -> ID {
         group_types::group_global_id(self.record.group_oid)
-    }
-
-    #[graphql(complexity = 0)]
-    async fn membership_id(&self) -> ID {
-        group_types::membership_global_id(self.record.membership_oid)
-    }
-
-    #[graphql(complexity = 0)]
-    async fn group_role_binding_id(&self) -> ID {
-        group_types::group_role_global_id(self.record.group_role_binding_oid)
     }
 
     #[graphql(complexity = 0)]
@@ -299,6 +307,21 @@ impl EffectiveGroupPermissionSourceNode {
             .map_err(|error| app_error(ctx, error))?;
         Ok(record.map(GroupNode::new))
     }
+
+    #[graphql(
+        guard = "ManagementGuard::new(ManagementScope::RolesRead, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::RolesRead))
+    )]
+    async fn role(&self, ctx: &Context<'_>) -> GraphqlResult<Option<RoleNode>> {
+        find_role(ctx, self.record.role_oid).await
+    }
+}
+
+async fn find_role(ctx: &Context<'_>, oid: RoleOid) -> GraphqlResult<Option<RoleNode>> {
+    let record = integration::find_role(request_context(ctx)?, oid)
+        .await
+        .map_err(|error| app_error(ctx, error))?;
+    Ok(record.map(RoleNode::new))
 }
 
 impl EffectivePermissionNode {
@@ -330,7 +353,7 @@ impl EffectivePermissionNode {
         &self.record.scope
     }
 
-    #[graphql(complexity = 0)]
+    #[graphql(complexity = "child_complexity")]
     async fn sources(&self) -> Vec<EffectivePermissionSourceNode> {
         self.record
             .sources
@@ -356,33 +379,20 @@ impl EffectivePermissionNode {
     }
 }
 
-pub(crate) struct UserRoleBindingPayload {
-    user_id: ID,
+/// Result of assigning or revoking a user's roles.
+pub(crate) struct UserRolesPayload {
+    user_oid: UserOid,
     user_version: Uuid,
-    binding_ids: Vec<ID>,
-    binding_oids: Vec<UserRoleBindingOid>,
     created_count: i32,
     revoked_count: i32,
     client_mutation_id: Option<String>,
 }
 
-impl UserRoleBindingPayload {
-    pub(crate) fn new(
-        result: UserRoleBindingMutationResult,
-        client_mutation_id: Option<String>,
-    ) -> Self {
-        let user_id = user_global_id(result.user_oid);
-        let binding_ids = result
-            .binding_oids
-            .iter()
-            .copied()
-            .map(binding_global_id)
-            .collect();
+impl UserRolesPayload {
+    pub(crate) fn new(result: UserRoleMutationResult, client_mutation_id: Option<String>) -> Self {
         Self {
-            user_id,
+            user_oid: result.user_oid,
             user_version: result.user_version,
-            binding_ids,
-            binding_oids: result.binding_oids,
             created_count: i32::try_from(result.created_count).unwrap_or(i32::MAX),
             revoked_count: i32::try_from(result.revoked_count).unwrap_or(i32::MAX),
             client_mutation_id,
@@ -391,17 +401,13 @@ impl UserRoleBindingPayload {
 }
 
 #[Object]
-impl UserRoleBindingPayload {
-    async fn user_id(&self) -> &ID {
-        &self.user_id
+impl UserRolesPayload {
+    async fn user_id(&self) -> ID {
+        user_global_id(self.user_oid)
     }
 
     async fn user_version(&self) -> Uuid {
         self.user_version
-    }
-
-    async fn binding_ids(&self) -> &[ID] {
-        &self.binding_ids
     }
 
     async fn created_count(&self) -> i32 {
@@ -412,27 +418,18 @@ impl UserRoleBindingPayload {
         self.revoked_count
     }
 
-    /// Expanded bindings for the server-produced IDs returned by this
-    /// mutation. Scalar payload fields stay unguarded so a writer without read
-    /// authority can still confirm the write; only this read object is guarded.
+    /// The changed user, for refetching `roles`. Scalar payload fields stay
+    /// unguarded so a writer without read authority can still confirm the
+    /// write.
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::RoleAssignmentsRead, ManagementTarget::instance())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::RoleAssignmentsRead))
+        guard = "ManagementGuard::new(ManagementScope::UsersRead, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::UsersRead))
     )]
-    async fn bindings(&self, ctx: &Context<'_>) -> GraphqlResult<Option<Vec<UserRoleBindingNode>>> {
-        let request = request_context(ctx)?;
-        let binding_oids = self
-            .binding_oids
-            .iter()
-            .copied()
-            .take(MAX_PAYLOAD_BINDINGS)
-            .collect();
-        let records = integration::find_user_role_bindings(request, binding_oids)
+    async fn user(&self, ctx: &Context<'_>) -> GraphqlResult<Option<UserNode>> {
+        let user = user_integration::find_user(request_context(ctx)?, self.user_oid)
             .await
             .map_err(|error| app_error(ctx, error))?;
-        Ok(Some(
-            records.into_iter().map(UserRoleBindingNode::new).collect(),
-        ))
+        Ok(user.map(UserNode::managed))
     }
 
     async fn client_mutation_id(&self) -> Option<&str> {

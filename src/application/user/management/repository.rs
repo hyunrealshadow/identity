@@ -136,6 +136,13 @@ pub trait UserManagementRepository: Send + Sync {
         user_oid: UserOid,
     ) -> Result<Option<UserManagementRecord>, UserManagementRepositoryError>;
 
+    /// Users referenced by one page of relation edges. Unknown OIDs are
+    /// omitted; callers bound the list to one page.
+    async fn find_users(
+        &self,
+        user_oids: Vec<UserOid>,
+    ) -> Result<Vec<UserManagementRecord>, UserManagementRepositoryError>;
+
     async fn create_user(
         &self,
         command: CreateUserTransaction,

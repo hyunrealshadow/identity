@@ -13,7 +13,7 @@ use identity_domain::{
     rbac,
     rbac::{
         LocalizedMetadata, LocalizedText, LocalizedTextError, PermissionCode, RbacValidationError,
-        ResourceOid, RoleOid, UserRoleBindingOid, boundary::BusinessScopeBoundaryError,
+        ResourceOid, RoleOid, boundary::BusinessScopeBoundaryError,
     },
     user::UserOid,
 };
@@ -26,24 +26,18 @@ use crate::{
     },
     observability::{BusinessEvent, EventSink, EventValue, NoopEventSink, error_outcome},
     rbac::{
-        binding::{
-            AssignUserRolesCommand, EffectivePermissionPage, EffectivePermissionPageItem,
-            EffectivePermissionPageRequest, RevokeUserRolesCommand, RoleUserPageRequest,
-            UserRoleBindingMutationResult, UserRoleBindingOrder, UserRoleBindingPage,
-            UserRoleBindingPageItem, UserRoleBindingRecord, UserRolePageRequest,
-        },
         client::{
             ClientScopePageRequest, ClientScopeSetResult, ClientScopeTargetFilter,
             ClientScopeTargetPage, ClientScopeTargetPageItem, ClientScopeTargetPageRequest,
             SetClientScopesCommand,
         },
         cursor::{
-            CURSOR_KIND_BINDING, CURSOR_KIND_CLIENT_SCOPE, CURSOR_KIND_CLIENT_TARGET,
-            CURSOR_KIND_EFFECTIVE, CURSOR_KIND_RESOURCE, CURSOR_KIND_ROLE, CURSOR_KIND_SCOPE,
+            CURSOR_KIND_CLIENT_SCOPE, CURSOR_KIND_CLIENT_TARGET, CURSOR_KIND_EFFECTIVE,
+            CURSOR_KIND_RESOURCE, CURSOR_KIND_ROLE, CURSOR_KIND_SCOPE, CURSOR_KIND_USER_ROLE,
             PageArguments, encode_cursor, prepare_page,
         },
         model::{
-            MAX_BINDING_LOOKUPS, MAX_CLIENT_MUTATION_ID_LENGTH, MAX_DESCRIPTION_LENGTH,
+            MAX_BATCH_LOOKUPS, MAX_CLIENT_MUTATION_ID_LENGTH, MAX_DESCRIPTION_LENGTH,
             MAX_DESCRIPTION_LOCALES, MAX_DISPLAY_NAME_LENGTH, MAX_QUERY_FILTER_LENGTH,
             MAX_REASON_LENGTH, MAX_ROLE_PERMISSIONS, MAX_USER_ROLES, RbacManagementAuthority,
             ScopeDescription, ScopeOid,
@@ -56,7 +50,7 @@ use crate::{
             ResourceStateTransaction, RevokeUserRolesTransaction, RoleQuery, RoleStateTransaction,
             ScopeQuery, ScopeStateTransaction, SetClientScopesTransaction,
             SetRolePermissionsTransaction, UpdateResourceTransaction, UpdateRoleTransaction,
-            UpdateScopeTransaction, UserRoleBindingQuery,
+            UpdateScopeTransaction, UserRoleQuery,
         },
         resource::{
             ApiResourceRecord, CreateResourceCommand, ResourceFilter, ResourcePage,
@@ -70,14 +64,20 @@ use crate::{
             CreateScopeCommand, ScopeFilter, ScopePage, ScopePageItem, ScopePageRequest,
             ScopeStateCommand, UpdateScopeCommand,
         },
+        user_role::{
+            AssignUserRolesCommand, EffectivePermissionPage, EffectivePermissionPageItem,
+            EffectivePermissionPageRequest, RevokeUserRolesCommand, RoleUserPageRequest,
+            UserRoleMutationResult, UserRoleOrder, UserRolePage, UserRolePageItem,
+            UserRolePageRequest,
+        },
     },
 };
 
-mod bindings;
 mod clients;
 mod resources;
 mod roles;
 mod scopes;
+mod user_roles;
 
 pub struct RbacManagementService {
     repository: Arc<dyn RbacManagementRepository>,

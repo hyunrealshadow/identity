@@ -18,7 +18,7 @@ use chrono::{DateTime, Utc};
 use crate::{
     authorization::ids::AuthorizationVersion,
     rbac::{
-        ids::{GroupMembershipOid, GroupOid, GroupRoleBindingOid, RoleOid},
+        ids::{GroupMembershipOid, GroupOid, GroupRoleOid, RoleOid},
         metadata::{LocalizedMetadata, LocalizedText, canonicalize_locale},
     },
     user::UserOid,
@@ -199,8 +199,8 @@ impl GroupMembership {
 /// Explicit group-to-role relation. Built-in groups define these as immutable
 /// definitions; membership of the relation is managed separately.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GroupRoleBinding {
-    pub oid: GroupRoleBindingOid,
+pub struct GroupRole {
+    pub oid: GroupRoleOid,
     pub group_oid: GroupOid,
     pub role_oid: RoleOid,
     pub granted_by_user_oid: Option<UserOid>,
@@ -212,9 +212,9 @@ pub struct GroupRoleBinding {
     pub updated_at: Option<DateTime<Utc>>,
 }
 
-impl GroupRoleBinding {
+impl GroupRole {
     pub fn new(
-        oid: GroupRoleBindingOid,
+        oid: GroupRoleOid,
         group_oid: GroupOid,
         role_oid: RoleOid,
         granted_by_user_oid: Option<UserOid>,
@@ -378,11 +378,11 @@ mod tests {
     use chrono::Utc;
 
     use super::{
-        Group, GroupMembership, GroupRoleBinding, GroupValidationError, LocalizedMetadata,
-        LocalizedText, validate_group_metadata,
+        Group, GroupMembership, GroupRole, GroupValidationError, LocalizedMetadata, LocalizedText,
+        validate_group_metadata,
     };
     use crate::{
-        rbac::ids::{GroupMembershipOid, GroupOid, GroupRoleBindingOid, RoleOid},
+        rbac::ids::{GroupMembershipOid, GroupOid, GroupRoleOid, RoleOid},
         user::UserOid,
     };
     use uuid::Uuid;
@@ -453,8 +453,8 @@ mod tests {
         .expect("blank membership reason is optional");
         assert_eq!(membership.reason, "");
 
-        let binding = GroupRoleBinding::new(
-            GroupRoleBindingOid::new(),
+        let binding = GroupRole::new(
+            GroupRoleOid::new(),
             GroupOid::new(),
             RoleOid::new(),
             None,

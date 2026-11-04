@@ -30,13 +30,13 @@ pub use builtin::{
     built_in_permission_oid, built_in_role_oid, deterministic_oid, is_built_in_permission_oid,
 };
 pub use group::{
-    Group, GroupLifecycleError, GroupMembership, GroupRoleBinding, GroupValidationError,
+    Group, GroupLifecycleError, GroupMembership, GroupRole, GroupValidationError,
     validate_group_descriptions, validate_group_metadata, validate_group_names, validate_locale,
     validate_reason as validate_group_reason,
 };
 pub use ids::{
-    GroupMembershipOid, GroupOid, GroupRoleBindingOid, ResourceOid, ResourcePermissionOid, RoleOid,
-    RolePermissionOid, UserRoleBindingOid,
+    GroupMembershipOid, GroupOid, GroupRoleOid, ResourceOid, ResourcePermissionOid, RoleOid,
+    RolePermissionOid, UserRoleOid,
 };
 pub use metadata::{
     LANGUAGES, LocalizedMetadata, LocalizedText, LocalizedTextError,
@@ -46,14 +46,13 @@ pub use metadata::{
 pub use model::{
     EffectiveGroupSource, EffectivePermission, EffectivePermissionError, EffectivePermissionSource,
     EffectivePermissionSources, GroupRolePath, PermissionCode, RbacLifecycleError,
-    RbacValidationError, ResourcePermission, Role, RolePermission, UserRoleBinding,
+    RbacValidationError, ResourcePermission, Role, RolePermission, UserRole,
     project_effective_permissions, project_scope_names,
 };
 pub use repository::{
     AuthorizationVersionRepository, EffectivePermissionRepository, RbacRepositoryError,
-    RoleRepository, UserRoleBindingRepository,
+    RoleRepository, UserRoleRepository,
 };
 pub use snapshot::{
-    BindingSnapshotError, UserAuthorizationSnapshot, UserRoleBindingSnapshot,
-    validate_binding_snapshot,
+    BindingSnapshotError, UserAuthorizationSnapshot, UserRoleSnapshot, validate_binding_snapshot,
 };

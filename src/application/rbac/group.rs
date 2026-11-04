@@ -6,10 +6,7 @@
 
 use chrono::{DateTime, Utc};
 use identity_domain::{
-    rbac::{
-        GroupMembershipOid, GroupOid, GroupRoleBindingOid, LocalizedMetadata, LocalizedText,
-        RoleOid,
-    },
+    rbac::{GroupMembershipOid, GroupOid, GroupRoleOid, LocalizedMetadata, LocalizedText, RoleOid},
     user::UserOid,
 };
 use serde::Serialize;
@@ -59,8 +56,8 @@ pub struct GroupMembershipRecord {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct GroupRoleBindingRecord {
-    pub oid: GroupRoleBindingOid,
+pub struct GroupRoleRecord {
+    pub oid: GroupRoleOid,
     pub group_oid: GroupOid,
     pub role_oid: RoleOid,
     pub granted_by_user_oid: Option<UserOid>,
@@ -223,7 +220,7 @@ pub struct GroupRolePageRequest {
 
 #[derive(Debug, Clone)]
 pub struct GroupRolePageItem {
-    pub record: GroupRoleBindingRecord,
+    pub record: GroupRoleRecord,
     pub cursor: String,
 }
 

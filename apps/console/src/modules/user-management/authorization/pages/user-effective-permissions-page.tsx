@@ -77,7 +77,7 @@ export function UserEffectivePermissionsPage({ userId }: { userId: string }) {
     Boolean(variables),
     'missing_effective_permissions',
   )
-  const connection = permissions.data?.userPermissions
+  const connection = permissions.data?.user?.effectivePermissions
   const labelIds = useMemo(() => {
     const ids = new Set<string>()
     for (const { node } of connection?.edges ?? []) {
@@ -311,7 +311,7 @@ export function UserEffectivePermissionsPage({ userId }: { userId: string }) {
                 render: (row) => (
                   <div className="flex max-w-xl flex-wrap gap-2">
                     {row.sources.map((source) => (
-                      <Chip key={source.bindingId} size="sm" variant="soft">
+                      <Chip key={source.roleId} size="sm" variant="soft">
                         <Chip.Label>
                           {scope.rolesRead ? (
                             <Link
@@ -329,7 +329,7 @@ export function UserEffectivePermissionsPage({ userId }: { userId: string }) {
                     ))}
                     {row.groupSources.map((source) => (
                       <Chip
-                        key={source.membershipId + source.groupRoleBindingId}
+                        key={`${source.groupId}/${source.roleId}`}
                         size="sm"
                         variant="soft"
                       >

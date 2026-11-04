@@ -475,20 +475,24 @@ export function AddGroupMembershipDialog({
   )
 }
 export function RemoveMemberDialog({
-  node,
+  groupId,
+  userId,
+  username,
   groupVersion,
   ...callbacks
 }: Callbacks & {
-  node: { groupId: string; userId: string; user?: { username: string } | null }
+  groupId: string
+  userId: string
+  username: string
   groupVersion: string
   onRemoved: () => void
 }) {
   const t = useTranslator()
-  const label = node.user?.username ?? node.userId
+  const label = username
   return (
     <RemoveMembershipDialog
-      groupId={node.groupId}
-      userId={node.userId}
+      groupId={groupId}
+      userId={userId}
       version={groupVersion}
       label={label}
       description={t('groupMembersRemoveDescription', { user: label })}

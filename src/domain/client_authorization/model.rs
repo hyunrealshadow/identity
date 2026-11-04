@@ -21,8 +21,8 @@ use crate::{
     },
     rbac::{
         BusinessAuthorizationSnapshot, RoleAuthorizationSnapshot,
-        ids::{ResourceOid, RoleOid, UserRoleBindingOid},
-        snapshot::UserRoleBindingSnapshot,
+        ids::{ResourceOid, RoleOid, UserRoleOid},
+        snapshot::UserRoleSnapshot,
     },
     user::UserOid,
 };
@@ -334,7 +334,7 @@ impl BusinessAuthorizationSnapshotData {
             .bindings
             .iter()
             .map(|binding| BusinessBindingSnapshotData {
-                binding_oid: binding.binding_oid.0.to_string(),
+                binding_oid: binding.user_role_oid.0.to_string(),
                 role_oid: binding.role_oid.0.to_string(),
             })
             .collect::<Vec<_>>();
@@ -388,7 +388,7 @@ impl BusinessAuthorizationSnapshotData {
         let mut binding_oids = BTreeSet::new();
         let mut bindings = Vec::with_capacity(self.bindings.len());
         for binding in &self.bindings {
-            let binding_oid = UserRoleBindingOid(
+            let binding_oid = UserRoleOid(
                 Uuid::parse_str(&binding.binding_oid)
                     .map_err(|_| BusinessSnapshotDataError::InvalidBindingOid)?,
             );
@@ -401,8 +401,8 @@ impl BusinessAuthorizationSnapshotData {
                 Uuid::parse_str(&binding.role_oid)
                     .map_err(|_| BusinessSnapshotDataError::InvalidRoleOid)?,
             );
-            bindings.push(UserRoleBindingSnapshot {
-                binding_oid,
+            bindings.push(UserRoleSnapshot {
+                user_role_oid: binding_oid,
                 role_oid,
             });
         }

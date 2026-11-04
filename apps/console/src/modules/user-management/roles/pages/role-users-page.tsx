@@ -33,7 +33,7 @@ import {
 } from '#/modules/user-management/components/rbac-feedback'
 import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
-import { BindingStatusChip } from '#/modules/user-management/roles/components/role-status'
+import { AssignmentStatusChip } from '#/modules/user-management/roles/components/role-status'
 
 import { useConsoleQuery } from '#/modules/user-management/lib/console-query'
 import { cursorPage } from '#/modules/user-management/lib/cursor-page'
@@ -59,9 +59,9 @@ export function RoleUsersPage({ roleId }: { roleId: string }) {
   const [after, setAfter] = useState<string | undefined>()
   const [before, setBefore] = useState<string | undefined>()
   const [notice, setNotice] = useState<RbacNotice | null>(null)
-  const bindingsVariables = useMemo<ConsoleRoleUsersQueryVariables | null>(
+  const assignmentsVariables = useMemo<ConsoleRoleUsersQueryVariables | null>(
     () =>
-      scope.rolesRead && scope.assignmentsRead
+      scope.rolesRead && scope.assignmentsRead && scope.usersRead
         ? {
             roleId,
             enabled:
@@ -72,7 +72,6 @@ export function RoleUsersPage({ roleId }: { roleId: string }) {
                   : undefined,
             orderBy: 'CREATED_AT_DESC',
             ...cursorPage(PAGE_SIZE, after, before),
-            includeUser: scope.usersRead,
           }
         : null,
     [
@@ -85,27 +84,35 @@ export function RoleUsersPage({ roleId }: { roleId: string }) {
       status,
     ],
   )
-  const bindings = useConsoleQuery<
+  const assignments = useConsoleQuery<
     ConsoleRoleUsersQuery,
     ConsoleRoleUsersQueryVariables
   >(
     ConsoleRoleUsersDocument,
-    bindingsVariables,
+    assignmentsVariables,
     'ConsoleRoleUsers',
-    Boolean(bindingsVariables),
+    Boolean(assignmentsVariables),
     'missing_role_users',
   )
   const role = roleQuery.data?.role ?? null
 
-  if (!scope.rolesRead || !scope.assignmentsRead) {
+  if (!scope.rolesRead || !scope.assignmentsRead || !scope.usersRead) {
     return (
       <ConsoleWorkspaceGate>
         <RbacAccessRestricted
-          title={!scope.rolesRead ? 'rolesNoReadTitle' : 'roleUsersNoReadTitle'}
+          title={
+            !scope.rolesRead
+              ? 'rolesNoReadTitle'
+              : !scope.usersRead
+                ? 'usersNoReadTitle'
+                : 'roleUsersNoReadTitle'
+          }
           description={
             !scope.rolesRead
               ? 'rolesNoReadDescription'
-              : 'roleUsersNoReadDescription'
+              : !scope.usersRead
+                ? 'userAuthorizationUsersReadDescription'
+                : 'roleUsersNoReadDescription'
           }
 
           onBack={() => void navigate({ to: '/roles' })}
@@ -186,9 +193,9 @@ export function RoleUsersPage({ roleId }: { roleId: string }) {
                     }
                   }}
                   options={[
-                    { id: 'any', label: t('bindingFilterAll') },
-                    { id: 'active', label: t('bindingFilterActive') },
-                    { id: 'revoked', label: t('bindingFilterRevoked') },
+                    { id: 'any', label: t('assignmentFilterAll') },
+                    { id: 'active', label: t('assignmentFilterActive') },
+                    { id: 'revoked', label: t('assignmentFilterRevoked') },
                   ]}
                 />
               </div>
@@ -201,19 +208,19 @@ export function RoleUsersPage({ roleId }: { roleId: string }) {
                       title: t('roleUserAssignedTitle'),
                       description: t('roleUserAssignedDescription'),
                     })
-                    void bindings.refresh()
+                    void assignments.refresh()
                   }}
-                  onReload={() => void bindings.refresh()}
-                  reloadPending={bindings.refreshing}
+                  onReload={() => void assignments.refresh()}
+                  reloadPending={assignments.refreshing}
                 />
               ) : null}
             </div>
           </header>
-          <div className="p-0">{renderBindings()}</div>
+          <div className="p-0">{renderAssignments()}</div>
           <footer className="border-t border-separator pt-4">
             <RelationPagination
-              connection={bindings.data?.roleUsers ?? null}
-              variables={bindingsVariables}
+              connection={assignments.data?.role?.users ?? null}
+              variables={assignmentsVariables}
               after={after}
               before={before}
               onNavigate={(page) => {
@@ -221,7 +228,7 @@ export function RoleUsersPage({ roleId }: { roleId: string }) {
                 setBefore(page.before)
               }}
               label={t('roleUsersPagination')}
-              isDisabled={bindings.refreshing || bindings.status !== 'ready'}
+              isDisabled={assignments.refreshing || assignments.status !== 'ready'}
             />
           </footer>
         </section>
@@ -229,25 +236,25 @@ export function RoleUsersPage({ roleId }: { roleId: string }) {
     </ConsoleWorkspaceGate>
   )
 
-  function renderBindings() {
-    if (bindings.status === 'error') {
+  function renderAssignments() {
+    if (assignments.status === 'error') {
       return (
         <div className="p-4">
           <AsyncState
-            kind={bindings.forbidden ? 'forbidden' : 'error'}
-            title={t(failureTitleKey(bindings.failure, bindings.forbidden))}
+            kind={assignments.forbidden ? 'forbidden' : 'error'}
+            title={t(failureTitleKey(assignments.failure, assignments.forbidden))}
             description={t(
-              failureDescriptionKey(bindings.failure, bindings.forbidden),
+              failureDescriptionKey(assignments.failure, assignments.forbidden),
             )}
-            requestId={bindings.requestId}
-            traceId={bindings.traceId}
-            issues={bindings.errors}
-            onRetry={() => void bindings.refresh()}
+            requestId={assignments.requestId}
+            traceId={assignments.traceId}
+            issues={assignments.errors}
+            onRetry={() => void assignments.refresh()}
           />
         </div>
       )
     }
-    if (bindings.status !== 'ready' || !bindings.data) {
+    if (assignments.status !== 'ready' || !assignments.data) {
       return (
         <div
           className="space-y-2 p-4"
@@ -261,7 +268,7 @@ export function RoleUsersPage({ roleId }: { roleId: string }) {
         </div>
       )
     }
-    const edges = bindings.data.roleUsers.edges
+    const edges = assignments.data.role?.users.edges ?? []
     if (edges.length === 0) {
       return (
         <div className="p-4">
@@ -280,7 +287,7 @@ export function RoleUsersPage({ roleId }: { roleId: string }) {
     }
     return (
       <div>
-        {bindings.partial ? (
+        {assignments.partial ? (
           <div className="p-3">
             <Alert status="warning">
               <Alert.Indicator />
@@ -290,10 +297,10 @@ export function RoleUsersPage({ roleId }: { roleId: string }) {
                   {t('rolesPartialDescription')}
                 </Alert.Description>
                 <RequestCorrelation
-                  requestId={bindings.requestId}
-                  traceId={bindings.traceId}
+                  requestId={assignments.requestId}
+                  traceId={assignments.traceId}
                 />
-                <ErrorDetails issues={bindings.errors} />
+                <ErrorDetails issues={assignments.errors} />
               </Alert.Content>
             </Alert>
           </div>
@@ -325,70 +332,72 @@ export function RoleUsersPage({ roleId }: { roleId: string }) {
           ]}
         >
           <DataTable.Body>
-            {edges.map(({ node }) => (
-              <DataTable.Row key={node.id} id={node.id}>
-                <DataTable.Cell>
-                  <div className="min-w-48">
-                    {node.user && scope.usersRead ? (
+            {edges.map((edge) => {
+              const user = edge.node
+              return (
+                <DataTable.Row key={user.id} id={user.id}>
+                  <DataTable.Cell>
+                    <div className="min-w-48">
                       <Link
                         to="/users/$userId"
-                        params={{ userId: node.user.id }}
+                        params={{ userId: user.id }}
                         className="font-medium text-foreground underline-offset-4 hover:underline"
                       >
-                        {node.user.username}
+                        {user.username}
                       </Link>
-                    ) : node.user ? (
-                      <span className="font-medium">{node.user.username}</span>
-                    ) : (
-                      <span className="font-mono text-xs">{node.userId}</span>
-                    )}
-                    {node.user?.email ? (
-                      <p className="mt-0.5 break-all text-xs text-muted">
-                        {node.user.email}
-                      </p>
-                    ) : null}
-                  </div>
-                </DataTable.Cell>
-                <DataTable.Cell>
-                  <BindingStatusChip
-                    enabled={node.enabled}
-                    revokedAt={node.revokedAt}
-                  />
-                </DataTable.Cell>
-                <DataTable.Cell>
-                  <span className="whitespace-nowrap text-sm">
-                    {formatDateTime(node.createdAt, locale, timeZone)}
-                  </span>
-                </DataTable.Cell>
-                <DataTable.Cell>
-                  {node.enabled ? (
-                    scope.assignmentsWrite ? (
-                      <RevokeRoleFromUserDialog
-                        binding={node}
-                        onRevoked={() => {
-                          setNotice({
-                            kind: 'success',
-                            title: t('roleUserRevokedTitle'),
-                            description: t('roleUserRevokedDescription'),
-                          })
-                          void bindings.refresh()
-                        }}
-                        onReload={() => void bindings.refresh()}
-                        reloadPending={bindings.refreshing}
-                      />
+                      {user.email ? (
+                        <p className="mt-0.5 break-all text-xs text-muted">
+                          {user.email}
+                        </p>
+                      ) : null}
+                    </div>
+                  </DataTable.Cell>
+                  <DataTable.Cell>
+                    <AssignmentStatusChip
+                      enabled={edge.enabled}
+                      revokedAt={edge.revokedAt}
+                    />
+                  </DataTable.Cell>
+                  <DataTable.Cell>
+                    <span className="whitespace-nowrap text-sm">
+                      {formatDateTime(edge.createdAt, locale, timeZone)}
+                    </span>
+                  </DataTable.Cell>
+                  <DataTable.Cell>
+                    {edge.enabled ? (
+                      scope.assignmentsWrite ? (
+                        <RevokeRoleFromUserDialog
+                          assignment={{
+                            userId: user.id,
+                            roleId,
+                            userVersion: user.version,
+                          }}
+                          label={user.username}
+                          onRevoked={() => {
+                            setNotice({
+                              kind: 'success',
+                              title: t('roleUserRevokedTitle'),
+                              description: t('roleUserRevokedDescription'),
+                            })
+                            void assignments.refresh()
+                          }}
+                          onReload={() => void assignments.refresh()}
+                          reloadPending={assignments.refreshing}
+                        />
+                      ) : (
+                        <span className="text-xs text-muted">
+                          {t('roleUsersNoWritePermission')}
+                        </span>
+                      )
                     ) : (
                       <span className="text-xs text-muted">
-                        {t('roleUsersNoWritePermission')}
+                        {formatDateTime(edge.revokedAt, locale, timeZone)}
                       </span>
-                    )
-                  ) : (
-                    <span className="text-xs text-muted">
-                      {formatDateTime(node.revokedAt, locale, timeZone)}
-                    </span>
-                  )}
-                </DataTable.Cell>
-              </DataTable.Row>
-            ))}
+                    )}
+                  </DataTable.Cell>
+                </DataTable.Row>
+              )
+            })}
           </DataTable.Body>
         </DataTable>
       </div>

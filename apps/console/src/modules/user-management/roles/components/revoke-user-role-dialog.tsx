@@ -2,47 +2,39 @@ import { toast, useOverlayState } from '@heroui/react'
 import { XCircle } from 'lucide-react'
 
 import { TableRowActions } from '#/components/table-row-actions'
-import { useLocale, useTranslator } from '#/lib/i18n'
+import { useTranslator } from '#/lib/i18n'
 import { RelationDialog } from '../../components/relation-dialog'
 import { useRelationMutation } from '../../lib/relation-mutation'
-import { resolveLocalizedText } from '../../groups/lib/groups-search'
 import { useRoleMutations } from '../hooks/role-mutations'
 
 interface Props {
-  binding: {
+  /** The user-role assignment to revoke, addressed by its two endpoints. */
+  assignment: {
     userId: string
     roleId: string
-    userVersion: string
-    user?: { username: string } | null
-    role?: {
-      id: string
-      name: string
-      names: { locale: string; value: string }[]
-    } | null
+    userVersion: string | null | undefined
   }
+  /** Display name of the other endpoint: the role on a user, or the user on a role. */
+  label: string
   onRevoked: () => void
   onReload: () => void
   reloadPending: boolean
 }
 
-function RevokeUserRoleDialog({
-  binding,
+function RevokeAssignmentDialog({
+  assignment,
+  label,
   perspective,
   onRevoked,
   onReload,
   reloadPending,
 }: Props & { perspective: 'role' | 'user' }) {
   const t = useTranslator()
-  const { locale } = useLocale()
   const state = useOverlayState()
   const mutation = useRelationMutation()
   const mutations = useRoleMutations()
   const fromUser = perspective === 'user'
-  const label = fromUser
-    ? binding.role
-      ? (resolveLocalizedText(binding.role.names, locale) ?? binding.role.name)
-      : binding.roleId
-    : (binding.user?.username ?? binding.userId)
+  const userVersion = assignment.userVersion
   return (
     <>
       <TableRowActions
@@ -67,7 +59,7 @@ function RevokeUserRoleDialog({
         mutation={mutation}
         size="md"
         danger
-        disabled={!binding.userVersion}
+        disabled={!userVersion}
         title={t(fromUser ? 'userRolesRevokeTitle' : 'roleUsersRevokeTitle')}
         confirm={t(
           fromUser ? 'userRolesRevokeConfirm' : 'roleUsersRevokeConfirm',
@@ -76,10 +68,11 @@ function RevokeUserRoleDialog({
         reloadPending={reloadPending}
         onSubmit={() =>
           void mutation.run(async () => {
+            if (!userVersion) return
             const result = await mutations.revokeUserRoles({
-              userId: binding.userId,
-              roleIds: [binding.roleId],
-              expectedUserVersion: binding.userVersion,
+              userId: assignment.userId,
+              roleIds: [assignment.roleId],
+              expectedUserVersion: userVersion,
             })
             const payload = result.data?.revokeUserRoles
             if (
@@ -117,9 +110,9 @@ function RevokeUserRoleDialog({
   )
 }
 
-export function RevokeBindingDialog(props: Props) {
-  return <RevokeUserRoleDialog perspective="user" {...props} />
+export function RevokeUserRoleDialog(props: Props) {
+  return <RevokeAssignmentDialog perspective="user" {...props} />
 }
 export function RevokeRoleFromUserDialog(props: Props) {
-  return <RevokeUserRoleDialog perspective="role" {...props} />
+  return <RevokeAssignmentDialog perspective="role" {...props} />
 }

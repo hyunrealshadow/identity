@@ -14,13 +14,12 @@ use async_trait::async_trait;
 use identity_application::rbac::{
     AddGroupMemberTransaction, CreateGroupTransaction, DeleteGroupResult, DeleteGroupTransaction,
     GroupFilter, GroupManagementRepository, GroupManagementRepositoryError,
-    GroupMembershipMutationResult, GroupMembershipPageEntry, GroupMembershipQuery,
-    GroupMembershipRecord, GroupPageData, GroupPageEntry, GroupQuery, GroupRecord,
-    GroupRoleBindingRecord, GroupRoleMutationResult, GroupRolePageEntry, GroupRoleQuery,
-    GroupStateTransaction, RemoveGroupMemberTransaction, SetGroupRolesTransaction,
+    GroupMembershipMutationResult, GroupMembershipPageEntry, GroupMembershipQuery, GroupPageData,
+    GroupPageEntry, GroupQuery, GroupRecord, GroupRoleMutationResult, GroupRolePageEntry,
+    GroupRoleQuery, GroupStateTransaction, RemoveGroupMemberTransaction, SetGroupRolesTransaction,
     UpdateGroupTransaction,
 };
-use identity_domain::rbac::{GroupMembershipOid, GroupOid, GroupRoleBindingOid};
+use identity_domain::rbac::GroupOid;
 use sea_orm::DatabaseConnection;
 
 pub struct GroupManagementRepositoryImpl {
@@ -55,20 +54,6 @@ impl GroupManagementRepository for GroupManagementRepositoryImpl {
         oid: GroupOid,
     ) -> Result<Option<GroupRecord>, GroupManagementRepositoryError> {
         self.group_find(oid).await
-    }
-
-    async fn find_group_membership(
-        &self,
-        oid: GroupMembershipOid,
-    ) -> Result<Option<GroupMembershipRecord>, GroupManagementRepositoryError> {
-        self.membership_find(oid).await
-    }
-
-    async fn find_group_role_binding(
-        &self,
-        oid: GroupRoleBindingOid,
-    ) -> Result<Option<GroupRoleBindingRecord>, GroupManagementRepositoryError> {
-        self.group_role_find(oid).await
     }
 
     async fn list_group_memberships(
