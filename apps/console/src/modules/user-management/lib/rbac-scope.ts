@@ -15,7 +15,9 @@ export function rbacScope(
     permissionWrite: mutation('createScope'),
     scopesRead: query('scopes'),
     resourcesRead: query('resources'),
-    assignmentsRead: query('userRoles'),
+    // Role assignments are read through user and role fields; this one needs
+    // only the assignment read scope.
+    assignmentsRead: fieldAffordance(permissions, 'User', 'effectivePermissions'),
     assignmentsWrite: mutation('assignUserRoles'),
     usersRead: query('users'),
     groupsRead: query('groups'),

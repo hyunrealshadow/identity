@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { schemaMetadata } from '@identity/graphql-access'
 import { expect, it } from 'vitest'
 import type { EffectivePermissions } from '#/lib/workspace'
 import { rbacScope } from './rbac-scope'
@@ -35,4 +36,16 @@ it('offers requestable actions without imposing a second authentication policy',
   expect(scope.rolesRead).toBe(false)
   expect(scope.assignmentsWrite).toBe(false)
   expect(scope.groupMembershipsWrite).toBe(true)
+})
+
+it('derives every affordance from a field that the schema still declares', () => {
+  const declared = Object.values(schemaMetadata.types).flatMap((type) =>
+    Object.values(type?.fields ?? {}).flatMap((field) =>
+      (field?.policies ?? []).flatMap((policy) => policy.scopes),
+    ),
+  )
+  const scope = rbacScope({ ...snapshot, requestableScopes: [...new Set(declared)] })
+  for (const [name, allowed] of Object.entries(scope)) {
+    expect(allowed, name).toBe(true)
+  }
 })
