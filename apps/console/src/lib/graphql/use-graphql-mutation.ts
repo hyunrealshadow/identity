@@ -3,6 +3,7 @@ import { useCallback } from 'react'
 
 import type { DocumentSource, GraphQLResult } from '#/lib/graphql/transport'
 import { useInvalidateOperations } from '#/lib/graphql/invalidate-operations'
+import { usePatchVersionedEntities } from '#/lib/graphql/patch-versioned-entities'
 import { useGraphQL } from '#/lib/graphql/use-graphql'
 
 /** One mutation through the shared request path; returns the full result. */
@@ -26,13 +27,15 @@ interface MutationInput {
  * observe pending state, while callers keep the existing "await the result"
  * contract used across the console.
  *
- * A clean success marks the affected reads stale. The refetch is deliberately
- * not awaited: pages that already reload the current view afterwards share the
+ * A clean success first applies the returned version to the cached detail
+ * reads, then marks the affected reads stale. The refetch is deliberately not
+ * awaited: pages that already reload the current view afterwards share the
  * same in-flight request instead of issuing a second one.
  */
 export function useGraphQLMutation(): GraphQLMutation {
   const request = useGraphQL()
   const invalidate = useInvalidateOperations()
+  const patch = usePatchVersionedEntities()
   const { mutateAsync } = useMutation({
     mutationFn: async (input: MutationInput) => {
       const result = await request(
@@ -40,13 +43,11 @@ export function useGraphQLMutation(): GraphQLMutation {
         input.variables,
         input.operationName,
       )
-      if (
-        input.invalidates &&
-        input.invalidates.length > 0 &&
-        !result.failure &&
-        result.errors.length === 0
-      ) {
-        void invalidate(input.invalidates)
+      if (!result.failure && result.errors.length === 0) {
+        patch(input.operationName, result.data)
+        if (input.invalidates && input.invalidates.length > 0) {
+          void invalidate(input.invalidates)
+        }
       }
       return result
     },
