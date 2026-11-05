@@ -1,0 +1,219 @@
+fragment ConsoleClientFields on Client {
+  id
+  clientId
+  name
+  description
+  names {
+    locale
+    value
+  }
+  descriptions {
+    locale
+    value
+  }
+  builtIn
+  enabled
+  platforms {
+    platform
+    redirectUris
+  }
+  postLogoutRedirectUris
+  grantTypes
+  tokenEndpointAuthMethod
+  requirePushedAuthorizationRequests
+  skipConsent
+  corsEnabled
+  corsOrigins
+  version
+  createdAt
+  updatedAt
+}
+
+query ConsoleClients(
+  $filter: ClientFilter
+  $orderBy: ClientOrder
+  $first: Int
+  $after: String
+  $last: Int
+  $before: String
+) {
+  clients(
+    filter: $filter
+    orderBy: $orderBy
+    first: $first
+    after: $after
+    last: $last
+    before: $before
+  ) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    edges {
+      cursor
+      node {
+        id
+        clientId
+        name
+        names {
+          locale
+          value
+        }
+        builtIn
+        enabled
+        grantTypes
+        tokenEndpointAuthMethod
+        version
+        createdAt
+      }
+    }
+  }
+}
+
+query ConsoleClient($id: ID!) {
+  client(id: $id) {
+    ...ConsoleClientFields
+  }
+}
+
+query ConsoleClientCredentials($id: ID!) {
+  client(id: $id) {
+    id
+    version
+    tokenEndpointAuthMethod
+    credentials {
+      id
+      type
+      hint
+      expiresAt
+      revokedAt
+      active
+      createdAt
+    }
+  }
+}
+
+query ConsoleClientScopes(
+  $id: ID!
+  $orderBy: ScopeOrder
+  $first: Int
+  $after: String
+  $last: Int
+  $before: String
+) {
+  client(id: $id) {
+    id
+    version
+    scopes(
+      orderBy: $orderBy
+      first: $first
+      after: $after
+      last: $last
+      before: $before
+    ) {
+      totalCount
+      pageInfo {
+        hasNextPage
+        hasPreviousPage
+        startCursor
+        endCursor
+      }
+      edges {
+        cursor
+        clientGranted
+        node {
+          id
+          code
+          name
+          names {
+            locale
+            value
+          }
+          resourceId
+          builtIn
+          enabled
+        }
+      }
+    }
+  }
+}
+
+mutation ConsoleCreateClient($input: CreateClientInput!) {
+  createClient(input: $input) {
+    clientId
+    version
+  }
+}
+
+mutation ConsoleUpdateClient($input: UpdateClientInput!) {
+  updateClient(input: $input) {
+    clientId
+    version
+  }
+}
+
+mutation ConsoleEnableClient($input: ClientStateInput!) {
+  enableClient(input: $input) {
+    clientId
+    version
+  }
+}
+
+mutation ConsoleDisableClient($input: ClientStateInput!) {
+  disableClient(input: $input) {
+    clientId
+    version
+  }
+}
+
+mutation ConsoleDeleteClient($input: ClientStateInput!) {
+  deleteClient(input: $input) {
+    clientId
+    deleted
+  }
+}
+
+mutation ConsoleCreateClientSecret($input: CreateClientSecretInput!) {
+  createClientSecret(input: $input) {
+    clientId
+    version
+    secret
+    credential {
+      id
+      hint
+      expiresAt
+    }
+  }
+}
+
+mutation ConsoleRotateClientSecret($input: RotateClientSecretInput!) {
+  rotateClientSecret(input: $input) {
+    clientId
+    version
+    secret
+    credential {
+      id
+      hint
+      expiresAt
+    }
+  }
+}
+
+mutation ConsoleRevokeClientCredential($input: RevokeClientCredentialInput!) {
+  revokeClientCredential(input: $input) {
+    clientId
+    version
+  }
+}
+
+mutation ConsoleSetClientScopes($input: SetClientScopesInput!) {
+  setClientScopes(input: $input) {
+    clientId
+    version
+    scopeIds
+    clientGrantedScopeIds
+  }
+}

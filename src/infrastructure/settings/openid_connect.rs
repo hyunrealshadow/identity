@@ -5,10 +5,18 @@ use std::{
 
 use async_trait::async_trait;
 use identity_application::{error::AppError, setting::runtime::RefreshableSetting};
-use sea_orm::{DatabaseConnection, EntityTrait, QuerySelect};
+use sea_orm::{
+    ColumnTrait, DatabaseConnection, EntityTrait, JoinType, QueryFilter, QuerySelect, RelationTrait,
+};
 
-use crate::database::entity::client_openid_connect_cors_origin::{
-    Column as ClientOpenIdConnectCorsOriginColumn, Entity as ClientOpenIdConnectCorsOriginEntity,
+use crate::database::entity::{
+    client::Column as ClientColumn,
+    client_openid_connect::Relation as ClientOpenIdConnectRelation,
+    client_openid_connect_cors_origin::{
+        Column as ClientOpenIdConnectCorsOriginColumn,
+        Entity as ClientOpenIdConnectCorsOriginEntity,
+        Relation as ClientOpenIdConnectCorsOriginRelation,
+    },
 };
 
 /// A global, read-only setting derived from per-client CORS origin rows.
@@ -26,10 +34,21 @@ impl CachedCorsOrigins {
         })
     }
 
+    /// Origins of enabled clients only; a disabled client's browser origins
+    /// stop being allowed with the client itself.
     async fn load(db: &DatabaseConnection) -> Result<HashSet<String>, AppError> {
         ClientOpenIdConnectCorsOriginEntity::find()
             .select_only()
             .column(ClientOpenIdConnectCorsOriginColumn::Origin)
+            .join(
+                JoinType::InnerJoin,
+                ClientOpenIdConnectCorsOriginRelation::OpenIdConnectClient.def(),
+            )
+            .join(
+                JoinType::InnerJoin,
+                ClientOpenIdConnectRelation::Client.def(),
+            )
+            .filter(ClientColumn::Enabled.eq(true))
             .distinct()
             .into_tuple::<String>()
             .all(db)

@@ -269,6 +269,11 @@ mod tests {
             include_str!("../../../assets/i18n/zh-CN/errors/graphql_transport.ftl"),
         ),
         (
+            "client",
+            include_str!("../../../assets/i18n/en-US/errors/client.ftl"),
+            include_str!("../../../assets/i18n/zh-CN/errors/client.ftl"),
+        ),
+        (
             "group",
             include_str!("../../../assets/i18n/en-US/errors/group.ftl"),
             include_str!("../../../assets/i18n/zh-CN/errors/group.ftl"),

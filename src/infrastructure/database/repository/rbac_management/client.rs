@@ -8,8 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use identity_application::rbac::{
     ClientScopeAssignment, ClientScopePageEntry, ClientScopeQuery, ClientScopeSetResult,
-    ClientScopeTargetPageEntry, ClientScopeTargetQuery, ClientScopeTargetRecord, RbacEntityKind,
-    RbacManagementRepositoryError, RbacPageData, RbacProtectedKind, ScopeOrder,
+    RbacEntityKind, RbacManagementRepositoryError, RbacPageData, RbacProtectedKind, ScopeOrder,
     SetClientScopesTransaction,
     cursor::{RbacPageDirection, RbacSortKey, RbacTie},
 };
@@ -25,17 +24,11 @@ use super::{
     delegation,
     scope::scope_from_row,
     support::{
-        Binds, CursorComparison, corrupt, escape_like, keyset_condition, not_found,
-        order_is_descending, page_flags, storage,
+        Binds, CursorComparison, corrupt, keyset_condition, not_found, order_is_descending,
+        page_flags, storage,
     },
 };
 use crate::database::client_authorization_boundary;
-
-const CLIENT_TARGET_SELECT: &str = "SELECT c.id, c.oid, c.name, c.built_in, \
-            count(cs.id)::bigint AS allowed_scope_count, \
-            c.version AS version \
-     FROM client c \
-     LEFT JOIN client_scope cs ON cs.client_id = c.id";
 
 const CLIENT_SCOPE_SELECT: &str = "SELECT s.id, s.oid, s.resource_id, s.code, s.name, s.names, \
             s.description, s.descriptions, s.built_in, s.enabled, s.version, s.created_at, s.updated_at, \
@@ -54,96 +47,6 @@ impl RbacManagementRepositoryImpl {
             [client_oid.into()])).await.map_err(storage)?.ok_or_else(corrupt)?;
         let value = row.try_get::<i64>("", "total_count").map_err(storage)?;
         u64::try_from(value).map_err(|_| corrupt())
-    }
-
-    pub(crate) async fn client_target_list(
-        &self,
-        query: ClientScopeTargetQuery,
-    ) -> Result<RbacPageData<ClientScopeTargetPageEntry>, RbacManagementRepositoryError> {
-        let descending = order_is_descending(query.order.is_descending(), query.direction);
-        let ascending = !query.order.is_descending();
-        let mut binds = Binds::new();
-        let mut conditions = vec!["c.built_in = false".to_owned()];
-        if let Some(term) = &query.filter.query {
-            let pattern = format!("%{}%", escape_like(term));
-            conditions.push(format!("c.name ILIKE {}", binds.push(pattern)));
-        }
-        if let Some(after) = &query.after {
-            conditions.push(keyset_condition(
-                "c.name",
-                "c.id",
-                after,
-                CursorComparison::After,
-                ascending,
-                &mut binds,
-            ));
-        }
-        if let Some(before) = &query.before {
-            conditions.push(keyset_condition(
-                "c.name",
-                "c.id",
-                before,
-                CursorComparison::Before,
-                ascending,
-                &mut binds,
-            ));
-        }
-        let direction_sql = if descending { "DESC" } else { "ASC" };
-        let limit_placeholder = binds.push((query.limit + 1) as i64);
-        let where_sql = conditions.join(" AND ");
-        let sql = format!(
-            "{CLIENT_TARGET_SELECT} WHERE {where_sql} \
-             GROUP BY c.id, c.oid, c.name, c.built_in, c.version \
-             ORDER BY c.name {direction_sql}, c.id {direction_sql} LIMIT {limit_placeholder}"
-        );
-        let rows = self
-            .db
-            .query_all_raw(Statement::from_sql_and_values(
-                DbBackend::Postgres,
-                sql,
-                binds.into_values(),
-            ))
-            .await
-            .map_err(storage)?;
-        let has_more = rows.len() > query.limit;
-        let mut rows = rows;
-        rows.truncate(query.limit);
-        if query.direction == RbacPageDirection::Backward {
-            rows.reverse();
-        }
-        let mut items = Vec::with_capacity(rows.len());
-        for row in rows {
-            let id = row.try_get::<i64>("", "id").map_err(storage)?;
-            let version = row
-                .try_get::<Option<Uuid>>("", "version")
-                .map_err(storage)?
-                .ok_or_else(corrupt)?;
-            let record = ClientScopeTargetRecord {
-                client_oid: row.try_get::<Uuid>("", "oid").map_err(storage)?,
-                name: row.try_get::<String>("", "name").map_err(storage)?,
-                built_in: row.try_get::<bool>("", "built_in").map_err(storage)?,
-                allowed_scope_count: row
-                    .try_get::<i64>("", "allowed_scope_count")
-                    .map_err(storage)?,
-                version,
-            };
-            let sort_key = RbacSortKey::Text {
-                value: record.name.clone(),
-                tie: RbacTie::Id(id),
-            };
-            items.push(ClientScopeTargetPageEntry { sort_key, record });
-        }
-        let (has_previous_page, has_next_page) = page_flags(
-            query.direction,
-            has_more,
-            query.after.is_some(),
-            query.before.is_some(),
-        );
-        Ok(RbacPageData {
-            items,
-            has_previous_page,
-            has_next_page,
-        })
     }
 
     pub(crate) async fn client_scope_list(

@@ -21,7 +21,6 @@ import {
   type ConsolePermissionOptionsQueryVariables,
   type ConsoleResourceOptionsQuery,
   type ConsoleResourceOptionsQueryVariables,
-  type ConsoleRoleQuery,
 } from '#/gql/graphql'
 import {
   failureDescriptionKey,
@@ -33,9 +32,7 @@ import {
   permissionDisplayDescription,
   permissionDisplayName,
   permissionIsBuiltIn,
-  roleDisplayName,
   withPermissionDisplayFields,
-  withRoleDisplayFields,
 } from '#/modules/user-management/roles/lib/role-localization'
 import type { StagedPermission } from '#/modules/user-management/roles/lib/permission-selection'
 import { useConsoleQuery } from '#/modules/user-management/lib/console-query'
@@ -78,7 +75,8 @@ function resourceLabel(resource: ResourceOption): string {
 }
 
 export function PermissionPickerDialog({
-  role,
+  subjectName,
+  hint,
   assignedIds,
   initialSelected,
   initialMetadata,
@@ -87,7 +85,10 @@ export function PermissionPickerDialog({
   disabled,
   onApply,
 }: {
-  role: NonNullable<ConsoleRoleQuery['role']>
+  /** Display name of the role or client receiving permissions. */
+  subjectName: string
+  /** Optional replacement for the built-in permission hint. */
+  hint?: string
   assignedIds: ReadonlySet<string>
   initialSelected: ReadonlySet<string>
   initialMetadata: ReadonlyMap<string, StagedPermission>
@@ -98,7 +99,6 @@ export function PermissionPickerDialog({
 }) {
   const t = useTranslator()
   const { locale } = useLocale()
-  const roleName = roleDisplayName(withRoleDisplayFields(role), locale)
   const state = useOverlayState()
   const [query, setQuery] = useState('')
   const [appliedQuery, setAppliedQuery] = useState('')
@@ -347,11 +347,11 @@ export function PermissionPickerDialog({
                   <Modal.Body className="flex min-h-0 flex-col gap-3 overflow-y-auto">
                     <p className="text-sm leading-5 text-muted">
                       {t('rolePermissionsPickerDescription', {
-                        role: roleName,
+                        role: subjectName,
                       })}
                     </p>
                     <p className="text-xs leading-5 text-muted">
-                      {t('rolePermissionsProtectedHint')}
+                      {hint ?? t('rolePermissionsProtectedHint')}
                     </p>
 
                     <form

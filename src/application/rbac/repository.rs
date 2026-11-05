@@ -20,10 +20,7 @@ use identity_domain::{
 };
 
 use super::{
-    client::{
-        ClientScopeAssignment, ClientScopeSetResult, ClientScopeTargetFilter,
-        ClientScopeTargetOrder, ClientScopeTargetRecord,
-    },
+    client::{ClientScopeAssignment, ClientScopeSetResult},
     cursor::{RbacPageDirection, RbacSortKey},
     model::{RbacManagementAuthority, ScopeDescription, ScopeOid},
     resource::{ApiResourceRecord, ResourceFilter, ResourceOrder},
@@ -100,12 +97,6 @@ pub struct EffectivePermissionPageData {
 }
 
 #[derive(Debug, Clone)]
-pub struct ClientScopeTargetPageEntry {
-    pub sort_key: RbacSortKey,
-    pub record: ClientScopeTargetRecord,
-}
-
-#[derive(Debug, Clone)]
 pub struct ResourceQuery {
     pub filter: ResourceFilter,
     pub order: ResourceOrder,
@@ -152,16 +143,6 @@ pub struct EffectivePermissionQuery {
     pub user_oid: UserOid,
     pub resource_oid: ResourceOid,
     pub order: EffectivePermissionOrder,
-    pub direction: RbacPageDirection,
-    pub after: Option<RbacSortKey>,
-    pub before: Option<RbacSortKey>,
-    pub limit: usize,
-}
-
-#[derive(Debug, Clone)]
-pub struct ClientScopeTargetQuery {
-    pub filter: ClientScopeTargetFilter,
-    pub order: ClientScopeTargetOrder,
     pub direction: RbacPageDirection,
     pub after: Option<RbacSortKey>,
     pub before: Option<RbacSortKey>,
@@ -516,11 +497,6 @@ pub trait RbacManagementRepository: Send + Sync {
         &self,
         command: RevokeUserRolesTransaction,
     ) -> Result<UserRoleMutationResult, RbacManagementRepositoryError>;
-
-    async fn list_client_scope_targets(
-        &self,
-        query: ClientScopeTargetQuery,
-    ) -> Result<RbacPageData<ClientScopeTargetPageEntry>, RbacManagementRepositoryError>;
 
     async fn list_client_scopes(
         &self,

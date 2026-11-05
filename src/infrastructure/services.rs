@@ -5,6 +5,7 @@ use identity_application::{
         account::AccountService, login::LoginService, mfa::MfaService, passkey::PasskeyService,
         session::SessionService,
     },
+    client::ClientManagementService,
     console::ConsoleRuntimeService,
     data_protection::{DataProtector, DataProtectorImpl},
     install::InstallService,
@@ -55,6 +56,7 @@ use crate::{
         repository::{
             authorization::AuthorizationRepositoryImpl, challenge::ChallengeRepositoryImpl,
             client_authorization::ClientAuthorizationRepositoryImpl,
+            client_management::ClientManagementRepositoryImpl,
             device_authorization::DeviceAuthorizationRepositoryImpl,
             group_management::GroupManagementRepositoryImpl, install::InstallRepositoryImpl,
             instance_overview::InstanceOverviewRepositoryImpl, key::KeyRepositoryImpl,
@@ -114,6 +116,7 @@ pub struct AppServices {
     user_management: UserManagementService,
     rbac_management: RbacManagementService,
     group_management: GroupManagementService,
+    client_management: ClientManagementService,
     oidc: AppOpenIdProviderService,
     oidc_authorize: AppOpenIdAuthorizeService,
     pushed_authorization: PushedAuthorizationService,
@@ -272,6 +275,11 @@ impl AppServices {
             .with_events(Arc::clone(&events)),
             group_management: GroupManagementService::new(
                 Arc::new(GroupManagementRepositoryImpl::new(db.clone())),
+                data_protector.clone(),
+            )
+            .with_events(Arc::clone(&events)),
+            client_management: ClientManagementService::new(
+                Arc::new(ClientManagementRepositoryImpl::new(db.clone())),
                 data_protector.clone(),
             )
             .with_events(Arc::clone(&events)),
@@ -481,6 +489,11 @@ impl AppServices {
     #[must_use]
     pub fn group_management(&self) -> &GroupManagementService {
         &self.group_management
+    }
+
+    #[must_use]
+    pub fn client_management(&self) -> &ClientManagementService {
+        &self.client_management
     }
 
     #[must_use]

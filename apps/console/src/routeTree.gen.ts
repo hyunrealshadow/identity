@@ -13,6 +13,9 @@ import { Route as AppRouteRouteImport } from './routes/_app/route'
 import { Route as CallbackRouteImport } from './routes/callback'
 import { Route as SignedOutRouteImport } from './routes/signed-out'
 import { Route as AppdashboardIndexRouteImport } from './routes/_app/(dashboard)/index'
+import { Route as AppclientManagementClientsIndexRouteImport } from './routes/_app/(client-management)/clients/index'
+import { Route as AppclientManagementClientsClientIdRouteRouteImport } from './routes/_app/(client-management)/clients/$clientId/route'
+import { Route as AppclientManagementClientsNewRouteImport } from './routes/_app/(client-management)/clients/new'
 import { Route as AppclientManagementResourcesIndexRouteImport } from './routes/_app/(client-management)/resources/index'
 import { Route as AppclientManagementResourcesResourceIdRouteRouteImport } from './routes/_app/(client-management)/resources/$resourceId/route'
 import { Route as AppuserManagementGroupsIndexRouteImport } from './routes/_app/(user-management)/groups/index'
@@ -24,6 +27,9 @@ import { Route as AppuserManagementRolesNewRouteImport } from './routes/_app/(us
 import { Route as AppuserManagementUsersIndexRouteImport } from './routes/_app/(user-management)/users/index'
 import { Route as AppuserManagementUsersUserIdRouteRouteImport } from './routes/_app/(user-management)/users/$userId/route'
 import { Route as AppuserManagementUsersNewRouteImport } from './routes/_app/(user-management)/users/new'
+import { Route as AppclientManagementClientsClientIdIndexRouteImport } from './routes/_app/(client-management)/clients/$clientId/index'
+import { Route as AppclientManagementClientsClientIdCredentialsRouteImport } from './routes/_app/(client-management)/clients/$clientId/credentials'
+import { Route as AppclientManagementClientsClientIdScopesRouteImport } from './routes/_app/(client-management)/clients/$clientId/scopes'
 import { Route as AppclientManagementResourcesResourceIdIndexRouteImport } from './routes/_app/(client-management)/resources/$resourceId/index'
 import { Route as AppuserManagementGroupsGroupIdIndexRouteImport } from './routes/_app/(user-management)/groups/$groupId/index'
 import { Route as AppuserManagementGroupsGroupIdMembersRouteImport } from './routes/_app/(user-management)/groups/$groupId/members'
@@ -60,6 +66,24 @@ const AppdashboardIndexRoute = AppdashboardIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppclientManagementClientsIndexRoute =
+  AppclientManagementClientsIndexRouteImport.update({
+    id: '/(client-management)/clients/',
+    path: '/clients/',
+    getParentRoute: () => AppRouteRoute,
+  } as any)
+const AppclientManagementClientsClientIdRouteRoute =
+  AppclientManagementClientsClientIdRouteRouteImport.update({
+    id: '/(client-management)/clients/$clientId',
+    path: '/clients/$clientId',
+    getParentRoute: () => AppRouteRoute,
+  } as any)
+const AppclientManagementClientsNewRoute =
+  AppclientManagementClientsNewRouteImport.update({
+    id: '/(client-management)/clients/new',
+    path: '/clients/new',
+    getParentRoute: () => AppRouteRoute,
+  } as any)
 const AppclientManagementResourcesIndexRoute =
   AppclientManagementResourcesIndexRouteImport.update({
     id: '/(client-management)/resources/',
@@ -125,6 +149,24 @@ const AppuserManagementUsersNewRoute =
     id: '/(user-management)/users/new',
     path: '/users/new',
     getParentRoute: () => AppRouteRoute,
+  } as any)
+const AppclientManagementClientsClientIdIndexRoute =
+  AppclientManagementClientsClientIdIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AppclientManagementClientsClientIdRouteRoute,
+  } as any)
+const AppclientManagementClientsClientIdCredentialsRoute =
+  AppclientManagementClientsClientIdCredentialsRouteImport.update({
+    id: '/credentials',
+    path: '/credentials',
+    getParentRoute: () => AppclientManagementClientsClientIdRouteRoute,
+  } as any)
+const AppclientManagementClientsClientIdScopesRoute =
+  AppclientManagementClientsClientIdScopesRouteImport.update({
+    id: '/scopes',
+    path: '/scopes',
+    getParentRoute: () => AppclientManagementClientsClientIdRouteRoute,
   } as any)
 const AppclientManagementResourcesResourceIdIndexRoute =
   AppclientManagementResourcesResourceIdIndexRouteImport.update({
@@ -229,17 +271,22 @@ export interface FileRoutesByFullPath {
   '/': typeof AppdashboardIndexRoute
   '/callback': typeof CallbackRoute
   '/signed-out': typeof SignedOutRoute
+  '/clients/$clientId': typeof AppclientManagementClientsClientIdRouteRouteWithChildren
   '/resources/$resourceId': typeof AppclientManagementResourcesResourceIdRouteRouteWithChildren
   '/groups/$groupId': typeof AppuserManagementGroupsGroupIdRouteRouteWithChildren
   '/roles/$roleId': typeof AppuserManagementRolesRoleIdRouteRouteWithChildren
   '/users/$userId': typeof AppuserManagementUsersUserIdRouteRouteWithChildren
+  '/clients/new': typeof AppclientManagementClientsNewRoute
   '/groups/new': typeof AppuserManagementGroupsNewRoute
   '/roles/new': typeof AppuserManagementRolesNewRoute
   '/users/new': typeof AppuserManagementUsersNewRoute
+  '/clients/': typeof AppclientManagementClientsIndexRoute
   '/resources/': typeof AppclientManagementResourcesIndexRoute
   '/groups/': typeof AppuserManagementGroupsIndexRoute
   '/roles/': typeof AppuserManagementRolesIndexRoute
   '/users/': typeof AppuserManagementUsersIndexRoute
+  '/clients/$clientId/credentials': typeof AppclientManagementClientsClientIdCredentialsRoute
+  '/clients/$clientId/scopes': typeof AppclientManagementClientsClientIdScopesRoute
   '/groups/$groupId/members': typeof AppuserManagementGroupsGroupIdMembersRoute
   '/groups/$groupId/roles': typeof AppuserManagementGroupsGroupIdRolesRoute
   '/roles/$roleId/groups': typeof AppuserManagementRolesRoleIdGroupsRoute
@@ -249,6 +296,7 @@ export interface FileRoutesByFullPath {
   '/users/$userId/groups': typeof AppuserManagementUsersUserIdGroupsRoute
   '/users/$userId/permissions': typeof AppuserManagementUsersUserIdPermissionsRoute
   '/users/$userId/roles': typeof AppuserManagementUsersUserIdRolesRoute
+  '/clients/$clientId/': typeof AppclientManagementClientsClientIdIndexRoute
   '/resources/$resourceId/': typeof AppclientManagementResourcesResourceIdIndexRoute
   '/groups/$groupId/': typeof AppuserManagementGroupsGroupIdIndexRoute
   '/roles/$roleId/': typeof AppuserManagementRolesRoleIdIndexRoute
@@ -261,13 +309,17 @@ export interface FileRoutesByTo {
   '/callback': typeof CallbackRoute
   '/signed-out': typeof SignedOutRoute
   '/': typeof AppdashboardIndexRoute
+  '/clients/new': typeof AppclientManagementClientsNewRoute
   '/groups/new': typeof AppuserManagementGroupsNewRoute
   '/roles/new': typeof AppuserManagementRolesNewRoute
   '/users/new': typeof AppuserManagementUsersNewRoute
+  '/clients': typeof AppclientManagementClientsIndexRoute
   '/resources': typeof AppclientManagementResourcesIndexRoute
   '/groups': typeof AppuserManagementGroupsIndexRoute
   '/roles': typeof AppuserManagementRolesIndexRoute
   '/users': typeof AppuserManagementUsersIndexRoute
+  '/clients/$clientId/credentials': typeof AppclientManagementClientsClientIdCredentialsRoute
+  '/clients/$clientId/scopes': typeof AppclientManagementClientsClientIdScopesRoute
   '/groups/$groupId/members': typeof AppuserManagementGroupsGroupIdMembersRoute
   '/groups/$groupId/roles': typeof AppuserManagementGroupsGroupIdRolesRoute
   '/roles/$roleId/groups': typeof AppuserManagementRolesRoleIdGroupsRoute
@@ -277,6 +329,7 @@ export interface FileRoutesByTo {
   '/users/$userId/groups': typeof AppuserManagementUsersUserIdGroupsRoute
   '/users/$userId/permissions': typeof AppuserManagementUsersUserIdPermissionsRoute
   '/users/$userId/roles': typeof AppuserManagementUsersUserIdRolesRoute
+  '/clients/$clientId': typeof AppclientManagementClientsClientIdIndexRoute
   '/resources/$resourceId': typeof AppclientManagementResourcesResourceIdIndexRoute
   '/groups/$groupId': typeof AppuserManagementGroupsGroupIdIndexRoute
   '/roles/$roleId': typeof AppuserManagementRolesRoleIdIndexRoute
@@ -291,17 +344,22 @@ export interface FileRoutesById {
   '/callback': typeof CallbackRoute
   '/signed-out': typeof SignedOutRoute
   '/_app/(dashboard)/': typeof AppdashboardIndexRoute
+  '/_app/(client-management)/clients/$clientId': typeof AppclientManagementClientsClientIdRouteRouteWithChildren
   '/_app/(client-management)/resources/$resourceId': typeof AppclientManagementResourcesResourceIdRouteRouteWithChildren
   '/_app/(user-management)/groups/$groupId': typeof AppuserManagementGroupsGroupIdRouteRouteWithChildren
   '/_app/(user-management)/roles/$roleId': typeof AppuserManagementRolesRoleIdRouteRouteWithChildren
   '/_app/(user-management)/users/$userId': typeof AppuserManagementUsersUserIdRouteRouteWithChildren
+  '/_app/(client-management)/clients/new': typeof AppclientManagementClientsNewRoute
   '/_app/(user-management)/groups/new': typeof AppuserManagementGroupsNewRoute
   '/_app/(user-management)/roles/new': typeof AppuserManagementRolesNewRoute
   '/_app/(user-management)/users/new': typeof AppuserManagementUsersNewRoute
+  '/_app/(client-management)/clients/': typeof AppclientManagementClientsIndexRoute
   '/_app/(client-management)/resources/': typeof AppclientManagementResourcesIndexRoute
   '/_app/(user-management)/groups/': typeof AppuserManagementGroupsIndexRoute
   '/_app/(user-management)/roles/': typeof AppuserManagementRolesIndexRoute
   '/_app/(user-management)/users/': typeof AppuserManagementUsersIndexRoute
+  '/_app/(client-management)/clients/$clientId/credentials': typeof AppclientManagementClientsClientIdCredentialsRoute
+  '/_app/(client-management)/clients/$clientId/scopes': typeof AppclientManagementClientsClientIdScopesRoute
   '/_app/(user-management)/groups/$groupId/members': typeof AppuserManagementGroupsGroupIdMembersRoute
   '/_app/(user-management)/groups/$groupId/roles': typeof AppuserManagementGroupsGroupIdRolesRoute
   '/_app/(user-management)/roles/$roleId/groups': typeof AppuserManagementRolesRoleIdGroupsRoute
@@ -311,6 +369,7 @@ export interface FileRoutesById {
   '/_app/(user-management)/users/$userId/groups': typeof AppuserManagementUsersUserIdGroupsRoute
   '/_app/(user-management)/users/$userId/permissions': typeof AppuserManagementUsersUserIdPermissionsRoute
   '/_app/(user-management)/users/$userId/roles': typeof AppuserManagementUsersUserIdRolesRoute
+  '/_app/(client-management)/clients/$clientId/': typeof AppclientManagementClientsClientIdIndexRoute
   '/_app/(client-management)/resources/$resourceId/': typeof AppclientManagementResourcesResourceIdIndexRoute
   '/_app/(user-management)/groups/$groupId/': typeof AppuserManagementGroupsGroupIdIndexRoute
   '/_app/(user-management)/roles/$roleId/': typeof AppuserManagementRolesRoleIdIndexRoute
@@ -325,17 +384,22 @@ export interface FileRouteTypes {
     | '/'
     | '/callback'
     | '/signed-out'
+    | '/clients/$clientId'
     | '/resources/$resourceId'
     | '/groups/$groupId'
     | '/roles/$roleId'
     | '/users/$userId'
+    | '/clients/new'
     | '/groups/new'
     | '/roles/new'
     | '/users/new'
+    | '/clients/'
     | '/resources/'
     | '/groups/'
     | '/roles/'
     | '/users/'
+    | '/clients/$clientId/credentials'
+    | '/clients/$clientId/scopes'
     | '/groups/$groupId/members'
     | '/groups/$groupId/roles'
     | '/roles/$roleId/groups'
@@ -345,6 +409,7 @@ export interface FileRouteTypes {
     | '/users/$userId/groups'
     | '/users/$userId/permissions'
     | '/users/$userId/roles'
+    | '/clients/$clientId/'
     | '/resources/$resourceId/'
     | '/groups/$groupId/'
     | '/roles/$roleId/'
@@ -357,13 +422,17 @@ export interface FileRouteTypes {
     | '/callback'
     | '/signed-out'
     | '/'
+    | '/clients/new'
     | '/groups/new'
     | '/roles/new'
     | '/users/new'
+    | '/clients'
     | '/resources'
     | '/groups'
     | '/roles'
     | '/users'
+    | '/clients/$clientId/credentials'
+    | '/clients/$clientId/scopes'
     | '/groups/$groupId/members'
     | '/groups/$groupId/roles'
     | '/roles/$roleId/groups'
@@ -373,6 +442,7 @@ export interface FileRouteTypes {
     | '/users/$userId/groups'
     | '/users/$userId/permissions'
     | '/users/$userId/roles'
+    | '/clients/$clientId'
     | '/resources/$resourceId'
     | '/groups/$groupId'
     | '/roles/$roleId'
@@ -386,17 +456,22 @@ export interface FileRouteTypes {
     | '/callback'
     | '/signed-out'
     | '/_app/(dashboard)/'
+    | '/_app/(client-management)/clients/$clientId'
     | '/_app/(client-management)/resources/$resourceId'
     | '/_app/(user-management)/groups/$groupId'
     | '/_app/(user-management)/roles/$roleId'
     | '/_app/(user-management)/users/$userId'
+    | '/_app/(client-management)/clients/new'
     | '/_app/(user-management)/groups/new'
     | '/_app/(user-management)/roles/new'
     | '/_app/(user-management)/users/new'
+    | '/_app/(client-management)/clients/'
     | '/_app/(client-management)/resources/'
     | '/_app/(user-management)/groups/'
     | '/_app/(user-management)/roles/'
     | '/_app/(user-management)/users/'
+    | '/_app/(client-management)/clients/$clientId/credentials'
+    | '/_app/(client-management)/clients/$clientId/scopes'
     | '/_app/(user-management)/groups/$groupId/members'
     | '/_app/(user-management)/groups/$groupId/roles'
     | '/_app/(user-management)/roles/$roleId/groups'
@@ -406,6 +481,7 @@ export interface FileRouteTypes {
     | '/_app/(user-management)/users/$userId/groups'
     | '/_app/(user-management)/users/$userId/permissions'
     | '/_app/(user-management)/users/$userId/roles'
+    | '/_app/(client-management)/clients/$clientId/'
     | '/_app/(client-management)/resources/$resourceId/'
     | '/_app/(user-management)/groups/$groupId/'
     | '/_app/(user-management)/roles/$roleId/'
@@ -449,6 +525,27 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof AppdashboardIndexRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/(client-management)/clients/': {
+      id: '/_app/(client-management)/clients/'
+      path: '/clients'
+      fullPath: '/clients/'
+      preLoaderRoute: typeof AppclientManagementClientsIndexRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/(client-management)/clients/$clientId': {
+      id: '/_app/(client-management)/clients/$clientId'
+      path: '/clients/$clientId'
+      fullPath: '/clients/$clientId'
+      preLoaderRoute: typeof AppclientManagementClientsClientIdRouteRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/(client-management)/clients/new': {
+      id: '/_app/(client-management)/clients/new'
+      path: '/clients/new'
+      fullPath: '/clients/new'
+      preLoaderRoute: typeof AppclientManagementClientsNewRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/_app/(client-management)/resources/': {
@@ -527,6 +624,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/users/new'
       preLoaderRoute: typeof AppuserManagementUsersNewRouteImport
       parentRoute: typeof AppRouteRoute
+    }
+    '/_app/(client-management)/clients/$clientId/': {
+      id: '/_app/(client-management)/clients/$clientId/'
+      path: '/'
+      fullPath: '/clients/$clientId/'
+      preLoaderRoute: typeof AppclientManagementClientsClientIdIndexRouteImport
+      parentRoute: typeof AppclientManagementClientsClientIdRouteRoute
+    }
+    '/_app/(client-management)/clients/$clientId/credentials': {
+      id: '/_app/(client-management)/clients/$clientId/credentials'
+      path: '/credentials'
+      fullPath: '/clients/$clientId/credentials'
+      preLoaderRoute: typeof AppclientManagementClientsClientIdCredentialsRouteImport
+      parentRoute: typeof AppclientManagementClientsClientIdRouteRoute
+    }
+    '/_app/(client-management)/clients/$clientId/scopes': {
+      id: '/_app/(client-management)/clients/$clientId/scopes'
+      path: '/scopes'
+      fullPath: '/clients/$clientId/scopes'
+      preLoaderRoute: typeof AppclientManagementClientsClientIdScopesRouteImport
+      parentRoute: typeof AppclientManagementClientsClientIdRouteRoute
     }
     '/_app/(client-management)/resources/$resourceId/': {
       id: '/_app/(client-management)/resources/$resourceId/'
@@ -643,6 +761,27 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AppclientManagementClientsClientIdRouteRouteChildren {
+  AppclientManagementClientsClientIdCredentialsRoute: typeof AppclientManagementClientsClientIdCredentialsRoute
+  AppclientManagementClientsClientIdScopesRoute: typeof AppclientManagementClientsClientIdScopesRoute
+  AppclientManagementClientsClientIdIndexRoute: typeof AppclientManagementClientsClientIdIndexRoute
+}
+
+const AppclientManagementClientsClientIdRouteRouteChildren: AppclientManagementClientsClientIdRouteRouteChildren =
+  {
+    AppclientManagementClientsClientIdCredentialsRoute:
+      AppclientManagementClientsClientIdCredentialsRoute,
+    AppclientManagementClientsClientIdScopesRoute:
+      AppclientManagementClientsClientIdScopesRoute,
+    AppclientManagementClientsClientIdIndexRoute:
+      AppclientManagementClientsClientIdIndexRoute,
+  }
+
+const AppclientManagementClientsClientIdRouteRouteWithChildren =
+  AppclientManagementClientsClientIdRouteRoute._addFileChildren(
+    AppclientManagementClientsClientIdRouteRouteChildren,
+  )
+
 interface AppclientManagementResourcesResourceIdRouteRouteChildren {
   AppclientManagementResourcesResourceIdIndexRoute: typeof AppclientManagementResourcesResourceIdIndexRoute
   AppclientManagementResourcesResourceIdPermissionsPermissionIdRoute: typeof AppclientManagementResourcesResourceIdPermissionsPermissionIdRoute
@@ -741,13 +880,16 @@ const AppuserManagementUsersUserIdRouteRouteWithChildren =
 
 interface AppRouteRouteChildren {
   AppdashboardIndexRoute: typeof AppdashboardIndexRoute
+  AppclientManagementClientsClientIdRouteRoute: typeof AppclientManagementClientsClientIdRouteRouteWithChildren
   AppclientManagementResourcesResourceIdRouteRoute: typeof AppclientManagementResourcesResourceIdRouteRouteWithChildren
   AppuserManagementGroupsGroupIdRouteRoute: typeof AppuserManagementGroupsGroupIdRouteRouteWithChildren
   AppuserManagementRolesRoleIdRouteRoute: typeof AppuserManagementRolesRoleIdRouteRouteWithChildren
   AppuserManagementUsersUserIdRouteRoute: typeof AppuserManagementUsersUserIdRouteRouteWithChildren
+  AppclientManagementClientsNewRoute: typeof AppclientManagementClientsNewRoute
   AppuserManagementGroupsNewRoute: typeof AppuserManagementGroupsNewRoute
   AppuserManagementRolesNewRoute: typeof AppuserManagementRolesNewRoute
   AppuserManagementUsersNewRoute: typeof AppuserManagementUsersNewRoute
+  AppclientManagementClientsIndexRoute: typeof AppclientManagementClientsIndexRoute
   AppclientManagementResourcesIndexRoute: typeof AppclientManagementResourcesIndexRoute
   AppuserManagementGroupsIndexRoute: typeof AppuserManagementGroupsIndexRoute
   AppuserManagementRolesIndexRoute: typeof AppuserManagementRolesIndexRoute
@@ -756,6 +898,8 @@ interface AppRouteRouteChildren {
 
 const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppdashboardIndexRoute: AppdashboardIndexRoute,
+  AppclientManagementClientsClientIdRouteRoute:
+    AppclientManagementClientsClientIdRouteRouteWithChildren,
   AppclientManagementResourcesResourceIdRouteRoute:
     AppclientManagementResourcesResourceIdRouteRouteWithChildren,
   AppuserManagementGroupsGroupIdRouteRoute:
@@ -764,9 +908,11 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
     AppuserManagementRolesRoleIdRouteRouteWithChildren,
   AppuserManagementUsersUserIdRouteRoute:
     AppuserManagementUsersUserIdRouteRouteWithChildren,
+  AppclientManagementClientsNewRoute: AppclientManagementClientsNewRoute,
   AppuserManagementGroupsNewRoute: AppuserManagementGroupsNewRoute,
   AppuserManagementRolesNewRoute: AppuserManagementRolesNewRoute,
   AppuserManagementUsersNewRoute: AppuserManagementUsersNewRoute,
+  AppclientManagementClientsIndexRoute: AppclientManagementClientsIndexRoute,
   AppclientManagementResourcesIndexRoute:
     AppclientManagementResourcesIndexRoute,
   AppuserManagementGroupsIndexRoute: AppuserManagementGroupsIndexRoute,

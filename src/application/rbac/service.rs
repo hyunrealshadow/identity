@@ -26,15 +26,11 @@ use crate::{
     },
     observability::{BusinessEvent, EventSink, EventValue, NoopEventSink, error_outcome},
     rbac::{
-        client::{
-            ClientScopePageRequest, ClientScopeSetResult, ClientScopeTargetFilter,
-            ClientScopeTargetPage, ClientScopeTargetPageItem, ClientScopeTargetPageRequest,
-            SetClientScopesCommand,
-        },
+        client::{ClientScopePageRequest, ClientScopeSetResult, SetClientScopesCommand},
         cursor::{
-            CURSOR_KIND_CLIENT_SCOPE, CURSOR_KIND_CLIENT_TARGET, CURSOR_KIND_EFFECTIVE,
-            CURSOR_KIND_RESOURCE, CURSOR_KIND_ROLE, CURSOR_KIND_SCOPE, CURSOR_KIND_USER_ROLE,
-            PageArguments, encode_cursor, prepare_page,
+            CURSOR_KIND_CLIENT_SCOPE, CURSOR_KIND_EFFECTIVE, CURSOR_KIND_RESOURCE,
+            CURSOR_KIND_ROLE, CURSOR_KIND_SCOPE, CURSOR_KIND_USER_ROLE, PageArguments,
+            encode_cursor, prepare_page,
         },
         model::{
             MAX_BATCH_LOOKUPS, MAX_CLIENT_MUTATION_ID_LENGTH, MAX_DESCRIPTION_LENGTH,
@@ -43,9 +39,9 @@ use crate::{
             ScopeDescription, ScopeOid,
         },
         repository::{
-            AssignUserRolesTransaction, ClientScopeQuery, ClientScopeTargetQuery,
-            CreateResourceTransaction, CreateRoleTransaction, CreateScopeTransaction,
-            EffectivePermissionQuery, RbacDuplicateKind, RbacEntityKind, RbacManagementRepository,
+            AssignUserRolesTransaction, ClientScopeQuery, CreateResourceTransaction,
+            CreateRoleTransaction, CreateScopeTransaction, EffectivePermissionQuery,
+            RbacDuplicateKind, RbacEntityKind, RbacManagementRepository,
             RbacManagementRepositoryError, RbacProtectedKind, ResourceQuery,
             ResourceStateTransaction, RevokeUserRolesTransaction, RoleQuery, RoleStateTransaction,
             ScopeQuery, ScopeStateTransaction, SetClientScopesTransaction,
@@ -328,13 +324,6 @@ fn normalize_scope_filter(mut filter: ScopeFilter) -> Result<ScopeFilter, AppErr
 }
 
 fn normalize_role_filter(mut filter: RoleFilter) -> Result<RoleFilter, AppError> {
-    filter.query = normalize_filter_text(filter.query, "query", MAX_QUERY_FILTER_LENGTH)?;
-    Ok(filter)
-}
-
-fn normalize_client_target_filter(
-    mut filter: ClientScopeTargetFilter,
-) -> Result<ClientScopeTargetFilter, AppError> {
     filter.query = normalize_filter_text(filter.query, "query", MAX_QUERY_FILTER_LENGTH)?;
     Ok(filter)
 }

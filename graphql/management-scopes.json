@@ -158,6 +158,17 @@
     "reserved": true
   },
   {
+    "scope": "management.client.delete",
+    "action": "client.delete",
+    "roles": [
+      "admin",
+      "owner"
+    ],
+    "authentication": "recent_aal2",
+    "machineAllowed": false,
+    "reserved": true
+  },
+  {
     "scope": "management.client.scope",
     "action": "client.scope",
     "roles": [

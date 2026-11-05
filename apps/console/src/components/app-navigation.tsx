@@ -17,7 +17,7 @@ import { useTranslator, type MessageKey } from '#/lib/i18n'
 
 interface NavEntry {
   label: MessageKey
-  to?: '/' | '/users' | '/groups' | '/roles' | '/resources'
+  to?: '/' | '/users' | '/groups' | '/roles' | '/clients' | '/resources'
   icon: LucideIcon
 }
 
@@ -36,7 +36,7 @@ const groups: NavGroup[] = [
   {
     label: 'navClientManagement',
     entries: [
-      { label: 'navClients', icon: AppWindow },
+      { label: 'navClients', to: '/clients', icon: AppWindow },
       { label: 'navResources', to: '/resources', icon: Boxes },
     ],
   },

@@ -1,4 +1,6 @@
 //! PostgreSQL credential revocation and transactional audit verification.
+#[path = "repository_security/client_management.rs"]
+mod client_management;
 mod common;
 use chrono::{Duration as ChronoDuration, Utc};
 use identity_application::user::{

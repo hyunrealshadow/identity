@@ -3,6 +3,8 @@ use std::{error::Error, fmt, str::FromStr};
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
+use crate::rbac::LocalizedText;
+
 pub type ClientOid = Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -50,9 +52,13 @@ impl FromStr for ClientProtocol {
 pub struct Client {
     pub oid: ClientOid,
     pub protocol: ClientProtocol,
+    /// Independent default display name.
     pub name: String,
-    pub names: Vec<String>,
+    /// Optional translations of `name`; viewers choose the language.
+    pub names: Vec<LocalizedText>,
     pub description: Option<String>,
+    /// Optional translations of `description`.
+    pub descriptions: Vec<LocalizedText>,
     pub built_in: bool,
     pub enabled: bool,
     pub created_at: DateTime<Utc>,

@@ -38,6 +38,7 @@ fn registration(oid: Uuid) -> OpenIdConnectClientRegistration {
             protocol: ClientProtocol::OpenIdConnect,
             name: "Updated".into(),
             names: vec![],
+            descriptions: vec![],
             description: None,
             built_in: false,
             enabled: true,

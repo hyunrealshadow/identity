@@ -1,4 +1,7 @@
-use crate::database::entity::{client, client_openid_connect, client_openid_connect_platform};
+use crate::database::{
+    entity::{client, client_openid_connect, client_openid_connect_platform},
+    repository::localized,
+};
 use chrono::Utc;
 use identity_domain::{
     client::model::Client,
@@ -6,6 +9,7 @@ use identity_domain::{
         OpenIdConnectClientMetadata, OpenIdConnectClientPlatform, OpenIdConnectClientPlatformType,
         OpenIdConnectClientRepositoryError, OpenIdConnectClientSettings,
     },
+    rbac::LocalizedText,
 };
 use serde_json::{Value, from_value};
 use std::str::FromStr;
@@ -18,6 +22,23 @@ pub(super) fn deserialize_optional_string_vec(
         .map(from_value::<Vec<String>>)
         .transpose()
         .map_err(OpenIdConnectClientRepositoryError::DeserializeMetadata)
+}
+
+/// Client display translations are a locale-to-text object. Registrations
+/// created before translations existed stored an empty array; both empty forms
+/// mean no translations.
+pub(crate) fn decode_client_text(
+    raw: Option<Value>,
+) -> Result<Vec<LocalizedText>, OpenIdConnectClientRepositoryError> {
+    match raw {
+        None | Some(Value::Null) => Ok(Vec::new()),
+        Some(Value::Array(items)) if items.is_empty() => Ok(Vec::new()),
+        Some(value) => localized::decode_text(value).map_err(|_| {
+            OpenIdConnectClientRepositoryError::DeserializeMetadata(serde::de::Error::custom(
+                "client translations must be a locale-to-text object",
+            ))
+        }),
+    }
 }
 
 pub(super) fn parse_optional_url(
@@ -52,7 +73,7 @@ fn parse_optional_redirect_uris(
     Ok(values)
 }
 
-pub(super) fn to_client(
+pub(crate) fn to_client(
     model: client::Model,
 ) -> Result<Client, OpenIdConnectClientRepositoryError> {
     Ok(Client {
@@ -62,8 +83,9 @@ pub(super) fn to_client(
             .parse()
             .map_err(OpenIdConnectClientRepositoryError::ParseClientProtocol)?,
         name: model.name,
-        names: deserialize_optional_string_vec(model.names.as_ref())?.unwrap_or_default(),
+        names: decode_client_text(model.names)?,
         description: model.description,
+        descriptions: decode_client_text(model.descriptions)?,
         built_in: model.built_in,
         enabled: model.enabled,
         created_at: model.created_at.with_timezone(&Utc),
@@ -71,7 +93,7 @@ pub(super) fn to_client(
     })
 }
 
-pub(super) fn to_metadata(
+pub(crate) fn to_metadata(
     model: client_openid_connect::Model,
 ) -> Result<OpenIdConnectClientMetadata, OpenIdConnectClientRepositoryError> {
     let settings = from_value::<OpenIdConnectClientSettings>(model.settings)
@@ -174,7 +196,7 @@ fn parse_metadata_values<T: FromStr>(
         .transpose()
 }
 
-pub(super) fn to_platform(
+pub(crate) fn to_platform(
     model: client_openid_connect_platform::Model,
 ) -> Result<OpenIdConnectClientPlatform, OpenIdConnectClientRepositoryError> {
     Ok(OpenIdConnectClientPlatform {

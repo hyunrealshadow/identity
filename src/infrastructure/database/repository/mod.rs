@@ -4,6 +4,7 @@ pub mod challenge;
 mod client_authority;
 pub mod client_authorization;
 mod client_authorization_query;
+pub mod client_management;
 pub mod device_authorization;
 pub mod group_management;
 pub mod install;

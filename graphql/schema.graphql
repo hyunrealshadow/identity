@@ -84,6 +84,171 @@ input ChangeTotpEnrollmentAlgorithmInput {
 	clientMutationId: String
 }
 
+type Client implements Node {
+	id: ID!
+	"""
+	The OAuth `client_id` used in protocol requests.
+	"""
+	clientId: String!
+	"""
+	Independent default name; viewers choose matching translations from `names`.
+	"""
+	name: String!
+	description: String!
+	names: [LocalizedText!]!
+	descriptions: [LocalizedText!]!
+	builtIn: Boolean!
+	enabled: Boolean!
+	platforms: [ClientPlatform!]!
+	postLogoutRedirectUris: [String!]!
+	grantTypes: [ClientGrantType!]!
+	tokenEndpointAuthMethod: ClientAuthMethod!
+	requirePushedAuthorizationRequests: Boolean!
+	skipConsent: Boolean!
+	corsEnabled: Boolean!
+	"""
+	Browser origins derived from the redirect URIs while CORS is enabled.
+	"""
+	corsOrigins: [String!]!
+	"""
+	UUID optimistic-lock version, shared with scope assignment.
+	"""
+	version: UUID!
+	createdAt: DateTime!
+	updatedAt: DateTime
+	"""
+	Credential metadata, newest first.
+	"""
+	credentials: [ClientCredential!]! @access(policy: {scopes: ["management.client_credential.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
+	API and protocol scopes assigned to this client.
+	"""
+	scopes(orderBy: ScopeOrder, first: Int, after: String, last: Int, before: String): ClientScopeConnection! @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+}
+
+"""
+Token endpoint client authentication. Key-based `PRIVATE_KEY_JWT` is shown
+for existing registrations only.
+"""
+enum ClientAuthMethod {
+	CLIENT_SECRET_BASIC
+	CLIENT_SECRET_POST
+	CLIENT_SECRET_JWT
+	PRIVATE_KEY_JWT
+	NONE
+}
+
+type ClientConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [ClientEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [Client!]!
+	totalCount: Int!
+}
+
+"""
+Credential metadata. Secret values are never readable.
+"""
+type ClientCredential {
+	id: ID!
+	type: ClientCredentialKind!
+	"""
+	Masked identification, such as the last characters of a secret.
+	"""
+	hint: String!
+	expiresAt: DateTime!
+	revokedAt: DateTime
+	"""
+	Neither revoked nor expired.
+	"""
+	active: Boolean!
+	createdAt: DateTime!
+}
+
+enum ClientCredentialKind {
+	CLIENT_SECRET
+	PUBLIC_KEY
+	JWKS_URI
+}
+
+type ClientCredentialPayload {
+	clientId: ID!
+	version: UUID!
+	credential: ClientCredential!
+	clientMutationId: String
+}
+
+"""
+An edge in a connection.
+"""
+type ClientEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: Client!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
+}
+
+input ClientFilter {
+	"""
+	Matches the name, or the exact client ID.
+	"""
+	query: String
+	enabled: Boolean
+}
+
+"""
+OAuth grant type. `IMPLICIT` is shown for existing registrations only and
+cannot be newly selected.
+"""
+enum ClientGrantType {
+	AUTHORIZATION_CODE
+	REFRESH_TOKEN
+	CLIENT_CREDENTIALS
+	DEVICE_CODE
+	IMPLICIT
+}
+
+enum ClientOrder {
+	CREATED_AT_ASC
+	CREATED_AT_DESC
+	NAME_ASC
+	NAME_DESC
+}
+
+type ClientPayload {
+	clientId: ID!
+	version: UUID!
+	client: Client! @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	clientMutationId: String
+}
+
+type ClientPlatform {
+	platform: ClientPlatformType!
+	redirectUris: [String!]!
+}
+
+input ClientPlatformInput {
+	platform: ClientPlatformType!
+	redirectUris: [String!]!
+}
+
+enum ClientPlatformType {
+	WEB
+	NATIVE
+}
+
 input ClientScopeAssignmentInput {
 	scopeId: ID!
 	"""
@@ -136,58 +301,65 @@ type ClientScopeSetPayload {
 	clientMutationId: String
 }
 
-type ClientScopeTarget {
+type ClientSecretPayload {
 	clientId: ID!
-	name: String!
-	builtIn: Boolean!
-	"""
-	Current `client.version` CAS token used by `setClientScopes`.
-	"""
 	version: UUID!
-	allowedScopeCount: Int!
-}
-
-type ClientScopeTargetConnection {
+	credential: ClientCredential!
 	"""
-	Information to aid in pagination.
+	The plaintext secret. It cannot be read again after this response.
 	"""
-	pageInfo: PageInfo!
+	secret: String!
 	"""
-	A list of edges.
+	The secret revoked by a rotation.
 	"""
-	edges: [ClientScopeTargetEdge!]!
-	"""
-	A list of nodes.
-	"""
-	nodes: [ClientScopeTarget!]!
+	revokedCredential: ClientCredential
+	clientMutationId: String
 }
 
 """
-An edge in a connection.
+Protocol configuration, replaced as one unit.
 """
-type ClientScopeTargetEdge {
-	"""
-	The item at the end of the edge
-	"""
-	node: ClientScopeTarget!
-	"""
-	A cursor for use in pagination
-	"""
-	cursor: String!
+input ClientSettingsInput {
+	platforms: [ClientPlatformInput!]!
+	postLogoutRedirectUris: [String!]! = []
+	grantTypes: [ClientGrantType!]!
+	tokenEndpointAuthMethod: ClientAuthMethod!
+	requirePushedAuthorizationRequests: Boolean! = false
+	skipConsent: Boolean! = false
+	corsEnabled: Boolean! = false
 }
 
-input ClientScopeTargetFilter {
-	query: String
-}
-
-enum ClientScopeTargetOrder {
-	NAME_ASC
-	NAME_DESC
+"""
+Enable, disable or delete one client.
+"""
+input ClientStateInput {
+	id: ID!
+	expectedVersion: UUID!
+	reason: String! = ""
+	clientMutationId: String
 }
 
 input ConfirmTotpEnrollmentInput {
 	enrollmentToken: String!
 	code: String!
+	clientMutationId: String
+}
+
+input CreateClientInput {
+	name: String!
+	description: String! = ""
+	names: [LocalizedTextInput!]! = []
+	descriptions: [LocalizedTextInput!]! = []
+	settings: ClientSettingsInput!
+	reason: String! = ""
+	clientMutationId: String
+}
+
+input CreateClientSecretInput {
+	clientId: ID!
+	expectedVersion: UUID!
+	lifetimeDays: Int! = 365
+	reason: String! = ""
 	clientMutationId: String
 }
 
@@ -252,6 +424,12 @@ Implement the DateTime<Utc> scalar
 The input/output is a string in RFC3339 format.
 """
 scalar DateTime
+
+type DeleteClientPayload {
+	clientId: ID!
+	deleted: Boolean!
+	clientMutationId: String
+}
 
 type DeleteGroupPayload {
 	groupId: ID!
@@ -623,6 +801,35 @@ type MutationRoot {
 	setRolePermissions(input: SetRolePermissionsInput!): RolePayload! @access(policy: {scopes: ["management.role.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
 	assignUserRoles(input: AssignUserRolesInput!): UserRolesPayload! @access(policy: {scopes: ["management.role_assignment.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
 	revokeUserRoles(input: RevokeUserRolesInput!): UserRolesPayload! @access(policy: {scopes: ["management.role_assignment.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	"""
+	Create a client. Issue a secret separately with `createClientSecret`.
+	"""
+	createClient(input: CreateClientInput!): ClientPayload! @access(policy: {scopes: ["management.client.create"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
+	Update display text and/or protocol settings. Changing what the client
+	may obtain permanently withdraws what it was already issued.
+	"""
+	updateClient(input: UpdateClientInput!): ClientPayload! @access(policy: {scopes: ["management.client.update"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	enableClient(input: ClientStateInput!): ClientPayload! @access(policy: {scopes: ["management.client.state"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
+	Disabling rejects the client at every protocol endpoint and permanently
+	withdraws what it was issued; enabling again does not restore them.
+	"""
+	disableClient(input: ClientStateInput!): ClientPayload! @access(policy: {scopes: ["management.client.state"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	deleteClient(input: ClientStateInput!): DeleteClientPayload! @access(policy: {scopes: ["management.client.delete"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	"""
+	Issue an additional secret; existing secrets stay valid.
+	"""
+	createClientSecret(input: CreateClientSecretInput!): ClientSecretPayload! @access(policy: {scopes: ["management.client_credential.create"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	"""
+	Issue a new secret and revoke the given one, which permanently withdraws
+	what the client was already issued.
+	"""
+	rotateClientSecret(input: RotateClientSecretInput!): ClientSecretPayload! @access(policy: {scopes: ["management.client_credential.rotate"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	"""
+	Revoke a credential, permanently withdrawing what the client was issued.
+	"""
+	revokeClientCredential(input: RevokeClientCredentialInput!): ClientCredentialPayload! @access(policy: {scopes: ["management.client_credential.revoke"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
 	setClientScopes(input: SetClientScopesInput!): ClientScopeSetPayload! @access(policy: {scopes: ["management.client.scope"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 }
 
@@ -718,8 +925,8 @@ type QueryRoot {
 	user identity.
 	"""
 	accountPermissions(resourceId: ID!, orderBy: EffectivePermissionOrder, first: Int, after: String, last: Int, before: String): EffectivePermissionConnection! @access(policy: {scopes: ["account.read"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
-	clientScopeTargets(filter: ClientScopeTargetFilter, orderBy: ClientScopeTargetOrder, first: Int, after: String, last: Int, before: String): ClientScopeTargetConnection! @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
-	clientScopes(clientId: ID!, orderBy: ScopeOrder, first: Int, after: String, last: Int, before: String): ClientScopeConnection! @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	client(id: ID!): Client @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	clients(filter: ClientFilter, orderBy: ClientOrder, first: Int, after: String, last: Int, before: String): ClientConnection! @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 }
 
 type RecoveryCodeEnrollmentPayload {
@@ -814,6 +1021,14 @@ type ResourcePayload {
 
 input ResourceStateInput {
 	id: ID!
+	expectedVersion: UUID!
+	reason: String! = ""
+	clientMutationId: String
+}
+
+input RevokeClientCredentialInput {
+	clientId: ID!
+	credentialId: ID!
 	expectedVersion: UUID!
 	reason: String! = ""
 	clientMutationId: String
@@ -970,6 +1185,18 @@ type RoleUserEdge {
 	A cursor for use in pagination
 	"""
 	cursor: String!
+}
+
+"""
+Issue a new secret and revoke `credentialId` in the same change.
+"""
+input RotateClientSecretInput {
+	clientId: ID!
+	credentialId: ID!
+	expectedVersion: UUID!
+	lifetimeDays: Int! = 365
+	reason: String! = ""
+	clientMutationId: String
 }
 
 type Scope implements Node {
@@ -1168,6 +1395,18 @@ scalar UUID
 input UnlockUserInput {
 	id: ID!
 	expectedVersion: UUID!
+	reason: String! = ""
+	clientMutationId: String
+}
+
+input UpdateClientInput {
+	id: ID!
+	expectedVersion: UUID!
+	name: String
+	description: String
+	names: [LocalizedTextInput!]
+	descriptions: [LocalizedTextInput!]
+	settings: ClientSettingsInput
 	reason: String! = ""
 	clientMutationId: String
 }

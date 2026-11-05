@@ -5,6 +5,6 @@ pub(crate) mod mutation;
 pub(crate) mod query;
 pub(crate) mod types;
 
-pub(crate) use client::{ClientScopeMutation, ClientScopeQuery};
+pub(crate) use client::ClientScopeMutation;
 pub(crate) use mutation::ScopeMutation;
 pub(crate) use query::ScopeQuery;

@@ -20,6 +20,97 @@ export type AssignUserRolesInput = {
   userId: string | number;
 };
 
+/**
+ * Token endpoint client authentication. Key-based `PRIVATE_KEY_JWT` is shown
+ * for existing registrations only.
+ */
+export type ClientAuthMethod =
+  | 'CLIENT_SECRET_BASIC'
+  | 'CLIENT_SECRET_JWT'
+  | 'CLIENT_SECRET_POST'
+  | 'NONE'
+  | 'PRIVATE_KEY_JWT';
+
+export type ClientCredentialKind =
+  | 'CLIENT_SECRET'
+  | 'JWKS_URI'
+  | 'PUBLIC_KEY';
+
+export type ClientFilter = {
+  enabled?: boolean | null | undefined;
+  /** Matches the name, or the exact client ID. */
+  query?: string | null | undefined;
+};
+
+/**
+ * OAuth grant type. `IMPLICIT` is shown for existing registrations only and
+ * cannot be newly selected.
+ */
+export type ClientGrantType =
+  | 'AUTHORIZATION_CODE'
+  | 'CLIENT_CREDENTIALS'
+  | 'DEVICE_CODE'
+  | 'IMPLICIT'
+  | 'REFRESH_TOKEN';
+
+export type ClientOrder =
+  | 'CREATED_AT_ASC'
+  | 'CREATED_AT_DESC'
+  | 'NAME_ASC'
+  | 'NAME_DESC';
+
+export type ClientPlatformInput = {
+  platform: ClientPlatformType;
+  redirectUris: Array<string>;
+};
+
+export type ClientPlatformType =
+  | 'NATIVE'
+  | 'WEB';
+
+export type ClientScopeAssignmentInput = {
+  /** Grant the scope to the client itself for client-credentials access. */
+  clientGranted?: boolean;
+  scopeId: string | number;
+};
+
+/** Protocol configuration, replaced as one unit. */
+export type ClientSettingsInput = {
+  corsEnabled?: boolean;
+  grantTypes: Array<ClientGrantType>;
+  platforms: Array<ClientPlatformInput>;
+  postLogoutRedirectUris?: Array<string>;
+  requirePushedAuthorizationRequests?: boolean;
+  skipConsent?: boolean;
+  tokenEndpointAuthMethod: ClientAuthMethod;
+};
+
+/** Enable, disable or delete one client. */
+export type ClientStateInput = {
+  clientMutationId?: string | null | undefined;
+  expectedVersion: string;
+  id: string | number;
+  reason?: string;
+};
+
+export type CreateClientInput = {
+  clientMutationId?: string | null | undefined;
+  description?: string;
+  descriptions?: Array<LocalizedTextInput>;
+  name: string;
+  names?: Array<LocalizedTextInput>;
+  reason?: string;
+  settings: ClientSettingsInput;
+};
+
+export type CreateClientSecretInput = {
+  clientId: string | number;
+  clientMutationId?: string | null | undefined;
+  expectedVersion: string;
+  lifetimeDays?: number;
+  reason?: string;
+};
+
 export type CreateGroupInput = {
   clientMutationId?: string | null | undefined;
   description?: string;
@@ -128,6 +219,14 @@ export type ResourceOrder =
   | 'URI_ASC'
   | 'URI_DESC';
 
+export type RevokeClientCredentialInput = {
+  clientId: string | number;
+  clientMutationId?: string | null | undefined;
+  credentialId: string | number;
+  expectedVersion: string;
+  reason?: string;
+};
+
 export type RevokeUserRolesInput = {
   clientMutationId?: string | null | undefined;
   expectedUserVersion: string;
@@ -157,6 +256,16 @@ export type RoleStateInput = {
   reason?: string;
 };
 
+/** Issue a new secret and revoke `credentialId` in the same change. */
+export type RotateClientSecretInput = {
+  clientId: string | number;
+  clientMutationId?: string | null | undefined;
+  credentialId: string | number;
+  expectedVersion: string;
+  lifetimeDays?: number;
+  reason?: string;
+};
+
 export type ScopeDescriptionInput = {
   locale: string;
   value: string;
@@ -182,6 +291,14 @@ export type ScopeStateInput = {
   expectedVersion: string;
   id: string | number;
   reason?: string;
+};
+
+export type SetClientScopesInput = {
+  clientId: string | number;
+  clientMutationId?: string | null | undefined;
+  expectedVersion: string;
+  reason?: string;
+  scopes: Array<ClientScopeAssignmentInput>;
 };
 
 export type SetGroupEnabledInput = {
@@ -213,6 +330,18 @@ export type UnlockUserInput = {
   expectedVersion: string;
   id: string | number;
   reason?: string;
+};
+
+export type UpdateClientInput = {
+  clientMutationId?: string | null | undefined;
+  description?: string | null | undefined;
+  descriptions?: Array<LocalizedTextInput> | null | undefined;
+  expectedVersion: string;
+  id: string | number;
+  name?: string | null | undefined;
+  names?: Array<LocalizedTextInput> | null | undefined;
+  reason?: string;
+  settings?: ClientSettingsInput | null | undefined;
 };
 
 export type UpdateGroupInput = {
@@ -314,6 +443,109 @@ export type ConsoleBootstrapQueryVariables = Exact<{ [key: string]: never; }>;
 
 
 export type ConsoleBootstrapQuery = { effectivePermissions: { role: string | null, requestableScopes: Array<string>, grantedScopes: Array<string>, effectiveScopes: Array<string>, authentication: { acr: string | null, authTime: string | null, aal2: boolean, recent: boolean } }, instanceInfo: { name: string, environment: string, issuer: string, version: string } };
+
+export type ConsoleClientFieldsFragment = { id: string, clientId: string, name: string, description: string, builtIn: boolean, enabled: boolean, postLogoutRedirectUris: Array<string>, grantTypes: Array<ClientGrantType>, tokenEndpointAuthMethod: ClientAuthMethod, requirePushedAuthorizationRequests: boolean, skipConsent: boolean, corsEnabled: boolean, corsOrigins: Array<string>, version: string, createdAt: string, updatedAt: string | null, names: Array<{ locale: string, value: string }>, descriptions: Array<{ locale: string, value: string }>, platforms: Array<{ platform: ClientPlatformType, redirectUris: Array<string> }> };
+
+export type ConsoleClientsQueryVariables = Exact<{
+  filter?: ClientFilter | null | undefined;
+  orderBy?: ClientOrder | null | undefined;
+  first?: number | null | undefined;
+  after?: string | null | undefined;
+  last?: number | null | undefined;
+  before?: string | null | undefined;
+}>;
+
+
+export type ConsoleClientsQuery = { clients: { totalCount: number, pageInfo: { hasNextPage: boolean, hasPreviousPage: boolean, startCursor: string | null, endCursor: string | null }, edges: Array<{ cursor: string, node: { id: string, clientId: string, name: string, builtIn: boolean, enabled: boolean, grantTypes: Array<ClientGrantType>, tokenEndpointAuthMethod: ClientAuthMethod, version: string, createdAt: string, names: Array<{ locale: string, value: string }> } }> } };
+
+export type ConsoleClientQueryVariables = Exact<{
+  id: string | number;
+}>;
+
+
+export type ConsoleClientQuery = { client: { id: string, clientId: string, name: string, description: string, builtIn: boolean, enabled: boolean, postLogoutRedirectUris: Array<string>, grantTypes: Array<ClientGrantType>, tokenEndpointAuthMethod: ClientAuthMethod, requirePushedAuthorizationRequests: boolean, skipConsent: boolean, corsEnabled: boolean, corsOrigins: Array<string>, version: string, createdAt: string, updatedAt: string | null, names: Array<{ locale: string, value: string }>, descriptions: Array<{ locale: string, value: string }>, platforms: Array<{ platform: ClientPlatformType, redirectUris: Array<string> }> } | null };
+
+export type ConsoleClientCredentialsQueryVariables = Exact<{
+  id: string | number;
+}>;
+
+
+export type ConsoleClientCredentialsQuery = { client: { id: string, version: string, tokenEndpointAuthMethod: ClientAuthMethod, credentials: Array<{ id: string, type: ClientCredentialKind, hint: string, expiresAt: string, revokedAt: string | null, active: boolean, createdAt: string }> } | null };
+
+export type ConsoleClientScopesQueryVariables = Exact<{
+  id: string | number;
+  orderBy?: ScopeOrder | null | undefined;
+  first?: number | null | undefined;
+  after?: string | null | undefined;
+  last?: number | null | undefined;
+  before?: string | null | undefined;
+}>;
+
+
+export type ConsoleClientScopesQuery = { client: { id: string, version: string, scopes: { totalCount: number, pageInfo: { hasNextPage: boolean, hasPreviousPage: boolean, startCursor: string | null, endCursor: string | null }, edges: Array<{ cursor: string, clientGranted: boolean, node: { id: string, code: string, name: string, resourceId: string | null, builtIn: boolean, enabled: boolean, names: Array<{ locale: string, value: string }> } }> } } | null };
+
+export type ConsoleCreateClientMutationVariables = Exact<{
+  input: CreateClientInput;
+}>;
+
+
+export type ConsoleCreateClientMutation = { createClient: { clientId: string, version: string } };
+
+export type ConsoleUpdateClientMutationVariables = Exact<{
+  input: UpdateClientInput;
+}>;
+
+
+export type ConsoleUpdateClientMutation = { updateClient: { clientId: string, version: string } };
+
+export type ConsoleEnableClientMutationVariables = Exact<{
+  input: ClientStateInput;
+}>;
+
+
+export type ConsoleEnableClientMutation = { enableClient: { clientId: string, version: string } };
+
+export type ConsoleDisableClientMutationVariables = Exact<{
+  input: ClientStateInput;
+}>;
+
+
+export type ConsoleDisableClientMutation = { disableClient: { clientId: string, version: string } };
+
+export type ConsoleDeleteClientMutationVariables = Exact<{
+  input: ClientStateInput;
+}>;
+
+
+export type ConsoleDeleteClientMutation = { deleteClient: { clientId: string, deleted: boolean } };
+
+export type ConsoleCreateClientSecretMutationVariables = Exact<{
+  input: CreateClientSecretInput;
+}>;
+
+
+export type ConsoleCreateClientSecretMutation = { createClientSecret: { clientId: string, version: string, secret: string, credential: { id: string, hint: string, expiresAt: string } } };
+
+export type ConsoleRotateClientSecretMutationVariables = Exact<{
+  input: RotateClientSecretInput;
+}>;
+
+
+export type ConsoleRotateClientSecretMutation = { rotateClientSecret: { clientId: string, version: string, secret: string, credential: { id: string, hint: string, expiresAt: string } } };
+
+export type ConsoleRevokeClientCredentialMutationVariables = Exact<{
+  input: RevokeClientCredentialInput;
+}>;
+
+
+export type ConsoleRevokeClientCredentialMutation = { revokeClientCredential: { clientId: string, version: string } };
+
+export type ConsoleSetClientScopesMutationVariables = Exact<{
+  input: SetClientScopesInput;
+}>;
+
+
+export type ConsoleSetClientScopesMutation = { setClientScopes: { clientId: string, version: string, scopeIds: Array<string>, clientGrantedScopeIds: Array<string> } };
 
 export type ConsoleResourcesQueryVariables = Exact<{
   filter?: ResourceFilter | null | undefined;
@@ -481,6 +713,7 @@ export type ConsoleAuthorizationLabelsQueryVariables = Exact<{
 
 
 export type ConsoleAuthorizationLabelsQuery = { nodes: Array<
+    | { __typename: 'Client', id: string }
     | { __typename: 'Group', name: string, id: string, names: Array<{ locale: string, value: string }> }
     | { __typename: 'Resource', id: string }
     | { __typename: 'Role', name: string, description: string, id: string, names: Array<{ locale: string, value: string }> }
@@ -778,7 +1011,38 @@ export class TypedDocumentString<TResult, TVariables>
     return this.value;
   }
 }
-
+export const ConsoleClientFieldsFragmentDoc = new TypedDocumentString(`
+    fragment ConsoleClientFields on Client {
+  id
+  clientId
+  name
+  description
+  names {
+    locale
+    value
+  }
+  descriptions {
+    locale
+    value
+  }
+  builtIn
+  enabled
+  platforms {
+    platform
+    redirectUris
+  }
+  postLogoutRedirectUris
+  grantTypes
+  tokenEndpointAuthMethod
+  requirePushedAuthorizationRequests
+  skipConsent
+  corsEnabled
+  corsOrigins
+  version
+  createdAt
+  updatedAt
+}
+    `, {"fragmentName":"ConsoleClientFields"}) as unknown as TypedDocumentString<ConsoleClientFieldsFragment, unknown>;
 export const ConsoleBootstrapDocument = new TypedDocumentString(`
     query ConsoleBootstrap {
   effectivePermissions {
@@ -801,6 +1065,223 @@ export const ConsoleBootstrapDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ConsoleBootstrapQuery, ConsoleBootstrapQueryVariables>;
+export const ConsoleClientsDocument = new TypedDocumentString(`
+    query ConsoleClients($filter: ClientFilter, $orderBy: ClientOrder, $first: Int, $after: String, $last: Int, $before: String) {
+  clients(
+    filter: $filter
+    orderBy: $orderBy
+    first: $first
+    after: $after
+    last: $last
+    before: $before
+  ) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    edges {
+      cursor
+      node {
+        id
+        clientId
+        name
+        names {
+          locale
+          value
+        }
+        builtIn
+        enabled
+        grantTypes
+        tokenEndpointAuthMethod
+        version
+        createdAt
+      }
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<ConsoleClientsQuery, ConsoleClientsQueryVariables>;
+export const ConsoleClientDocument = new TypedDocumentString(`
+    query ConsoleClient($id: ID!) {
+  client(id: $id) {
+    ...ConsoleClientFields
+  }
+}
+    fragment ConsoleClientFields on Client {
+  id
+  clientId
+  name
+  description
+  names {
+    locale
+    value
+  }
+  descriptions {
+    locale
+    value
+  }
+  builtIn
+  enabled
+  platforms {
+    platform
+    redirectUris
+  }
+  postLogoutRedirectUris
+  grantTypes
+  tokenEndpointAuthMethod
+  requirePushedAuthorizationRequests
+  skipConsent
+  corsEnabled
+  corsOrigins
+  version
+  createdAt
+  updatedAt
+}`) as unknown as TypedDocumentString<ConsoleClientQuery, ConsoleClientQueryVariables>;
+export const ConsoleClientCredentialsDocument = new TypedDocumentString(`
+    query ConsoleClientCredentials($id: ID!) {
+  client(id: $id) {
+    id
+    version
+    tokenEndpointAuthMethod
+    credentials {
+      id
+      type
+      hint
+      expiresAt
+      revokedAt
+      active
+      createdAt
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<ConsoleClientCredentialsQuery, ConsoleClientCredentialsQueryVariables>;
+export const ConsoleClientScopesDocument = new TypedDocumentString(`
+    query ConsoleClientScopes($id: ID!, $orderBy: ScopeOrder, $first: Int, $after: String, $last: Int, $before: String) {
+  client(id: $id) {
+    id
+    version
+    scopes(
+      orderBy: $orderBy
+      first: $first
+      after: $after
+      last: $last
+      before: $before
+    ) {
+      totalCount
+      pageInfo {
+        hasNextPage
+        hasPreviousPage
+        startCursor
+        endCursor
+      }
+      edges {
+        cursor
+        clientGranted
+        node {
+          id
+          code
+          name
+          names {
+            locale
+            value
+          }
+          resourceId
+          builtIn
+          enabled
+        }
+      }
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<ConsoleClientScopesQuery, ConsoleClientScopesQueryVariables>;
+export const ConsoleCreateClientDocument = new TypedDocumentString(`
+    mutation ConsoleCreateClient($input: CreateClientInput!) {
+  createClient(input: $input) {
+    clientId
+    version
+  }
+}
+    `) as unknown as TypedDocumentString<ConsoleCreateClientMutation, ConsoleCreateClientMutationVariables>;
+export const ConsoleUpdateClientDocument = new TypedDocumentString(`
+    mutation ConsoleUpdateClient($input: UpdateClientInput!) {
+  updateClient(input: $input) {
+    clientId
+    version
+  }
+}
+    `) as unknown as TypedDocumentString<ConsoleUpdateClientMutation, ConsoleUpdateClientMutationVariables>;
+export const ConsoleEnableClientDocument = new TypedDocumentString(`
+    mutation ConsoleEnableClient($input: ClientStateInput!) {
+  enableClient(input: $input) {
+    clientId
+    version
+  }
+}
+    `) as unknown as TypedDocumentString<ConsoleEnableClientMutation, ConsoleEnableClientMutationVariables>;
+export const ConsoleDisableClientDocument = new TypedDocumentString(`
+    mutation ConsoleDisableClient($input: ClientStateInput!) {
+  disableClient(input: $input) {
+    clientId
+    version
+  }
+}
+    `) as unknown as TypedDocumentString<ConsoleDisableClientMutation, ConsoleDisableClientMutationVariables>;
+export const ConsoleDeleteClientDocument = new TypedDocumentString(`
+    mutation ConsoleDeleteClient($input: ClientStateInput!) {
+  deleteClient(input: $input) {
+    clientId
+    deleted
+  }
+}
+    `) as unknown as TypedDocumentString<ConsoleDeleteClientMutation, ConsoleDeleteClientMutationVariables>;
+export const ConsoleCreateClientSecretDocument = new TypedDocumentString(`
+    mutation ConsoleCreateClientSecret($input: CreateClientSecretInput!) {
+  createClientSecret(input: $input) {
+    clientId
+    version
+    secret
+    credential {
+      id
+      hint
+      expiresAt
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<ConsoleCreateClientSecretMutation, ConsoleCreateClientSecretMutationVariables>;
+export const ConsoleRotateClientSecretDocument = new TypedDocumentString(`
+    mutation ConsoleRotateClientSecret($input: RotateClientSecretInput!) {
+  rotateClientSecret(input: $input) {
+    clientId
+    version
+    secret
+    credential {
+      id
+      hint
+      expiresAt
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<ConsoleRotateClientSecretMutation, ConsoleRotateClientSecretMutationVariables>;
+export const ConsoleRevokeClientCredentialDocument = new TypedDocumentString(`
+    mutation ConsoleRevokeClientCredential($input: RevokeClientCredentialInput!) {
+  revokeClientCredential(input: $input) {
+    clientId
+    version
+  }
+}
+    `) as unknown as TypedDocumentString<ConsoleRevokeClientCredentialMutation, ConsoleRevokeClientCredentialMutationVariables>;
+export const ConsoleSetClientScopesDocument = new TypedDocumentString(`
+    mutation ConsoleSetClientScopes($input: SetClientScopesInput!) {
+  setClientScopes(input: $input) {
+    clientId
+    version
+    scopeIds
+    clientGrantedScopeIds
+  }
+}
+    `) as unknown as TypedDocumentString<ConsoleSetClientScopesMutation, ConsoleSetClientScopesMutationVariables>;
 export const ConsoleResourcesDocument = new TypedDocumentString(`
     query ConsoleResources($filter: ResourceFilter, $orderBy: ResourceOrder, $first: Int, $after: String, $last: Int, $before: String) {
   resources(

@@ -120,6 +120,304 @@ export const schemaMetadata: SchemaMetadata = {
         }
       }
     },
+    "Client": {
+      "kind": "OBJECT",
+      "interfaces": [
+        "Node"
+      ],
+      "possibleTypes": [],
+      "fields": {
+        "builtIn": {
+          "name": "builtIn",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "clientId": {
+          "name": "clientId",
+          "returnType": "String",
+          "policies": []
+        },
+        "corsEnabled": {
+          "name": "corsEnabled",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "corsOrigins": {
+          "name": "corsOrigins",
+          "returnType": "String",
+          "policies": []
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "returnType": "DateTime",
+          "policies": []
+        },
+        "credentials": {
+          "name": "credentials",
+          "returnType": "ClientCredential",
+          "policies": [
+            {
+              "scopes": [
+                "management.client_credential.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
+        },
+        "description": {
+          "name": "description",
+          "returnType": "String",
+          "policies": []
+        },
+        "descriptions": {
+          "name": "descriptions",
+          "returnType": "LocalizedText",
+          "policies": []
+        },
+        "enabled": {
+          "name": "enabled",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "grantTypes": {
+          "name": "grantTypes",
+          "returnType": "ClientGrantType",
+          "policies": []
+        },
+        "id": {
+          "name": "id",
+          "returnType": "ID",
+          "policies": []
+        },
+        "name": {
+          "name": "name",
+          "returnType": "String",
+          "policies": []
+        },
+        "names": {
+          "name": "names",
+          "returnType": "LocalizedText",
+          "policies": []
+        },
+        "platforms": {
+          "name": "platforms",
+          "returnType": "ClientPlatform",
+          "policies": []
+        },
+        "postLogoutRedirectUris": {
+          "name": "postLogoutRedirectUris",
+          "returnType": "String",
+          "policies": []
+        },
+        "requirePushedAuthorizationRequests": {
+          "name": "requirePushedAuthorizationRequests",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "scopes": {
+          "name": "scopes",
+          "returnType": "ClientScopeConnection",
+          "policies": [
+            {
+              "scopes": [
+                "management.client.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
+        },
+        "skipConsent": {
+          "name": "skipConsent",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "tokenEndpointAuthMethod": {
+          "name": "tokenEndpointAuthMethod",
+          "returnType": "ClientAuthMethod",
+          "policies": []
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "returnType": "DateTime",
+          "policies": []
+        },
+        "version": {
+          "name": "version",
+          "returnType": "UUID",
+          "policies": []
+        }
+      }
+    },
+    "ClientConnection": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "edges": {
+          "name": "edges",
+          "returnType": "ClientEdge",
+          "policies": []
+        },
+        "nodes": {
+          "name": "nodes",
+          "returnType": "Client",
+          "policies": []
+        },
+        "pageInfo": {
+          "name": "pageInfo",
+          "returnType": "PageInfo",
+          "policies": []
+        },
+        "totalCount": {
+          "name": "totalCount",
+          "returnType": "Int",
+          "policies": []
+        }
+      }
+    },
+    "ClientCredential": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "active": {
+          "name": "active",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "returnType": "DateTime",
+          "policies": []
+        },
+        "expiresAt": {
+          "name": "expiresAt",
+          "returnType": "DateTime",
+          "policies": []
+        },
+        "hint": {
+          "name": "hint",
+          "returnType": "String",
+          "policies": []
+        },
+        "id": {
+          "name": "id",
+          "returnType": "ID",
+          "policies": []
+        },
+        "revokedAt": {
+          "name": "revokedAt",
+          "returnType": "DateTime",
+          "policies": []
+        },
+        "type": {
+          "name": "type",
+          "returnType": "ClientCredentialKind",
+          "policies": []
+        }
+      }
+    },
+    "ClientCredentialPayload": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "clientId": {
+          "name": "clientId",
+          "returnType": "ID",
+          "policies": []
+        },
+        "clientMutationId": {
+          "name": "clientMutationId",
+          "returnType": "String",
+          "policies": []
+        },
+        "credential": {
+          "name": "credential",
+          "returnType": "ClientCredential",
+          "policies": []
+        },
+        "version": {
+          "name": "version",
+          "returnType": "UUID",
+          "policies": []
+        }
+      }
+    },
+    "ClientEdge": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "cursor": {
+          "name": "cursor",
+          "returnType": "String",
+          "policies": []
+        },
+        "node": {
+          "name": "node",
+          "returnType": "Client",
+          "policies": []
+        }
+      }
+    },
+    "ClientPayload": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "client": {
+          "name": "client",
+          "returnType": "Client",
+          "policies": [
+            {
+              "scopes": [
+                "management.client.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
+        },
+        "clientId": {
+          "name": "clientId",
+          "returnType": "ID",
+          "policies": []
+        },
+        "clientMutationId": {
+          "name": "clientMutationId",
+          "returnType": "String",
+          "policies": []
+        },
+        "version": {
+          "name": "version",
+          "returnType": "UUID",
+          "policies": []
+        }
+      }
+    },
+    "ClientPlatform": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "platform": {
+          "name": "platform",
+          "returnType": "ClientPlatformType",
+          "policies": []
+        },
+        "redirectUris": {
+          "name": "redirectUris",
+          "returnType": "String",
+          "policies": []
+        }
+      }
+    },
     "ClientScopeConnection": {
       "kind": "OBJECT",
       "interfaces": [],
@@ -201,73 +499,39 @@ export const schemaMetadata: SchemaMetadata = {
         }
       }
     },
-    "ClientScopeTarget": {
+    "ClientSecretPayload": {
       "kind": "OBJECT",
       "interfaces": [],
       "possibleTypes": [],
       "fields": {
-        "allowedScopeCount": {
-          "name": "allowedScopeCount",
-          "returnType": "Int",
-          "policies": []
-        },
-        "builtIn": {
-          "name": "builtIn",
-          "returnType": "Boolean",
-          "policies": []
-        },
         "clientId": {
           "name": "clientId",
           "returnType": "ID",
           "policies": []
         },
-        "name": {
-          "name": "name",
+        "clientMutationId": {
+          "name": "clientMutationId",
+          "returnType": "String",
+          "policies": []
+        },
+        "credential": {
+          "name": "credential",
+          "returnType": "ClientCredential",
+          "policies": []
+        },
+        "revokedCredential": {
+          "name": "revokedCredential",
+          "returnType": "ClientCredential",
+          "policies": []
+        },
+        "secret": {
+          "name": "secret",
           "returnType": "String",
           "policies": []
         },
         "version": {
           "name": "version",
           "returnType": "UUID",
-          "policies": []
-        }
-      }
-    },
-    "ClientScopeTargetConnection": {
-      "kind": "OBJECT",
-      "interfaces": [],
-      "possibleTypes": [],
-      "fields": {
-        "edges": {
-          "name": "edges",
-          "returnType": "ClientScopeTargetEdge",
-          "policies": []
-        },
-        "nodes": {
-          "name": "nodes",
-          "returnType": "ClientScopeTarget",
-          "policies": []
-        },
-        "pageInfo": {
-          "name": "pageInfo",
-          "returnType": "PageInfo",
-          "policies": []
-        }
-      }
-    },
-    "ClientScopeTargetEdge": {
-      "kind": "OBJECT",
-      "interfaces": [],
-      "possibleTypes": [],
-      "fields": {
-        "cursor": {
-          "name": "cursor",
-          "returnType": "String",
-          "policies": []
-        },
-        "node": {
-          "name": "node",
-          "returnType": "ClientScopeTarget",
           "policies": []
         }
       }
@@ -295,6 +559,28 @@ export const schemaMetadata: SchemaMetadata = {
         "version": {
           "name": "version",
           "returnType": "UUID",
+          "policies": []
+        }
+      }
+    },
+    "DeleteClientPayload": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "clientId": {
+          "name": "clientId",
+          "returnType": "ID",
+          "policies": []
+        },
+        "clientMutationId": {
+          "name": "clientMutationId",
+          "returnType": "String",
+          "policies": []
+        },
+        "deleted": {
+          "name": "deleted",
+          "returnType": "Boolean",
           "policies": []
         }
       }
@@ -1294,6 +1580,35 @@ export const schemaMetadata: SchemaMetadata = {
             }
           ]
         },
+        "createClient": {
+          "name": "createClient",
+          "returnType": "ClientPayload",
+          "policies": [
+            {
+              "scopes": [
+                "management.client.create"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
+        },
+        "createClientSecret": {
+          "name": "createClientSecret",
+          "returnType": "ClientSecretPayload",
+          "policies": [
+            {
+              "scopes": [
+                "management.client_credential.create"
+              ],
+              "authentication": "RECENT_AAL2",
+              "userOnly": true,
+              "runtime": true,
+              "maxAge": 300
+            }
+          ]
+        },
         "createGroup": {
           "name": "createGroup",
           "returnType": "GroupPayload",
@@ -1373,6 +1688,21 @@ export const schemaMetadata: SchemaMetadata = {
             }
           ]
         },
+        "deleteClient": {
+          "name": "deleteClient",
+          "returnType": "DeleteClientPayload",
+          "policies": [
+            {
+              "scopes": [
+                "management.client.delete"
+              ],
+              "authentication": "RECENT_AAL2",
+              "userOnly": true,
+              "runtime": true,
+              "maxAge": 300
+            }
+          ]
+        },
         "deleteGroup": {
           "name": "deleteGroup",
           "returnType": "DeleteGroupPayload",
@@ -1414,6 +1744,20 @@ export const schemaMetadata: SchemaMetadata = {
               "runtime": true,
               "maxAge": 300,
               "elevatedMaxAge": 3600
+            }
+          ]
+        },
+        "disableClient": {
+          "name": "disableClient",
+          "returnType": "ClientPayload",
+          "policies": [
+            {
+              "scopes": [
+                "management.client.state"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
             }
           ]
         },
@@ -1488,6 +1832,20 @@ export const schemaMetadata: SchemaMetadata = {
             {
               "scopes": [
                 "management.user.state"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
+        },
+        "enableClient": {
+          "name": "enableClient",
+          "returnType": "ClientPayload",
+          "policies": [
+            {
+              "scopes": [
+                "management.client.state"
               ],
               "authentication": "AAL2",
               "userOnly": false,
@@ -1661,6 +2019,21 @@ export const schemaMetadata: SchemaMetadata = {
             }
           ]
         },
+        "revokeClientCredential": {
+          "name": "revokeClientCredential",
+          "returnType": "ClientCredentialPayload",
+          "policies": [
+            {
+              "scopes": [
+                "management.client_credential.revoke"
+              ],
+              "authentication": "RECENT_AAL2",
+              "userOnly": true,
+              "runtime": true,
+              "maxAge": 300
+            }
+          ]
+        },
         "revokeOtherSessions": {
           "name": "revokeOtherSessions",
           "returnType": "RevokeOtherSessionsPayload",
@@ -1696,6 +2069,21 @@ export const schemaMetadata: SchemaMetadata = {
             {
               "scopes": [
                 "management.role_assignment.write"
+              ],
+              "authentication": "RECENT_AAL2",
+              "userOnly": true,
+              "runtime": true,
+              "maxAge": 300
+            }
+          ]
+        },
+        "rotateClientSecret": {
+          "name": "rotateClientSecret",
+          "returnType": "ClientSecretPayload",
+          "policies": [
+            {
+              "scopes": [
+                "management.client_credential.rotate"
               ],
               "authentication": "RECENT_AAL2",
               "userOnly": true,
@@ -1784,6 +2172,20 @@ export const schemaMetadata: SchemaMetadata = {
             {
               "scopes": [
                 "management.user.state"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
+        },
+        "updateClient": {
+          "name": "updateClient",
+          "returnType": "ClientPayload",
+          "policies": [
+            {
+              "scopes": [
+                "management.client.update"
               ],
               "authentication": "AAL2",
               "userOnly": false,
@@ -1946,6 +2348,7 @@ export const schemaMetadata: SchemaMetadata = {
       "kind": "INTERFACE",
       "interfaces": [],
       "possibleTypes": [
+        "Client",
         "Group",
         "Resource",
         "Role",
@@ -2038,9 +2441,9 @@ export const schemaMetadata: SchemaMetadata = {
             }
           ]
         },
-        "clientScopeTargets": {
-          "name": "clientScopeTargets",
-          "returnType": "ClientScopeTargetConnection",
+        "client": {
+          "name": "client",
+          "returnType": "Client",
           "policies": [
             {
               "scopes": [
@@ -2052,9 +2455,9 @@ export const schemaMetadata: SchemaMetadata = {
             }
           ]
         },
-        "clientScopes": {
-          "name": "clientScopes",
-          "returnType": "ClientScopeConnection",
+        "clients": {
+          "name": "clients",
+          "returnType": "ClientConnection",
           "policies": [
             {
               "scopes": [

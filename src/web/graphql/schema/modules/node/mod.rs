@@ -17,6 +17,10 @@ use uuid::Uuid;
 
 use super::{
     account::{UserGlobalId, UserNode},
+    client::{
+        integration as client_integration,
+        types::{ClientGlobalId, ClientNode},
+    },
     group::{
         integration as group_integration,
         types::{GroupGlobalId, GroupNode},
@@ -78,6 +82,7 @@ enum Node {
     Scope(Box<ScopeNode>),
     Role(Box<RoleNode>),
     Group(Box<GroupNode>),
+    Client(Box<ClientNode>),
 }
 
 async fn load_node(ctx: &Context<'_>, id: &ID) -> Result<Option<Node>> {
@@ -162,6 +167,18 @@ async fn load_node(ctx: &Context<'_>, id: &ID) -> Result<Option<Node>> {
             .await
             .map_err(|error| app_error(ctx, error))?;
         Ok(record.map(RoleNode::new).map(Box::new).map(Node::from))
+    } else if decoded.is::<ClientGlobalId>() {
+        let oid = decoded
+            .into_typed::<ClientGlobalId>()
+            .map_err(|_| coded_error(ctx, GraphqlErrorCode::InvalidGlobalId, ErrorParams::new()))?
+            .oid();
+        ManagementGuard::new(ManagementScope::ClientsRead, ManagementTarget::instance())
+            .check(ctx)
+            .await?;
+        let record = client_integration::find_client(request, oid)
+            .await
+            .map_err(|error| app_error(ctx, error))?;
+        Ok(record.map(ClientNode::new).map(Box::new).map(Node::from))
     } else if decoded.is::<GroupGlobalId>() {
         let oid = decoded
             .into_typed::<GroupGlobalId>()

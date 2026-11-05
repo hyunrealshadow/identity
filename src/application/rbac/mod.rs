@@ -21,9 +21,7 @@ pub mod user_role;
 
 pub use client::{
     ClientScopeAssignment, ClientScopePage, ClientScopePageItem, ClientScopePageRequest,
-    ClientScopeSetResult, ClientScopeTargetFilter, ClientScopeTargetOrder, ClientScopeTargetPage,
-    ClientScopeTargetPageItem, ClientScopeTargetPageRequest, ClientScopeTargetRecord,
-    SetClientScopesCommand,
+    ClientScopeSetResult, SetClientScopesCommand,
 };
 pub use group::{
     AddGroupMemberCommand, CreateGroupCommand, DeleteGroupCommand, DeleteGroupResult, GroupFilter,
@@ -43,16 +41,15 @@ pub use group_repository::{
 };
 pub use model::{RbacManagementAuthority, ScopeDescription, ScopeOid};
 pub use repository::{
-    AssignUserRolesTransaction, ClientScopePageEntry, ClientScopeQuery, ClientScopeTargetPageEntry,
-    ClientScopeTargetQuery, CreateResourceTransaction, CreateRoleTransaction,
-    CreateScopeTransaction, EffectivePermissionPageData, EffectivePermissionPageEntry,
-    EffectivePermissionQuery, RbacDuplicateKind, RbacEntityKind, RbacManagementRepository,
-    RbacManagementRepositoryError, RbacPageData, RbacProtectedKind, ResourcePageEntry,
-    ResourceQuery, ResourceStateTransaction, RevokeUserRolesTransaction, RolePageEntry, RoleQuery,
-    RoleStateTransaction, ScopePageEntry, ScopeQuery, ScopeStateTransaction,
-    SetClientScopesTransaction, SetRolePermissionsTransaction, SharedRbacManagementRepository,
-    UpdateResourceTransaction, UpdateRoleTransaction, UpdateScopeTransaction, UserRolePageData,
-    UserRolePageEntry, UserRoleQuery,
+    AssignUserRolesTransaction, ClientScopePageEntry, ClientScopeQuery, CreateResourceTransaction,
+    CreateRoleTransaction, CreateScopeTransaction, EffectivePermissionPageData,
+    EffectivePermissionPageEntry, EffectivePermissionQuery, RbacDuplicateKind, RbacEntityKind,
+    RbacManagementRepository, RbacManagementRepositoryError, RbacPageData, RbacProtectedKind,
+    ResourcePageEntry, ResourceQuery, ResourceStateTransaction, RevokeUserRolesTransaction,
+    RolePageEntry, RoleQuery, RoleStateTransaction, ScopePageEntry, ScopeQuery,
+    ScopeStateTransaction, SetClientScopesTransaction, SetRolePermissionsTransaction,
+    SharedRbacManagementRepository, UpdateResourceTransaction, UpdateRoleTransaction,
+    UpdateScopeTransaction, UserRolePageData, UserRolePageEntry, UserRoleQuery,
 };
 pub use resource::{
     ApiResourceRecord, CreateResourceCommand, ResourceFilter, ResourceOrder, ResourcePage,

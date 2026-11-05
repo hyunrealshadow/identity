@@ -208,6 +208,7 @@ pub enum ManagementScope {
     ClientsCreate,
     ClientsUpdate,
     ClientsState,
+    ClientsDelete,
     ClientsScopes,
     ClientCredentialsRead,
     ClientCredentialsCreate,
@@ -255,6 +256,7 @@ impl ManagementScope {
         Self::ClientsCreate,
         Self::ClientsUpdate,
         Self::ClientsState,
+        Self::ClientsDelete,
         Self::ClientsScopes,
         Self::ClientCredentialsRead,
         Self::ClientCredentialsCreate,
@@ -545,6 +547,15 @@ pub const MANAGEMENT_SCOPES: [ManagementScopeDefinition; MANAGEMENT_SCOPE_COUNT]
         ManagementFlowAllowance::USER_AND_CLIENT_CREDENTIALS,
     ),
     entry(
+        ManagementScope::ClientsDelete,
+        "management.client.delete",
+        "client.delete",
+        "Delete OAuth clients",
+        ManagementRoleEligibility::ADMIN,
+        HumanAuthenticationRequirement::RecentAal2,
+        ManagementFlowAllowance::USER_ONLY,
+    ),
+    entry(
         ManagementScope::ClientsScopes,
         "management.client.scope",
         "client.scope",
@@ -808,9 +819,10 @@ pub const MANAGEMENT_SCOPES: [ManagementScopeDefinition; MANAGEMENT_SCOPE_COUNT]
 ];
 
 /// Scopes that must never be issued to machine clients in the first release.
-pub const HUMAN_ONLY_SCOPES: [ManagementScope; 17] = [
+pub const HUMAN_ONLY_SCOPES: [ManagementScope; 18] = [
     ManagementScope::CredentialsRevoke,
     ManagementScope::CredentialsReset,
+    ManagementScope::ClientsDelete,
     ManagementScope::ClientCredentialsCreate,
     ManagementScope::ClientCredentialsRotate,
     ManagementScope::ClientCredentialsRevoke,

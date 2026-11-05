@@ -59,6 +59,12 @@ impl GlobalIdType for UserGlobalId {
     const TYPE_NAME: &'static str = "User";
 }
 
+struct ClientGlobalId;
+
+impl GlobalIdType for ClientGlobalId {
+    const TYPE_NAME: &'static str = "Client";
+}
+
 struct ResourceGlobalId;
 
 impl GlobalIdType for ResourceGlobalId {
@@ -267,7 +273,7 @@ async fn graphql_http_denies_rbac_resource_reads_without_management_authority() 
 
 #[tokio::test]
 async fn graphql_http_collection_totals_require_management_read_authority() {
-    for field in ["users", "roles", "groups", "scopes"] {
+    for field in ["users", "roles", "groups", "scopes", "clients"] {
         let fixture = fixture(FixtureOptions {
             tail: FixtureTail::ManagementDenial,
             ..FixtureOptions::default()
@@ -311,6 +317,65 @@ async fn graphql_http_denies_rbac_writes_without_management_authority() {
     let body: Value = response.take_json().await.unwrap();
     assert!(body["data"]["createResource"].is_null());
     assert!(body["errors"].is_array());
+}
+
+#[tokio::test]
+async fn graphql_http_denies_client_management_without_management_authority() {
+    let id = GlobalId::<ClientGlobalId>::new(Uuid::new_v4()).encode();
+    let version = Uuid::new_v4();
+    for (field, operation) in [
+        (
+            "client",
+            format!(r#"query {{ client(id: "{id}") {{ id clientId }} }}"#),
+        ),
+        (
+            "createClient",
+            r#"mutation { createClient(input: { name: "Orders", settings: {
+                platforms: [], grantTypes: [CLIENT_CREDENTIALS],
+                tokenEndpointAuthMethod: CLIENT_SECRET_BASIC } }) { clientId } }"#
+                .to_owned(),
+        ),
+        (
+            "disableClient",
+            format!(
+                r#"mutation {{ disableClient(input: {{ id: "{id}", expectedVersion: "{version}" }}) {{ clientId }} }}"#
+            ),
+        ),
+        (
+            "deleteClient",
+            format!(
+                r#"mutation {{ deleteClient(input: {{ id: "{id}", expectedVersion: "{version}" }}) {{ clientId }} }}"#
+            ),
+        ),
+        (
+            "createClientSecret",
+            format!(
+                r#"mutation {{ createClientSecret(input: {{ clientId: "{id}", expectedVersion: "{version}" }}) {{ secret }} }}"#
+            ),
+        ),
+    ] {
+        let fixture = fixture(FixtureOptions {
+            tail: FixtureTail::ManagementDenial,
+            ..FixtureOptions::default()
+        })
+        .await;
+        let mut response = graphql_post(&fixture, &operation).await;
+        assert_eq!(response.status_code, Some(StatusCode::OK));
+        let body: Value = response.take_json().await.unwrap();
+        assert!(
+            body["data"].is_null() || body["data"][field].is_null(),
+            "{field} was not denied"
+        );
+        let errors = body["errors"].as_array().unwrap();
+        assert!(!errors.is_empty(), "{field} returned no error");
+        assert!(
+            !errors.iter().any(|error| error["message"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("Unknown")),
+            "{field} is not part of the schema"
+        );
+    }
 }
 
 #[tokio::test]

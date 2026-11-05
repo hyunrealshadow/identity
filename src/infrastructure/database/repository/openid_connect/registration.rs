@@ -31,6 +31,7 @@ use crate::database::{
         resource::{Column as ResourceColumn, Entity as ResourceEntity},
         scope::{Column as ScopeColumn, Entity as ScopeEntity},
     },
+    repository::localized,
     repository::{
         openid_connect_credential::serialize_data as serialize_credential_data,
         shared::non_expiring_timestamp,
@@ -83,7 +84,7 @@ fn optional_metadata_values_to_json<T: ToString>(value: Option<Vec<T>>) -> Optio
     )
 }
 
-pub(super) fn cors_origins_for_client(
+pub(crate) fn cors_origins_for_client(
     settings: &OpenIdConnectClientSettings,
     platforms: &[OpenIdConnectClientPlatform],
 ) -> Vec<String> {
@@ -228,7 +229,12 @@ impl OpenIdConnectClientRepositoryImpl {
                         oid: Set(registration.client.oid),
                         protocol: Set(registration.client.protocol.to_string()),
                         name: Set(registration.client.name),
-                        names: Set(optional_strings_to_json(Some(registration.client.names))),
+                        // Registration never owns translations; managed edits survive updates.
+                        names: if existing.is_some() {
+                            sea_orm::ActiveValue::NotSet
+                        } else {
+                            Set(Some(localized::encode_text(&registration.client.names)))
+                        },
                         description: Set(registration.client.description),
                         descriptions: Default::default(),
                         built_in: Set(registration.client.built_in),
@@ -602,6 +608,7 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
         let Some(client_model) = ClientEntity::find()
             .filter(ClientColumn::Oid.eq(client_oid))
             .filter(ClientColumn::Protocol.eq("openid_connect"))
+            .filter(ClientColumn::Enabled.eq(true))
             .one(&self.db)
             .await
             .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?

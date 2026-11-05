@@ -15,6 +15,7 @@ pub(in crate::openid_connect) fn test_client(oid: ClientOid) -> Client {
         protocol: ClientProtocol::OpenIdConnect,
         name: "Example RP".to_string(),
         names: vec![],
+        descriptions: vec![],
         description: None,
         built_in: false,
         enabled: true,

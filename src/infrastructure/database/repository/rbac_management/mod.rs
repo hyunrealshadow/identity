@@ -4,22 +4,21 @@
 //! rows, applies UUID version CAS and appends the semantic audit fact before
 //! committing. No SQL error text crosses the application port.
 
-mod audit;
-mod authority;
+pub(crate) mod audit;
+pub(crate) mod authority;
 mod catalog;
 mod client;
 mod delegation;
 mod resource;
 mod role;
 mod scope;
-mod support;
+pub(crate) mod support;
 mod user_role;
 
 use async_trait::async_trait;
 use identity_application::rbac::{
     ApiResourceRecord, AssignUserRolesTransaction, ClientScopePageEntry, ClientScopeQuery,
-    ClientScopeSetResult, ClientScopeTargetPageEntry, ClientScopeTargetQuery,
-    CreateResourceTransaction, CreateRoleTransaction, CreateScopeTransaction,
+    ClientScopeSetResult, CreateResourceTransaction, CreateRoleTransaction, CreateScopeTransaction,
     EffectivePermissionPageData, EffectivePermissionQuery, RbacManagementRepository,
     RbacManagementRepositoryError, RbacPageData, ResourcePageEntry, ResourceQuery,
     ResourceStateTransaction, RevokeUserRolesTransaction, RoleFilter, RolePageEntry, RoleQuery,
@@ -228,13 +227,6 @@ impl RbacManagementRepository for RbacManagementRepositoryImpl {
         command: RevokeUserRolesTransaction,
     ) -> Result<UserRoleMutationResult, RbacManagementRepositoryError> {
         self.user_role_revoke(command).await
-    }
-
-    async fn list_client_scope_targets(
-        &self,
-        query: ClientScopeTargetQuery,
-    ) -> Result<RbacPageData<ClientScopeTargetPageEntry>, RbacManagementRepositoryError> {
-        self.client_target_list(query).await
     }
 
     async fn list_client_scopes(

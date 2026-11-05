@@ -62,6 +62,17 @@ client API scopes preserves protocol scope assignments, withdraws previously
 issued client artifacts and uses the client's UUID `version` as its optimistic
 lock.
 
+Client management writes re-check management authority in their transaction,
+lock the client, compare its `version` and audit the change. Built-in clients
+cannot be edited, disabled or deleted. A protocol-settings change that alters
+what the client may obtain, a credential revocation or rotation, and disabling
+the client permanently withdraw its issued artifacts; display-text edits and
+issuing an additional secret do not. A disabled client is rejected by every
+protocol endpoint, including dynamic registration management and CORS, and
+enabling it again never restores withdrawn artifacts. Deleting a client removes
+its configuration, credentials, scope assignments, consents and artifacts.
+Secret values are returned once when issued and are never readable afterwards.
+
 Editing roles, groups or scope definitions does not imply permission to grant
 arbitrary authority. An addition must fit the actor's pre-change effective
 permissions or use explicit `management.permission.delegate`. That capability

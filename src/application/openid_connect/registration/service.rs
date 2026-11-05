@@ -588,6 +588,7 @@ impl DynamicClientRegistrationService {
             protocol: ClientProtocol::OpenIdConnect,
             name: client_name,
             names: vec![],
+            descriptions: vec![],
             description: None,
             built_in: false,
             enabled: true,

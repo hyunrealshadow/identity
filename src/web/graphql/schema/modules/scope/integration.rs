@@ -4,11 +4,9 @@
 use identity_application::{
     error::AppError,
     rbac::{
-        ClientScopePage, ClientScopePageRequest, ClientScopeSetResult, ClientScopeTargetFilter,
-        ClientScopeTargetOrder as ApplicationClientTargetOrder, ClientScopeTargetPage,
-        ClientScopeTargetPageRequest, CreateScopeCommand, ScopeFilter, ScopeOid,
-        ScopeOrder as ApplicationScopeOrder, ScopePage, ScopePageRequest, ScopeRecord,
-        ScopeStateCommand, SetClientScopesCommand, UpdateScopeCommand,
+        ClientScopePage, ClientScopePageRequest, ClientScopeSetResult, CreateScopeCommand,
+        ScopeFilter, ScopeOid, ScopeOrder as ApplicationScopeOrder, ScopePage, ScopePageRequest,
+        ScopeRecord, ScopeStateCommand, SetClientScopesCommand, UpdateScopeCommand,
     },
 };
 use identity_domain::client::model::ClientOid;
@@ -98,27 +96,6 @@ pub(crate) async fn disable_scope(
         .services()
         .rbac_management()
         .disable_scope(&authority, command)
-        .await
-}
-
-pub(crate) async fn list_client_scope_targets(
-    request: &RequestContext,
-    filter: ClientScopeTargetFilter,
-    order: ApplicationClientTargetOrder,
-    page: PageArgs,
-) -> Result<ClientScopeTargetPage, AppError> {
-    request
-        .state
-        .services()
-        .rbac_management()
-        .list_client_scope_targets(ClientScopeTargetPageRequest {
-            filter,
-            order,
-            first: page.first,
-            after: page.after,
-            last: page.last,
-            before: page.before,
-        })
         .await
 }
 

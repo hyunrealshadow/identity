@@ -22,7 +22,7 @@ import {
   failureDescriptionKey,
   failureTitleKey,
 } from '#/lib/graphql/presentation'
-import { useTranslator, type MessageKey } from '#/lib/i18n'
+import { useLocale, useTranslator, type MessageKey } from '#/lib/i18n'
 import { useWorkspace } from '#/lib/workspace'
 import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
 import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
@@ -32,6 +32,7 @@ import { RolePermissionTable } from '#/modules/user-management/roles/components/
 import { useRoleMembership } from '#/modules/user-management/roles/hooks/use-role-membership'
 import { useRoleMutations } from '#/modules/user-management/roles/hooks/role-mutations'
 import {
+  roleDisplayName,
   roleIsBuiltIn,
   withRoleDisplayFields,
 } from '#/modules/user-management/roles/lib/role-localization'
@@ -96,6 +97,7 @@ function readPermissionDraft(roleId: string): PermissionDraft | null {
 
 export function RolePermissionsPage({ roleId }: { roleId: string }) {
   const t = useTranslator()
+  const { locale } = useLocale()
   const navigate = useNavigate()
   const workspace = useWorkspace()
   const scope = useMemo(
@@ -467,7 +469,7 @@ export function RolePermissionsPage({ roleId }: { roleId: string }) {
             </div>
             {builtIn ? null : (
               <PermissionPickerDialog
-                role={role}
+                subjectName={roleDisplayName(withRoleDisplayFields(role), locale)}
                 assignedIds={initial}
                 initialSelected={pendingAdditions}
                 initialMetadata={staged}

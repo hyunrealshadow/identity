@@ -23,8 +23,8 @@ pub(crate) const CURSOR_KIND_SCOPE: u8 = 2;
 pub(crate) const CURSOR_KIND_ROLE: u8 = 3;
 pub(crate) const CURSOR_KIND_USER_ROLE: u8 = 5;
 pub(crate) const CURSOR_KIND_EFFECTIVE: u8 = 6;
-pub(crate) const CURSOR_KIND_CLIENT_TARGET: u8 = 7;
 pub(crate) const CURSOR_KIND_CLIENT_SCOPE: u8 = 8;
+pub(crate) const CURSOR_KIND_CLIENT: u8 = 9;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RbacTie {

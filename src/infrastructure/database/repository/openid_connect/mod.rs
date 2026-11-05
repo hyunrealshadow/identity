@@ -1,8 +1,8 @@
 //! OIDC client persistence, split into mapping, queries, and registration.
 
-mod mapping;
+pub(crate) mod mapping;
 mod queries;
-mod registration;
+pub(crate) mod registration;
 
 pub use queries::OpenIdConnectClientRepositoryImpl;
 

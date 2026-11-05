@@ -149,6 +149,7 @@ fn test_client(
             protocol: ClientProtocol::OpenIdConnect,
             name: "Conformance RP".to_owned(),
             names: vec![],
+            descriptions: vec![],
             description: None,
             built_in: false,
             enabled: true,

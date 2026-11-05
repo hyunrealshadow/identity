@@ -3,6 +3,7 @@ extern crate self as application;
 
 pub mod auth;
 pub mod authorization;
+pub mod client;
 pub mod console;
 pub mod data_protection;
 pub mod error;

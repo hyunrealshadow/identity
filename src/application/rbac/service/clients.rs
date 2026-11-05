@@ -15,60 +15,6 @@ impl RbacManagementService {
             .map_err(map_repository_error)
     }
 
-    #[tracing::instrument(skip_all, name = "rbac.client_scope_targets.list")]
-    pub async fn list_client_scope_targets(
-        &self,
-        request: ClientScopeTargetPageRequest,
-    ) -> Result<ClientScopeTargetPage, AppError> {
-        let filter = normalize_client_target_filter(request.filter)?;
-        let order = request.order;
-        let prepared = prepare_page(
-            self.data_protector.as_ref(),
-            CURSOR_KIND_CLIENT_TARGET,
-            order.as_u8(),
-            &filter,
-            PageArguments {
-                first: request.first,
-                after: request.after,
-                last: request.last,
-                before: request.before,
-            },
-        )
-        .await?;
-        let data = self
-            .repository
-            .list_client_scope_targets(ClientScopeTargetQuery {
-                filter,
-                order,
-                direction: prepared.direction,
-                after: prepared.after,
-                before: prepared.before,
-                limit: prepared.limit,
-            })
-            .await
-            .map_err(map_repository_error)?;
-        let mut items = Vec::with_capacity(data.items.len());
-        for entry in data.items {
-            let cursor = encode_cursor(
-                self.data_protector.as_ref(),
-                CURSOR_KIND_CLIENT_TARGET,
-                order.as_u8(),
-                &prepared.filter_fingerprint,
-                &entry.sort_key,
-            )
-            .await?;
-            items.push(ClientScopeTargetPageItem {
-                record: entry.record,
-                cursor,
-            });
-        }
-        Ok(ClientScopeTargetPage {
-            items,
-            has_previous_page: data.has_previous_page,
-            has_next_page: data.has_next_page,
-        })
-    }
-
     #[tracing::instrument(skip_all, name = "rbac.client_scopes.list")]
     pub async fn list_client_scopes(
         &self,

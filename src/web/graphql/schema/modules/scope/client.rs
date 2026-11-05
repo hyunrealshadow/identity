@@ -1,203 +1,63 @@
 use crate::graphql::schema::access::access;
 use async_graphql::{
-    Context, Enum, ID, InputObject, Object, Result,
-    connection::{Connection, CursorType, Edge, PageInfo},
+    Context, ID, InputObject, Object, Result,
+    connection::{CursorType, PageInfo},
 };
 use identity_application::{
     authorization::ManagementTarget,
-    rbac::{
-        ClientScopeAssignment, ClientScopeTargetFilter as ApplicationTargetFilter,
-        ClientScopeTargetOrder as ApplicationTargetOrder, ClientScopeTargetRecord, ScopeOid,
-        SetClientScopesCommand,
-    },
+    rbac::{ClientScopeAssignment, ScopeOid, SetClientScopesCommand},
 };
 use identity_domain::{authorization::ManagementScope, client::model::ClientOid};
-use identity_infrastructure::graphql::id::{GlobalId, GlobalIdType};
 use uuid::Uuid;
 
 use super::{
-    super::resource::support::{RbacConnectionCursor, decode_oid, normalize_reason, page_args},
+    super::{
+        client::types::{ClientGlobalId, client_global_id},
+        resource::support::{PageArgs, RbacConnectionCursor, decode_oid, normalize_reason},
+    },
     integration, types,
     types::{ScopeGlobalId, ScopeNode, ScopeOrder},
 };
 use crate::graphql::schema::{
-    authorization::request_context, connection, error::app_error, management_guard::ManagementGuard,
+    RequestContext, authorization::request_context, connection, error::app_error,
+    management_guard::ManagementGuard,
 };
 
-pub(crate) struct ClientGlobalId;
-
-impl GlobalIdType for ClientGlobalId {
-    const TYPE_NAME: &'static str = "Client";
-}
-
-pub(crate) fn client_global_id(oid: ClientOid) -> ID {
-    GlobalId::<ClientGlobalId>::new(oid).into()
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]
-pub(crate) enum ClientScopeTargetOrder {
-    #[graphql(name = "NAME_ASC")]
-    NameAsc,
-    #[graphql(name = "NAME_DESC")]
-    NameDesc,
-}
-
-impl ClientScopeTargetOrder {
-    pub(crate) const fn default_order() -> Self {
-        Self::NameAsc
-    }
-}
-
-impl From<ClientScopeTargetOrder> for ApplicationTargetOrder {
-    fn from(order: ClientScopeTargetOrder) -> Self {
-        match order {
-            ClientScopeTargetOrder::NameAsc => Self::NameAsc,
-            ClientScopeTargetOrder::NameDesc => Self::NameDesc,
-        }
-    }
-}
-
-#[derive(Clone, Default, InputObject)]
-pub(crate) struct ClientScopeTargetFilter {
-    #[graphql(validator(chars_max_length = 255))]
-    pub query: Option<String>,
-}
-
-impl ClientScopeTargetFilter {
-    fn into_application(self) -> ApplicationTargetFilter {
-        ApplicationTargetFilter { query: self.query }
-    }
-}
-
-pub(crate) struct ClientScopeTargetNode {
-    record: ClientScopeTargetRecord,
-}
-
-impl ClientScopeTargetNode {
-    fn new(record: ClientScopeTargetRecord) -> Self {
-        Self { record }
-    }
-}
-
-#[Object(name = "ClientScopeTarget")]
-impl ClientScopeTargetNode {
-    async fn client_id(&self) -> ID {
-        client_global_id(self.record.client_oid)
-    }
-
-    async fn name(&self) -> &str {
-        &self.record.name
-    }
-
-    async fn built_in(&self) -> bool {
-        self.record.built_in
-    }
-
-    /// Current `client.version` CAS token used by `setClientScopes`.
-    async fn version(&self) -> Uuid {
-        self.record.version
-    }
-
-    async fn allowed_scope_count(&self) -> i32 {
-        i32::try_from(self.record.allowed_scope_count).unwrap_or(i32::MAX)
-    }
-}
-
-#[derive(Default)]
-pub(crate) struct ClientScopeQuery;
-
-#[Object]
-impl ClientScopeQuery {
-    #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::ClientsRead, ManagementTarget::instance())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::ClientsRead)),
-        complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
-    )]
-    #[allow(clippy::too_many_arguments)]
-    async fn client_scope_targets(
-        &self,
-        ctx: &Context<'_>,
-        filter: Option<ClientScopeTargetFilter>,
-        order_by: Option<ClientScopeTargetOrder>,
-        #[graphql(validator(minimum = 1, maximum = 100))] first: Option<i32>,
-        after: Option<String>,
-        #[graphql(validator(minimum = 1, maximum = 100))] last: Option<i32>,
-        before: Option<String>,
-    ) -> Result<Connection<RbacConnectionCursor, ClientScopeTargetNode>> {
-        let page = page_args(ctx, first, after, last, before)?;
-        let request = request_context(ctx)?;
-        let page = integration::list_client_scope_targets(
-            request,
-            filter.unwrap_or_default().into_application(),
-            order_by
-                .unwrap_or_else(ClientScopeTargetOrder::default_order)
-                .into(),
-            page,
-        )
+/// One page of the scopes assigned to a client, for `Client.scopes`.
+pub(crate) async fn load_client_scopes(
+    ctx: &Context<'_>,
+    request: &RequestContext,
+    client_oid: ClientOid,
+    order: ScopeOrder,
+    page: PageArgs,
+) -> Result<ClientScopeConnection> {
+    let page = integration::list_client_scopes(request, client_oid, order.into(), page)
         .await
         .map_err(|error| app_error(ctx, error))?;
-        let mut connection = Connection::new(page.has_previous_page, page.has_next_page);
-        connection.edges.extend(page.items.into_iter().map(|item| {
-            Edge::new(
-                RbacConnectionCursor::from_backend(item.cursor),
-                ClientScopeTargetNode::new(item.record),
-            )
-        }));
-        Ok(connection)
-    }
-
-    #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::ClientsRead, ManagementTarget::instance())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::ClientsRead)),
-        complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * (1 + child_complexity)"
-    )]
-    #[allow(clippy::too_many_arguments)]
-    async fn client_scopes(
-        &self,
-        ctx: &Context<'_>,
-        client_id: ID,
-        order_by: Option<ScopeOrder>,
-        #[graphql(validator(minimum = 1, maximum = 100))] first: Option<i32>,
-        after: Option<String>,
-        #[graphql(validator(minimum = 1, maximum = 100))] last: Option<i32>,
-        before: Option<String>,
-    ) -> Result<ClientScopeConnection> {
-        let page = page_args(ctx, first, after, last, before)?;
-        let client_oid = decode_oid::<ClientGlobalId>(ctx, &client_id)?;
-        let request = request_context(ctx)?;
-        let page = integration::list_client_scopes(
-            request,
-            client_oid,
-            order_by.unwrap_or_else(ScopeOrder::default_order).into(),
-            page,
-        )
-        .await
-        .map_err(|error| app_error(ctx, error))?;
-        let additional = connection::connection_total(ctx, async {
-            request
-                .state
-                .services()
-                .rbac_management()
-                .count_client_scopes(client_oid)
-                .await
-                .map_err(|error| app_error(ctx, error))
-        })
-        .await?;
-        Ok(ClientScopeConnection {
-            edges: page
-                .items
-                .into_iter()
-                .map(|item| ClientScopeEdge {
-                    cursor: RbacConnectionCursor::from_backend(item.cursor),
-                    client_granted: item.client_granted,
-                    node: ScopeNode::new(item.record),
-                })
-                .collect(),
-            has_previous_page: page.has_previous_page,
-            has_next_page: page.has_next_page,
-            total_count: additional.total_count,
-        })
-    }
+    let additional = connection::connection_total(ctx, async {
+        request
+            .state
+            .services()
+            .rbac_management()
+            .count_client_scopes(client_oid)
+            .await
+            .map_err(|error| app_error(ctx, error))
+    })
+    .await?;
+    Ok(ClientScopeConnection {
+        edges: page
+            .items
+            .into_iter()
+            .map(|item| ClientScopeEdge {
+                cursor: RbacConnectionCursor::from_backend(item.cursor),
+                client_granted: item.client_granted,
+                node: ScopeNode::new(item.record),
+            })
+            .collect(),
+        has_previous_page: page.has_previous_page,
+        has_next_page: page.has_next_page,
+        total_count: additional.total_count,
+    })
 }
 
 /// Scopes assigned to one client. Charged like `ScopeConnection`.

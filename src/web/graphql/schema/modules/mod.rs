@@ -3,12 +3,13 @@ use async_graphql::MergedObject;
 use self::{
     account::{AccountMutation, AccountQuery},
     authorization::AuthorizationQuery,
+    client::{ClientMutation, ClientQuery},
     group::{GroupMutation, GroupQuery},
     instance::InstanceQuery,
     node::NodeQuery,
     resource::{ResourceMutation, ResourceQuery},
     role::{RoleMutation, RoleQuery},
-    scope::{ClientScopeMutation, ClientScopeQuery, ScopeMutation, ScopeQuery},
+    scope::{ClientScopeMutation, ScopeMutation, ScopeQuery},
     security::{SecurityMutation, SecurityQuery},
     session::{SessionMutation, SessionQuery},
     user::{UserManagementMutation, UserManagementQuery},
@@ -16,6 +17,7 @@ use self::{
 
 pub(super) mod account;
 mod authorization;
+mod client;
 mod group;
 mod instance;
 mod localized;
@@ -44,7 +46,7 @@ pub(crate) struct QueryRoot(
     ResourceQuery,
     ScopeQuery,
     RoleQuery,
-    ClientScopeQuery,
+    ClientQuery,
 );
 
 #[derive(MergedObject, Default)]
@@ -57,5 +59,6 @@ pub(crate) struct MutationRoot(
     ResourceMutation,
     ScopeMutation,
     RoleMutation,
+    ClientMutation,
     ClientScopeMutation,
 );

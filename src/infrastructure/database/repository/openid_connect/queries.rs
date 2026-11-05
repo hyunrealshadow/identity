@@ -44,6 +44,8 @@ impl OpenIdConnectClientRepository for OpenIdConnectClientRepositoryImpl {
         let row = ClientEntity::find()
             .filter(ClientColumn::Oid.eq(oid))
             .filter(ClientColumn::Protocol.eq("openid_connect"))
+            // A disabled client does not exist for any protocol interaction.
+            .filter(ClientColumn::Enabled.eq(true))
             .find_also_related(OpenIdConnectClientEntity)
             .one(&self.db)
             .await
@@ -139,6 +141,7 @@ impl OpenIdConnectClientRepositoryImpl {
         let mut client_rows = ClientEntity::find()
             .filter(ClientColumn::Id.is_in(client_ids.clone()))
             .filter(ClientColumn::Protocol.eq("openid_connect"))
+            .filter(ClientColumn::Enabled.eq(true))
             .find_also_related(OpenIdConnectClientEntity)
             .filter(channel_filter)
             .all(&self.db)

@@ -3,6 +3,7 @@ pub mod auth;
 pub mod authorization;
 pub mod authorize;
 pub mod authorize_http;
+pub mod client;
 pub mod common;
 pub mod data_protection;
 pub mod device;
@@ -23,7 +24,7 @@ mod tests {
     use super::{
         account::AccountErrorCode, auth::AuthErrorCode, authorization::AuthorizationErrorCode,
         authorize::AuthorizeErrorCode, authorize_http::AuthorizeHttpErrorCode,
-        common::CommonErrorCode, data_protection::DataProtectionErrorCode,
+        client::ClientErrorCode, common::CommonErrorCode, data_protection::DataProtectionErrorCode,
         device::DeviceAuthorizationErrorCode, graphql::GraphqlErrorCode,
         graphql_transport::GraphqlTransportErrorCode, group::GroupErrorCode,
         install::InstallErrorCode, key::KeyErrorCode, openid_connect::OpenIdConnectErrorCode,
@@ -58,6 +59,7 @@ mod tests {
         check::<AccountErrorCode>(&mut seen, 15000..=15099);
         check::<UserManagementErrorCode>(&mut seen, 16000..=16099);
         check::<RbacErrorCode>(&mut seen, 17000..=17099);
+        check::<ClientErrorCode>(&mut seen, 18000..=18099);
         check::<GroupErrorCode>(&mut seen, 19000..=19099);
         check::<ProviderErrorCode>(&mut seen, 20000..=20099);
         check::<OpenIdConnectErrorCode>(&mut seen, 21000..=21099);
