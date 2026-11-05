@@ -1,6 +1,9 @@
 use async_trait::async_trait;
 use chrono::Utc;
-use identity_domain::{authorization::catalog::ManagementScope, rbac::built_in_permission_oid};
+use identity_domain::{
+    authorization::catalog::{ManagementScope, RETIRED_MANAGEMENT_SCOPE_NAMES},
+    rbac::built_in_permission_oid,
+};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DbBackend, DbErr,
     EntityTrait, QueryFilter, Set, Statement, TransactionTrait,
@@ -234,10 +237,6 @@ pub(crate) fn management_name(scope: ManagementScope) -> &'static str {
         ManagementScope::ResourcesWrite => "Write resources",
         ManagementScope::ScopesRead => "Read scopes",
         ManagementScope::ScopesWrite => "Write scopes",
-        ManagementScope::AdministratorsRead => "Read administrators",
-        ManagementScope::AdministratorsWrite => "Write administrators",
-        ManagementScope::ClientGrantsRead => "Read client grants",
-        ManagementScope::ClientGrantsWrite => "Write client grants",
         ManagementScope::SettingsRead => "Read settings",
         ManagementScope::SettingsWrite => "Write settings",
         ManagementScope::AuditRead => "Read audit events",
@@ -284,10 +283,6 @@ pub(crate) fn management_name_zh_cn(scope: ManagementScope) -> &'static str {
         ManagementScope::ResourcesWrite => "维护 API 资源",
         ManagementScope::ScopesRead => "读取 scope 目录",
         ManagementScope::ScopesWrite => "维护 scope 目录",
-        ManagementScope::AdministratorsRead => "读取管理员绑定",
-        ManagementScope::AdministratorsWrite => "维护管理员绑定",
-        ManagementScope::ClientGrantsRead => "读取客户端管理授权",
-        ManagementScope::ClientGrantsWrite => "维护客户端管理授权",
         ManagementScope::SettingsRead => "读取安全设置",
         ManagementScope::SettingsWrite => "维护安全设置",
         ManagementScope::AuditRead => "读取安全审计",
@@ -333,10 +328,6 @@ pub(crate) fn management_description_zh_cn(scope: ManagementScope) -> &'static s
         ManagementScope::ResourcesWrite => "创建、更新、启用或停用 API 资源",
         ManagementScope::ScopesRead => "读取 scope 目录",
         ManagementScope::ScopesWrite => "创建或更新非保留 scope",
-        ManagementScope::AdministratorsRead => "读取管理员绑定",
-        ManagementScope::AdministratorsWrite => "分配或变更管理员绑定",
-        ManagementScope::ClientGrantsRead => "读取客户端管理授权",
-        ManagementScope::ClientGrantsWrite => "设置或撤销客户端管理授权",
         ManagementScope::SettingsRead => "读取安全相关设置",
         ManagementScope::SettingsWrite => "更新安全相关设置",
         ManagementScope::AuditRead => "读取安全审计事件",
@@ -479,6 +470,10 @@ async fn ensure_no_reserved_scope_collisions(db: &impl ConnectionTrait) -> Resul
         let token = row
             .try_get::<String>("", "token")
             .map_err(AppError::internal)?;
+        if RETIRED_MANAGEMENT_SCOPE_NAMES.contains(&token.as_str()) {
+            // Removed by the RBAC seed together with its relations.
+            continue;
+        }
         if ManagementScope::from_name(&token).is_none() {
             return Err(reserved_scope_error(token));
         }

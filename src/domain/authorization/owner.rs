@@ -230,7 +230,7 @@ mod tests {
             &actor,
             true,
             true,
-            ManagementScope::AdministratorsWrite,
+            ManagementScope::CredentialsReset,
             Utc.timestamp_opt(1_000, 0).single().unwrap(),
             Duration::from_secs(300),
         );

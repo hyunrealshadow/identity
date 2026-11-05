@@ -271,48 +271,6 @@
     "reserved": true
   },
   {
-    "scope": "management.administrator.read",
-    "action": "administrator.read",
-    "roles": [
-      "viewer",
-      "admin",
-      "owner"
-    ],
-    "authentication": "aal2",
-    "machineAllowed": false,
-    "reserved": true
-  },
-  {
-    "scope": "management.administrator.write",
-    "action": "administrator.write",
-    "roles": [
-      "owner"
-    ],
-    "authentication": "recent_aal2",
-    "machineAllowed": false,
-    "reserved": true
-  },
-  {
-    "scope": "management.client_grant.read",
-    "action": "client_grant.read",
-    "roles": [
-      "owner"
-    ],
-    "authentication": "aal2",
-    "machineAllowed": false,
-    "reserved": true
-  },
-  {
-    "scope": "management.client_grant.write",
-    "action": "client_grant.write",
-    "roles": [
-      "owner"
-    ],
-    "authentication": "recent_aal2",
-    "machineAllowed": false,
-    "reserved": true
-  },
-  {
     "scope": "management.setting.read",
     "action": "setting.read",
     "roles": [

@@ -292,7 +292,7 @@ mod tests {
     #[test]
     fn clipping_uses_exact_effective_permissions_and_never_role_names() {
         let requested = ScopeSet::parse(
-            "openid management.user.read management.user.create management.administrator.write",
+            "openid management.user.read management.user.create management.credential.reset",
         )
         .unwrap();
         assert_eq!(

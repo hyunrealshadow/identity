@@ -15,7 +15,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use async_trait::async_trait;
 use identity_domain::{
-    authorization::catalog::{AdministratorRole, ManagementScope, validate_catalog},
+    authorization::catalog::{
+        AdministratorRole, ManagementScope, RETIRED_MANAGEMENT_SCOPE_NAMES, validate_catalog,
+    },
     rbac::{
         LocalizedMetadata, LocalizedText, RolePermissionOid, built_in_group_oid,
         built_in_permission_oid, built_in_role_oid,
@@ -84,6 +86,7 @@ pub async fn ensure_built_in_rbac(transaction: &DatabaseTransaction) -> Result<(
     validate_catalog().map_err(AppError::internal)?;
 
     let resource_oid = oauth_resource::graphql_resource_oid(transaction).await?;
+    retire_management_scopes(transaction).await?;
 
     let mut scope_ids: BTreeMap<ManagementScope, i64> = BTreeMap::new();
     for scope in ManagementScope::ALL {
@@ -106,6 +109,89 @@ pub async fn ensure_built_in_rbac(transaction: &DatabaseTransaction) -> Result<(
         ensure_group_role(transaction, group_id, role_id, built_in_group_oid(role).0).await?;
     }
 
+    Ok(())
+}
+
+/// Remove retired built-in scope definitions from an existing database. Every
+/// role that still references one loses that permission with the same version,
+/// withdrawal and audit effects as any other built-in reconciliation; client
+/// assignments and consents follow through their cascading foreign keys.
+async fn retire_management_scopes(transaction: &DatabaseTransaction) -> Result<(), AppError> {
+    let retired: Vec<sea_orm::Value> = RETIRED_MANAGEMENT_SCOPE_NAMES
+        .iter()
+        .map(|name| (*name).into())
+        .collect();
+    let placeholders = (1..=retired.len())
+        .map(|index| format!("${index}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let roles = transaction
+        .query_all_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            format!(
+                "SELECT DISTINCT r.id AS role_id, r.oid AS role_oid \
+                 FROM role_permission rp \
+                 JOIN scope s ON s.id = rp.scope_id \
+                 JOIN \"role\" r ON r.id = rp.role_id \
+                 WHERE s.built_in = true AND s.code IN ({placeholders}) \
+                 ORDER BY r.id"
+            ),
+            retired.clone(),
+        ))
+        .await
+        .map_err(AppError::internal)?;
+    for row in roles {
+        let role_id = row
+            .try_get::<i64>("", "role_id")
+            .map_err(AppError::internal)?;
+        let role_oid = row
+            .try_get::<Uuid>("", "role_oid")
+            .map_err(AppError::internal)?;
+        let mut values = vec![role_id.into()];
+        values.extend(retired.iter().cloned());
+        let shifted = (2..=retired.len() + 1)
+            .map(|index| format!("${index}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        transaction
+            .execute_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                format!(
+                    "DELETE FROM role_permission rp USING scope s \
+                     WHERE rp.scope_id = s.id AND rp.role_id = $1 \
+                       AND s.built_in = true AND s.code IN ({shifted})"
+                ),
+                values,
+            ))
+            .await
+            .map_err(AppError::internal)?;
+        transaction
+            .execute_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                "UPDATE \"role\" SET version = gen_random_uuid(), \
+                    updated_at = now() WHERE id = $1",
+                [role_id.into()],
+            ))
+            .await
+            .map_err(AppError::internal)?;
+        advance_users_affected_by_role(transaction, role_id).await?;
+        audit::record(
+            transaction,
+            "rbac.role.permissions.reconcile",
+            "role",
+            role_oid,
+        )
+        .await
+        .map_err(AppError::internal)?;
+    }
+    transaction
+        .execute_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            format!("DELETE FROM scope WHERE built_in = true AND code IN ({placeholders})"),
+            retired,
+        ))
+        .await
+        .map_err(AppError::internal)?;
     Ok(())
 }
 

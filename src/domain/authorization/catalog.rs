@@ -188,7 +188,7 @@ impl ManagementScopeDefinition {
     }
 }
 
-/// The 43 trusted management scopes.
+/// The trusted management scopes.
 ///
 /// Adding a variant requires a catalog entry, migration seed, error/translation
 /// review and explicit role/M2M review. There is no future-scope wildcard.
@@ -218,10 +218,6 @@ pub enum ManagementScope {
     ResourcesWrite,
     ScopesRead,
     ScopesWrite,
-    AdministratorsRead,
-    AdministratorsWrite,
-    ClientGrantsRead,
-    ClientGrantsWrite,
     SettingsRead,
     SettingsWrite,
     AuditRead,
@@ -266,10 +262,6 @@ impl ManagementScope {
         Self::ResourcesWrite,
         Self::ScopesRead,
         Self::ScopesWrite,
-        Self::AdministratorsRead,
-        Self::AdministratorsWrite,
-        Self::ClientGrantsRead,
-        Self::ClientGrantsWrite,
         Self::SettingsRead,
         Self::SettingsWrite,
         Self::AuditRead,
@@ -360,7 +352,6 @@ impl ManagementScope {
                 | Self::UsersRevokeAccess
                 | Self::CredentialsRevoke
                 | Self::CredentialsReset
-                | Self::AdministratorsWrite
         )
     }
 
@@ -637,42 +628,6 @@ pub const MANAGEMENT_SCOPES: [ManagementScopeDefinition; MANAGEMENT_SCOPE_COUNT]
         ManagementFlowAllowance::USER_AND_CLIENT_CREDENTIALS,
     ),
     entry(
-        ManagementScope::AdministratorsRead,
-        "management.administrator.read",
-        "administrator.read",
-        "Read administrator bindings",
-        ManagementRoleEligibility::VIEWER,
-        HumanAuthenticationRequirement::Aal2,
-        ManagementFlowAllowance::USER_ONLY,
-    ),
-    entry(
-        ManagementScope::AdministratorsWrite,
-        "management.administrator.write",
-        "administrator.write",
-        "Assign or change administrator bindings",
-        ManagementRoleEligibility::OWNER,
-        HumanAuthenticationRequirement::RecentAal2,
-        ManagementFlowAllowance::USER_ONLY,
-    ),
-    entry(
-        ManagementScope::ClientGrantsRead,
-        "management.client_grant.read",
-        "client_grant.read",
-        "Read client management grants",
-        ManagementRoleEligibility::OWNER,
-        HumanAuthenticationRequirement::Aal2,
-        ManagementFlowAllowance::USER_ONLY,
-    ),
-    entry(
-        ManagementScope::ClientGrantsWrite,
-        "management.client_grant.write",
-        "client_grant.write",
-        "Set or revoke client management grants",
-        ManagementRoleEligibility::OWNER,
-        HumanAuthenticationRequirement::RecentAal2,
-        ManagementFlowAllowance::USER_ONLY,
-    ),
-    entry(
         ManagementScope::SettingsRead,
         "management.setting.read",
         "setting.read",
@@ -818,18 +773,24 @@ pub const MANAGEMENT_SCOPES: [ManagementScopeDefinition; MANAGEMENT_SCOPE_COUNT]
     ),
 ];
 
+/// Former built-in management scopes that no longer guard any operation. The
+/// seed removes their definitions and relations from existing databases; a
+/// historical grant that still names one simply authorizes nothing.
+pub const RETIRED_MANAGEMENT_SCOPE_NAMES: [&str; 4] = [
+    "management.administrator.read",
+    "management.administrator.write",
+    "management.client_grant.read",
+    "management.client_grant.write",
+];
+
 /// Scopes that must never be issued to machine clients in the first release.
-pub const HUMAN_ONLY_SCOPES: [ManagementScope; 18] = [
+pub const HUMAN_ONLY_SCOPES: [ManagementScope; 14] = [
     ManagementScope::CredentialsRevoke,
     ManagementScope::CredentialsReset,
     ManagementScope::ClientsDelete,
     ManagementScope::ClientCredentialsCreate,
     ManagementScope::ClientCredentialsRotate,
     ManagementScope::ClientCredentialsRevoke,
-    ManagementScope::AdministratorsRead,
-    ManagementScope::AdministratorsWrite,
-    ManagementScope::ClientGrantsRead,
-    ManagementScope::ClientGrantsWrite,
     ManagementScope::SettingsWrite,
     ManagementScope::PermissionWrite,
     ManagementScope::RolesWrite,
@@ -1119,7 +1080,6 @@ mod tests {
             ManagementScope::UsersRevokeAccess,
             ManagementScope::CredentialsRevoke,
             ManagementScope::CredentialsReset,
-            ManagementScope::AdministratorsWrite,
         ];
         for scope in ManagementScope::ALL {
             assert_eq!(
