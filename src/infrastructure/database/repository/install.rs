@@ -420,13 +420,16 @@ fn installation_console_config(
     match (console_url, issuer) {
         (Some(console_url), Some(issuer)) => {
             let console_origin = console_url.origin().ascii_serialization();
+            // The canonical Console address has no trailing slash (`/console`),
+            // so join relative to it as a directory rather than replacing it.
+            let mut base = console_url.clone();
+            if !base.path().ends_with('/') {
+                base.set_path(&format!("{}/", base.path()));
+            }
             ConsoleClientSeedConfig::new(
                 &console_origin,
                 issuer.as_str(),
-                console_url
-                    .join("callback")
-                    .map_err(AppError::internal)?
-                    .as_str(),
+                base.join("callback").map_err(AppError::internal)?.as_str(),
             )
             .map(Some)
             .map_err(|_| AppError::from_code(InstallErrorCode::DomainInvalid))
@@ -507,6 +510,24 @@ mod tests {
             config.redirect_uri.as_str(),
             "https://console.example.com/callback"
         );
+    }
+
+    #[test]
+    fn installation_console_config_keeps_the_console_path_in_the_callback() {
+        let issuer = Url::parse("https://identity.example.com").unwrap();
+        for console_url in [
+            "https://identity.example.com/console",
+            "https://identity.example.com/console/",
+        ] {
+            let console_url = Url::parse(console_url).unwrap();
+            let config = installation_console_config(Some(&console_url), Some(&issuer), None)
+                .unwrap()
+                .expect("installation input must provision a console client");
+            assert_eq!(
+                config.redirect_uri.as_str(),
+                "https://identity.example.com/console/callback"
+            );
+        }
     }
 
     #[test]
