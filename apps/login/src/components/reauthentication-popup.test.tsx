@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import type { ReactElement } from 'react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ execute: vi.fn(), invalidate: vi.fn(), navigate: vi.fn(), success: vi.fn() }))
@@ -15,6 +17,12 @@ import type { AccountAccessContext } from '#/lib/account-operations'
 import { ACCOUNT_REAUTH_MESSAGE_TYPE } from '#/lib/popup-reauth'
 
 const request = { url: 'https://issuer.example/oauth2/authorize', state: 'pending-state' }
+const queryClient = new QueryClient()
+
+function renderWithQuery(ui: ReactElement) {
+  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>)
+}
+
 let child: Window
 let replace: ReturnType<typeof vi.fn>
 let close: ReturnType<typeof vi.fn>
@@ -26,7 +34,7 @@ function Controls({ action = 'prepare-change-password' }: { action?: string }) {
     <AccountActionForm action={action} requestFailedMessage="Request failed" onSuccess={mocks.success}><input name="username" defaultValue="draft-user" /><button type="submit">prepare</button></AccountActionForm>
   </>
 }
-function setup(access?: AccountAccessContext, action?: string) { render(<AccountReauthProvider locale="zh-CN" access={access}><Controls action={action} /></AccountReauthProvider>) }
+function setup(access?: AccountAccessContext, action?: string) { renderWithQuery(<AccountReauthProvider locale="zh-CN" access={access}><Controls action={action} /></AccountReauthProvider>) }
 function send(source: Window, state = request.state, origin = window.location.origin) {
   const event = new MessageEvent('message', { origin, data: {
     type: ACCOUNT_REAUTH_MESSAGE_TYPE, state, result: 'success', returnTo: '/account/security?confirm=change-password',
@@ -135,7 +143,7 @@ function PasskeysControl() {
 }
 it('opens the passkey editor with no browser window when access is fresh', async () => {
   mocks.execute.mockResolvedValueOnce({ ok: true })
-  render(<AccountReauthProvider locale="zh-CN" access={access()}><PasskeysControl /></AccountReauthProvider>)
+  renderWithQuery(<AccountReauthProvider locale="zh-CN" access={access()}><PasskeysControl /></AccountReauthProvider>)
   fireEvent.click(screen.getByText('passkeys'))
   await waitFor(() => expect(screen.getByText('editor open')).toBeTruthy())
   expect(window.open).not.toHaveBeenCalled()
@@ -149,7 +157,7 @@ it.each([0, 400])('passes ordinary sign-in through without a new popup at authen
     const auth = useAccountReauth()
     return <button onClick={() => { void auth.executeAction({ action: 'update-username', values: { username: 'draft' } }).then(result => { outcome = result }) }}>recover</button>
   }
-  render(<AccountReauthProvider locale="zh-CN" access={access(age)}><Controls /><Recover /></AccountReauthProvider>)
+  renderWithQuery(<AccountReauthProvider locale="zh-CN" access={access(age)}><Controls /><Recover /></AccountReauthProvider>)
   fireEvent.click(screen.getByText('verify'))
   fireEvent.click(screen.getByText('recover'))
   await waitFor(() => expect(outcome).toEqual({ redirect }))

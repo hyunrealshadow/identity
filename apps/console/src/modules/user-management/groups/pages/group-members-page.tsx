@@ -219,7 +219,6 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
                       title: t('groupMembersAddedToast'),
                       description: t('groupMembersAddedCommitted'),
                     })
-                    void members.refresh()
                   }}
                   onReload={() => void members.refresh()}
                   reloadPending={members.refreshing}
@@ -360,7 +359,6 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
                           title: t('groupMembersRemovedToast'),
                           description: t('groupMembersRemovedCommitted'),
                         })
-                        void members.refresh()
                       }}
                       onReload={() => void members.refresh()}
                       reloadPending={members.refreshing}

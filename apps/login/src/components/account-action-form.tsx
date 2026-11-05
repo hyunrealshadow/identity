@@ -1,8 +1,10 @@
 import { Alert } from '@heroui/react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { useState, type FormEvent, type ReactNode } from 'react'
 
 import { useAccountReauth } from '#/components/reauthentication-popup'
+import { ACCOUNT_QUERY_KEY } from '#/lib/account-query'
 
 interface AccountActionFormProps {
   action: string
@@ -20,6 +22,7 @@ export function AccountActionForm({
   onSuccess,
 }: AccountActionFormProps) {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const { requestReauth, executeAction } = useAccountReauth()
   const [isPending, setIsPending] = useState(false)
   const [requestError, setRequestError] = useState<string>()
@@ -56,6 +59,9 @@ export function AccountActionForm({
         window.location.assign(result.redirect)
         return
       }
+      // The action changed account data and may have written a flash message
+      // that only the loader consumes, so both owners are refreshed.
+      await queryClient.invalidateQueries({ queryKey: ACCOUNT_QUERY_KEY })
       await router.invalidate()
       if (result.ok) onSuccess?.(submittedAction)
     } catch {

@@ -54,7 +54,7 @@ export function useRoleMutations() {
         >(
           ConsoleCreateRoleDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleCreateRole',
+          'ConsoleCreateRole', ['ConsoleRoles'],
         )
       },
       update(input: UpdateRoleInput) {
@@ -64,7 +64,7 @@ export function useRoleMutations() {
         >(
           ConsoleUpdateRoleDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleUpdateRole',
+          'ConsoleUpdateRole', ['ConsoleRole', 'ConsoleRoles'],
         )
       },
       enable(input: RoleStateInput) {
@@ -74,7 +74,7 @@ export function useRoleMutations() {
         >(
           ConsoleEnableRoleDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleEnableRole',
+          'ConsoleEnableRole', ['ConsoleRole', 'ConsoleRoles'],
         )
       },
       disable(input: RoleStateInput) {
@@ -84,7 +84,7 @@ export function useRoleMutations() {
         >(
           ConsoleDisableRoleDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleDisableRole',
+          'ConsoleDisableRole', ['ConsoleRole', 'ConsoleRoles'],
         )
       },
       setPermissions(input: SetRolePermissionsInput) {
@@ -94,7 +94,7 @@ export function useRoleMutations() {
         >(
           ConsoleSetRolePermissionsDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleSetRolePermissions',
+          'ConsoleSetRolePermissions', ['ConsoleRole', 'ConsolePermissions', 'ConsolePermission', 'ConsolePermissionOptions'],
         )
       },
       assignUserRoles(input: AssignUserRolesInput) {
@@ -104,7 +104,7 @@ export function useRoleMutations() {
         >(
           ConsoleAssignUserRolesDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleAssignUserRoles',
+          'ConsoleAssignUserRoles', ['ConsoleUserRoles', 'ConsoleUserRoleVersion', 'ConsoleUser', 'ConsoleRoleUsers'],
         )
       },
       revokeUserRoles(input: RevokeUserRolesInput) {
@@ -114,7 +114,7 @@ export function useRoleMutations() {
         >(
           ConsoleRevokeUserRolesDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleRevokeUserRoles',
+          'ConsoleRevokeUserRoles', ['ConsoleUserRoles', 'ConsoleUserRoleVersion', 'ConsoleUser', 'ConsoleRoleUsers'],
         )
       },
     }),

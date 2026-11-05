@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import type { ReactElement } from 'react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ execute: vi.fn(), invalidate: vi.fn(), navigate: vi.fn() }))
@@ -8,6 +10,12 @@ vi.mock('@tanstack/react-router', () => ({ useRouter: () => ({ invalidate: mocks
 vi.mock('#/lib/account-actions', () => ({ runAccountAction: vi.fn() }))
 
 import { MfaPriority } from './mfa-priority'
+
+const queryClient = new QueryClient()
+
+function renderWithQuery(ui: ReactElement) {
+  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>)
+}
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -19,7 +27,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals() })
 
 it('opens HeroUI radios without reauthentication and saves the selected priority', async () => {
-  render(<MfaPriority locale="en-US" preference="passkey" totpEnabled />)
+  renderWithQuery(<MfaPriority locale="en-US" preference="passkey" totpEnabled />)
   expect(screen.queryByRole('radio')).toBeNull()
   fireEvent.click(screen.getByRole('button', { name: 'Change' }))
   const dialog = await screen.findByRole('dialog')
@@ -34,7 +42,7 @@ it('opens HeroUI radios without reauthentication and saves the selected priority
 })
 
 it('disables authenticator preference until TOTP has been enabled', async () => {
-  render(<MfaPriority locale="en-US" preference="passkey" totpEnabled={false} />)
+  renderWithQuery(<MfaPriority locale="en-US" preference="passkey" totpEnabled={false} />)
   fireEvent.click(screen.getByRole('button', { name: 'Change' }))
   const dialog = await screen.findByRole('dialog')
   expect((within(dialog).getByRole('radio', { name: 'Password and authenticator app first' }) as HTMLInputElement).disabled).toBe(true)
@@ -42,7 +50,7 @@ it('disables authenticator preference until TOTP has been enabled', async () => 
 
 it('keeps the preference dialog open when saving fails', async () => {
   mocks.execute.mockResolvedValue({ ok: false })
-  render(<MfaPriority locale="en-US" preference="passkey" totpEnabled />)
+  renderWithQuery(<MfaPriority locale="en-US" preference="passkey" totpEnabled />)
   fireEvent.click(screen.getByRole('button', { name: 'Change' }))
   const dialog = await screen.findByRole('dialog')
   expect(mocks.execute).not.toHaveBeenCalled()

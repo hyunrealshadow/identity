@@ -249,8 +249,6 @@ export function ClientScopesPage() {
       toast.success(t('clientsScopesSavedToast'), {
         description: t('clientsScopesSavedWithdrawn'),
       })
-      void query.refresh()
-      void detail.query.refresh()
     } finally {
       setPending(false)
     }

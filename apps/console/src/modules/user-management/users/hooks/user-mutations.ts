@@ -78,7 +78,7 @@ export function useUserMutations(): UserMutations {
         return request<
           ConsoleCreateUserMutation,
           ConsoleCreateUserMutationVariables
-        >(ConsoleCreateUserDocument, variables, 'ConsoleCreateUser')
+        >(ConsoleCreateUserDocument, variables, 'ConsoleCreateUser', ['ConsoleUsers'])
       },
       update(input) {
         const variables: ConsoleUpdateUserMutationVariables = {
@@ -87,7 +87,7 @@ export function useUserMutations(): UserMutations {
         return request<
           ConsoleUpdateUserMutation,
           ConsoleUpdateUserMutationVariables
-        >(ConsoleUpdateUserDocument, variables, 'ConsoleUpdateUser')
+        >(ConsoleUpdateUserDocument, variables, 'ConsoleUpdateUser', ['ConsoleUser', 'ConsoleUsers'])
       },
       enable(input) {
         const variables: ConsoleEnableUserMutationVariables = {
@@ -96,7 +96,7 @@ export function useUserMutations(): UserMutations {
         return request<
           ConsoleEnableUserMutation,
           ConsoleEnableUserMutationVariables
-        >(ConsoleEnableUserDocument, variables, 'ConsoleEnableUser')
+        >(ConsoleEnableUserDocument, variables, 'ConsoleEnableUser', ['ConsoleUser', 'ConsoleUsers'])
       },
       disable(input) {
         const variables: ConsoleDisableUserMutationVariables = {
@@ -105,7 +105,7 @@ export function useUserMutations(): UserMutations {
         return request<
           ConsoleDisableUserMutation,
           ConsoleDisableUserMutationVariables
-        >(ConsoleDisableUserDocument, variables, 'ConsoleDisableUser')
+        >(ConsoleDisableUserDocument, variables, 'ConsoleDisableUser', ['ConsoleUser', 'ConsoleUsers'])
       },
       unlock(input) {
         const variables: ConsoleUnlockUserMutationVariables = {
@@ -114,7 +114,7 @@ export function useUserMutations(): UserMutations {
         return request<
           ConsoleUnlockUserMutation,
           ConsoleUnlockUserMutationVariables
-        >(ConsoleUnlockUserDocument, variables, 'ConsoleUnlockUser')
+        >(ConsoleUnlockUserDocument, variables, 'ConsoleUnlockUser', ['ConsoleUser', 'ConsoleUsers'])
       },
     }),
     [request],

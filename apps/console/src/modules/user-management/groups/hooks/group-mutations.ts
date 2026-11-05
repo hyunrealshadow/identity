@@ -40,7 +40,7 @@ export function useGroupMutations() {
         >(
           ConsoleCreateGroupDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleCreateGroup',
+          'ConsoleCreateGroup', ['ConsoleGroups'],
         )
       },
       update(input: UpdateGroupInput) {
@@ -50,7 +50,7 @@ export function useGroupMutations() {
         >(
           ConsoleUpdateGroupDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleUpdateGroup',
+          'ConsoleUpdateGroup', ['ConsoleGroup', 'ConsoleGroups', 'ConsoleGroupMembers', 'ConsoleGroupRoles', 'ConsoleGroupRoleIds'],
         )
       },
       setEnabled(input: SetGroupEnabledInput) {
@@ -60,7 +60,7 @@ export function useGroupMutations() {
         >(
           ConsoleSetGroupEnabledDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleSetGroupEnabled',
+          'ConsoleSetGroupEnabled', ['ConsoleGroup', 'ConsoleGroups', 'ConsoleGroupMembers', 'ConsoleGroupRoles', 'ConsoleGroupRoleIds'],
         )
       },
       remove(input: GroupStateInput) {
@@ -70,7 +70,7 @@ export function useGroupMutations() {
         >(
           ConsoleDeleteGroupDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleDeleteGroup',
+          'ConsoleDeleteGroup', ['ConsoleGroup', 'ConsoleGroups'],
         )
       },
     }),

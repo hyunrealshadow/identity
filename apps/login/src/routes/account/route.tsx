@@ -1,5 +1,5 @@
 import { Alert } from '@heroui/react'
-import { queryOptions, useQuery } from '@tanstack/react-query'
+import { queryOptions, useSuspenseQuery } from '@tanstack/react-query'
 import { Link, Outlet, createFileRoute, redirect } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { AtSign, KeyRound, Laptop, UserRound, X } from 'lucide-react'
@@ -9,6 +9,7 @@ import { AccountAvatar } from '#/components/account-avatar'
 import { AccountReauthProvider } from '#/components/reauthentication-popup'
 import { UserMenu } from '#/components/user-menu'
 import { resolveAccountLocale } from '#/lib/account-locale'
+import { ACCOUNT_QUERY_KEY } from '#/lib/account-query'
 import { beginAuthorization } from '#/lib/authorization-flow'
 import { GraphqlRequestError, identityGraphql, accountAccessContext } from '#/lib/graphql.server'
 import { translate } from '#/lib/i18n'
@@ -80,27 +81,26 @@ const loadAccountFlash = createServerFn({ method: 'GET' }).handler(async () => (
 }))
 
 export const accountQuery = queryOptions({
-  queryKey: ['account'],
+  queryKey: ACCOUNT_QUERY_KEY,
   queryFn: () => loadAccountData(),
-  // Fresh enough to skip a redundant refetch after hydration; the route
-  // loader revalidates on every navigation and every router invalidation.
+  // Fresh enough to skip a redundant read right after hydration. Account
+  // actions invalidate this key, and the router invalidation that follows
+  // lets the loader revalidate it.
   staleTime: 30_000,
 })
 
 export function useAccount() {
-  const { page, flash } = Route.useLoaderData()
-  const { data: snapshot } = useQuery({ ...accountQuery, initialData: page })
-  const current = snapshot ?? page
-  if (!current.data) throw new Error(current.error ?? 'Account data is unavailable')
-  return { ...current, flash, data: current.data }
+  const { flash } = Route.useLoaderData()
+  const { data: page } = useSuspenseQuery(accountQuery)
+  if (!page.data) throw new Error(page.error ?? 'Account data is unavailable')
+  return { ...page, flash, data: page.data }
 }
 
 export const Route = createFileRoute('/account')({
   loader: async ({ location, context }) => {
     const [page, { flash }] = await Promise.all([
-      // The account read is always revalidated on navigation so an action
-      // followed by `router.invalidate()` cannot render a stale snapshot.
-      context.queryClient.fetchQuery({ ...accountQuery, staleTime: 0 }),
+      // The loader fills the request cache; the component reads the same key.
+      context.queryClient.ensureQueryData(accountQuery),
       loadAccountFlash(),
     ])
     if (!page.data && !page.error) {
@@ -114,13 +114,13 @@ export const Route = createFileRoute('/account')({
     }
     return { page, flash }
   },
+  headers: () => ({ 'Cache-Control': 'private, no-store' }),
   component: AccountLayout,
 })
 
 function AccountLayout() {
-  const { page, flash } = Route.useLoaderData()
-  const { data: snapshot } = useQuery({ ...accountQuery, initialData: page })
-  const current = snapshot ?? page
+  const { flash } = Route.useLoaderData()
+  const { data: current } = useSuspenseQuery(accountQuery)
   const [visibleMessage, setVisibleMessage] = useState(flash.message)
   const [visibleError, setVisibleError] = useState(flash.error)
 

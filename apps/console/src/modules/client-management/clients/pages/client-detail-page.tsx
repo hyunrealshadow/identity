@@ -156,7 +156,6 @@ function ClientOverview({ client }: { client: ConsoleClient }) {
       toast.success(t('clientsSavedToast'), {
         description: t(settingsChanged ? 'clientsSavedWithdrawn' : 'clientsSavedCommitted'),
       })
-      void query.refresh()
     } catch {
       setFeedback({
         errors: [],
@@ -353,7 +352,6 @@ function ClientLifecycle({ client }: { client: ConsoleClient }) {
       }
       stateDialog.close()
       toast.success(t(client.enabled ? 'clientsDisabledToast' : 'clientsEnabledToast'))
-      void query.refresh()
     } finally {
       setPending(false)
     }

@@ -70,7 +70,7 @@ export function useGroupRoleMutations() {
         >(
           ConsoleSetGroupRolesDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleSetGroupRoles',
+          'ConsoleSetGroupRoles', ['ConsoleGroupRoles', 'ConsoleGroupRoleIds', 'ConsoleGroup'],
         )
       },
       async loadActiveRoleIds(groupId: string): Promise<GroupRoleLinkSnapshot> {

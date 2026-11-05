@@ -256,7 +256,6 @@ export function UserRolesPage({ userId }: { userId: string }) {
                         title: t('userRolesAssignedTitle'),
                         description: t('userRolesAssignedDescription'),
                       })
-                      void assignments.refresh()
                     }}
                     onReload={() => void assignments.refresh()}
                     reloadPending={assignments.refreshing}
@@ -428,7 +427,6 @@ export function UserRolesPage({ userId }: { userId: string }) {
                               title: t('userRolesRevokedTitle'),
                               description: t('userRolesRevokedDescription'),
                             })
-                            void assignments.refresh()
                           }}
                           onReload={() => void assignments.refresh()}
                           reloadPending={assignments.refreshing}

@@ -238,7 +238,6 @@ export function GroupRolesPage({ groupId }: { groupId: string }) {
                         removedCount,
                       }),
                     })
-                    void roles.refresh()
                   }}
                   onReload={() => void roles.refresh()}
                   reloadPending={roles.refreshing}

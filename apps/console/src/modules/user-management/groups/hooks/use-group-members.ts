@@ -53,7 +53,7 @@ export function useGroupMemberMutations() {
         >(
           ConsoleAddGroupMemberDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleAddGroupMember',
+          'ConsoleAddGroupMember', ['ConsoleGroupMembers', 'ConsoleGroup'],
         )
       },
       remove(input: RemoveGroupMemberInput) {
@@ -63,7 +63,7 @@ export function useGroupMemberMutations() {
         >(
           ConsoleRemoveGroupMemberDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleRemoveGroupMember',
+          'ConsoleRemoveGroupMember', ['ConsoleGroupMembers', 'ConsoleGroup'],
         )
       },
     }),

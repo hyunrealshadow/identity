@@ -39,7 +39,7 @@ export function usePermissionMutations() {
         >(
           ConsoleCreatePermissionDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleCreatePermission',
+          'ConsoleCreatePermission', ['ConsolePermissions', 'ConsoleScopes', 'ConsolePermissionOptions'],
         )
       },
       update(input: UpdateScopeInput) {
@@ -49,7 +49,7 @@ export function usePermissionMutations() {
         >(
           ConsoleUpdatePermissionDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleUpdatePermission',
+          'ConsoleUpdatePermission', ['ConsolePermission', 'ConsolePermissions', 'ConsoleScopes', 'ConsolePermissionOptions'],
         )
       },
       enable(input: ScopeStateInput) {
@@ -59,7 +59,7 @@ export function usePermissionMutations() {
         >(
           ConsoleEnablePermissionDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleEnablePermission',
+          'ConsoleEnablePermission', ['ConsolePermission', 'ConsolePermissions', 'ConsoleScopes', 'ConsolePermissionOptions'],
         )
       },
       disable(input: ScopeStateInput) {
@@ -69,7 +69,7 @@ export function usePermissionMutations() {
         >(
           ConsoleDisablePermissionDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleDisablePermission',
+          'ConsoleDisablePermission', ['ConsolePermission', 'ConsolePermissions', 'ConsoleScopes', 'ConsolePermissionOptions'],
         )
       },
     }),

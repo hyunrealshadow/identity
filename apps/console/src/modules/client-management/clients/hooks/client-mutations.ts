@@ -47,35 +47,35 @@ export function useClientMutations() {
         return request<ConsoleCreateClientMutation, ConsoleCreateClientMutationVariables>(
           ConsoleCreateClientDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleCreateClient',
+          'ConsoleCreateClient', ['ConsoleClients'],
         )
       },
       update(input: UpdateClientInput) {
         return request<ConsoleUpdateClientMutation, ConsoleUpdateClientMutationVariables>(
           ConsoleUpdateClientDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleUpdateClient',
+          'ConsoleUpdateClient', ['ConsoleClient', 'ConsoleClients'],
         )
       },
       enable(input: ClientStateInput) {
         return request<ConsoleEnableClientMutation, ConsoleEnableClientMutationVariables>(
           ConsoleEnableClientDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleEnableClient',
+          'ConsoleEnableClient', ['ConsoleClient', 'ConsoleClients'],
         )
       },
       disable(input: ClientStateInput) {
         return request<ConsoleDisableClientMutation, ConsoleDisableClientMutationVariables>(
           ConsoleDisableClientDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleDisableClient',
+          'ConsoleDisableClient', ['ConsoleClient', 'ConsoleClients'],
         )
       },
       remove(input: ClientStateInput) {
         return request<ConsoleDeleteClientMutation, ConsoleDeleteClientMutationVariables>(
           ConsoleDeleteClientDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleDeleteClient',
+          'ConsoleDeleteClient', ['ConsoleClient', 'ConsoleClients'],
         )
       },
       createSecret(input: CreateClientSecretInput) {
@@ -85,7 +85,7 @@ export function useClientMutations() {
         >(
           ConsoleCreateClientSecretDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleCreateClientSecret',
+          'ConsoleCreateClientSecret', ['ConsoleClientCredentials', 'ConsoleClient'],
         )
       },
       rotateSecret(input: RotateClientSecretInput) {
@@ -95,7 +95,7 @@ export function useClientMutations() {
         >(
           ConsoleRotateClientSecretDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleRotateClientSecret',
+          'ConsoleRotateClientSecret', ['ConsoleClientCredentials', 'ConsoleClient'],
         )
       },
       revokeCredential(input: RevokeClientCredentialInput) {
@@ -105,14 +105,14 @@ export function useClientMutations() {
         >(
           ConsoleRevokeClientCredentialDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleRevokeClientCredential',
+          'ConsoleRevokeClientCredential', ['ConsoleClientCredentials', 'ConsoleClient'],
         )
       },
       setScopes(input: SetClientScopesInput) {
         return request<ConsoleSetClientScopesMutation, ConsoleSetClientScopesMutationVariables>(
           ConsoleSetClientScopesDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleSetClientScopes',
+          'ConsoleSetClientScopes', ['ConsoleClientScopes', 'ConsoleClient'],
         )
       },
     }),
