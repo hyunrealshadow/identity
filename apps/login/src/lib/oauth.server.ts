@@ -89,12 +89,6 @@ export class OAuthTokenExchangeError extends Error {
   }
 }
 
-export async function prepareAuthorization(options?: {
-  selectAccount?: boolean
-}) {
-  return startSignIn(undefined, options)
-}
-
 export async function startSignIn(
   returnTo?: string,
   options?: { selectAccount?: boolean },

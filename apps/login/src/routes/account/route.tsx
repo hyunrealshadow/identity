@@ -83,11 +83,16 @@ export function useAccount() {
 }
 
 export const Route = createFileRoute('/account')({
-  loader: async () => {
+  loader: async ({ location }) => {
     const page = await loadAccount()
     if (!page.data && !page.error) {
-      // Authorization must reach the provider rather than the client route tree
-      throw redirect({ href: await beginAuthorization(), reloadDocument: true })
+      // Authorization must reach the provider rather than the client route
+      // tree, and come back to the page that needed it (for example after an
+      // MFA change withdrew the previous account-center token).
+      throw redirect({
+        href: await beginAuthorization({ data: { returnTo: location.href } }),
+        reloadDocument: true,
+      })
     }
     return page
   },

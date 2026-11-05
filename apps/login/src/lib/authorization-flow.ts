@@ -1,8 +1,12 @@
 import { createServerFn } from '@tanstack/react-start'
 
-export const beginAuthorization = createServerFn({ method: 'GET' }).handler(
-  async () => {
-    const { prepareAuthorization } = await import('./oauth.server')
-    return (await prepareAuthorization()).toString()
-  },
-)
+/**
+ * Start top-level sign-in. `returnTo` is the local page to come back to; the
+ * server keeps only same-origin paths.
+ */
+export const beginAuthorization = createServerFn({ method: 'GET' })
+  .validator((data: { returnTo?: string } | undefined) => data ?? {})
+  .handler(async ({ data }) => {
+    const { startSignIn } = await import('./oauth.server')
+    return (await startSignIn(data.returnTo)).toString()
+  })
