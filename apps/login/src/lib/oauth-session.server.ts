@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
-import { useSession } from '@tanstack/react-start/server'
 
 import { loadSessionSecret } from './runtime-config.server'
+import { createSessionCookie, type SessionCookie } from './session-cookie.server'
 
 const AUTH_SESSION_NAME = '__Host-login.account'
 const FLOW_SESSION_NAME = '__Host-login.oauth'
@@ -57,71 +57,39 @@ export interface AccountFlashSession {
 }
 
 export async function useAuthorizationSession() {
-  return useSession<OAuthTokenSession>({
+  return createSessionCookie<OAuthTokenSession>({
     name: AUTH_SESSION_NAME,
     password: await sessionPassword('authorization'),
     maxAge: AUTH_SESSION_MAX_AGE,
-    sessionHeader: false,
-    cookie: {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'lax',
-      path: '/',
-      maxAge: AUTH_SESSION_MAX_AGE,
-    },
   })
 }
 
 export async function useOAuthFlowSession() {
-  return useSession<OAuthFlowSession>({
+  return createSessionCookie<OAuthFlowSession>({
     name: FLOW_SESSION_NAME,
     password: await sessionPassword('oauth-flow'),
     maxAge: FLOW_SESSION_MAX_AGE,
-    sessionHeader: false,
-    cookie: {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'lax',
-      path: '/',
-      maxAge: FLOW_SESSION_MAX_AGE,
-    },
   })
 }
 
 export async function useMfaUiSession() {
-  return useSession<MfaUiSession>({
+  return createSessionCookie<MfaUiSession>({
     name: MFA_UI_SESSION_NAME,
     password: await sessionPassword('mfa-ui'),
     maxAge: MFA_UI_SESSION_MAX_AGE,
-    sessionHeader: false,
-    cookie: {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'lax',
-      path: '/',
-      maxAge: MFA_UI_SESSION_MAX_AGE,
-    },
   })
 }
 
 export async function useAccountFlashSession() {
-  return useSession<AccountFlashSession>({
+  return createSessionCookie<AccountFlashSession>({
     name: ACCOUNT_FLASH_SESSION_NAME,
     password: await sessionPassword('account-flash'),
     maxAge: ACCOUNT_FLASH_SESSION_MAX_AGE,
-    sessionHeader: false,
-    cookie: {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'lax',
-      path: '/',
-      maxAge: ACCOUNT_FLASH_SESSION_MAX_AGE,
-    },
   })
 }
 
 export async function storeAccountFlash(value: AccountFlashSession) {
-  await (await useAccountFlashSession()).update(value)
+  ;(await useAccountFlashSession()).update(value)
 }
 
 export async function consumeAccountFlash() {
@@ -131,7 +99,7 @@ export async function consumeAccountFlash() {
     error: session.data.error,
     fields: session.data.fields,
   }
-  await session.clear()
+  session.clear()
   return value
 }
 
@@ -147,3 +115,5 @@ export function deriveSessionPassword(sessionSecret: string, purpose: string) {
 async function sessionPassword(purpose: string) {
   return deriveSessionPassword(await loadSessionSecret(), purpose)
 }
+
+export type { SessionCookie }
