@@ -17,9 +17,9 @@ import {
   type CreateScopeInput,
   type ScopeStateInput,
   type UpdateScopeInput,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import type { GraphQLResult } from '#/lib/graphql/transport'
-import { useGraphQL } from '#/lib/graphql/use-graphql'
+import { useGraphQLMutation } from '#/lib/graphql/use-graphql-mutation'
 
 export type PermissionWriteResult =
   | GraphQLResult<ConsoleCreatePermissionMutation>
@@ -28,7 +28,7 @@ export type PermissionWriteResult =
   | GraphQLResult<ConsoleDisablePermissionMutation>
 
 export function usePermissionMutations() {
-  const request = useGraphQL()
+  const request = useGraphQLMutation()
 
   return useMemo(
     () => ({

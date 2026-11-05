@@ -2,7 +2,7 @@ import { resolveLocale, translate } from '#/lib/i18n'
 import {
   HeadContent,
   Scripts,
-  createRootRoute,
+  createRootRouteWithContext,
   redirect,
   useRouterState,
   type ErrorComponentProps,
@@ -27,7 +27,11 @@ const loadRootLocale = createServerFn({ method: 'GET' })
   .validator((data: { uiLocales?: string }) => data)
   .handler(({ data }) => requestLocale(data.uiLocales?.split(' ')))
 
-export const Route = createRootRoute({
+export interface RouterContext {
+  queryClient: import('@tanstack/react-query').QueryClient
+}
+
+export const Route = createRootRouteWithContext<RouterContext>()({
   staleTime: Infinity,
   validateSearch: (search: Record<string, unknown>): { ui_locales?: string } => ({
     ui_locales: typeof search.ui_locales === 'string' ? search.ui_locales : undefined,

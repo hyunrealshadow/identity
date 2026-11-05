@@ -1,4 +1,4 @@
-import type { GroupFilter, GroupOrder } from '#/gql/graphql'
+import type { GroupFilter, GroupOrder } from '#/generated/graphql'
 import { cursorPage } from '#/modules/user-management/lib/cursor-page'
 import {
   resolveLocalizedValue,

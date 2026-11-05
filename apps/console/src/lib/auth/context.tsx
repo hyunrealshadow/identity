@@ -10,7 +10,9 @@ import {
 } from 'react'
 
 import { ReauthenticationPopup } from '#/components/reauthentication-popup'
+import { SessionVersionContext } from '#/lib/auth/session-version'
 import { clearCurrentDrafts } from '#/lib/draft-storage'
+import { queryClient } from '#/lib/graphql/query-client'
 
 import { emitAuthLogout, emitBeforeAuthRedirect } from '#/lib/auth/events'
 import {
@@ -110,6 +112,9 @@ function currentPath(): string {
 }
 
 function clearTransientPageData(): void {
+  // Cached GraphQL reads belong to one authenticated session. Signing out
+  // removes them before another account can mount the workspace.
+  queryClient.clear()
   try {
     window.sessionStorage.removeItem(AUTH_TRANSACTION_KEY)
   } catch {
@@ -165,6 +170,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [sessionVersion, setSessionVersion] = useState(0)
   const [popupPrompt, setPopupPrompt] =
     useState<PopupReauthenticationPrompt | null>(null)
+
+  useEffect(() => {
+    // Every usable session replacement starts with an empty read cache, so a
+    // page can never render capabilities or entities of its predecessor.
+    queryClient.clear()
+  }, [sessionVersion])
 
   const startedRef = useRef(false)
   const redirectInFlightRef = useRef<Promise<void> | null>(null)
@@ -1069,17 +1080,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   return (
-    <AuthContext.Provider value={value}>
-      {children}
-      {popupPrompt ? (
-        <ReauthenticationPopup
-          prompt={popupPrompt}
-          onContinue={continuePopupReauthentication}
-          onFallback={fallbackToTopLevelReauthentication}
-          onCancel={cancelReauthentication}
-        />
-      ) : null}
-    </AuthContext.Provider>
+    <SessionVersionContext.Provider value={sessionVersion}>
+      <AuthContext.Provider value={value}>
+        {children}
+        {popupPrompt ? (
+          <ReauthenticationPopup
+            prompt={popupPrompt}
+            onContinue={continuePopupReauthentication}
+            onFallback={fallbackToTopLevelReauthentication}
+            onCancel={cancelReauthentication}
+          />
+        ) : null}
+      </AuthContext.Provider>
+    </SessionVersionContext.Provider>
   )
 }
 

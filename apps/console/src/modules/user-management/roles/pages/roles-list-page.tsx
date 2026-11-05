@@ -19,7 +19,7 @@ import {
   ConsoleRolesDocument,
   type ConsoleRolesQuery,
   type ConsoleRolesQueryVariables,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import {
   failureDescriptionKey,
   failureTitleKey,
@@ -39,7 +39,7 @@ import {
   roleIsBuiltIn,
   withRoleDisplayFields,
 } from '#/modules/user-management/roles/lib/role-localization'
-import { useConsoleQuery } from '#/modules/user-management/lib/console-query'
+import { useConsoleQuery } from '#/lib/graphql/use-console-query'
 import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
 import {
   isRoleOrder,

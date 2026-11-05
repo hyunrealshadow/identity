@@ -11,7 +11,7 @@ import {
   type ConsoleUsersQuery,
   type ConsoleUsersQueryVariables,
   type ConsoleUserGroupsQuery,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import { clearDraft } from '#/lib/draft-storage'
 import { useLocale, useTranslator } from '#/lib/i18n'
 import { RelationDialog } from '../../components/relation-dialog'
@@ -20,7 +20,7 @@ import {
   CandidateSearch,
   RelationPagination,
 } from '../../components/relation-picker'
-import { useConsoleQuery } from '../../lib/console-query'
+import { useConsoleQuery } from '#/lib/graphql/use-console-query'
 import { cursorPage } from '../../lib/cursor-page'
 import { useDialogDraft } from '../../lib/dialog-draft'
 import { useRelationMutation } from '../../lib/relation-mutation'

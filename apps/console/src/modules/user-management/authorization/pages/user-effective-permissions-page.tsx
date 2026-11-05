@@ -10,7 +10,7 @@ import {
   ConsoleUserPermissionsDocument,
   type ConsoleUserPermissionsQuery,
   type ConsoleUserPermissionsQueryVariables,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import {
   failureDescriptionKey,
   failureTitleKey,
@@ -23,7 +23,7 @@ import { ApiResourceSelect } from '#/modules/user-management/components/api-reso
 import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
 import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
-import { useConsoleQuery } from '#/modules/user-management/lib/console-query'
+import { useConsoleQuery } from '#/lib/graphql/use-console-query'
 import { cursorPage } from '#/modules/user-management/lib/cursor-page'
 import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
 import { UserDetailTabSkeleton } from '#/modules/user-management/users/components/user-detail-skeleton'

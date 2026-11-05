@@ -1,4 +1,4 @@
-import type { ResourceOrder } from '#/gql/graphql'
+import type { ResourceOrder } from '#/generated/graphql'
 import { cursorPage } from '#/modules/user-management/lib/cursor-page'
 export interface ResourcesSearch {
   q?: string

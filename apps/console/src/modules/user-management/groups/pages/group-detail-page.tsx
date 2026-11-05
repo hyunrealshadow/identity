@@ -21,7 +21,7 @@ import {
   type GroupStateInput,
   type SetGroupEnabledInput,
   type UpdateGroupInput,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import {
   failureDescriptionKey,
   failureTitleKey,

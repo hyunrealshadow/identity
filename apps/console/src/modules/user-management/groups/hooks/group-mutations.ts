@@ -18,9 +18,9 @@ import {
   type GroupStateInput,
   type SetGroupEnabledInput,
   type UpdateGroupInput,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import type { GraphQLResult } from '#/lib/graphql/transport'
-import { useGraphQL } from '#/lib/graphql/use-graphql'
+import { useGraphQLMutation } from '#/lib/graphql/use-graphql-mutation'
 
 export type GroupWriteResult =
   | GraphQLResult<ConsoleCreateGroupMutation>
@@ -29,7 +29,7 @@ export type GroupWriteResult =
   | GraphQLResult<ConsoleDeleteGroupMutation>
 
 export function useGroupMutations() {
-  const request = useGraphQL()
+  const request = useGraphQLMutation()
 
   return useMemo(
     () => ({

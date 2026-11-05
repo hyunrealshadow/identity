@@ -13,7 +13,7 @@ import {
   useCursorPagination,
   type PageCursor,
 } from '#/lib/use-cursor-pagination'
-import type { ConsoleQueryState } from '../lib/console-query'
+import type { ConsoleQueryState } from '#/lib/graphql/use-console-query'
 import { UserTextField } from '../users/components/user-form-fields'
 
 interface Connection {

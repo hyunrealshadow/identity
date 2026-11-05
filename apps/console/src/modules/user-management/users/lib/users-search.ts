@@ -3,7 +3,7 @@ import type {
   ConsoleUsersQueryVariables,
   UserFilter,
   UserOrder,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 
 export const USER_ORDERS = [
   'CREATED_AT_ASC',

@@ -21,9 +21,9 @@ import {
   type UnlockUserInput,
   type UpdateUserInput,
   type UserStateInput,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import type { GraphQLResult } from '#/lib/graphql/transport'
-import { useGraphQL } from '#/lib/graphql/use-graphql'
+import { useGraphQLMutation } from '#/lib/graphql/use-graphql-mutation'
 
 export type CreateUserPayload = NonNullable<
   ConsoleCreateUserMutation['createUser']
@@ -67,7 +67,7 @@ export interface UserMutations {
  * replay a failed write automatically.
  */
 export function useUserMutations(): UserMutations {
-  const request = useGraphQL()
+  const request = useGraphQLMutation()
 
   return useMemo(
     () => ({

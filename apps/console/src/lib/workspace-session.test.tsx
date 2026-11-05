@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearAuthSession, setAuthSession, type AuthSession } from '#/lib/auth/session'
 import type { RuntimeConfig } from '#/lib/config'
 import { RuntimeConfigProvider } from '#/lib/runtime-config'
+import { LocaleTestProvider, QueryTestProvider } from '#/test/render'
 import { WorkspaceProvider, useWorkspace } from '#/lib/workspace'
 
 const mocks = vi.hoisted(() => ({
@@ -45,7 +46,17 @@ function deferred<T>() {
 let workspace: ReturnType<typeof useWorkspace>
 function Probe() { workspace = useWorkspace(); return null }
 function App() {
-  return <RuntimeConfigProvider config={config}><WorkspaceProvider><Probe /></WorkspaceProvider></RuntimeConfigProvider>
+  return (
+    <QueryTestProvider>
+      <LocaleTestProvider>
+        <RuntimeConfigProvider config={config}>
+          <WorkspaceProvider>
+            <Probe />
+          </WorkspaceProvider>
+        </RuntimeConfigProvider>
+      </LocaleTestProvider>
+    </QueryTestProvider>
+  )
 }
 beforeEach(() => {
   clearAuthSession()

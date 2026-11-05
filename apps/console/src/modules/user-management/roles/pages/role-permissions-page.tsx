@@ -17,7 +17,7 @@ import { AsyncState } from '#/components/async-state'
 import { ConfirmationDialog } from '#/components/confirmation-dialog'
 import { ErrorDetails } from '#/components/error-details'
 import { StepUpPanel } from '#/components/step-up-panel'
-import { type SetRolePermissionsInput } from '#/gql/graphql'
+import { type SetRolePermissionsInput } from '#/generated/graphql'
 import {
   failureDescriptionKey,
   failureTitleKey,

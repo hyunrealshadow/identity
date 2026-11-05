@@ -17,7 +17,7 @@ import { StepUpPanel } from '#/components/step-up-panel'
 import {
   type ConsoleGroupMembersQuery,
   type ConsoleGroupMembersQueryVariables,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import { formatDateTime } from '#/lib/format'
 import {
   failureDescriptionKey,

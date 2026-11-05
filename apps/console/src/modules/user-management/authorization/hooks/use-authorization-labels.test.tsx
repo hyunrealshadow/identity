@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { act, renderHook, waitFor } from '@testing-library/react'
+import { act, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { renderHookWithLocale } from '#/test/render'
 import { useAuthorizationLabels } from './use-authorization-labels'
 const { request } = vi.hoisted(() => ({ request: vi.fn() }))
 vi.mock('#/lib/graphql/use-graphql', () => ({ useGraphQL: () => request }))
@@ -17,7 +18,7 @@ describe('authorization label loading', () => {
       }),
     )
     const ids = Array.from({ length: 102 }, (_, index) => `label-${index}`)
-    const { result } = renderHook(() => useAuthorizationLabels(ids))
+    const { result } = renderHookWithLocale(() => useAuthorizationLabels(ids))
     await waitFor(() => expect(result.current.nodes).toHaveLength(102))
     expect(request.mock.calls.map((call) => call[1].ids.length)).toEqual([
       100, 2,
@@ -33,7 +34,7 @@ describe('authorization label loading', () => {
         }),
     )
     request.mockResolvedValue({ data: { nodes: [node('new')] }, errors: [] })
-    const { result, rerender } = renderHook(
+    const { result, rerender } = renderHookWithLocale(
       ({ ids }) => useAuthorizationLabels(ids),
       { initialProps: { ids: ['old'] } },
     )

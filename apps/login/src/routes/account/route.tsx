@@ -1,4 +1,5 @@
 import { Alert } from '@heroui/react'
+import { queryOptions, useQuery } from '@tanstack/react-query'
 import { Link, Outlet, createFileRoute, redirect } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { AtSign, KeyRound, Laptop, UserRound, X } from 'lucide-react'
@@ -45,9 +46,8 @@ const ACCOUNT_QUERY = `query AccountHome {
   passkeys { id name }
 }`
 
-const loadAccount = createServerFn({ method: 'GET' }).handler(async () => {
+const loadAccountData = createServerFn({ method: 'GET' }).handler(async () => {
   const browserLocale = requestLocale()
-  const flash = await consumeAccountFlash()
   try {
     const [data, mfa] = await Promise.all([identityGraphql<AccountData>(ACCOUNT_QUERY), mfaUiState()])
     if (data) await storeTotpEnabled(data.security.totpEnabled)
@@ -60,8 +60,7 @@ const loadAccount = createServerFn({ method: 'GET' }).handler(async () => {
       data,
       access: await accountAccessContext(data?.security.mfaEnabled),
       mfa,
-      flash,
-      error: undefined,
+      error: undefined as string | undefined,
     }
   } catch (error) {
     return {
@@ -70,21 +69,40 @@ const loadAccount = createServerFn({ method: 'GET' }).handler(async () => {
       data: undefined,
       access: undefined,
       mfa: { enrollment: undefined },
-      flash,
       error: error instanceof GraphqlRequestError ? error.message : error instanceof Error ? error.message : translate(browserLocale, 'temporaryError'),
     }
   }
 })
 
+/** One-shot flash messages stay outside the cache; they may be consumed once. */
+const loadAccountFlash = createServerFn({ method: 'GET' }).handler(async () => ({
+  flash: await consumeAccountFlash(),
+}))
+
+export const accountQuery = queryOptions({
+  queryKey: ['account'],
+  queryFn: () => loadAccountData(),
+  // Fresh enough to skip a redundant refetch after hydration; the route
+  // loader revalidates on every navigation and every router invalidation.
+  staleTime: 30_000,
+})
+
 export function useAccount() {
-  const page = Route.useLoaderData()
-  if (!page.data) throw new Error(page.error ?? 'Account data is unavailable')
-  return { ...page, data: page.data }
+  const { page, flash } = Route.useLoaderData()
+  const { data: snapshot } = useQuery({ ...accountQuery, initialData: page })
+  const current = snapshot ?? page
+  if (!current.data) throw new Error(current.error ?? 'Account data is unavailable')
+  return { ...current, flash, data: current.data }
 }
 
 export const Route = createFileRoute('/account')({
-  loader: async ({ location }) => {
-    const page = await loadAccount()
+  loader: async ({ location, context }) => {
+    const [page, { flash }] = await Promise.all([
+      // The account read is always revalidated on navigation so an action
+      // followed by `router.invalidate()` cannot render a stale snapshot.
+      context.queryClient.fetchQuery({ ...accountQuery, staleTime: 0 }),
+      loadAccountFlash(),
+    ])
     if (!page.data && !page.error) {
       // Authorization must reach the provider rather than the client route
       // tree, and come back to the page that needed it (for example after an
@@ -94,42 +112,44 @@ export const Route = createFileRoute('/account')({
         reloadDocument: true,
       })
     }
-    return page
+    return { page, flash }
   },
   component: AccountLayout,
 })
 
 function AccountLayout() {
-  const page = Route.useLoaderData()
-  const [visibleMessage, setVisibleMessage] = useState(page.flash.message)
-  const [visibleError, setVisibleError] = useState(page.flash.error)
+  const { page, flash } = Route.useLoaderData()
+  const { data: snapshot } = useQuery({ ...accountQuery, initialData: page })
+  const current = snapshot ?? page
+  const [visibleMessage, setVisibleMessage] = useState(flash.message)
+  const [visibleError, setVisibleError] = useState(flash.error)
 
   useEffect(() => {
-    applyTheme(page.theme)
-    document.documentElement.dataset.themePreference = page.theme
-    if (page.theme !== 'system') return
+    applyTheme(current.theme)
+    document.documentElement.dataset.themePreference = current.theme
+    if (current.theme !== 'system') return
     const media = window.matchMedia('(prefers-color-scheme: dark)')
     const followSystem = () => applyTheme('system')
     media.addEventListener('change', followSystem)
     return () => media.removeEventListener('change', followSystem)
-  }, [page.theme])
+  }, [current.theme])
 
   useEffect(() => {
-    setVisibleMessage(page.flash.message)
-    setVisibleError(page.flash.error)
-    if (!page.flash.message) return
+    setVisibleMessage(flash.message)
+    setVisibleError(flash.error)
+    if (!flash.message) return
 
     const timeout = window.setTimeout(() => setVisibleMessage(undefined), 4000)
     return () => window.clearTimeout(timeout)
-  }, [page.flash])
+  }, [flash])
 
-  if (!page.data) {
-    return <main className="flex min-h-screen items-center justify-center p-6"><Alert status="danger" className="max-w-lg"><Alert.Indicator /><Alert.Content><Alert.Title>{translate(page.locale, 'unableToContinue')}</Alert.Title><Alert.Description>{page.error}</Alert.Description></Alert.Content></Alert></main>
+  if (!current.data) {
+    return <main className="flex min-h-screen items-center justify-center p-6"><Alert status="danger" className="max-w-lg"><Alert.Indicator /><Alert.Content><Alert.Title>{translate(current.locale, 'unableToContinue')}</Alert.Title><Alert.Description>{current.error}</Alert.Description></Alert.Content></Alert></main>
   }
 
-  const account = page.data.account
+  const account = current.data.account
   const displayName = [account.givenName, account.familyName].filter(Boolean).join(' ') || account.nickname || account.username
-  const t = (key: Parameters<typeof translate>[1]) => translate(page.locale, key)
+  const t = (key: Parameters<typeof translate>[1]) => translate(current.locale, key)
   const navItems = [
     { to: '/account/profile' as const, label: t('accountProfile'), icon: UserRound },
     { to: '/account/identifiers' as const, label: t('accountIdentifiers'), icon: AtSign },
@@ -138,7 +158,7 @@ function AccountLayout() {
   ]
 
   return (
-    <main lang={page.locale} className="min-h-screen bg-background">
+    <main lang={current.locale} className="min-h-screen bg-background">
         <header className="account-topbar border-b border-separator">
           <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-5">
             <Link to="/account/profile" preload={false} className="text-sm font-semibold tracking-tight">Identity</Link>
@@ -168,7 +188,7 @@ function AccountLayout() {
             </nav>
           </aside>
           <section className="min-w-0">
-            <AccountReauthProvider locale={page.locale} access={page.access}>
+            <AccountReauthProvider locale={current.locale} access={current.access}>
             <div className="mb-5 space-y-3">
               {visibleMessage ? <Alert status="success"><Alert.Indicator /><Alert.Content><Alert.Title>{visibleMessage === 'reauthenticated' ? t('accountReauthenticated') : t('accountSaved')}</Alert.Title></Alert.Content><button type="button" className="ml-auto cursor-pointer rounded-sm p-1 text-muted hover:bg-surface-secondary hover:text-foreground" aria-label={t('close')} onClick={() => setVisibleMessage(undefined)}><X className="size-4" aria-hidden="true" /></button></Alert> : null}
               {visibleError ? <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Title>{t('accountRequestFailed')}</Alert.Title><Alert.Description>{visibleError}</Alert.Description></Alert.Content><button type="button" className="ml-auto cursor-pointer rounded-sm p-1 text-muted hover:bg-surface-secondary hover:text-foreground" aria-label={t('close')} onClick={() => setVisibleError(undefined)}><X className="size-4" aria-hidden="true" /></button></Alert> : null}

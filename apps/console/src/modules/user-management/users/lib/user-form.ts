@@ -3,7 +3,7 @@ import type {
   CreateUserInput,
   UpdateUserInput,
   UserProfilePatchInput,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 
 export type ProjectedUser = NonNullable<ConsoleUserQuery['user']>
 

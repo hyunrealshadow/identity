@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react'
-import type { ConsoleGroupQuery } from '#/gql/graphql'
-import type { ConsoleQueryState } from '../../lib/console-query'
+import type { ConsoleGroupQuery } from '#/generated/graphql'
+import type { ConsoleQueryState } from '#/lib/graphql/use-console-query'
 
 export const GroupDetailContext =
   createContext<ConsoleQueryState<ConsoleGroupQuery> | null>(null)

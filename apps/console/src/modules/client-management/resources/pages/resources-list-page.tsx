@@ -11,7 +11,7 @@ import {
   ConsoleResourcesDocument,
   type ConsoleResourcesQuery,
   type ConsoleResourcesQueryVariables,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import { formatDateTime } from '#/lib/format'
 import {
   failureDescriptionKey,
@@ -21,7 +21,7 @@ import { useLocale, useTranslator } from '#/lib/i18n'
 import { useCursorPagination } from '#/lib/use-cursor-pagination'
 import { useWorkspace } from '#/lib/workspace'
 import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
-import { useConsoleQuery } from '#/modules/user-management/lib/console-query'
+import { useConsoleQuery } from '#/lib/graphql/use-console-query'
 import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
 import {

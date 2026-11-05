@@ -5,9 +5,9 @@ import {
   ConsoleResourceOptionsDocument,
   type ConsoleResourceOptionsQuery,
   type ConsoleResourceOptionsQueryVariables,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import { useTranslator } from '#/lib/i18n'
-import { useConsoleQuery } from '#/modules/user-management/lib/console-query'
+import { useConsoleQuery } from '#/lib/graphql/use-console-query'
 
 type Resource =
   ConsoleResourceOptionsQuery['resources']['edges'][number]['node']

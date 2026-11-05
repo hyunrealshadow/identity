@@ -19,7 +19,7 @@ import {
   ConsoleGroupsDocument,
   type ConsoleGroupsQuery,
   type ConsoleGroupsQueryVariables,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import {
   failureDescriptionKey,
   failureTitleKey,
@@ -43,7 +43,7 @@ import {
   type GroupsFilterDraft,
   type GroupsSearch,
 } from '#/modules/user-management/groups/lib/groups-search'
-import { useConsoleQuery } from '#/modules/user-management/lib/console-query'
+import { useConsoleQuery } from '#/lib/graphql/use-console-query'
 import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
 import {

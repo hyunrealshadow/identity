@@ -1,4 +1,4 @@
-import type { LocalizedTextInput } from '#/gql/graphql'
+import type { LocalizedTextInput } from '#/generated/graphql'
 import {
   createLocalizedDraft,
   localizedMetadata,

@@ -17,7 +17,7 @@ import {
   ConsoleUserRolesDocument,
   type ConsoleUserRolesQuery,
   type ConsoleUserRolesQueryVariables,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import {
   failureDescriptionKey,
   failureTitleKey,
@@ -40,7 +40,7 @@ import { resolveLocalizedText } from '#/modules/user-management/groups/lib/group
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
 import { AssignmentStatusChip } from '#/modules/user-management/roles/components/role-status'
 
-import { useConsoleQuery } from '#/modules/user-management/lib/console-query'
+import { useConsoleQuery } from '#/lib/graphql/use-console-query'
 import { cursorPage } from '#/modules/user-management/lib/cursor-page'
 
 import { rbacScope } from '#/modules/user-management/lib/rbac-scope'

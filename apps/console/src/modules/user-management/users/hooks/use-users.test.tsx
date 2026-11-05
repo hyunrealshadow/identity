@@ -1,4 +1,4 @@
-import { act, renderHook, screen } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 
@@ -6,9 +6,9 @@ import { ResourceTable } from '#/components/resource-table'
 import type {
   ConsoleUsersQuery,
   ConsoleUsersQueryVariables,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import type { GraphQLResult } from '#/lib/graphql/transport'
-import { renderWithLocale } from '#/test/render'
+import { renderHookWithLocale, renderWithLocale } from '#/test/render'
 import { useUsers } from './use-users'
 
 const mocks = vi.hoisted(() => ({ request: vi.fn() }))
@@ -115,7 +115,7 @@ describe('user list refresh', () => {
     expect(screen.getByRole('status').textContent).toBe('Loading table data')
     expect(screen.queryByText('Ada')).toBeNull()
     await act(async () => pending.resolve(result('Grace')))
-    expect(screen.getByText('Grace')).toBeTruthy()
+    expect(await screen.findByText('Grace')).toBeTruthy()
     expect(
       screen.queryByRole('region', { name: 'Users', busy: true }),
     ).toBeNull()
@@ -129,18 +129,18 @@ describe('user list refresh', () => {
       .mockResolvedValueOnce(result('Ada'))
       .mockReturnValueOnce(refresh.promise)
       .mockReturnValueOnce(filtered.promise)
-    const { result: state, rerender } = renderHook(
+    const { result: state, rerender } = renderHookWithLocale(
       ({ query }) => useUsers(query, true),
       {
         initialProps: { query: variables },
       },
     )
-    await act(async () => {})
+    await waitFor(() => expect(state.current.data).not.toBeNull())
     let refreshing!: Promise<void>
     act(() => {
       refreshing = state.current.refresh()
     })
-    expect(state.current.refreshing).toBe(true)
+    await waitFor(() => expect(state.current.refreshing).toBe(true))
     rerender({ query: { first: 10, filter: { query: 'other' } } })
     expect(state.current.data).toBeNull()
     expect(state.current.refreshing).toBe(false)
@@ -152,7 +152,7 @@ describe('user list refresh', () => {
     await act(async () =>
       filtered.resolve({ ...result('unused'), data: null, forbidden: true }),
     )
-    expect(state.current.status).toBe('error')
+    await waitFor(() => expect(state.current.status).toBe('error'))
     expect(state.current.forbidden).toBe(true)
     expect(state.current.data).toBeNull()
   })

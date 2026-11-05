@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { LocalizedTextField } from '#/components/localized-text-field'
 import { PageHeader } from '#/components/page-header'
 
-import type { CreateRoleInput } from '#/gql/graphql'
+import type { CreateRoleInput } from '#/generated/graphql'
 import { useTranslator, type MessageKey } from '#/lib/i18n'
 import {
   createLocalizedDraft,

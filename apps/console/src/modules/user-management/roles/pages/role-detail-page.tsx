@@ -20,7 +20,7 @@ import {
   type ConsoleRoleQuery,
   type RoleStateInput,
   type UpdateRoleInput,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import {
   failureDescriptionKey,
   failureTitleKey,

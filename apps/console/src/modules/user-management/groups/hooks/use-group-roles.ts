@@ -12,7 +12,7 @@ import {
   type ConsoleSetGroupRolesMutation,
   type ConsoleSetGroupRolesMutationVariables,
   type SetGroupRolesInput,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import type {
   GraphQLFailure,
   GraphQLIssue,
@@ -20,7 +20,8 @@ import type {
   GraphQLStepUp,
 } from '#/lib/graphql/transport'
 import { useGraphQL } from '#/lib/graphql/use-graphql'
-import { useConsoleQuery } from '#/modules/user-management/lib/console-query'
+import { useGraphQLMutation } from '#/lib/graphql/use-graphql-mutation'
+import { useConsoleQuery } from '#/lib/graphql/use-console-query'
 
 const ROLE_LINK_SCAN_SIZE = 25
 const MAX_ROLE_LINK_PAGES = 40
@@ -58,11 +59,12 @@ export interface GroupRoleLinkSnapshot {
  */
 export function useGroupRoleMutations() {
   const request = useGraphQL()
+  const mutate = useGraphQLMutation()
 
   return useMemo(
     () => ({
       setRoles(input: SetGroupRolesInput) {
-        return request<
+        return mutate<
           ConsoleSetGroupRolesMutation,
           ConsoleSetGroupRolesMutationVariables
         >(
@@ -159,6 +161,6 @@ export function useGroupRoleMutations() {
         }
       },
     }),
-    [request],
+    [mutate, request],
   )
 }

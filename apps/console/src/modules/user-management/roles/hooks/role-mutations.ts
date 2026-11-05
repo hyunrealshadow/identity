@@ -29,9 +29,9 @@ import {
   type RoleStateInput,
   type SetRolePermissionsInput,
   type UpdateRoleInput,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import type { GraphQLResult } from '#/lib/graphql/transport'
-import { useGraphQL } from '#/lib/graphql/use-graphql'
+import { useGraphQLMutation } from '#/lib/graphql/use-graphql-mutation'
 
 export type RoleWriteResult =
   | GraphQLResult<ConsoleCreateRoleMutation>
@@ -43,7 +43,7 @@ export type RoleWriteResult =
   | GraphQLResult<ConsoleRevokeUserRolesMutation>
 
 export function useRoleMutations() {
-  const request = useGraphQL()
+  const request = useGraphQLMutation()
 
   return useMemo(
     () => ({

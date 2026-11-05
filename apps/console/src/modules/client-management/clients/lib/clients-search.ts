@@ -1,4 +1,4 @@
-import type { ClientOrder } from '#/gql/graphql'
+import type { ClientOrder } from '#/generated/graphql'
 import { cursorPage } from '#/modules/user-management/lib/cursor-page'
 
 export interface ClientsSearch {

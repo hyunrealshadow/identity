@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { LocalizedTextField } from '#/components/localized-text-field'
 import { PageHeader } from '#/components/page-header'
 
-import type { CreateGroupInput } from '#/gql/graphql'
+import type { CreateGroupInput } from '#/generated/graphql'
 import { useTranslator, type MessageKey } from '#/lib/i18n'
 import { useWorkspace } from '#/lib/workspace'
 import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'

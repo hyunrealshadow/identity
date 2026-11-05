@@ -2,7 +2,7 @@ import type {
   ClientAuthMethod,
   ClientGrantType,
   ClientSettingsInput,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import type { MessageKey } from '#/lib/i18n'
 
 /** Grant types an administrator can select; implicit is display-only. */

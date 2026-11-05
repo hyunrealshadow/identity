@@ -35,12 +35,12 @@ import {
   type RotateClientSecretInput,
   type SetClientScopesInput,
   type UpdateClientInput,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import { nextClientMutationId } from '#/lib/graphql/mutation-id'
-import { useGraphQL } from '#/lib/graphql/use-graphql'
+import { useGraphQLMutation } from '#/lib/graphql/use-graphql-mutation'
 
 export function useClientMutations() {
-  const request = useGraphQL()
+  const request = useGraphQLMutation()
   return useMemo(
     () => ({
       create(input: CreateClientInput) {

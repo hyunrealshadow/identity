@@ -5,7 +5,7 @@ const config: CodegenConfig = {
   documents: ['src/**/*.graphql'],
   ignoreNoDocuments: false,
   generates: {
-    'src/gql/': {
+    'src/generated/': {
       preset: 'client',
       config: {
         useTypeImports: true,

@@ -23,7 +23,7 @@ import {
   type ConsolePermissionQuery,
   type ScopeStateInput,
   type UpdateScopeInput,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import {
   failureDescriptionKey,
   failureTitleKey,

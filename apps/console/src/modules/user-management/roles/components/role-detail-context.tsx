@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react'
-import type { ConsoleRoleQuery } from '#/gql/graphql'
-import type { ConsoleQueryState } from '../../lib/console-query'
+import type { ConsoleRoleQuery } from '#/generated/graphql'
+import type { ConsoleQueryState } from '#/lib/graphql/use-console-query'
 
 export const RoleDetailContext =
   createContext<ConsoleQueryState<ConsoleRoleQuery> | null>(null)

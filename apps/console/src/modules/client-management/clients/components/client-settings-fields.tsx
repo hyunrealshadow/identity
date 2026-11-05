@@ -7,7 +7,7 @@ import {
   Switch,
 } from '@heroui/react'
 
-import type { ClientAuthMethod, ClientGrantType } from '#/gql/graphql'
+import type { ClientAuthMethod, ClientGrantType } from '#/generated/graphql'
 import { useTranslator, type MessageKey } from '#/lib/i18n'
 import {
   UserSelectField,

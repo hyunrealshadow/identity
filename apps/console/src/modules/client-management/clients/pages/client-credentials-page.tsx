@@ -20,7 +20,7 @@ import {
   type ClientCredentialKind,
   type ConsoleClientCredentialsQuery,
   type ConsoleClientCredentialsQueryVariables,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import { formatDateTime } from '#/lib/format'
 import {
   failureDescriptionKey,
@@ -28,7 +28,7 @@ import {
 } from '#/lib/graphql/presentation'
 import { useLocale, useTranslator, type MessageKey } from '#/lib/i18n'
 import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
-import { useConsoleQuery } from '#/modules/user-management/lib/console-query'
+import { useConsoleQuery } from '#/lib/graphql/use-console-query'
 import type { RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
 import { UserSelectField } from '#/modules/user-management/users/components/user-form-fields'

@@ -11,6 +11,7 @@ import type { RuntimeConfig } from '#/lib/config'
 import { LocaleProvider } from '#/lib/i18n'
 import { RuntimeConfigProvider } from '#/lib/runtime-config'
 import { WorkspaceProvider, useWorkspace } from '#/lib/workspace'
+import { QueryTestProvider } from '#/test/render'
 
 const mocks = vi.hoisted(() => ({
   beginAuthorization: vi.fn(),
@@ -95,15 +96,17 @@ function Probe() {
 
 function renderWorkspace() {
   return render(
-    <RuntimeConfigProvider config={config}>
-      <LocaleProvider>
-        <AuthProvider>
-          <WorkspaceProvider>
-            <Probe />
-          </WorkspaceProvider>
-        </AuthProvider>
-      </LocaleProvider>
-    </RuntimeConfigProvider>,
+    <QueryTestProvider>
+      <RuntimeConfigProvider config={config}>
+        <LocaleProvider>
+          <AuthProvider>
+            <WorkspaceProvider>
+              <Probe />
+            </WorkspaceProvider>
+          </AuthProvider>
+        </LocaleProvider>
+      </RuntimeConfigProvider>
+    </QueryTestProvider>,
   )
 }
 

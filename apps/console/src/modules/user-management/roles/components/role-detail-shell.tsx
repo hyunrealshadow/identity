@@ -8,7 +8,7 @@ import {
   ConsoleRoleDocument,
   type ConsoleRoleQuery,
   type ConsoleRoleQueryVariables,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import { useLocale, useTranslator } from '#/lib/i18n'
 import { useWorkspace } from '#/lib/workspace'
 import { RoleDetailTabs } from '#/modules/user-management/components/detail-tabs'
@@ -17,7 +17,7 @@ import {
   RoleStatusChip,
 } from '#/modules/user-management/roles/components/role-status'
 import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
-import { useConsoleQuery } from '#/modules/user-management/lib/console-query'
+import { useConsoleQuery } from '#/lib/graphql/use-console-query'
 import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
 
 type TabPath =

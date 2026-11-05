@@ -14,14 +14,14 @@ import {
   ConsoleResourceDocument,
   type ConsoleResourceQuery,
   type ConsoleResourceQueryVariables,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import {
   failureDescriptionKey,
   failureTitleKey,
 } from '#/lib/graphql/presentation'
 import { useTranslator } from '#/lib/i18n'
 import { useWorkspace } from '#/lib/workspace'
-import { useConsoleQuery } from '#/modules/user-management/lib/console-query'
+import { useConsoleQuery } from '#/lib/graphql/use-console-query'
 import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
 
 type Resource = NonNullable<ConsoleResourceQuery['resource']>

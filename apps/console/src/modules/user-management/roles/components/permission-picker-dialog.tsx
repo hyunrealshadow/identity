@@ -21,7 +21,7 @@ import {
   type ConsolePermissionOptionsQueryVariables,
   type ConsoleResourceOptionsQuery,
   type ConsoleResourceOptionsQueryVariables,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import {
   failureDescriptionKey,
   failureTitleKey,
@@ -35,7 +35,7 @@ import {
   withPermissionDisplayFields,
 } from '#/modules/user-management/roles/lib/role-localization'
 import type { StagedPermission } from '#/modules/user-management/roles/lib/permission-selection'
-import { useConsoleQuery } from '#/modules/user-management/lib/console-query'
+import { useConsoleQuery } from '#/lib/graphql/use-console-query'
 import { cursorPage } from '#/modules/user-management/lib/cursor-page'
 import {
   UserSelectField,

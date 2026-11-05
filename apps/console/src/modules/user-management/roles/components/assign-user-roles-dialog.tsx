@@ -15,14 +15,14 @@ import {
   ConsoleRolesDocument,
   type ConsoleRolesQuery,
   type ConsoleRolesQueryVariables,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 
 import { useLocale, useTranslator } from '#/lib/i18n'
 
 import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
 
 import { useRoleMutations } from '#/modules/user-management/roles/hooks/role-mutations'
-import { useConsoleQuery } from '#/modules/user-management/lib/console-query'
+import { useConsoleQuery } from '#/lib/graphql/use-console-query'
 import { cursorPage } from '#/modules/user-management/lib/cursor-page'
 import { clearDraft } from '#/lib/draft-storage'
 import { useDialogDraft } from '../../lib/dialog-draft'

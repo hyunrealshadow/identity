@@ -1,16 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo } from 'react'
 
 import {
   InstanceDashboardDocument,
   type InstanceDashboardQuery,
   type InstanceDashboardQueryVariables,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import {
   type GraphQLFailure,
   type GraphQLIssue,
 } from '#/lib/graphql/transport'
+import { useConsoleQuery } from '#/lib/graphql/use-console-query'
 import { useLocale } from '#/lib/i18n'
-import { useGraphQL } from '#/lib/graphql/use-graphql'
 import type { EffectivePermissions } from '#/lib/workspace'
 import { dashboardScope, type DashboardScope } from '#/modules/dashboard/lib/dashboard-scope'
 
@@ -37,11 +37,6 @@ export interface InstanceDashboardState {
   refresh: () => Promise<void>
 }
 
-interface InFlight {
-  key: string
-  promise: Promise<void>
-}
-
 function missingDashboardData(
   requestId?: string,
   traceId?: string,
@@ -62,140 +57,48 @@ function missingDashboardData(
 export function useInstanceDashboard(
   permissions: EffectivePermissions | null | undefined,
 ): InstanceDashboardState {
-  const request = useGraphQL()
   const { timeZone } = useLocale()
   const scope = useMemo(() => dashboardScope(permissions), [permissions])
-  const [status, setStatus] = useState<DashboardStatus>('idle')
-  const [data, setData] = useState<InstanceOverview | null>(null)
-  const [errors, setErrors] = useState<GraphQLIssue[]>([])
-  const [failure, setFailure] = useState<GraphQLFailure>()
-  const [requestId, setRequestId] = useState<string>()
-  const [traceId, setTraceId] = useState<string>()
-  const [partial, setPartial] = useState(false)
-  const [forbidden, setForbidden] = useState(false)
-  const [refreshing, setRefreshing] = useState(false)
-  const inFlight = useRef<InFlight | null>(null)
-  const loaded = useRef(false)
-  const activeKey = useRef<string | undefined>(undefined)
-  const scopeKey = `${timeZone}:${Number(scope.users)}${Number(scope.applications)}${Number(scope.sessions)}${Number(scope.resources)}`
-  const selection = useRef(scopeKey)
+  const variables = useMemo<InstanceDashboardQueryVariables>(
+    () => ({
+      timeZone,
+      includeUsers: scope.users,
+      includeApplications: scope.applications,
+      includeSessions: scope.sessions,
+      includeResources: scope.resources,
+    }),
+    [scope, timeZone],
+  )
 
-  const load = useCallback(async () => {
-    if (!scope.hasAny) return
-    if (inFlight.current?.key === scopeKey) return inFlight.current.promise
-
-    const key = scopeKey
-    const selectionChanged = selection.current !== key
-    selection.current = key
-    activeKey.current = key
-    const run = (async () => {
-      try {
-        if (loaded.current && !selectionChanged) {
-          setRefreshing(true)
-        } else {
-          setData(null)
-          setErrors([])
-          setRequestId(undefined)
-          setTraceId(undefined)
-          setPartial(false)
-          setStatus('loading')
-        }
-        setFailure(undefined)
-        setForbidden(false)
-
-        const variables: InstanceDashboardQueryVariables = {
-          timeZone,
-          includeUsers: scope.users,
-          includeApplications: scope.applications,
-          includeSessions: scope.sessions,
-          includeResources: scope.resources,
-        }
-        const result = await request<
-          InstanceDashboardQuery,
-          InstanceDashboardQueryVariables
-        >(InstanceDashboardDocument, variables, 'InstanceDashboard')
-
-        // A newer selection replaced this request while it was in flight.
-        if (activeKey.current !== key) return
-
-        setErrors(result.errors)
-        setRequestId(result.requestId)
-        setTraceId(result.traceId)
-        setForbidden(result.forbidden)
-
-        const overview = result.data?.instanceOverview ?? null
-        if (overview) {
-          setData(overview)
-          setFailure(result.failure)
-          setPartial(result.partial)
-          setStatus('ready')
-        } else {
-          setData(null)
-          setFailure(
-            result.failure ?? missingDashboardData(result.requestId, result.traceId),
-          )
-          setPartial(false)
-          setStatus('error')
-        }
-
-        loaded.current = true
-      } catch {
-        if (activeKey.current === key) {
-          setData(null)
-          setErrors([])
-          setRequestId(undefined)
-          setTraceId(undefined)
-          setFailure({ kind: 'network', code: 'dashboard_request_failed' })
-          setPartial(false)
-          setStatus('error')
-        }
-      } finally {
-        if (activeKey.current === key) setRefreshing(false)
-      }
-    })()
-
-    const entry: InFlight = { key, promise: run }
-    inFlight.current = entry
-    void run.finally(() => {
-      if (inFlight.current === entry) inFlight.current = null
-    })
-    return run
-  }, [request, scope, scopeKey, timeZone])
-
-  useEffect(() => {
-    if (!scope.hasAny) {
-      loaded.current = false
-      inFlight.current = null
-      activeKey.current = undefined
-      setStatus('idle')
-      setData(null)
-      setErrors([])
-      setFailure(undefined)
-      setRequestId(undefined)
-      setTraceId(undefined)
-      setPartial(false)
-      setForbidden(false)
-      setRefreshing(false)
-      return
-    }
-    void load()
-  }, [load, scope.hasAny])
-
-  const refresh = useCallback(async () => {
-    await load()
-  }, [load])
+  const query = useConsoleQuery<
+    InstanceDashboardQuery,
+    InstanceDashboardQueryVariables
+  >(
+    InstanceDashboardDocument,
+    variables,
+    'InstanceDashboard',
+    scope.hasAny,
+    'missing_instance_overview',
+  )
+  const overview = query.data?.instanceOverview ?? null
+  const missing = query.status === 'ready' && overview === null
 
   return {
-    status,
-    data,
+    status: missing ? 'error' : query.status,
+    data: overview,
     scope,
-    errors,
-    failure,
-    requestId,
-    traceId,
-    partial,
-    forbidden,
-    refreshing,
-    refresh,
+    errors: query.errors,
+    failure:
+      missing && !query.failure
+        ? missingDashboardData(query.requestId, query.traceId)
+        : query.failure,
+    requestId: query.requestId,
+    traceId: query.traceId,
+    partial: query.partial,
+    forbidden: query.forbidden,
+    refreshing: query.refreshing,
+    refresh: async () => {
+      await query.refresh()
+    },
   }
 }

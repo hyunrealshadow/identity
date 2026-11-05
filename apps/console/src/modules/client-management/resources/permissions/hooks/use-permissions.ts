@@ -8,8 +8,8 @@ import {
   type ConsoleResourcePermissionsQueryVariables,
   type ConsoleScopesQuery,
   type ConsoleScopesQueryVariables,
-} from '#/gql/graphql'
-import { useConsoleQuery } from '#/modules/user-management/lib/console-query'
+} from '#/generated/graphql'
+import { useConsoleQuery } from '#/lib/graphql/use-console-query'
 
 export function usePermissionList(
   variables: ConsoleResourcePermissionsQueryVariables | null,

@@ -1,9 +1,11 @@
 import { RouterProvider } from '@tanstack/react-router'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
 import './styles.css'
 import { ConfigError, loadRuntimeConfig } from '#/lib/config'
+import { queryClient } from '#/lib/graphql/query-client'
 import { resolveBrowserLocale, translate } from '#/lib/i18n'
 import { createAppRouter } from './router'
 
@@ -68,7 +70,9 @@ loadRuntimeConfig()
     const router = createAppRouter(config)
     root.render(
       <StrictMode>
-        <RouterProvider router={router} />
+        <QueryClientProvider client={queryClient}>
+          <RouterProvider router={router} />
+        </QueryClientProvider>
       </StrictMode>,
     )
   })

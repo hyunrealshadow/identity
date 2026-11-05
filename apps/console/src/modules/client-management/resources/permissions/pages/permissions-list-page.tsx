@@ -5,7 +5,7 @@ import { AsyncState } from '#/components/async-state'
 import { CopyButton } from '#/components/copy-button'
 import { CursorPagination } from '#/components/cursor-pagination'
 import { ResourceTable, type ResourceColumn } from '#/components/resource-table'
-import { type ConsoleResourcePermissionsQueryVariables } from '#/gql/graphql'
+import { type ConsoleResourcePermissionsQueryVariables } from '#/generated/graphql'
 import { formatDateTime } from '#/lib/format'
 import {
   failureTitleKey,

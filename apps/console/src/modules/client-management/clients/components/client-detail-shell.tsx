@@ -15,7 +15,7 @@ import {
   ConsoleClientDocument,
   type ConsoleClientQuery,
   type ConsoleClientQueryVariables,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import {
   failureDescriptionKey,
   failureTitleKey,
@@ -25,7 +25,7 @@ import { useWorkspace } from '#/lib/workspace'
 import {
   useConsoleQuery,
   type ConsoleQueryState,
-} from '#/modules/user-management/lib/console-query'
+} from '#/lib/graphql/use-console-query'
 import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
 import { clientScope, type ClientScope } from '../lib/client-scope'

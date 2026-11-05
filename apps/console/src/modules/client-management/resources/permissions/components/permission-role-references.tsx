@@ -11,11 +11,11 @@ import {
   ConsolePermissionRolesDocument,
   type ConsolePermissionRolesQuery,
   type ConsolePermissionRolesQueryVariables,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import { useLocale, useTranslator } from '#/lib/i18n'
 import { useWorkspace } from '#/lib/workspace'
 import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
-import { useConsoleQuery } from '#/modules/user-management/lib/console-query'
+import { useConsoleQuery } from '#/lib/graphql/use-console-query'
 import { cursorPage } from '#/modules/user-management/lib/cursor-page'
 import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
 import {

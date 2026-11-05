@@ -12,7 +12,7 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { ConfirmationDialog } from '#/components/confirmation-dialog'
 import { LocalizedTextField } from '#/components/localized-text-field'
-import type { UpdateClientInput } from '#/gql/graphql'
+import type { UpdateClientInput } from '#/generated/graphql'
 import { formatDateTime } from '#/lib/format'
 import { useLocale, useTranslator, type MessageKey } from '#/lib/i18n'
 import {

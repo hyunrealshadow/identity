@@ -27,7 +27,7 @@ import {
   type ConsoleRolesQuery,
   type ConsoleRolesQueryVariables,
   type SetGroupRolesInput,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import {
   failureDescriptionKey,
   failureTitleKey,
@@ -39,7 +39,7 @@ import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-
 import { useGroupRoleMutations } from '#/modules/user-management/groups/hooks/use-group-roles'
 import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
 import type { RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
-import { useConsoleQuery } from '#/modules/user-management/lib/console-query'
+import { useConsoleQuery } from '#/lib/graphql/use-console-query'
 import { cursorPage } from '#/modules/user-management/lib/cursor-page'
 import { clearDraft, readDraft, writeDraft } from '#/lib/draft-storage'
 

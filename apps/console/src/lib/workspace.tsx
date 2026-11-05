@@ -1,11 +1,10 @@
+import { useQuery } from '@tanstack/react-query'
 import {
   createContext,
   useCallback,
   useContext,
   useEffect,
   useMemo,
-  useRef,
-  useState,
   type ReactNode,
 } from 'react'
 
@@ -15,14 +14,16 @@ import {
   ConsoleBootstrapDocument,
   type ConsoleBootstrapQuery,
   type ConsoleBootstrapQueryVariables,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import {
   type GraphQLFailure,
   type GraphQLIssue,
+  type GraphQLResult,
   type GraphQLStepUp,
 } from '#/lib/graphql/transport'
 import { RequestableAccessContext } from '#/lib/graphql/access-context'
 import { useGraphQL } from '#/lib/graphql/use-graphql'
+import { useLocale } from '#/lib/i18n'
 
 export type EffectivePermissions = ConsoleBootstrapQuery['effectivePermissions']
 export type InstanceInfo = ConsoleBootstrapQuery['instanceInfo']
@@ -47,6 +48,12 @@ interface WorkspaceContextValue {
   refresh: () => Promise<void>
 }
 
+interface BootstrapSnapshot {
+  result: GraphQLResult<ConsoleBootstrapQuery>
+  /** The validated session this capability snapshot belongs to. */
+  session: AuthSession | null
+}
+
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null)
 
 function missingOverviewData(
@@ -68,153 +75,114 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     requireReauthentication,
   } = useAuth()
   const request = useGraphQL()
-  const [status, setStatus] = useState<WorkspaceStatus>('idle')
-  const [data, setData] = useState<WorkspaceData>()
-  const [errors, setErrors] = useState<GraphQLIssue[]>([])
-  const [failure, setFailure] = useState<GraphQLFailure>()
-  const [requestId, setRequestId] = useState<string>()
-  const [traceId, setTraceId] = useState<string>()
-  const [stepUp, setStepUp] = useState<GraphQLStepUp>()
-  const [partial, setPartial] = useState(false)
-  const [forbidden, setForbidden] = useState(false)
-  const [loadedSession, setLoadedSession] = useState<AuthSession | null>(null)
-  const currentSession = getAuthSession()
-  const inFlight = useRef<{
-    session: AuthSession | null
-    promise: Promise<void>
-  } | null>(null)
+  const { locale } = useLocale()
 
-  const load = useCallback(async () => {
-    const session = getAuthSession()
-    if (inFlight.current?.session === session) return inFlight.current.promise
-    const run = (async () => {
-      setStatus('loading')
-      setFailure(undefined)
+  const query = useQuery({
+    queryKey: ['console', sessionVersion, locale, 'ConsoleBootstrap'],
+    enabled: authStatus === 'authenticated',
+    retry: false,
+    staleTime: 0,
+    queryFn: async ({ signal }): Promise<BootstrapSnapshot> => {
+      const session = getAuthSession()
       const result = await request<
         ConsoleBootstrapQuery,
         ConsoleBootstrapQueryVariables
-      >(ConsoleBootstrapDocument, {}, 'ConsoleBootstrap')
-      // Bootstrap capabilities belong to one validated session. Discard a late
-      // result rather than applying old freshness or permissions to its successor.
-      if (getAuthSession() !== session) return
-      setLoadedSession(session)
-      setErrors(result.errors)
-      setRequestId(result.requestId)
-      setTraceId(result.traceId)
-      setStepUp(result.stepUp)
-      setForbidden(result.forbidden)
+      >(ConsoleBootstrapDocument, {}, 'ConsoleBootstrap', { signal })
+      return { result, session }
+    },
+  })
 
-      const effectivePermissions = result.data?.effectivePermissions ?? null
-      const instanceInfo = result.data?.instanceInfo ?? null
-      const hasAnyRoot = Boolean(effectivePermissions || instanceInfo)
-      // Bootstrap describes current capabilities. Missing write freshness is
-      // handled by the selected operation's access contract, not by re-login.
-      if (result.stepUp || result.unauthorized) {
-        // Keep the bootstrap gate in a loading state until the central
-        // coordinator navigates, so individual pages never flash a denial for
-        // access that authentication is about to recover.
-        setData({ effectivePermissions, instanceInfo })
-        setFailure(undefined)
-        setPartial(false)
-        setStatus('reauth')
-        void requireReauthentication(result.stepUp, {
-          requestId: result.requestId,
-          traceId: result.traceId,
-          reason: result.stepUp
-            ? 'step_up'
-            : result.unauthorized
-              ? 'unauthorized'
-              : 'policy',
-        })
-        return
-      }
-
-      if (!hasAnyRoot) {
-        setData(undefined)
-        setFailure(
-          result.failure ??
-            missingOverviewData(result.requestId, result.traceId),
-        )
-        setPartial(false)
-        setStatus('error')
-        return
-      }
-
-      setData({ effectivePermissions, instanceInfo })
-      setFailure(result.failure)
-      // Each bootstrap root is loaded independently. Keep the successful root,
-      // but make the missing one visible instead of replacing the whole page.
-      setPartial(result.partial || !effectivePermissions || !instanceInfo)
-      setStatus('ready')
-    })()
-    const entry = { session, promise: run }
-    inFlight.current = entry
-    void run.finally(() => {
-      if (inFlight.current === entry) inFlight.current = null
-    })
-    return run
-  }, [request, requireReauthentication])
+  const snapshot = query.data
+  const result = snapshot?.result
+  // Bootstrap capabilities belong to one validated session. A late result of
+  // its predecessor is never applied to the successor's workspace.
+  const currentSession = getAuthSession()
+  const current =
+    authStatus === 'authenticated' &&
+    snapshot !== undefined &&
+    snapshot.session === currentSession
 
   useEffect(() => {
-    if (authStatus !== 'authenticated') {
-      setStatus('idle')
-      setData(undefined)
-      setLoadedSession(null)
-      setErrors([])
-      setFailure(undefined)
-      setPartial(false)
-      inFlight.current = null
-      return
-    }
-    void load()
-  }, [authStatus, sessionVersion, load])
+    if (!current || !result) return
+    if (!result.stepUp && !result.unauthorized) return
+    // Keep the bootstrap gate loading until the central coordinator navigates,
+    // so pages never flash a denial for access authentication can recover.
+    void requireReauthentication(result.stepUp, {
+      requestId: result.requestId,
+      traceId: result.traceId,
+      reason: result.stepUp ? 'step_up' : 'unauthorized',
+    })
+  }, [current, result, requireReauthentication])
 
+  const { refetch } = query
   const refresh = useCallback(async () => {
-    await load()
-  }, [load])
+    await refetch()
+  }, [refetch])
 
-  // Hide the previous session's capability snapshot synchronously on callback.
-  // Pages stay mounted with their drafts while the new bootstrap is pending.
-  const current = loadedSession === currentSession
+  const effectivePermissions = current
+    ? (result?.data?.effectivePermissions ?? null)
+    : null
+  const instanceInfo = current ? (result?.data?.instanceInfo ?? null) : null
+  const hasAnyRoot = Boolean(effectivePermissions || instanceInfo)
+  const challenged = Boolean(result?.stepUp || result?.unauthorized)
+
+  const status: WorkspaceStatus =
+    authStatus !== 'authenticated'
+      ? 'idle'
+      : !current || query.isPending
+        ? 'loading'
+        : challenged
+          ? 'reauth'
+          : hasAnyRoot
+            ? 'ready'
+            : 'error'
+
   const value = useMemo<WorkspaceContextValue>(
     () => ({
-      status: authStatus === 'authenticated' && !current ? 'loading' : status,
-      data: current ? data : undefined,
-      errors,
-      failure,
-      requestId,
-      traceId,
-      stepUp,
-      partial,
-      forbidden,
+      status,
+      data:
+        current && (hasAnyRoot || challenged)
+          ? { effectivePermissions, instanceInfo }
+          : undefined,
+      errors: current ? (result?.errors ?? []) : [],
+      failure:
+        current && status === 'error'
+          ? (result?.failure ??
+            missingOverviewData(result?.requestId, result?.traceId))
+          : undefined,
+      requestId: current ? result?.requestId : undefined,
+      traceId: current ? result?.traceId : undefined,
+      stepUp: current ? result?.stepUp : undefined,
+      partial:
+        current && status === 'ready'
+          ? (result?.partial ?? false) || !effectivePermissions || !instanceInfo
+          : false,
+      forbidden: current ? (result?.forbidden ?? false) : false,
       refresh,
     }),
     [
-      authStatus,
+      challenged,
       current,
-      data,
-      errors,
-      failure,
-      forbidden,
-      partial,
+      effectivePermissions,
+      hasAnyRoot,
+      instanceInfo,
       refresh,
-      requestId,
+      result,
       status,
-      stepUp,
-      traceId,
     ],
   )
 
   const requestableAccess = useMemo(
     () =>
-      loadedSession && current && data?.effectivePermissions
+      current && effectivePermissions
         ? {
-            session: loadedSession,
-            scopes: data.effectivePermissions.requestableScopes,
+            session: snapshot.session as AuthSession,
+            scopes: effectivePermissions.requestableScopes,
           }
         : null,
-    [loadedSession, current, data],
+    [current, effectivePermissions, snapshot],
   )
+
   return (
     <WorkspaceContext.Provider value={value}>
       <RequestableAccessContext.Provider value={requestableAccess}>

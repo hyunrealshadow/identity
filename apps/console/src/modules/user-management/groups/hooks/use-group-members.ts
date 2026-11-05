@@ -13,10 +13,10 @@ import {
   type ConsoleRemoveGroupMemberMutation,
   type ConsoleRemoveGroupMemberMutationVariables,
   type RemoveGroupMemberInput,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import type { GraphQLResult } from '#/lib/graphql/transport'
-import { useGraphQL } from '#/lib/graphql/use-graphql'
-import { useConsoleQuery } from '#/modules/user-management/lib/console-query'
+import { useGraphQLMutation } from '#/lib/graphql/use-graphql-mutation'
+import { useConsoleQuery } from '#/lib/graphql/use-console-query'
 
 /**
  * Membership reads are bounded by the group query and the membership
@@ -42,7 +42,7 @@ export type GroupMemberWriteResult =
   | GraphQLResult<ConsoleRemoveGroupMemberMutation>
 
 export function useGroupMemberMutations() {
-  const request = useGraphQL()
+  const request = useGraphQLMutation()
 
   return useMemo(
     () => ({

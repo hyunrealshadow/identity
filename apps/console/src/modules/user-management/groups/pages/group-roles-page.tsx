@@ -11,7 +11,7 @@ import { AsyncState } from '#/components/async-state'
 import { ErrorDetails } from '#/components/error-details'
 import { RequestCorrelation } from '#/components/request-correlation'
 import { StepUpPanel } from '#/components/step-up-panel'
-import { type ConsoleGroupRolesQueryVariables } from '#/gql/graphql'
+import { type ConsoleGroupRolesQueryVariables } from '#/generated/graphql'
 import {
   failureDescriptionKey,
   failureTitleKey,

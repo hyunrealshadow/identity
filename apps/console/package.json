@@ -19,7 +19,9 @@
     "@heroui/react": "3.2.6",
     "@heroui/styles": "3.2.6",
     "@identity/graphql-access": "workspace:*",
+    "@identity/ui": "workspace:*",
     "@internationalized/date": "3.12.4",
+    "@tanstack/react-query": "5.102.8",
     "@tanstack/react-router": "1.170.45",
     "graphql": "17.0.2",
     "lucide-react": "1.52.0",
@@ -27,8 +29,7 @@
     "react": "19.3.0",
     "react-aria": "3.52.1",
     "react-dom": "19.3.0",
-    "react-intl": "12.1.4",
-    "@identity/ui": "workspace:*"
+    "react-intl": "12.1.4"
   },
   "devDependencies": {
     "@graphql-codegen/cli": "7.4.6",

@@ -13,7 +13,7 @@ import {
   ConsoleClientsDocument,
   type ConsoleClientsQuery,
   type ConsoleClientsQueryVariables,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import { formatDateTime } from '#/lib/format'
 import {
   failureDescriptionKey,
@@ -24,7 +24,7 @@ import { useCursorPagination } from '#/lib/use-cursor-pagination'
 import { useWorkspace } from '#/lib/workspace'
 import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
 import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
-import { useConsoleQuery } from '#/modules/user-management/lib/console-query'
+import { useConsoleQuery } from '#/lib/graphql/use-console-query'
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
 import {
   UserSelectField,

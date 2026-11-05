@@ -14,7 +14,7 @@ import {
   ConsoleRoleGroupsDocument,
   type ConsoleRoleGroupsQuery,
   type ConsoleRoleGroupsQueryVariables,
-} from '#/gql/graphql'
+} from '#/generated/graphql'
 import { formatDateTime } from '#/lib/format'
 import {
   failureDescriptionKey,
@@ -33,7 +33,7 @@ import {
   GroupStatusChip,
 } from '#/modules/user-management/groups/components/group-status'
 import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
-import { useConsoleQuery } from '#/modules/user-management/lib/console-query'
+import { useConsoleQuery } from '#/lib/graphql/use-console-query'
 import { cursorPage } from '#/modules/user-management/lib/cursor-page'
 import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'

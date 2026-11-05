@@ -6,7 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { LocalizedTextField } from '#/components/localized-text-field'
 import { PageHeader } from '#/components/page-header'
 
-import { type CreateScopeInput } from '#/gql/graphql'
+import { type CreateScopeInput } from '#/generated/graphql'
 import { useTranslator, type MessageKey } from '#/lib/i18n'
 import { localizedMetadata, type LocalizedValues } from '#/lib/localized-values'
 import { useWorkspace } from '#/lib/workspace'
