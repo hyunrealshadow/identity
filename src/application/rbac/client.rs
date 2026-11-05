@@ -1,8 +1,8 @@
-//! Client API-scope delegation types over the canonical `client_scope` relation.
+//! Client scope assignment types over the canonical `client_scope` relation.
 //!
 //! This is not a fabricated `(client, resource, scopes)` grant. Replacement is
-//! exact over resource-owned API scopes (built-in or custom) and leaves
-//! protocol/identity assignments untouched.
+//! exact over every assigned scope: resource-owned API scopes (built-in or
+//! custom) and protocol/identity scopes such as `openid`.
 //!
 //! Every assignment bounds what the client may request on behalf of a user.
 //! `client_granted` additionally grants the scope to the client itself, which
@@ -51,8 +51,8 @@ pub struct ClientScopePage {
 #[derive(Debug, Clone)]
 pub struct SetClientScopesCommand {
     pub client_oid: ClientOid,
-    /// Exact, resource-owned API scope assignments. Protocol entries are
-    /// rejected and existing protocol assignments are preserved.
+    /// The complete assignment set. Protocol entries never set
+    /// `client_granted`.
     pub scopes: Vec<ClientScopeAssignment>,
     pub expected_version: Uuid,
     pub reason: String,

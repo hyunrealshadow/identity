@@ -22,6 +22,7 @@ import {
   type LocalizedDraft,
 } from '#/lib/localized-values'
 import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
+import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
 import type { RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
 import { useClientDetail, type ConsoleClient } from '../components/client-detail-shell'
 import { ClientSettingsFields } from '../components/client-settings-fields'
@@ -319,6 +320,7 @@ function ClientOverview({ client }: { client: ConsoleClient }) {
 
 function ClientLifecycle({ client }: { client: ConsoleClient }) {
   const t = useTranslator()
+  const { locale } = useLocale()
   const navigate = useNavigate()
   const { query, scope } = useClientDetail()
   const mutations = useClientMutations()
@@ -419,7 +421,9 @@ function ClientLifecycle({ client }: { client: ConsoleClient }) {
         <ConfirmationDialog
           state={deleteDialog}
           title={t('clientsDeleteTitle')}
-          description={t('clientsDeleteDescription', { name: client.name })}
+          description={t('clientsDeleteDescription', {
+            name: resolveLocalizedText(client.names, locale) ?? client.name,
+          })}
           confirmLabel={t('clientsDelete')}
           destructive
           pending={pending}

@@ -9,7 +9,10 @@ use identity_application::{
         ClientProtocolSettings, ClientStateTransaction, CreateClientSecretTransaction,
         CreateClientTransaction, NewClientSecret, UpdateClientTransaction,
     },
-    rbac::RbacManagementAuthority,
+    rbac::{
+        ClientScopeAssignment, RbacManagementAuthority, RbacManagementRepository,
+        RbacManagementRepositoryError, ScopeOid, SetClientScopesTransaction,
+    },
 };
 use identity_domain::{
     authorization::{ActorContext, ManagementScope, RequestId},
@@ -23,6 +26,7 @@ use identity_infrastructure::database::{
         client_management::ClientManagementRepositoryImpl,
         oauth_resource::OAuthResourceRepositoryImpl,
         openid_connect::OpenIdConnectClientRepositoryImpl,
+        rbac_management::RbacManagementRepositoryImpl,
     },
     seed,
 };
@@ -276,5 +280,130 @@ async fn postgres_client_management_rechecks_authority_and_withdraws_on_boundary
         assert!(matches!(revoked, ClientManagementRepositoryError::Authorization(_)), "{revoked:?}");
         let missing = repo.find_client(Uuid::new_v4()).await.unwrap();
         assert!(missing.is_none());
+    }).await;
+}
+
+async fn assigned_codes(db: &DatabaseConnection, client: Uuid) -> Vec<String> {
+    db.query_all_raw(Statement::from_string(
+        DbBackend::Postgres,
+        format!(
+            "SELECT s.code FROM client_scope cs JOIN scope s ON s.id=cs.scope_id
+             JOIN client c ON c.id=cs.client_id WHERE c.oid='{client}' ORDER BY s.code"
+        ),
+    ))
+    .await
+    .unwrap()
+    .into_iter()
+    .map(|row| row.try_get::<String>("", "code").unwrap())
+    .collect()
+}
+
+async fn scope_oid(db: &DatabaseConnection, code: &str) -> ScopeOid {
+    ScopeOid(
+        scalar::<Uuid>(
+            db,
+            &format!("SELECT oid AS value FROM scope WHERE code='{code}'"),
+        )
+        .await,
+    )
+}
+
+#[tokio::test]
+#[ignore = "requires explicitly configured PostgreSQL test database"]
+async fn postgres_client_protocol_scopes_default_on_create_and_replace_with_the_full_set() {
+    isolated(|db| async move {
+        seed::run_all(&db).await.unwrap();
+        owner(&db).await;
+        let authority = machine(&db, &[ManagementScope::ClientsCreate, ManagementScope::ClientsScopes]).await;
+        let clients = ClientManagementRepositoryImpl::new(db.clone());
+        let rbac = RbacManagementRepositoryImpl::new(db.clone());
+
+        // An interactive client can sign users in from the start; a machine
+        // client starts with no protocol scopes.
+        let web = clients.create_client(CreateClientTransaction {
+            client_oid: Uuid::new_v4(),
+            name: "Portal".to_owned(),
+            description: String::new(), names: Vec::new(), descriptions: Vec::new(),
+            settings: web_settings("https://portal.example.test/callback"),
+            reason: String::new(),
+            authority: authority.clone(),
+        }).await.unwrap();
+        assert_eq!(assigned_codes(&db, web.oid).await, ["email", "offline_access", "openid", "profile"]);
+        let worker = clients.create_client(CreateClientTransaction {
+            client_oid: Uuid::new_v4(),
+            name: "Worker".to_owned(),
+            description: String::new(), names: Vec::new(), descriptions: Vec::new(),
+            settings: ClientProtocolSettings {
+                platforms: Vec::new(),
+                post_logout_redirect_uris: Vec::new(),
+                grant_types: vec![GrantType::ClientCredentials],
+                cors_enabled: false,
+                ..web_settings("https://unused.example.test/callback")
+            },
+            reason: String::new(),
+            authority: authority.clone(),
+        }).await.unwrap();
+        assert!(assigned_codes(&db, worker.oid).await.is_empty());
+
+        // The submitted list replaces protocol scopes as well.
+        let artifact = issued_artifact(&db, web.oid).await;
+        let openid = scope_oid(&db, "openid").await;
+        let replaced = rbac.set_client_scopes(SetClientScopesTransaction {
+            client_oid: web.oid,
+            scopes: vec![ClientScopeAssignment { scope_oid: openid, client_granted: false }],
+            expected_version: web.version,
+            reason: String::new(),
+            authority: authority.clone(),
+        }).await.unwrap();
+        assert_eq!(assigned_codes(&db, web.oid).await, ["openid"]);
+        assert!(withdrawn(&db, artifact).await);
+        assert_eq!(audit_count(&db, "client.scopes.set", web.oid).await, 1);
+
+        // A protocol scope is never held by the client itself; the rejected
+        // change leaves the assignment and version untouched.
+        let rejected = rbac.set_client_scopes(SetClientScopesTransaction {
+            client_oid: web.oid,
+            scopes: vec![ClientScopeAssignment { scope_oid: openid, client_granted: true }],
+            expected_version: replaced.version,
+            reason: String::new(),
+            authority,
+        }).await.unwrap_err();
+        assert!(matches!(rejected, RbacManagementRepositoryError::ClientGrantNotAllowed { ref scope } if scope == "openid"), "{rejected:?}");
+        assert_eq!(assigned_codes(&db, web.oid).await, ["openid"]);
+        assert_eq!(clients.find_client(web.oid).await.unwrap().unwrap().version, replaced.version);
+    }).await;
+}
+
+#[tokio::test]
+#[ignore = "requires explicitly configured PostgreSQL test database"]
+async fn postgres_seed_removes_retired_management_scopes_and_their_relations() {
+    isolated(|db| async move {
+        seed::run_all(&db).await.unwrap();
+        // A database seeded before the retirement still holds the definition,
+        // a custom role permission and a client assignment for it.
+        sql(&db, r#"
+            INSERT INTO scope(oid,resource_id,code,name,names,description,descriptions,built_in,enabled,version)
+                SELECT gen_random_uuid(),resource_id,'management.administrator.read','Read administrators','{}'::jsonb,'','{}'::jsonb,true,true,gen_random_uuid()
+                FROM scope WHERE code='management.user.read';
+            INSERT INTO "role"(oid,name,names,description,descriptions,built_in,enabled,version)
+                VALUES(gen_random_uuid(),'Auditors','{}'::jsonb,'','{}'::jsonb,false,true,gen_random_uuid());
+            INSERT INTO role_permission(oid,role_id,scope_id)
+                SELECT gen_random_uuid(),r.id,s.id FROM "role" r, scope s
+                WHERE r.name='Auditors' AND s.code='management.administrator.read';
+            INSERT INTO client(oid,name,protocol) VALUES(gen_random_uuid(),'legacy','openid_connect');
+            INSERT INTO client_scope(client_id,scope_id,client_granted)
+                SELECT c.id,s.id,false FROM client c, scope s
+                WHERE c.name='legacy' AND s.code='management.administrator.read';
+        "#).await;
+        let before = scalar::<Uuid>(&db, "SELECT version AS value FROM \"role\" WHERE name='Auditors'").await;
+
+        seed::run_all(&db).await.unwrap();
+
+        assert_eq!(scalar::<i64>(&db, "SELECT count(*)::bigint AS value FROM scope WHERE code='management.administrator.read'").await, 0);
+        assert_eq!(scalar::<i64>(&db, "SELECT count(*)::bigint AS value FROM role_permission rp JOIN \"role\" r ON r.id=rp.role_id WHERE r.name='Auditors'").await, 0);
+        assert_eq!(scalar::<i64>(&db, "SELECT count(*)::bigint AS value FROM client_scope cs JOIN client c ON c.id=cs.client_id WHERE c.name='legacy'").await, 0);
+        assert_ne!(scalar::<Uuid>(&db, "SELECT version AS value FROM \"role\" WHERE name='Auditors'").await, before);
+        // Running the seed again is a no-op.
+        seed::run_all(&db).await.unwrap();
     }).await;
 }

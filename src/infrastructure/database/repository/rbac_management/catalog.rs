@@ -77,6 +77,19 @@ pub(crate) async fn resolve_scopes<C: ConnectionTrait>(
     Ok(ordered)
 }
 
+/// A protocol/identity scope assignment is an exact, live definition owned by
+/// no resource.
+pub(crate) fn ensure_assignable_protocol_scope(
+    scope: &ResolvedScope,
+) -> Result<(), RbacManagementRepositoryError> {
+    if scope.resource_id.is_some() || !scope.enabled || scope.code.contains('*') {
+        return Err(RbacManagementRepositoryError::ScopeNotBusiness {
+            scope: scope.code.clone(),
+        });
+    }
+    Ok(())
+}
+
 /// A client API-scope assignment is an exact, live, resource-owned concrete
 /// definition. Built-in definitions are assignable but remain immutable.
 pub(crate) fn ensure_assignable_api_scope(

@@ -1,14 +1,27 @@
-import { Alert, Button, Chip, Spinner, Switch, toast } from '@heroui/react'
+import {
+  Alert,
+  Button,
+  Checkbox,
+  CheckboxGroup,
+  Description,
+  Label,
+  Spinner,
+  Switch,
+  toast,
+} from '@heroui/react'
 import { DataTable } from '@identity/ui/data-table'
 import { Save } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
 import { TableRowActions } from '#/components/table-row-actions'
 import {
   ConsoleClientScopesDocument,
+  ConsoleProtocolScopesDocument,
   type ConsoleClientScopesQuery,
   type ConsoleClientScopesQueryVariables,
+  type ConsoleProtocolScopesQuery,
+  type ConsoleProtocolScopesQueryVariables,
 } from '#/gql/graphql'
 import {
   failureDescriptionKey,
@@ -34,7 +47,7 @@ interface ScopeRow {
   code: string
   name: string
   names: ReadonlyArray<{ locale: string; value: string }>
-  /** `null` marks a protocol scope, which this page does not replace. */
+  /** `null` marks a protocol scope such as `openid`. */
   resourceId: string | null
   clientGranted: boolean
 }
@@ -48,6 +61,17 @@ function rowsFrom(data: ConsoleClientScopesQuery | null): ScopeRow[] {
     resourceId: edge.node.resourceId ?? null,
     clientGranted: edge.clientGranted,
   }))
+}
+
+/** Field paths `scopes.<code>` name the scope a save rejected. */
+function rejectedScopeCodes(feedback: RbacFeedbackState | null): Set<string> {
+  const prefix = 'scopes.'
+  return new Set(
+    (feedback?.errors ?? [])
+      .flatMap((issue) => issue.fields)
+      .filter((field) => field.path.startsWith(prefix))
+      .map((field) => field.path.slice(prefix.length)),
+  )
 }
 
 export function ClientScopesPage() {
@@ -72,11 +96,29 @@ export function ClientScopesPage() {
     true,
     'missing_client_scopes',
   )
+  const protocolVariables = useMemo<ConsoleProtocolScopesQueryVariables>(
+    () => ({ first: PAGE_SIZE }),
+    [],
+  )
+  const protocolCatalog = useConsoleQuery<
+    ConsoleProtocolScopesQuery,
+    ConsoleProtocolScopesQueryVariables
+  >(
+    ConsoleProtocolScopesDocument,
+    rbac.scopesRead ? protocolVariables : null,
+    'ConsoleProtocolScopes',
+    rbac.scopesRead,
+    'missing_protocol_scopes',
+  )
   const server = useMemo(() => rowsFrom(query.data), [query.data])
-  const [rows, setRows] = useState<ScopeRow[]>([])
+  // Local edits live apart from the server rows so a refetch (for example
+  // after reauthentication) cannot discard them; `null` means "unchanged".
+  const [draft, setDraft] = useState<ScopeRow[] | null>(null)
   const [pending, setPending] = useState(false)
   const [feedback, setFeedback] = useState<RbacFeedbackState | null>(null)
-  useEffect(() => setRows(server), [server])
+  const rows = draft ?? server
+  const setRows = (update: (current: ScopeRow[]) => ScopeRow[]) =>
+    setDraft((current) => update(current ?? server))
 
   if (query.status === 'error') {
     return (
@@ -97,14 +139,62 @@ export function ClientScopesPage() {
   const editable =
     scope.scopesWrite && !detail.client?.builtIn && complete && Boolean(client)
   const signature = (list: ScopeRow[]) =>
-    JSON.stringify(
-      list
-        .filter((row) => row.resourceId)
-        .map((row) => [row.id, row.clientGranted])
-        .sort(),
-    )
+    JSON.stringify(list.map((row) => [row.id, row.clientGranted]).sort())
   const dirty = signature(rows) !== signature(server)
   const assignedIds = new Set(rows.map((row) => row.id))
+  const apiRows = rows.filter((row) => row.resourceId)
+  const protocolRows = rows.filter((row) => !row.resourceId)
+  const rejected = rejectedScopeCodes(feedback)
+  // The catalog lists every selectable protocol scope; assigned ones the
+  // catalog cannot show (no catalog read, or a disabled definition) stay
+  // visible so the list never hides an existing assignment.
+  const protocolOptions: Array<{
+    id: string
+    code: string
+    name: string
+    names: ReadonlyArray<{ locale: string; value: string }>
+    description: string
+  }> = [
+    ...(protocolCatalog.data?.scopes.edges ?? []).map((edge) => ({
+      id: edge.node.id,
+      code: edge.node.code,
+      name: edge.node.name,
+      names: edge.node.names,
+      description:
+        resolveLocalizedText(edge.node.descriptions, locale) ?? edge.node.description,
+    })),
+  ]
+  for (const row of protocolRows) {
+    if (!protocolOptions.some((option) => option.id === row.id)) {
+      protocolOptions.push({
+        id: row.id,
+        code: row.code,
+        name: row.name,
+        names: row.names,
+        description: '',
+      })
+    }
+  }
+
+  function setProtocolScopes(ids: string[]) {
+    setFeedback(null)
+    setRows((current) => [
+      ...current.filter((row) => row.resourceId || ids.includes(row.id)),
+      ...protocolOptions
+        .filter(
+          (option) =>
+            ids.includes(option.id) && !current.some((row) => row.id === option.id),
+        )
+        .map((option) => ({
+          id: option.id,
+          code: option.code,
+          name: option.name,
+          names: option.names,
+          resourceId: null,
+          clientGranted: false,
+        })),
+    ])
+  }
   const displayName = detail.client
     ? (resolveLocalizedText(detail.client.names, locale) ?? detail.client.name)
     : ''
@@ -134,9 +224,10 @@ export function ClientScopesPage() {
       const result = await mutations.setScopes({
         clientId,
         expectedVersion: client.version,
-        scopes: rows
-          .filter((row) => row.resourceId)
-          .map((row) => ({ scopeId: row.id, clientGranted: row.clientGranted })),
+        scopes: rows.map((row) => ({
+          scopeId: row.id,
+          clientGranted: row.resourceId ? row.clientGranted : false,
+        })),
       })
       if (!result.data?.setClientScopes) {
         setFeedback({
@@ -154,6 +245,7 @@ export function ClientScopesPage() {
         })
         return
       }
+      setDraft(null)
       toast.success(t('clientsScopesSavedToast'), {
         description: t('clientsScopesSavedWithdrawn'),
       })
@@ -195,6 +287,41 @@ export function ClientScopesPage() {
           reloadPending={query.refreshing}
         />
       ) : null}
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-base font-semibold">{t('clientsProtocolScopesTitle')}</h2>
+          <p className="mt-1 text-sm text-muted">{t('clientsProtocolScopesDescription')}</p>
+        </div>
+        {loading || (rbac.scopesRead && protocolCatalog.status !== 'ready' && protocolCatalog.status !== 'error') ? (
+          <p className="text-sm text-muted">{t('tableLoading')}</p>
+        ) : protocolOptions.length === 0 ? (
+          <p className="text-sm text-muted">{t('clientsProtocolScopesEmpty')}</p>
+        ) : (
+          <CheckboxGroup
+            name="protocol-scopes"
+            aria-label={t('clientsProtocolScopesTitle')}
+            value={protocolRows.map((row) => row.id)}
+            onChange={setProtocolScopes}
+            isDisabled={!editable || pending}
+            className="grid gap-3 sm:grid-cols-2"
+          >
+            {protocolOptions.map((option) => (
+              <Checkbox key={option.id} value={option.id} isInvalid={rejected.has(option.code)}>
+                <Checkbox.Content>
+                  <Checkbox.Control>
+                    <Checkbox.Indicator />
+                  </Checkbox.Control>
+                  <Label>
+                    {resolveLocalizedText(option.names, locale) ?? option.name}{' '}
+                    <code className="text-xs text-muted">{option.code}</code>
+                  </Label>
+                </Checkbox.Content>
+                {option.description ? <Description>{option.description}</Description> : null}
+              </Checkbox>
+            ))}
+          </CheckboxGroup>
+        )}
+      </section>
       <section className="space-y-4">
         <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
           <div>
@@ -202,37 +329,27 @@ export function ClientScopesPage() {
             <p className="mt-1 text-sm text-muted">{t('clientsScopesDescription')}</p>
           </div>
           {editable ? (
-            <div className="flex flex-wrap gap-2">
-              <PermissionPickerDialog
-                subjectName={displayName}
-                hint={t('clientsScopesPickerHint')}
-                assignedIds={assignedIds}
-                initialSelected={new Set()}
-                initialMetadata={new Map()}
-                permissionRead={rbac.permissionRead}
-                resourcesRead={rbac.resourcesRead}
-                disabled={pending}
-                onApply={(_, metadata) => addScopes(metadata)}
-              />
-              <Button isDisabled={pending || !dirty} onPress={() => void save()}>
-                {pending ? (
-                  <Spinner size="sm" aria-label={t('working')} />
-                ) : (
-                  <Save className="size-4" aria-hidden="true" />
-                )}
-                {t('clientsScopesSave')}
-              </Button>
-            </div>
+            <PermissionPickerDialog
+              subjectName={displayName}
+              hint={t('clientsScopesPickerHint')}
+              assignedIds={assignedIds}
+              initialSelected={new Set()}
+              initialMetadata={new Map()}
+              permissionRead={rbac.permissionRead}
+              resourcesRead={rbac.resourcesRead}
+              disabled={pending}
+              triggerSize="md"
+              onApply={(_, metadata) => addScopes(metadata)}
+            />
           ) : null}
         </header>
         <DataTable
           label={t('clientsScopesTitle')}
           loading={loading || query.refreshing}
           loadingLabel={t('tableLoading')}
-          minWidth={760}
+          minWidth={640}
           columns={[
             { id: 'scope', label: t('clientsScopeColumn'), primary: true },
-            { id: 'kind', label: t('clientsScopeKind'), primary: false },
             { id: 'granted', label: t('clientsScopeClientGranted'), primary: false },
             { id: 'actions', label: t('clientsColumnActions'), primary: false },
           ]}
@@ -242,8 +359,8 @@ export function ClientScopesPage() {
               <AsyncState kind="empty" compact title={t('clientsScopesEmpty')} />
             )}
           >
-            {rows.map((row) => {
-              const api = Boolean(row.resourceId)
+            {apiRows.map((row) => {
+              const invalid = rejected.has(row.code)
               return (
                 <DataTable.Row key={row.id} id={row.id}>
                   <DataTable.Cell>
@@ -255,18 +372,12 @@ export function ClientScopesPage() {
                     </div>
                   </DataTable.Cell>
                   <DataTable.Cell>
-                    <Chip size="sm" variant="soft">
-                      <Chip.Label>
-                        {t(api ? 'clientsScopeKindApi' : 'clientsScopeKindProtocol')}
-                      </Chip.Label>
-                    </Chip>
-                  </DataTable.Cell>
-                  <DataTable.Cell>
-                    {api ? (
+                    <div className="flex flex-col gap-1">
                       <Switch
                         size="sm"
                         aria-label={t('clientsScopeClientGrantedFor', { code: row.code })}
                         isSelected={row.clientGranted}
+                        isInvalid={invalid}
                         isDisabled={!editable || pending}
                         onChange={(clientGranted) => {
                           setFeedback(null)
@@ -277,16 +388,21 @@ export function ClientScopesPage() {
                           )
                         }}
                       >
-                        <Switch.Control>
-                          <Switch.Thumb />
-                        </Switch.Control>
+                        <Switch.Content>
+                          <Switch.Control>
+                            <Switch.Thumb />
+                          </Switch.Control>
+                        </Switch.Content>
                       </Switch>
-                    ) : (
-                      <span className="text-xs text-muted">{t('clientsScopeProtocolOnly')}</span>
-                    )}
+                      {invalid ? (
+                        <span className="text-xs text-danger">
+                          {t('clientsScopeClientGrantRejected')}
+                        </span>
+                      ) : null}
+                    </div>
                   </DataTable.Cell>
                   <DataTable.Cell>
-                    {api && editable ? (
+                    {editable ? (
                       <TableRowActions
                         subject={row.code}
                         actions={[
@@ -310,10 +426,22 @@ export function ClientScopesPage() {
             })}
           </DataTable.Body>
         </DataTable>
-        {dirty ? (
-          <p className="text-xs text-muted">{t('clientsScopesUnsaved')}</p>
-        ) : null}
       </section>
+      {editable ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <Button isDisabled={pending || !dirty} onPress={() => void save()}>
+            {pending ? (
+              <Spinner size="sm" aria-label={t('working')} />
+            ) : (
+              <Save className="size-4" aria-hidden="true" />
+            )}
+            {t('clientsScopesSave')}
+          </Button>
+          {dirty ? (
+            <span className="text-xs text-muted">{t('clientsScopesUnsaved')}</span>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   )
 }

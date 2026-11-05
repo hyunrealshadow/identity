@@ -830,6 +830,11 @@ type MutationRoot {
 	Revoke a credential, permanently withdrawing what the client was issued.
 	"""
 	revokeClientCredential(input: RevokeClientCredentialInput!): ClientCredentialPayload! @access(policy: {scopes: ["management.client_credential.revoke"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	"""
+	Replace every scope assignment of a client: API scopes and protocol
+	scopes such as `openid`. Protocol scopes cannot be granted to the
+	client itself.
+	"""
 	setClientScopes(input: SetClientScopesInput!): ClientScopeSetPayload! @access(policy: {scopes: ["management.client.scope"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 }
 
@@ -1269,6 +1274,10 @@ input ScopeFilter {
 	resourceId: ID
 	roleId: ID
 	apiOnly: Boolean! = false
+	"""
+	Only concrete protocol/identity scopes such as `openid`.
+	"""
+	protocolOnly: Boolean! = false
 }
 
 enum ScopeOrder {

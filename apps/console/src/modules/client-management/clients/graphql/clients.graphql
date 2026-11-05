@@ -141,6 +141,34 @@ query ConsoleClientScopes(
   }
 }
 
+query ConsoleProtocolScopes($first: Int) {
+  scopes(
+    filter: { protocolOnly: true, enabled: true }
+    orderBy: CODE_ASC
+    first: $first
+  ) {
+    pageInfo {
+      hasNextPage
+    }
+    edges {
+      node {
+        id
+        code
+        name
+        names {
+          locale
+          value
+        }
+        description
+        descriptions {
+          locale
+          value
+        }
+      }
+    }
+  }
+}
+
 mutation ConsoleCreateClient($input: CreateClientInput!) {
   createClient(input: $input) {
     clientId

@@ -132,6 +132,10 @@ const shared = {
     'The authorization response did not arrive at the configured callback path.',
   authDiscoveryFailed:
     'The identity provider metadata could not be loaded or validated.',
+  authAuthorizationDenied: 'Sign-in was cancelled or access was denied.',
+  authAuthenticationRequirementsUnmet:
+    'Your sign-in does not meet what the console requires, such as two-step verification.',
+  authAuthorizationFailed: 'The identity provider could not complete the sign-in request.',
   authExchangeFailed:
     'The authorization code could not be exchanged for tokens.',
   authClaimsInvalid: 'The identity token claims are incomplete or invalid.',

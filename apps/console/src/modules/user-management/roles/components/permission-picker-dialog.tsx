@@ -83,6 +83,7 @@ export function PermissionPickerDialog({
   permissionRead,
   resourcesRead,
   disabled,
+  triggerSize = 'sm',
   onApply,
 }: {
   /** Display name of the role or client receiving permissions. */
@@ -95,6 +96,8 @@ export function PermissionPickerDialog({
   permissionRead: boolean
   resourcesRead: boolean
   disabled: boolean
+  /** Match the trigger to neighbouring actions; filter rows use the small size. */
+  triggerSize?: 'sm' | 'md'
   onApply: (ids: string[], metadata: StagedPermission[]) => void
 }) {
   const t = useTranslator()
@@ -325,7 +328,7 @@ export function PermissionPickerDialog({
   return (
     <>
       <Button
-        size="sm"
+        size={triggerSize}
         isDisabled={disabled || !permissionRead}
         onPress={state.open}
       >

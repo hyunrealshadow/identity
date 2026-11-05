@@ -53,6 +53,8 @@ use crate::database::{
         },
         client_openid_connect_platform,
         client_openid_connect_platform::{Column as PlatformColumn, Entity as PlatformEntity},
+        client_scope,
+        scope::{Column as ScopeColumn, Entity as ScopeEntity},
     },
     repository::{
         localized,
@@ -276,6 +278,7 @@ pub(super) async fn create(
     .await
     .map_err(storage)?;
     write_protocol(&txn, model.id, &command.settings).await?;
+    assign_default_protocol_scopes(&txn, model.id, &command.settings).await?;
     append_semantic_audit(
         &txn,
         &command.authority,
@@ -288,6 +291,55 @@ pub(super) async fn create(
     .map_err(from_management)?;
     txn.commit().await.map_err(storage)?;
     reload(db, command.client_oid).await
+}
+
+/// Protocol scopes a new interactive client starts with: sign-in identity and
+/// basic claims, plus `offline_access` when it may use refresh tokens. Machine
+/// clients start with none. Administrators adjust the set on the scopes page.
+fn default_protocol_scope_codes(settings: &ClientProtocolSettings) -> Vec<&'static str> {
+    let grants = &settings.grant_types;
+    let interactive =
+        grants.contains(&GrantType::AuthorizationCode) || grants.contains(&GrantType::DeviceCode);
+    if !interactive {
+        return Vec::new();
+    }
+    let mut codes = vec!["openid", "profile", "email"];
+    if grants.contains(&GrantType::RefreshToken) {
+        codes.push("offline_access");
+    }
+    codes
+}
+
+async fn assign_default_protocol_scopes(
+    txn: &DatabaseTransaction,
+    client_id: i64,
+    settings: &ClientProtocolSettings,
+) -> Result<(), ClientManagementRepositoryError> {
+    let codes = default_protocol_scope_codes(settings);
+    if codes.is_empty() {
+        return Ok(());
+    }
+    let scopes = ScopeEntity::find()
+        .filter(ScopeColumn::Code.is_in(codes))
+        .filter(ScopeColumn::ResourceId.is_null())
+        .filter(ScopeColumn::BuiltIn.eq(true))
+        .filter(ScopeColumn::Enabled.eq(true))
+        .all(txn)
+        .await
+        .map_err(storage)?;
+    for scope in scopes {
+        client_scope::ActiveModel {
+            client_id: Set(client_id),
+            scope_id: Set(scope.id),
+            client_granted: Set(false),
+            created_at: Set(Utc::now().into()),
+            ..Default::default()
+        }
+        .insert(txn)
+        .await
+        .map_err(storage)?;
+    }
+    Ok(())
 }
 
 pub(super) async fn update(

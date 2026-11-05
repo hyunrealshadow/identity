@@ -58,12 +58,14 @@ function SettingSwitch({
 }) {
   return (
     <Switch isSelected={isSelected} onChange={onChange} isDisabled={isDisabled}>
-      <Switch.Control>
-        <Switch.Thumb />
-      </Switch.Control>
       <Switch.Content>
-        <Label>{label}</Label>
-        <Description>{description}</Description>
+        <Switch.Control>
+          <Switch.Thumb />
+        </Switch.Control>
+        <div className="flex flex-col gap-0.5">
+          <Label>{label}</Label>
+          <Description>{description}</Description>
+        </div>
       </Switch.Content>
     </Switch>
   )

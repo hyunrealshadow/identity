@@ -468,9 +468,11 @@ fn map_repository_error(error: RbacManagementRepositoryError) -> AppError {
                 .with_field("scopeIds")
         }
         Error::ClientGrantNotAllowed { scope } => {
+            // The field path names the rejected scope so the form can mark it.
+            let field = format!("scopes.{scope}");
             AppError::from_code(RbacErrorCode::ClientGrantNotAllowed)
                 .with_param("scope", scope)
-                .with_field("scopes")
+                .with_field(field)
         }
         Error::InvalidPermissionCode { code } => {
             AppError::from_code(RbacErrorCode::InvalidPermissionCode)

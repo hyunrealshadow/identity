@@ -20,7 +20,7 @@ use super::{
     RbacManagementRepositoryImpl,
     audit::append_semantic_audit,
     authority::recheck_authority,
-    catalog::{ensure_assignable_api_scope, resolve_scopes},
+    catalog::{ensure_assignable_api_scope, ensure_assignable_protocol_scope, resolve_scopes},
     delegation,
     scope::scope_from_row,
     support::{
@@ -180,12 +180,26 @@ impl RbacManagementRepositoryImpl {
             .collect::<Vec<_>>();
         let scopes = resolve_scopes(&txn, &requested_oids).await?;
         let mut requested = BTreeMap::new();
+        let mut protocol = BTreeSet::new();
         for (scope, assignment) in scopes.iter().zip(&command.scopes) {
-            ensure_assignable_api_scope(scope)?;
-            if assignment.client_granted && is_human_only_scope(&scope.code) {
-                return Err(RbacManagementRepositoryError::ClientGrantNotAllowed {
-                    scope: scope.code.clone(),
-                });
+            if scope.resource_id.is_none() {
+                // Protocol/identity scopes describe what a signed-in user may
+                // share; they confer no permission and a client never holds
+                // one for itself.
+                ensure_assignable_protocol_scope(scope)?;
+                if assignment.client_granted {
+                    return Err(RbacManagementRepositoryError::ClientGrantNotAllowed {
+                        scope: scope.code.clone(),
+                    });
+                }
+                protocol.insert(scope.id);
+            } else {
+                ensure_assignable_api_scope(scope)?;
+                if assignment.client_granted && is_human_only_scope(&scope.code) {
+                    return Err(RbacManagementRepositoryError::ClientGrantNotAllowed {
+                        scope: scope.code.clone(),
+                    });
+                }
             }
             requested.insert(scope.id, assignment.client_granted);
         }
@@ -194,14 +208,13 @@ impl RbacManagementRepositoryImpl {
                 DbBackend::Postgres,
                 "SELECT s.id, cs.client_granted FROM client_scope cs \
                  JOIN \"scope\" s ON s.id = cs.scope_id \
-                 WHERE cs.client_id = $1 AND s.resource_id IS NOT NULL",
+                 WHERE cs.client_id = $1",
                 [client_id.into()],
             ))
             .await
             .map_err(storage)?;
-        // Only API-scope assignments are replaced. Protocol/identity rows
-        // (`resource_id IS NULL`) are a separate assignment class and survive
-        // both non-empty and empty API replacements.
+        // The submitted list is the complete assignment set, protocol and API
+        // scopes alike.
         let mut current = BTreeMap::new();
         for row in current_rows {
             current.insert(
@@ -230,6 +243,7 @@ impl RbacManagementRepositoryImpl {
         // own delegation ceiling.
         let extended = requested
             .iter()
+            .filter(|(id, _)| !protocol.contains(*id))
             .filter(|(id, granted)| match current.get(*id) {
                 None => true,
                 Some(current_granted) => **granted && !*current_granted,
@@ -288,7 +302,7 @@ impl RbacManagementRepositoryImpl {
         append_semantic_audit(
             &txn,
             &command.authority,
-            "rbac.client_scopes.set",
+            "client.scopes.set",
             "client",
             command.client_oid,
             &command.reason,

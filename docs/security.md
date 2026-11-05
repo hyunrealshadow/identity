@@ -58,9 +58,13 @@ require no human RBAC/MFA identity, separate management grant or
 management-policy switch. Human-only management scopes cannot be granted to a
 client and still reject machine principals. Granting a scope to the client
 itself must fit the actor's delegation ceiling like a new assignment. Replacing
-client API scopes preserves protocol scope assignments, withdraws previously
-issued client artifacts and uses the client's UUID `version` as its optimistic
-lock.
+a client's scopes replaces the complete set, API and protocol scopes alike;
+protocol scopes such as `openid` confer no permission, need no delegation
+ceiling and are never granted to the client itself. A replacement withdraws
+previously issued client artifacts and uses the client's UUID `version` as its
+optimistic lock. A new interactive client starts with `openid`, `profile` and
+`email`, plus `offline_access` when it may use refresh tokens; a machine client
+starts with none.
 
 Client management writes re-check management authority in their transaction,
 lock the client, compare its `version` and audit the change. Built-in clients

@@ -6,6 +6,7 @@ import {
   POPUP_STATE_PREFIX,
   buildTransaction,
   saveTransaction,
+  type AuthErrorCode,
   type AuthTransaction,
 } from '#/lib/auth/transaction'
 import type { AuthSession, IdTokenClaims } from '#/lib/auth/session'
@@ -68,6 +69,18 @@ function fetchOptions(fetchImpl?: typeof fetch) {
 
 function client(config: RuntimeConfig): oauth.Client {
   return { client_id: config.clientId }
+}
+
+/** Map an authorization error response (RFC 6749 §4.1.2.1) to a local code. */
+function authorizationErrorCode(error: string): AuthErrorCode {
+  switch (error) {
+    case 'access_denied':
+      return 'authorization_denied'
+    case 'unmet_authentication_requirements':
+      return 'authentication_requirements_unmet'
+    default:
+      return 'authorization_failed'
+  }
 }
 
 export async function discoverAuthorizationServer(
@@ -255,11 +268,13 @@ export async function completeAuthorization(input: {
   ) {
     throw new AuthError('callback_mismatch')
   }
-  if (callback.searchParams.has('error')) throw new AuthError('exchange_failed')
-
   const state = callback.searchParams.get('state')
   if (!state || state !== input.transaction.state)
     throw new AuthError('state_mismatch')
+  const authorizationError = callback.searchParams.get('error')
+  if (authorizationError) {
+    throw new AuthError(authorizationErrorCode(authorizationError))
+  }
 
   const discovery = await discoverAuthorizationServer(
     input.config,

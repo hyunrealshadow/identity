@@ -249,7 +249,7 @@ export function ClientsListPage({ search }: { search: ClientsSearch }) {
                   label: t('clientsColumnActions'),
                   render: (client) => (
                     <TableRowActions
-                      subject={client.name}
+                      subject={resolveLocalizedText(client.names, locale) ?? client.name}
                       actions={[
                         {
                           id: 'open',

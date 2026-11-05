@@ -158,13 +158,18 @@ const messages = {
     'Store this secret now. It cannot be shown again after you close this dialog.',
   clientsSecretIssuedExpires: 'Expires {date}',
   clientsSecretStored: 'I have stored it',
-  clientsScopesTitle: 'Assigned scopes',
-  clientsScopesDescription: 'What this client may request, and what it holds itself.',
+  clientsProtocolScopesTitle: 'Sign-in scopes',
+  clientsProtocolScopesDescription:
+    'Identity information this client may request when a user signs in. Sign-in requires openid.',
+  clientsProtocolScopesEmpty: 'No sign-in scopes are available',
+  clientsScopeClientGrantRejected: 'Reserved for people; cannot be granted to the client',
+  clientsScopesTitle: 'API scopes',
+  clientsScopesDescription: 'API permissions this client may request, and those it holds itself.',
   clientsScopesExplainTitle: 'Requesting for users and acting as itself',
   clientsScopesExplainDescription:
     'Every assigned scope can be requested on behalf of a signed-in user, who still needs the permission. Turn on "Granted to client" only for scopes the client should hold itself through client credentials.',
   clientsScopesTooMany: 'This client has more than {count} scopes, so they are shown read-only.',
-  clientsScopesEmpty: 'No scopes assigned',
+  clientsScopesEmpty: 'No API scopes assigned',
   clientsScopesPickerHint:
     'Built-in permissions can be assigned to clients. Management permissions reserved for people cannot be granted to the client itself.',
   clientsScopesSave: 'Save scopes',
@@ -172,12 +177,8 @@ const messages = {
   clientsScopesSavedToast: 'Scopes saved',
   clientsScopesSavedWithdrawn: 'Tokens the client was already issued were withdrawn.',
   clientsScopeColumn: 'Scope',
-  clientsScopeKind: 'Type',
-  clientsScopeKindApi: 'API',
-  clientsScopeKindProtocol: 'Protocol',
   clientsScopeClientGranted: 'Granted to client',
   clientsScopeClientGrantedFor: 'Grant {code} to the client itself',
-  clientsScopeProtocolOnly: 'Requested for users only',
   clientsScopeRemove: 'Remove',
 } as const
 

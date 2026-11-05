@@ -275,6 +275,8 @@ export type ScopeFilter = {
   apiOnly?: boolean;
   builtIn?: boolean | null | undefined;
   enabled?: boolean | null | undefined;
+  /** Only concrete protocol/identity scopes such as `openid`. */
+  protocolOnly?: boolean;
   query?: string | null | undefined;
   resourceId?: string | number | null | undefined;
   roleId?: string | number | null | undefined;
@@ -483,6 +485,13 @@ export type ConsoleClientScopesQueryVariables = Exact<{
 
 
 export type ConsoleClientScopesQuery = { client: { id: string, version: string, scopes: { totalCount: number, pageInfo: { hasNextPage: boolean, hasPreviousPage: boolean, startCursor: string | null, endCursor: string | null }, edges: Array<{ cursor: string, clientGranted: boolean, node: { id: string, code: string, name: string, resourceId: string | null, builtIn: boolean, enabled: boolean, names: Array<{ locale: string, value: string }> } }> } } | null };
+
+export type ConsoleProtocolScopesQueryVariables = Exact<{
+  first?: number | null | undefined;
+}>;
+
+
+export type ConsoleProtocolScopesQuery = { scopes: { pageInfo: { hasNextPage: boolean }, edges: Array<{ node: { id: string, code: string, name: string, description: string, names: Array<{ locale: string, value: string }>, descriptions: Array<{ locale: string, value: string }> } }> } };
 
 export type ConsoleCreateClientMutationVariables = Exact<{
   input: CreateClientInput;
@@ -1196,6 +1205,35 @@ export const ConsoleClientScopesDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ConsoleClientScopesQuery, ConsoleClientScopesQueryVariables>;
+export const ConsoleProtocolScopesDocument = new TypedDocumentString(`
+    query ConsoleProtocolScopes($first: Int) {
+  scopes(
+    filter: { protocolOnly: true, enabled: true }
+    orderBy: CODE_ASC
+    first: $first
+  ) {
+    pageInfo {
+      hasNextPage
+    }
+    edges {
+      node {
+        id
+        code
+        name
+        names {
+          locale
+          value
+        }
+        description
+        descriptions {
+          locale
+          value
+        }
+      }
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<ConsoleProtocolScopesQuery, ConsoleProtocolScopesQueryVariables>;
 export const ConsoleCreateClientDocument = new TypedDocumentString(`
     mutation ConsoleCreateClient($input: CreateClientInput!) {
   createClient(input: $input) {

@@ -82,6 +82,9 @@ pub(crate) struct ScopeFilter {
     pub role_id: Option<ID>,
     #[graphql(default)]
     pub api_only: bool,
+    /// Only concrete protocol/identity scopes such as `openid`.
+    #[graphql(default)]
+    pub protocol_only: bool,
 }
 
 impl ScopeFilter {
@@ -105,6 +108,7 @@ impl ScopeFilter {
             resource_oid,
             role_oid,
             api_only: self.api_only,
+            protocol_only: self.protocol_only,
         })
     }
 }

@@ -189,6 +189,9 @@ impl ClientScopeMutation {
         guard = "ManagementGuard::new(ManagementScope::ClientsScopes, ManagementTarget::instance())",
         directive = access::apply(ManagementGuard::policy(ManagementScope::ClientsScopes))
     )]
+    /// Replace every scope assignment of a client: API scopes and protocol
+    /// scopes such as `openid`. Protocol scopes cannot be granted to the
+    /// client itself.
     async fn set_client_scopes(
         &self,
         ctx: &Context<'_>,

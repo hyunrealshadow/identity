@@ -134,6 +134,9 @@ fn scope_filter_conditions(filter: &ScopeFilter, binds: &mut Binds) -> Vec<Strin
         // protocol scopes or wildcard selector definitions.
         conditions.push("s.resource_id IS NOT NULL AND position('*' in s.code) = 0".to_owned());
     }
+    if filter.protocol_only {
+        conditions.push("s.resource_id IS NULL AND position('*' in s.code) = 0".to_owned());
+    }
     if let Some(resource_oid) = filter.resource_oid {
         conditions.push(format!(
             "s.resource_id = {}",

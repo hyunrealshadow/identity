@@ -40,6 +40,8 @@ pub struct ScopeFilter {
     /// Restrict to concrete, resource-owned API scopes. Excludes protocol scopes
     /// and wildcard selector definitions.
     pub api_only: bool,
+    /// Restrict to concrete protocol/identity scopes owned by no resource.
+    pub protocol_only: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]

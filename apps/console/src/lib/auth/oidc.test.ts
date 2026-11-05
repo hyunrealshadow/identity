@@ -258,3 +258,32 @@ describe('expected subject binding', () => {
     expect(session.claims.sub).toBe('user-b')
   })
 })
+
+describe('authorization error responses', () => {
+  it.each([
+    ['unmet_authentication_requirements', 'authentication_requirements_unmet'],
+    ['access_denied', 'authorization_denied'],
+    ['server_error', 'authorization_failed'],
+  ])('reports %s without attempting a code exchange', async (error, code) => {
+    await expect(
+      completeAuthorization({
+        config,
+        callbackUrl: `${config.redirectUri}?error=${error}&state=state-a`,
+        transaction: transaction(),
+        fetchImpl: discoveryFetch(),
+      }),
+    ).rejects.toMatchObject({ code })
+    expect(mocks.authorizationCodeGrantRequest).not.toHaveBeenCalled()
+  })
+
+  it('rejects an error response for another transaction as a state mismatch', async () => {
+    await expect(
+      completeAuthorization({
+        config,
+        callbackUrl: `${config.redirectUri}?error=access_denied&state=state-b`,
+        transaction: transaction(),
+        fetchImpl: discoveryFetch(),
+      }),
+    ).rejects.toMatchObject({ code: 'state_mismatch' })
+  })
+})

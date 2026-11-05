@@ -70,7 +70,7 @@ impl RbacManagementService {
         })
     }
 
-    #[tracing::instrument(skip_all, name = "rbac.client_scopes.set")]
+    #[tracing::instrument(skip_all, name = "client.scopes.set")]
     pub async fn set_client_scopes(
         &self,
         authority: &RbacManagementAuthority,
@@ -100,7 +100,7 @@ impl RbacManagementService {
             Ok(result)
         }
         .await;
-        self.emit_result("rbac.client_scopes.set", &result, "client_oid");
+        self.emit_result("client.scopes.set", &result, "client_oid");
         result
     }
 }
