@@ -1,7 +1,7 @@
 use std::{error::Error as StdError, sync::Arc};
 
 use identity_application::{
-    auth::{
+    authentication::{
         account::AccountService, login::LoginService, mfa::MfaService, passkey::PasskeyService,
         session::SessionService,
     },

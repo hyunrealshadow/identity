@@ -3,7 +3,7 @@ use super::{
     validate_passkey_login,
 };
 use crate::{
-    auth::passkey::PasskeyOptions,
+    authentication::passkey::PasskeyOptions,
     error::{AppError, codes::auth::AuthErrorCode},
 };
 use identity_domain::auth::{

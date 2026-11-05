@@ -3,7 +3,7 @@ use crate::{
         AppError,
         codes::{auth::AuthErrorCode, common::CommonErrorCode},
     },
-    auth::{password::PasswordHashError, totp::TotpError},
+    authentication::{password::PasswordHashError, totp::TotpError},
     domain::{
         auth::repository::{LoginRepositoryError, SessionRepositoryError},
         user::repository::UserRepositoryError,

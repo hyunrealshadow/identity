@@ -1,6 +1,6 @@
 use super::{ChallengeOutcome, LoginService, SessionContext, failed_attempt_lock_until};
 use crate::{
-    auth::password::{HashOptions, VerifyResult, run_password_hashing},
+    authentication::password::{HashOptions, VerifyResult, run_password_hashing},
     error::{AppError, codes::auth::AuthErrorCode},
     user::model::{CredentialData, CredentialType, Password},
 };

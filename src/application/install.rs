@@ -21,7 +21,7 @@ use crate::{
         },
         setting::{PasswordHashSetting, SettingsSource, runtime::RefreshableSetting},
     },
-    auth::{
+    authentication::{
         password::{PasswordHasher, run_password_hashing},
         password_policy,
         password_policy::BreachedPasswordChecker,

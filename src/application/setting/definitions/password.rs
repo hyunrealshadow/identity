@@ -1,5 +1,5 @@
 use crate::{
-    auth::password::HashOptions,
+    authentication::password::HashOptions,
     setting::{SettingDefinition, SettingValidationError},
     user::model::{Argon2Options, Argon2Variant, Argon2Version},
 };

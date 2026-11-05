@@ -9,7 +9,7 @@ use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::{
-    auth::totp::{TotpError, TotpVerifier},
+    authentication::totp::{TotpError, TotpVerifier},
     data_protection::DataProtector,
     error::{AppError, codes::auth::AuthErrorCode},
     observability::{BusinessEvent, EventSink, EventValue, NoopEventSink},
@@ -332,7 +332,7 @@ mod tests {
         recovery_code_hash,
     };
     use crate::{
-        auth::totp::{TotpError, TotpVerifier},
+        authentication::totp::{TotpError, TotpVerifier},
         data_protection::DataProtector,
         user::{
             CredentialData, CredentialType, OtpAlgorithm, OtpCredentialData, Password,

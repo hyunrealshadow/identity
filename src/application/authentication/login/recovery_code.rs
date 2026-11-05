@@ -3,7 +3,7 @@ use super::{
     failed_attempt_lock_until,
 };
 use crate::{
-    auth::mfa::recovery_code_hash,
+    authentication::mfa::recovery_code_hash,
     error::{AppError, codes::auth::AuthErrorCode},
     user::model::{CredentialData, CredentialType, RecoveryCodeCredentialData},
 };

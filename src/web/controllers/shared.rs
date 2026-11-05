@@ -20,7 +20,7 @@ use woothee::parser::Parser;
 
 use crate::{
     application::{
-        auth::login::SessionContext,
+        authentication::login::SessionContext,
         error::{
             AppError,
             codes::{authorize_http::AuthorizeHttpErrorCode, common::CommonErrorCode},

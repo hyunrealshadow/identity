@@ -1,5 +1,5 @@
 use super::*;
-use crate::auth::password_policy::BreachedPasswordChecker;
+use crate::authentication::password_policy::BreachedPasswordChecker;
 
 fn password_change_service() -> (LoginService, UserUserOid) {
     let user = test_user();

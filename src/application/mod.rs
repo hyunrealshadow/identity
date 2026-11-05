@@ -1,7 +1,8 @@
 extern crate identity_domain as domain;
 extern crate self as application;
 
-pub mod auth;
+pub mod authentication;
+pub use authentication as auth;
 pub mod authorization;
 pub mod client;
 pub mod console;

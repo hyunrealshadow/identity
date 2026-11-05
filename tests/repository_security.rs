@@ -515,7 +515,7 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
 #[tokio::test]
 #[ignore = "requires explicitly configured PostgreSQL test database"]
 async fn profile_audit_survives_dropped_events_and_rolls_back_with_the_write() {
-    use identity_application::auth::account::AccountService;
+    use identity_application::authentication::account::AccountService;
     use identity_domain::{
         authorization::{ActorContext, HumanAuthenticationContext, RequestId},
         user::{UserOid, repository::UserProfilePatch},

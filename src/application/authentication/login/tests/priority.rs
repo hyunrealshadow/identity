@@ -1,9 +1,9 @@
 use super::*;
-use crate::auth::login;
+use crate::authentication::login;
 
 #[test]
 fn bound_mfa_challenge_excludes_password_and_keeps_enrolled_second_factors() {
-    use crate::auth::login::{challenge_credential_types, preferred_credential_type};
+    use crate::authentication::login::{challenge_credential_types, preferred_credential_type};
     use identity_domain::user::MfaMethod;
     let mut login = test_login(Uuid::new_v4(), 0);
     login.status = LoginStatus::MFA_REQUIRED;
@@ -47,7 +47,7 @@ fn bound_mfa_challenge_excludes_password_and_keeps_enrolled_second_factors() {
 
 #[test]
 fn mfa_priority_selects_a_complete_authentication_path() {
-    use crate::auth::login::preferred_credential_type;
+    use crate::authentication::login::preferred_credential_type;
     use identity_domain::user::MfaMethod;
     let mut login = test_login(Uuid::new_v4(), 0);
     login.status = LoginStatus::IDENTIFIER_VERIFIED;
@@ -83,7 +83,7 @@ fn mfa_priority_selects_a_complete_authentication_path() {
 
 #[test]
 fn mfa_priority_ignores_unavailable_methods_and_unidentified_logins() {
-    use crate::auth::login::preferred_credential_type;
+    use crate::authentication::login::preferred_credential_type;
     use identity_domain::user::MfaMethod;
     let mut login = test_login(Uuid::new_v4(), 0);
     login.status = LoginStatus::IDENTIFIER_VERIFIED;

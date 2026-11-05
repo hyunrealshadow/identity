@@ -22,7 +22,7 @@ use identity_domain::{
 use uuid::Uuid;
 
 use crate::{
-    auth::{
+    authentication::{
         hash::PasswordHasher,
         password::run_password_hashing,
         password_policy::{BreachedPasswordChecker, validate_breached_password, validate_password},
@@ -634,7 +634,7 @@ mod tests {
         validate_username_field,
     };
     use crate::{
-        auth::{
+        authentication::{
             password::{HashOptions, PasswordHashError, PasswordHasher, VerifyResult},
             password_policy::BreachedPasswordChecker,
         },

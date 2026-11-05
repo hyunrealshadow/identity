@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 pub use crate::user::credential::StoredPasskey;
 use crate::{
-    auth::challenge::ChallengeRepository,
+    authentication::challenge::ChallengeRepository,
     error::{AppError, codes::auth::AuthErrorCode},
     observability::{BusinessEvent, EventSink, EventValue, NoopEventSink},
     user::{

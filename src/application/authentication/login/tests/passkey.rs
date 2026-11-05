@@ -1,5 +1,5 @@
 use super::*;
-use crate::auth::passkey::tests;
+use crate::authentication::passkey::tests;
 
 #[tokio::test]
 async fn passkey_completes_mfa_without_password_and_protects_password_fallback() {

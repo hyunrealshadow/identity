@@ -1,5 +1,5 @@
 use crate::{
-    auth::{
+    authentication::{
         challenge::ChallengeRepository,
         passkey::{
             PasskeyAuthenticator, PasskeyCeremony, PasskeyOptions, PasskeyService, StoredPasskey,
@@ -168,7 +168,7 @@ impl PasskeyAuthenticator for FakeAuthenticator {
         })
     }
 }
-pub(in crate::auth) async fn enrolled_passkey(
+pub(in crate::authentication) async fn enrolled_passkey(
     user: UserOid,
 ) -> (Arc<PasskeyService>, impl Fn(&PasskeyOptions) -> String) {
     let repo = Arc::new(MemoryRepo::default());

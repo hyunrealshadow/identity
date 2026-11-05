@@ -1,6 +1,6 @@
 use super::{super::password_policy, LoginService, PasswordChangeOutcome};
 use crate::{
-    auth::password::{VerifyResult, run_password_hashing},
+    authentication::password::{VerifyResult, run_password_hashing},
     error::{
         AppError,
         codes::{auth::AuthErrorCode, common::CommonErrorCode},

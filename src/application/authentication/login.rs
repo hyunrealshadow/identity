@@ -5,7 +5,7 @@ use super::{
     password_policy::{BreachedPasswordChecker, UnavailableBreachChecker},
 };
 use crate::{
-    auth::{password::PasswordHasher, totp::TotpVerifier},
+    authentication::{password::PasswordHasher, totp::TotpVerifier},
     error::{AppError, codes::auth::AuthErrorCode},
     observability::{EventSink, NoopEventSink},
     setting::SettingsSource,

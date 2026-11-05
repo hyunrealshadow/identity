@@ -22,7 +22,7 @@ use uuid::Uuid;
 use super::{ChallengeOutcome, LoginService, SessionContext};
 use crate::{
     application::error::{AppError, code::AppErrorCode, codes::auth::AuthErrorCode},
-    auth::{
+    authentication::{
         password::{HashOptions, PasswordHashError, PasswordHasher, VerifyResult},
         totp::{TotpError, TotpVerifier},
     },

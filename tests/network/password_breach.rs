@@ -1,4 +1,4 @@
-use identity_application::auth::password_policy::BreachedPasswordChecker;
+use identity_application::authentication::password_policy::BreachedPasswordChecker;
 use identity_infrastructure::{
     auth::breached_password::PwnedPasswordChecker, crypto::tls::generate_self_signed_tls_cert,
 };

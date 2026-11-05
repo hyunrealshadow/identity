@@ -22,7 +22,7 @@ use super::{
 };
 use crate::{
     application::{
-        auth::{login, login::ChallengeOutcome},
+        authentication::{login, login::ChallengeOutcome},
         error::{AppError, code::AppErrorCode, codes::auth::AuthErrorCode},
         openid_connect::authorize::stored_request_has_prompt,
     },
