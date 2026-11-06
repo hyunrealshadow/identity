@@ -319,22 +319,22 @@ importers:
         specifier: ^4.3.3
         version: 4.3.3(vite@8.3.3(@types/node@26.6.4)(jiti@2.7.0)(yaml@2.9.1))
       '@tanstack/react-devtools':
-        specifier: latest
+        specifier: ^0.10.14
         version: 0.10.14(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(csstype@3.2.3)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(solid-js@1.9.14)
       '@tanstack/react-query':
         specifier: 5.102.8
         version: 5.102.8(react@19.3.0)
       '@tanstack/react-router':
-        specifier: latest
+        specifier: ^1.170.46
         version: 1.170.46(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@tanstack/react-router-devtools':
-        specifier: latest
+        specifier: ^1.167.2
         version: 1.167.2(@tanstack/react-router@1.170.46(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(@tanstack/router-core@1.171.39)(csstype@3.2.3)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@tanstack/react-router-ssr-query':
-        specifier: latest
+        specifier: ^1.167.3
         version: 1.167.3(@tanstack/query-core@5.102.8)(@tanstack/react-query@5.102.8(react@19.3.0))(@tanstack/react-router@1.170.46(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(@tanstack/router-core@1.171.39)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       '@tanstack/react-start':
-        specifier: latest
+        specifier: ^1.169.4
         version: 1.169.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(rolldown@1.2.12)(vite@8.3.3(@types/node@26.6.4)(jiti@2.7.0)(yaml@2.9.1))
       '@tanstack/router-plugin':
         specifier: ^1.168.42
@@ -365,7 +365,7 @@ importers:
         specifier: ^0.5.20
         version: 0.5.20(tailwindcss@4.3.3)
       '@tanstack/devtools-vite':
-        specifier: latest
+        specifier: ^0.8.6
         version: 0.8.6(@emnapi/core@1.11.1)(@emnapi/runtime@1.11.1)(vite@8.3.3(@types/node@26.6.4)(jiti@2.7.0)(yaml@2.9.1))
       '@tanstack/router-cli':
         specifier: ^1.167.40
