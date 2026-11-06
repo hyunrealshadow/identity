@@ -101,7 +101,7 @@
 
   .identity-data-table .table__cell {
     padding: 1rem;
-    vertical-align: top;
+    vertical-align: middle;
   }
 
   .identity-data-table .chip__label {

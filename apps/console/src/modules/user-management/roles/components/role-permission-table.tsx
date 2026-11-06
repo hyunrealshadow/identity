@@ -169,7 +169,7 @@ export function RolePermissionTable({
             const removed = row.status === 'removed'
             return (
               <DataTable.Row key={row.id} id={row.id} className="h-14">
-                <DataTable.Cell className="py-2 align-middle">
+                <DataTable.Cell className="py-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <span
                       className={
@@ -198,7 +198,7 @@ export function RolePermissionTable({
                     />
                   </div>
                 </DataTable.Cell>
-                <DataTable.Cell className="py-2 align-middle">
+                <DataTable.Cell className="py-2">
                   <span
                     className={
                       removed
@@ -209,12 +209,12 @@ export function RolePermissionTable({
                     {row.description}
                   </span>
                 </DataTable.Cell>
-                <DataTable.Cell className="py-2 align-middle">
+                <DataTable.Cell className="py-2">
                   <span className="line-clamp-1 max-w-56 text-xs text-muted">
                     {row.resource ?? t('rolePermissionsResourceUnavailable')}
                   </span>
                 </DataTable.Cell>
-                <DataTable.Cell className="py-2 align-middle">
+                <DataTable.Cell className="py-2">
                   <Chip
                     size="sm"
                     variant="soft"
@@ -231,7 +231,7 @@ export function RolePermissionTable({
                     <Chip.Label>{t(STATUS_LABEL[row.status])}</Chip.Label>
                   </Chip>
                 </DataTable.Cell>
-                <DataTable.Cell className="py-2 align-middle">
+                <DataTable.Cell className="py-2">
                   <TableRowActions
                     subject={row.code}
                     actions={[
