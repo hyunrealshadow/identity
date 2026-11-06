@@ -2,13 +2,14 @@ import { nextClientMutationId } from '#/lib/graphql/mutation-id'
 import { useMemo } from 'react'
 
 import {
-  ConsoleGroupRolesDocument,
+  ConsoleGroupDocument,
   ConsoleGroupRoleIdsDocument,
+  ConsoleGroupRolesDocument,
   ConsoleSetGroupRolesDocument,
-  type ConsoleGroupRolesQuery,
-  type ConsoleGroupRolesQueryVariables,
   type ConsoleGroupRoleIdsQuery,
   type ConsoleGroupRoleIdsQueryVariables,
+  type ConsoleGroupRolesQuery,
+  type ConsoleGroupRolesQueryVariables,
   type ConsoleSetGroupRolesMutation,
   type ConsoleSetGroupRolesMutationVariables,
   type SetGroupRolesInput,
@@ -21,7 +22,10 @@ import type {
 } from '#/lib/graphql/transport'
 import { useGraphQL } from '#/lib/graphql/use-graphql'
 import { useGraphQLMutation } from '#/lib/graphql/use-graphql-mutation'
-import { useConsoleQuery } from '#/lib/graphql/use-console-query'
+import {
+  sameVariable,
+  useConsoleQuery,
+} from '#/lib/graphql/use-console-query'
 
 const ROLE_LINK_SCAN_SIZE = 25
 const MAX_ROLE_LINK_PAGES = 40
@@ -35,9 +39,9 @@ export function useGroupRoles(
   >(
     ConsoleGroupRolesDocument,
     variables,
-    'ConsoleGroupRoles',
     Boolean(variables),
     'missing_group_roles',
+    { keepPreviousData: sameVariable('groupId') },
   )
 }
 
@@ -70,7 +74,7 @@ export function useGroupRoleMutations() {
         >(
           ConsoleSetGroupRolesDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleSetGroupRoles', ['ConsoleGroupRoles', 'ConsoleGroupRoleIds', 'ConsoleGroup'],
+          [ConsoleGroupRolesDocument, ConsoleGroupRoleIdsDocument, ConsoleGroupDocument],
         )
       },
       async loadActiveRoleIds(groupId: string): Promise<GroupRoleLinkSnapshot> {

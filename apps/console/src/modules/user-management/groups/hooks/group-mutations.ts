@@ -4,6 +4,11 @@ import { useMemo } from 'react'
 import {
   ConsoleCreateGroupDocument,
   ConsoleDeleteGroupDocument,
+  ConsoleGroupDocument,
+  ConsoleGroupMembersDocument,
+  ConsoleGroupRoleIdsDocument,
+  ConsoleGroupRolesDocument,
+  ConsoleGroupsDocument,
   ConsoleSetGroupEnabledDocument,
   ConsoleUpdateGroupDocument,
   type ConsoleCreateGroupMutation,
@@ -40,7 +45,7 @@ export function useGroupMutations() {
         >(
           ConsoleCreateGroupDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleCreateGroup', ['ConsoleGroups'],
+          [ConsoleGroupsDocument],
         )
       },
       update(input: UpdateGroupInput) {
@@ -50,7 +55,7 @@ export function useGroupMutations() {
         >(
           ConsoleUpdateGroupDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleUpdateGroup', ['ConsoleGroup', 'ConsoleGroups', 'ConsoleGroupMembers', 'ConsoleGroupRoles', 'ConsoleGroupRoleIds'],
+          [ConsoleGroupDocument, ConsoleGroupsDocument, ConsoleGroupMembersDocument, ConsoleGroupRolesDocument, ConsoleGroupRoleIdsDocument],
         )
       },
       setEnabled(input: SetGroupEnabledInput) {
@@ -60,7 +65,7 @@ export function useGroupMutations() {
         >(
           ConsoleSetGroupEnabledDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleSetGroupEnabled', ['ConsoleGroup', 'ConsoleGroups', 'ConsoleGroupMembers', 'ConsoleGroupRoles', 'ConsoleGroupRoleIds'],
+          [ConsoleGroupDocument, ConsoleGroupsDocument, ConsoleGroupMembersDocument, ConsoleGroupRolesDocument, ConsoleGroupRoleIdsDocument],
         )
       },
       remove(input: GroupStateInput) {
@@ -70,7 +75,7 @@ export function useGroupMutations() {
         >(
           ConsoleDeleteGroupDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleDeleteGroup', ['ConsoleGroup', 'ConsoleGroups'],
+          [ConsoleGroupDocument, ConsoleGroupsDocument],
         )
       },
     }),

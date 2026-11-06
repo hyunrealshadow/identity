@@ -62,9 +62,9 @@ export function ResourcesListPage({ search }: { search: ResourcesSearch }) {
   >(
     ConsoleResourcesDocument,
     variables,
-    'ConsoleResources',
     Boolean(variables),
     'missing_resource_connection',
+    { keepPreviousData: true },
   )
   const connection = query.data?.resources
   const pager = useCursorPagination({

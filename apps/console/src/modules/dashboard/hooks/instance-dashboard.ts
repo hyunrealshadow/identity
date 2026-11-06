@@ -76,7 +76,6 @@ export function useInstanceDashboard(
   >(
     InstanceDashboardDocument,
     variables,
-    'InstanceDashboard',
     scope.hasAny,
     'missing_instance_overview',
   )

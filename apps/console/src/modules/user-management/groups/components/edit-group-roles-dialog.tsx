@@ -132,9 +132,9 @@ export function EditRolesDialog({
   >(
     ConsoleRolesDocument,
     roleVariables,
-    'ConsoleRoles',
     Boolean(roleVariables),
     'missing_role_connection',
+    { keepPreviousData: true },
   )
 
   useEffect(() => {

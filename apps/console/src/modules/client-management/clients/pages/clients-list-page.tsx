@@ -57,9 +57,9 @@ export function ClientsListPage({ search }: { search: ClientsSearch }) {
   const query = useConsoleQuery<ConsoleClientsQuery, ConsoleClientsQueryVariables>(
     ConsoleClientsDocument,
     variables,
-    'ConsoleClients',
     Boolean(variables),
     'missing_client_connection',
+    { keepPreviousData: true },
   )
   const connection = query.data?.clients
   const pager = useCursorPagination({

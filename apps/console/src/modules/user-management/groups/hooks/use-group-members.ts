@@ -3,6 +3,7 @@ import { useMemo } from 'react'
 
 import {
   ConsoleAddGroupMemberDocument,
+  ConsoleGroupDocument,
   ConsoleGroupMembersDocument,
   ConsoleRemoveGroupMemberDocument,
   type AddGroupMemberInput,
@@ -16,7 +17,10 @@ import {
 } from '#/generated/graphql'
 import type { GraphQLResult } from '#/lib/graphql/transport'
 import { useGraphQLMutation } from '#/lib/graphql/use-graphql-mutation'
-import { useConsoleQuery } from '#/lib/graphql/use-console-query'
+import {
+  sameVariable,
+  useConsoleQuery,
+} from '#/lib/graphql/use-console-query'
 
 /**
  * Membership reads are bounded by the group query and the membership
@@ -31,9 +35,9 @@ export function useGroupMembers(
   >(
     ConsoleGroupMembersDocument,
     variables,
-    'ConsoleGroupMembers',
     Boolean(variables),
     'missing_group_members',
+    { keepPreviousData: sameVariable('groupId') },
   )
 }
 
@@ -53,7 +57,7 @@ export function useGroupMemberMutations() {
         >(
           ConsoleAddGroupMemberDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleAddGroupMember', ['ConsoleGroupMembers', 'ConsoleGroup'],
+          [ConsoleGroupMembersDocument, ConsoleGroupDocument],
         )
       },
       remove(input: RemoveGroupMemberInput) {
@@ -63,7 +67,7 @@ export function useGroupMemberMutations() {
         >(
           ConsoleRemoveGroupMemberDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleRemoveGroupMember', ['ConsoleGroupMembers', 'ConsoleGroup'],
+          [ConsoleGroupMembersDocument, ConsoleGroupDocument],
         )
       },
     }),

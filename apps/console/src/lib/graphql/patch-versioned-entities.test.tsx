@@ -4,7 +4,12 @@ import { act, renderHook } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { describe, expect, it } from 'vitest'
 
-import type { ConsoleUserQuery } from '#/generated/graphql'
+import {
+  ConsoleCreateUserDocument,
+  ConsoleDisableUserDocument,
+  ConsoleUpdateUserDocument,
+  type ConsoleUserQuery,
+} from '#/generated/graphql'
 import { createQueryClient } from '#/lib/graphql/query-client'
 import { usePatchVersionedEntities } from '#/lib/graphql/patch-versioned-entities'
 import type { GraphQLResult } from '#/lib/graphql/transport'
@@ -69,7 +74,7 @@ describe('version patches from mutation payloads', () => {
     client.setQueryData(key, userResult('before'))
 
     act(() =>
-      patch.current('ConsoleUpdateUser', {
+      patch.current(ConsoleUpdateUserDocument, {
         updateUser: { userId: 'u1', version: 'after' },
       }),
     )
@@ -86,7 +91,7 @@ describe('version patches from mutation payloads', () => {
     client.setQueryData(key, userResult('before'))
 
     act(() =>
-      patch.current('ConsoleDisableUser', {
+      patch.current(ConsoleDisableUserDocument, {
         disableUser: { userId: 'u1', version: 'after' },
       }),
     )
@@ -103,7 +108,7 @@ describe('version patches from mutation payloads', () => {
     client.setQueryData(otherKey, { ...userResult('before'), data: { user: { ...userResult('before').data!.user, id: 'u2' } } })
 
     act(() =>
-      patch.current('ConsoleUpdateUser', {
+      patch.current(ConsoleUpdateUserDocument, {
         updateUser: { userId: 'u1', version: 'after' },
       }),
     )
@@ -117,7 +122,7 @@ describe('version patches from mutation payloads', () => {
     const key = ['console', 0, 'en-US', 'ConsoleUser', { id: 'u1' }]
     client.setQueryData(key, userResult('before'))
 
-    act(() => patch.current('ConsoleCreateUser', { createUser: { userId: 'u9', version: 'after' } }))
+    act(() => patch.current(ConsoleCreateUserDocument, { createUser: { userId: 'u9', version: 'after' } }))
 
     expect(cachedUser(client, key)?.version).toBe('before')
   })

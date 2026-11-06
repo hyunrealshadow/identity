@@ -22,6 +22,7 @@ import {
   type GraphQLStepUp,
 } from '#/lib/graphql/transport'
 import { RequestableAccessContext } from '#/lib/graphql/access-context'
+import { consoleQueryKeys } from '#/lib/graphql/query-keys'
 import { useGraphQL } from '#/lib/graphql/use-graphql'
 import { useLocale } from '#/lib/i18n'
 
@@ -78,10 +79,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const { locale } = useLocale()
 
   const query = useQuery({
-    queryKey: ['console', sessionVersion, locale, 'ConsoleBootstrap'],
+    queryKey: consoleQueryKeys.read(
+      sessionVersion,
+      locale,
+      ConsoleBootstrapDocument,
+      {},
+    ),
     enabled: authStatus === 'authenticated',
-    retry: false,
-    staleTime: 0,
     queryFn: async ({ signal }): Promise<BootstrapSnapshot> => {
       const session = getAuthSession()
       const result = await request<

@@ -40,7 +40,10 @@ import { resolveLocalizedText } from '#/modules/user-management/groups/lib/group
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
 import { AssignmentStatusChip } from '#/modules/user-management/roles/components/role-status'
 
-import { useConsoleQuery } from '#/lib/graphql/use-console-query'
+import {
+  sameVariable,
+  useConsoleQuery,
+} from '#/lib/graphql/use-console-query'
 import { cursorPage } from '#/modules/user-management/lib/cursor-page'
 
 import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
@@ -96,9 +99,9 @@ export function UserRolesPage({ userId }: { userId: string }) {
   >(
     ConsoleUserRolesDocument,
     variables,
-    'ConsoleUserRoles',
     Boolean(variables),
     'missing_user_roles',
+    { keepPreviousData: sameVariable('userId') },
   )
   const user = userDetail.user
   const connection = assignments.data?.user?.roles ?? null

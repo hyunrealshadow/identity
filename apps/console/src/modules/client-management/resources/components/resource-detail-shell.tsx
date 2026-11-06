@@ -54,7 +54,6 @@ export function ResourceDetailShell({ resourceId }: { resourceId: string }) {
   >(
     ConsoleResourceDocument,
     variables,
-    'ConsoleResource',
     Boolean(variables),
     'missing_resource',
   )

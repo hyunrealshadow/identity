@@ -5,6 +5,10 @@ import {
   ConsoleCreatePermissionDocument,
   ConsoleDisablePermissionDocument,
   ConsoleEnablePermissionDocument,
+  ConsolePermissionDocument,
+  ConsolePermissionOptionsDocument,
+  ConsoleResourcePermissionsDocument,
+  ConsoleScopesDocument,
   ConsoleUpdatePermissionDocument,
   type ConsoleCreatePermissionMutation,
   type ConsoleCreatePermissionMutationVariables,
@@ -39,7 +43,7 @@ export function usePermissionMutations() {
         >(
           ConsoleCreatePermissionDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleCreatePermission', ['ConsolePermissions', 'ConsoleScopes', 'ConsolePermissionOptions'],
+          [ConsoleResourcePermissionsDocument, ConsoleScopesDocument, ConsolePermissionOptionsDocument],
         )
       },
       update(input: UpdateScopeInput) {
@@ -49,7 +53,7 @@ export function usePermissionMutations() {
         >(
           ConsoleUpdatePermissionDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleUpdatePermission', ['ConsolePermission', 'ConsolePermissions', 'ConsoleScopes', 'ConsolePermissionOptions'],
+          [ConsolePermissionDocument, ConsoleResourcePermissionsDocument, ConsoleScopesDocument, ConsolePermissionOptionsDocument],
         )
       },
       enable(input: ScopeStateInput) {
@@ -59,7 +63,7 @@ export function usePermissionMutations() {
         >(
           ConsoleEnablePermissionDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleEnablePermission', ['ConsolePermission', 'ConsolePermissions', 'ConsoleScopes', 'ConsolePermissionOptions'],
+          [ConsolePermissionDocument, ConsoleResourcePermissionsDocument, ConsoleScopesDocument, ConsolePermissionOptionsDocument],
         )
       },
       disable(input: ScopeStateInput) {
@@ -69,7 +73,7 @@ export function usePermissionMutations() {
         >(
           ConsoleDisablePermissionDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleDisablePermission', ['ConsolePermission', 'ConsolePermissions', 'ConsoleScopes', 'ConsolePermissionOptions'],
+          [ConsolePermissionDocument, ConsoleResourcePermissionsDocument, ConsoleScopesDocument, ConsolePermissionOptionsDocument],
         )
       },
     }),

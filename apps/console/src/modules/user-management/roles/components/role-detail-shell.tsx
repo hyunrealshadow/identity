@@ -48,7 +48,6 @@ export function RoleDetailShell({ roleId }: { roleId: string }) {
   const query = useConsoleQuery<ConsoleRoleQuery, ConsoleRoleQueryVariables>(
     ConsoleRoleDocument,
     variables,
-    'ConsoleRole',
     Boolean(variables),
     'missing_role',
   )

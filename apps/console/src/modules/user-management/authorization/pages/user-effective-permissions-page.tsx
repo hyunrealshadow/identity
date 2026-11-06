@@ -23,7 +23,10 @@ import { ApiResourceSelect } from '#/modules/user-management/components/api-reso
 import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
 import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
-import { useConsoleQuery } from '#/lib/graphql/use-console-query'
+import {
+  sameVariable,
+  useConsoleQuery,
+} from '#/lib/graphql/use-console-query'
 import { cursorPage } from '#/modules/user-management/lib/cursor-page'
 import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
 import { UserDetailTabSkeleton } from '#/modules/user-management/users/components/user-detail-skeleton'
@@ -73,9 +76,9 @@ export function UserEffectivePermissionsPage({ userId }: { userId: string }) {
   >(
     ConsoleUserPermissionsDocument,
     variables,
-    'ConsoleUserPermissions',
     Boolean(variables),
     'missing_effective_permissions',
+    { keepPreviousData: sameVariable('userId') },
   )
   const connection = permissions.data?.user?.effectivePermissions
   const labelIds = useMemo(() => {

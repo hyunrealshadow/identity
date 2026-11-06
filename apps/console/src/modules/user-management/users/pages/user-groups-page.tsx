@@ -42,7 +42,10 @@ import {
 } from '#/modules/user-management/groups/components/group-status'
 
 import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
-import { useConsoleQuery } from '#/lib/graphql/use-console-query'
+import {
+  sameVariable,
+  useConsoleQuery,
+} from '#/lib/graphql/use-console-query'
 import { cursorPage } from '#/modules/user-management/lib/cursor-page'
 
 import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
@@ -93,9 +96,9 @@ export function UserGroupsPage({ userId }: { userId: string }) {
   >(
     ConsoleUserGroupsDocument,
     variables,
-    'ConsoleUserGroups',
     Boolean(variables),
     'missing_user_groups',
+    { keepPreviousData: sameVariable('userId') },
   )
 
   const user = userDetail.user

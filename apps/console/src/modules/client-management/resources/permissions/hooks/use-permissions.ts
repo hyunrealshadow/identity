@@ -21,9 +21,12 @@ export function usePermissionList(
   >(
     ConsoleResourcePermissionsDocument,
     variables,
-    'ConsoleResourcePermissions',
     enabled,
     'missing_permission_connection',
+    {
+        keepPreviousData: (previous, next) =>
+          previous.filter?.resourceId === next.filter?.resourceId,
+      },
   )
 }
 
@@ -38,7 +41,6 @@ export function usePermissionDetail(
   >(
     ConsolePermissionDocument,
     enabled ? { id: permissionId, includeResource } : null,
-    'ConsolePermission',
     enabled,
     'missing_permission',
   )
@@ -51,7 +53,6 @@ export function useScopeOptions(
   return useConsoleQuery<ConsoleScopesQuery, ConsoleScopesQueryVariables>(
     ConsoleScopesDocument,
     variables,
-    'ConsoleScopes',
     enabled,
     'missing_scope_connection',
   )

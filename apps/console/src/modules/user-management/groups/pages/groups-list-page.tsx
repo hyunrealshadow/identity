@@ -206,9 +206,9 @@ export function GroupsListPage({ search }: { search: GroupsSearch }) {
   >(
     ConsoleGroupsDocument,
     variables,
-    'ConsoleGroups',
     Boolean(variables),
     'missing_group_connection',
+    { keepPreviousData: true },
   )
 
   useEffect(() => {

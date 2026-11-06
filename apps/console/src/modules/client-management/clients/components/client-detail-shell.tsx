@@ -87,7 +87,6 @@ export function ClientDetailShell({ clientId }: { clientId: string }) {
   const query = useConsoleQuery<ConsoleClientQuery, ConsoleClientQueryVariables>(
     ConsoleClientDocument,
     variables,
-    'ConsoleClient',
     Boolean(variables),
     'missing_client',
   )

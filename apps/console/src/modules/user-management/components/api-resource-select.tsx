@@ -49,7 +49,6 @@ export function ApiResourceSelect({
   >(
     ConsoleResourceOptionsDocument,
     variables,
-    'ConsoleResourceOptions',
     enabled,
     'missing_resource_connection',
   )

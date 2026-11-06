@@ -15,7 +15,10 @@ import {
 import { useLocale, useTranslator } from '#/lib/i18n'
 import { useWorkspace } from '#/lib/workspace'
 import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
-import { useConsoleQuery } from '#/lib/graphql/use-console-query'
+import {
+  sameVariable,
+  useConsoleQuery,
+} from '#/lib/graphql/use-console-query'
 import { cursorPage } from '#/modules/user-management/lib/cursor-page'
 import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
 import {
@@ -46,9 +49,9 @@ export function PermissionRoleReferences({
   >(
     ConsolePermissionRolesDocument,
     variables,
-    'ConsolePermissionRoles',
     enabled,
     'missing_permission_roles',
+    { keepPreviousData: sameVariable('id') },
   )
   const connection = query.data?.permission?.roles
 

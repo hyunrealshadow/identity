@@ -68,7 +68,6 @@ export function useUserDetail(
   const query = useConsoleQuery<ConsoleUserQuery, ConsoleUserQueryVariables>(
     ConsoleUserDocument,
     id ? { id } : null,
-    'ConsoleUser',
     enabled && Boolean(id),
     'missing_user',
   )

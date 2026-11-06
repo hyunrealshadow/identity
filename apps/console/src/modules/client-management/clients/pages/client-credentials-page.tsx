@@ -84,7 +84,6 @@ export function ClientCredentialsPage() {
   >(
     ConsoleClientCredentialsDocument,
     variables,
-    'ConsoleClientCredentials',
     Boolean(variables),
     'missing_client_credentials',
   )

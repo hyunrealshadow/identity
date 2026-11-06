@@ -31,7 +31,10 @@ import { useLocale, useTranslator } from '#/lib/i18n'
 import { useWorkspace } from '#/lib/workspace'
 import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
 import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
-import { useConsoleQuery } from '#/lib/graphql/use-console-query'
+import {
+  sameVariable,
+  useConsoleQuery,
+} from '#/lib/graphql/use-console-query'
 import type { RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
 import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
 import { PermissionPickerDialog } from '#/modules/user-management/roles/components/permission-picker-dialog'
@@ -92,9 +95,9 @@ export function ClientScopesPage() {
   const query = useConsoleQuery<ConsoleClientScopesQuery, ConsoleClientScopesQueryVariables>(
     ConsoleClientScopesDocument,
     variables,
-    'ConsoleClientScopes',
     true,
     'missing_client_scopes',
+    { keepPreviousData: sameVariable('id') },
   )
   const protocolVariables = useMemo<ConsoleProtocolScopesQueryVariables>(
     () => ({ first: PAGE_SIZE }),
@@ -106,7 +109,6 @@ export function ClientScopesPage() {
   >(
     ConsoleProtocolScopesDocument,
     rbac.scopesRead ? protocolVariables : null,
-    'ConsoleProtocolScopes',
     rbac.scopesRead,
     'missing_protocol_scopes',
   )

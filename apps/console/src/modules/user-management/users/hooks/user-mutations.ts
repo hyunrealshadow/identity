@@ -7,6 +7,8 @@ import {
   ConsoleEnableUserDocument,
   ConsoleUnlockUserDocument,
   ConsoleUpdateUserDocument,
+  ConsoleUserDocument,
+  ConsoleUsersDocument,
   type ConsoleCreateUserMutation,
   type ConsoleCreateUserMutationVariables,
   type ConsoleDisableUserMutation,
@@ -78,7 +80,7 @@ export function useUserMutations(): UserMutations {
         return request<
           ConsoleCreateUserMutation,
           ConsoleCreateUserMutationVariables
-        >(ConsoleCreateUserDocument, variables, 'ConsoleCreateUser', ['ConsoleUsers'])
+        >(ConsoleCreateUserDocument, variables, [ConsoleUsersDocument])
       },
       update(input) {
         const variables: ConsoleUpdateUserMutationVariables = {
@@ -87,7 +89,7 @@ export function useUserMutations(): UserMutations {
         return request<
           ConsoleUpdateUserMutation,
           ConsoleUpdateUserMutationVariables
-        >(ConsoleUpdateUserDocument, variables, 'ConsoleUpdateUser', ['ConsoleUser', 'ConsoleUsers'])
+        >(ConsoleUpdateUserDocument, variables, [ConsoleUserDocument, ConsoleUsersDocument])
       },
       enable(input) {
         const variables: ConsoleEnableUserMutationVariables = {
@@ -96,7 +98,7 @@ export function useUserMutations(): UserMutations {
         return request<
           ConsoleEnableUserMutation,
           ConsoleEnableUserMutationVariables
-        >(ConsoleEnableUserDocument, variables, 'ConsoleEnableUser', ['ConsoleUser', 'ConsoleUsers'])
+        >(ConsoleEnableUserDocument, variables, [ConsoleUserDocument, ConsoleUsersDocument])
       },
       disable(input) {
         const variables: ConsoleDisableUserMutationVariables = {
@@ -105,7 +107,7 @@ export function useUserMutations(): UserMutations {
         return request<
           ConsoleDisableUserMutation,
           ConsoleDisableUserMutationVariables
-        >(ConsoleDisableUserDocument, variables, 'ConsoleDisableUser', ['ConsoleUser', 'ConsoleUsers'])
+        >(ConsoleDisableUserDocument, variables, [ConsoleUserDocument, ConsoleUsersDocument])
       },
       unlock(input) {
         const variables: ConsoleUnlockUserMutationVariables = {
@@ -114,7 +116,7 @@ export function useUserMutations(): UserMutations {
         return request<
           ConsoleUnlockUserMutation,
           ConsoleUnlockUserMutationVariables
-        >(ConsoleUnlockUserDocument, variables, 'ConsoleUnlockUser', ['ConsoleUser', 'ConsoleUsers'])
+        >(ConsoleUnlockUserDocument, variables, [ConsoleUserDocument, ConsoleUsersDocument])
       },
     }),
     [request],

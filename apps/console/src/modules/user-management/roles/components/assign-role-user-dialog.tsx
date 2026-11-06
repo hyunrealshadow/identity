@@ -100,9 +100,9 @@ export function AssignUserDialog({
   const users = useConsoleQuery<ConsoleUsersQuery, ConsoleUsersQueryVariables>(
     ConsoleUsersDocument,
     variables,
-    'ConsoleUsers',
     Boolean(variables),
     'missing_user_connection',
+    { keepPreviousData: true },
   )
 
   async function submit() {

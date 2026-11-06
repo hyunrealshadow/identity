@@ -122,7 +122,7 @@ describe('user list refresh', () => {
     expect(refresh.hasAttribute('disabled')).toBe(false)
   })
 
-  it('clears old data on a filter change and ignores a previous refresh response', async () => {
+  it('keeps the previous rows on a filter change without letting a previous refresh win', async () => {
     const refresh = deferred(),
       filtered = deferred()
     mocks.request
@@ -142,13 +142,15 @@ describe('user list refresh', () => {
     })
     await waitFor(() => expect(state.current.refreshing).toBe(true))
     rerender({ query: { first: 10, filter: { query: 'other' } } })
-    expect(state.current.data).toBeNull()
-    expect(state.current.refreshing).toBe(false)
+    // The table keeps its previous rows mounted and refreshes only them.
+    expect(state.current.status).toBe('ready')
+    expect(state.current.refreshing).toBe(true)
     await act(async () => {
       refresh.resolve(result('stale'))
       await refreshing
     })
-    expect(state.current.data).toBeNull()
+    // The previous filter's late response never completes the new read.
+    expect(state.current.refreshing).toBe(true)
     await act(async () =>
       filtered.resolve({ ...result('unused'), data: null, forbidden: true }),
     )

@@ -49,9 +49,9 @@ export function useUsers(
   const query = useConsoleQuery<ConsoleUsersQuery, ConsoleUsersQueryVariables>(
     ConsoleUsersDocument,
     variables,
-    'ConsoleUsers',
     enabled,
     'missing_user_connection',
+    { keepPreviousData: true },
   )
   const connection = query.data?.users ?? null
   // The generated connection is nullable; a null connection is an invalid

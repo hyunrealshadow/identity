@@ -35,7 +35,10 @@ import { ConsoleWorkspaceGate } from '#/modules/user-management/components/works
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
 import { AssignmentStatusChip } from '#/modules/user-management/roles/components/role-status'
 
-import { useConsoleQuery } from '#/lib/graphql/use-console-query'
+import {
+  sameVariable,
+  useConsoleQuery,
+} from '#/lib/graphql/use-console-query'
 import { cursorPage } from '#/modules/user-management/lib/cursor-page'
 
 import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
@@ -90,9 +93,9 @@ export function RoleUsersPage({ roleId }: { roleId: string }) {
   >(
     ConsoleRoleUsersDocument,
     assignmentsVariables,
-    'ConsoleRoleUsers',
     Boolean(assignmentsVariables),
     'missing_role_users',
+    { keepPreviousData: sameVariable('roleId') },
   )
   const role = roleQuery.data?.role ?? null
 

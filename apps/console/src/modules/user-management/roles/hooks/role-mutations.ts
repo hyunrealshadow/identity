@@ -6,9 +6,18 @@ import {
   ConsoleCreateRoleDocument,
   ConsoleDisableRoleDocument,
   ConsoleEnableRoleDocument,
+  ConsolePermissionDocument,
+  ConsolePermissionOptionsDocument,
+  ConsolePermissionRolesDocument,
   ConsoleRevokeUserRolesDocument,
+  ConsoleRoleDocument,
+  ConsoleRoleUsersDocument,
+  ConsoleRolesDocument,
   ConsoleSetRolePermissionsDocument,
   ConsoleUpdateRoleDocument,
+  ConsoleUserDocument,
+  ConsoleUserRoleVersionDocument,
+  ConsoleUserRolesDocument,
   type AssignUserRolesInput,
   type ConsoleAssignUserRolesMutation,
   type ConsoleAssignUserRolesMutationVariables,
@@ -54,7 +63,7 @@ export function useRoleMutations() {
         >(
           ConsoleCreateRoleDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleCreateRole', ['ConsoleRoles'],
+          [ConsoleRolesDocument],
         )
       },
       update(input: UpdateRoleInput) {
@@ -64,7 +73,7 @@ export function useRoleMutations() {
         >(
           ConsoleUpdateRoleDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleUpdateRole', ['ConsoleRole', 'ConsoleRoles'],
+          [ConsoleRoleDocument, ConsoleRolesDocument],
         )
       },
       enable(input: RoleStateInput) {
@@ -74,7 +83,7 @@ export function useRoleMutations() {
         >(
           ConsoleEnableRoleDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleEnableRole', ['ConsoleRole', 'ConsoleRoles'],
+          [ConsoleRoleDocument, ConsoleRolesDocument],
         )
       },
       disable(input: RoleStateInput) {
@@ -84,7 +93,7 @@ export function useRoleMutations() {
         >(
           ConsoleDisableRoleDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleDisableRole', ['ConsoleRole', 'ConsoleRoles'],
+          [ConsoleRoleDocument, ConsoleRolesDocument],
         )
       },
       setPermissions(input: SetRolePermissionsInput) {
@@ -94,7 +103,12 @@ export function useRoleMutations() {
         >(
           ConsoleSetRolePermissionsDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleSetRolePermissions', ['ConsoleRole', 'ConsolePermissions', 'ConsolePermission', 'ConsolePermissionOptions'],
+          [
+            ConsoleRoleDocument,
+            ConsolePermissionDocument,
+            ConsolePermissionRolesDocument,
+            ConsolePermissionOptionsDocument,
+          ],
         )
       },
       assignUserRoles(input: AssignUserRolesInput) {
@@ -104,7 +118,7 @@ export function useRoleMutations() {
         >(
           ConsoleAssignUserRolesDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleAssignUserRoles', ['ConsoleUserRoles', 'ConsoleUserRoleVersion', 'ConsoleUser', 'ConsoleRoleUsers'],
+          [ConsoleUserRolesDocument, ConsoleUserRoleVersionDocument, ConsoleUserDocument, ConsoleRoleUsersDocument],
         )
       },
       revokeUserRoles(input: RevokeUserRolesInput) {
@@ -114,7 +128,7 @@ export function useRoleMutations() {
         >(
           ConsoleRevokeUserRolesDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          'ConsoleRevokeUserRoles', ['ConsoleUserRoles', 'ConsoleUserRoleVersion', 'ConsoleUser', 'ConsoleRoleUsers'],
+          [ConsoleUserRolesDocument, ConsoleUserRoleVersionDocument, ConsoleUserDocument, ConsoleRoleUsersDocument],
         )
       },
     }),

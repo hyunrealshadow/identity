@@ -43,7 +43,6 @@ export function GroupDetailShell({ groupId }: { groupId: string }) {
   const query = useConsoleQuery<ConsoleGroupQuery, ConsoleGroupQueryVariables>(
     ConsoleGroupDocument,
     variables,
-    'ConsoleGroup',
     Boolean(variables),
     'missing_group',
   )

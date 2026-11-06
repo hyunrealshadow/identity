@@ -201,9 +201,9 @@ export function RolesListPage({ search }: { search: RolesSearch }) {
   const roles = useConsoleQuery<ConsoleRolesQuery, ConsoleRolesQueryVariables>(
     ConsoleRolesDocument,
     variables,
-    'ConsoleRoles',
     Boolean(variables),
     'missing_role_connection',
+    { keepPreviousData: true },
   )
 
   useEffect(() => {

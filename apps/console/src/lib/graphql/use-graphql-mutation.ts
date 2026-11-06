@@ -5,21 +5,20 @@ import type { DocumentSource, GraphQLResult } from '#/lib/graphql/transport'
 import { useInvalidateOperations } from '#/lib/graphql/invalidate-operations'
 import { usePatchVersionedEntities } from '#/lib/graphql/patch-versioned-entities'
 import { useGraphQL } from '#/lib/graphql/use-graphql'
+import { operationNameOf, type AnyDocument } from './query-keys'
 
 /** One mutation through the shared request path; returns the full result. */
 export type GraphQLMutation = <TData, TVariables>(
   document: string | DocumentSource<TData, TVariables>,
   variables: TVariables,
-  operationName?: string,
-  /** Read operations this write invalidates once it succeeds cleanly. */
-  invalidates?: readonly string[],
+  /** Read documents this write invalidates once it succeeds cleanly. */
+  invalidates?: readonly AnyDocument[],
 ) => Promise<GraphQLResult<TData>>
 
 interface MutationInput {
-  document: string | DocumentSource<unknown, unknown>
+  document: AnyDocument
   variables: unknown
-  operationName?: string
-  invalidates?: readonly string[]
+  invalidates?: readonly AnyDocument[]
 }
 
 /**
@@ -37,19 +36,14 @@ export function useGraphQLMutation(): GraphQLMutation {
   const invalidate = useInvalidateOperations()
   const patch = usePatchVersionedEntities()
   const { mutateAsync } = useMutation({
-    mutationFn: async (input: MutationInput) => {
-      const result = await request(
-        input.document,
-        input.variables,
-        input.operationName,
-      )
-      if (!result.failure && result.errors.length === 0) {
-        patch(input.operationName, result.data)
-        if (input.invalidates && input.invalidates.length > 0) {
-          void invalidate(input.invalidates)
-        }
-      }
-      return result
+    mutationFn: (input: MutationInput) =>
+      request(input.document, input.variables, operationNameOf(input.document)),
+    // GraphQL failures resolve as data, so only a clean result touches the
+    // cache. Mutation-level callbacks finish before `mutateAsync` resolves.
+    onSuccess: (result, input) => {
+      if (result.failure || result.errors.length > 0) return
+      patch(input.document, result.data)
+      if (input.invalidates?.length) void invalidate(input.invalidates)
     },
   })
 
@@ -57,15 +51,11 @@ export function useGraphQLMutation(): GraphQLMutation {
     <TData, TVariables>(
       document: string | DocumentSource<TData, TVariables>,
       variables: TVariables,
-      operationName?: string,
-      invalidates?: readonly string[],
+      invalidates?: readonly AnyDocument[],
     ) =>
-      mutateAsync({
-        document: document as unknown as MutationInput['document'],
-        variables,
-        operationName,
-        invalidates,
-      }) as Promise<GraphQLResult<TData>>,
+      mutateAsync({ document, variables, invalidates }) as Promise<
+        GraphQLResult<TData>
+      >,
     [mutateAsync],
   )
 }

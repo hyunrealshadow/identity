@@ -3,11 +3,52 @@ import { useCallback } from 'react'
 
 import { useSessionVersion } from '#/lib/auth/session-version'
 import type { GraphQLResult } from '#/lib/graphql/transport'
+import {
+  ConsoleAddGroupMemberDocument,
+  ConsoleAssignUserRolesDocument,
+  ConsoleClientDocument,
+  ConsoleCreateClientSecretDocument,
+  ConsoleDisableClientDocument,
+  ConsoleDisablePermissionDocument,
+  ConsoleDisableRoleDocument,
+  ConsoleDisableUserDocument,
+  ConsoleEnableClientDocument,
+  ConsoleEnablePermissionDocument,
+  ConsoleEnableRoleDocument,
+  ConsoleEnableUserDocument,
+  ConsoleGroupDocument,
+  ConsoleGroupMembersDocument,
+  ConsoleGroupRolesDocument,
+  ConsolePermissionDocument,
+  ConsoleRemoveGroupMemberDocument,
+  ConsoleRevokeClientCredentialDocument,
+  ConsoleRevokeUserRolesDocument,
+  ConsoleRoleDocument,
+  ConsoleRotateClientSecretDocument,
+  ConsoleSetClientScopesDocument,
+  ConsoleSetGroupEnabledDocument,
+  ConsoleSetGroupRolesDocument,
+  ConsoleSetRolePermissionsDocument,
+  ConsoleUnlockUserDocument,
+  ConsoleUpdateClientDocument,
+  ConsoleUpdateGroupDocument,
+  ConsoleUpdatePermissionDocument,
+  ConsoleUpdateRoleDocument,
+  ConsoleUpdateUserDocument,
+  ConsoleUserDocument,
+  ConsoleUserRolesDocument,
+  ConsoleUserRoleVersionDocument,
+} from '#/generated/graphql'
 import { useLocale } from '#/lib/i18n'
+import {
+  consoleQueryKeys,
+  operationNameOf,
+  type AnyDocument,
+} from './query-keys'
 
 interface EntityTarget {
   kind: 'entity'
-  operation: string
+  read: AnyDocument
   entity: string
   idField: string
   versionField: string
@@ -17,7 +58,7 @@ interface EntityTarget {
 
 interface UserRolesTarget {
   kind: 'userRoles'
-  operation: string
+  read: AnyDocument
   idField: string
   versionField: string
 }
@@ -25,78 +66,84 @@ interface UserRolesTarget {
 type VersionTarget = EntityTarget | UserRolesTarget
 
 function entity(
-  operation: string,
+  read: AnyDocument,
   name: string,
   idField: string,
   versionField = 'version',
-  enabled?: boolean,
 ): EntityTarget {
-  return {
-    kind: 'entity',
-    operation,
-    entity: name,
-    idField,
-    versionField,
-    ...(enabled === undefined ? {} : { enabled }),
-  }
+  return { kind: 'entity', read, entity: name, idField, versionField }
 }
 
-function userRoles(operation: string): UserRolesTarget {
-  return { kind: 'userRoles', operation, idField: 'userId', versionField: 'userVersion' }
+function userRoles(read: AnyDocument): UserRolesTarget {
+  return { kind: 'userRoles', read, idField: 'userId', versionField: 'userVersion' }
 }
 
 const GROUP_TARGETS = [
-  entity('ConsoleGroup', 'group', 'groupId'),
-  entity('ConsoleGroupMembers', 'group', 'groupId'),
-  entity('ConsoleGroupRoles', 'group', 'groupId'),
+  entity(ConsoleGroupDocument, 'group', 'groupId'),
+  entity(ConsoleGroupMembersDocument, 'group', 'groupId'),
+  entity(ConsoleGroupRolesDocument, 'group', 'groupId'),
 ]
 
 const GROUP_VERSION_TARGETS = [
-  entity('ConsoleGroup', 'group', 'groupId', 'groupVersion'),
-  entity('ConsoleGroupMembers', 'group', 'groupId', 'groupVersion'),
-  entity('ConsoleGroupRoles', 'group', 'groupId', 'groupVersion'),
+  entity(ConsoleGroupDocument, 'group', 'groupId', 'groupVersion'),
+  entity(ConsoleGroupMembersDocument, 'group', 'groupId', 'groupVersion'),
+  entity(ConsoleGroupRolesDocument, 'group', 'groupId', 'groupVersion'),
 ]
 
-/**
- * Mutation payloads that carry the new optimistic-lock version of a resource.
- * The field name is the lower-cased operation without its `Console` prefix, so
- * each entry stays a single declaration.
- */
-const VERSION_TARGETS: Record<string, readonly VersionTarget[]> = {
-  ConsoleUpdateUser: [entity('ConsoleUser', 'user', 'userId')],
-  ConsoleEnableUser: [entity('ConsoleUser', 'user', 'userId', 'version', true)],
-  ConsoleDisableUser: [entity('ConsoleUser', 'user', 'userId', 'version', false)],
-  ConsoleUnlockUser: [entity('ConsoleUser', 'user', 'userId')],
+const USER = entity(ConsoleUserDocument, 'user', 'userId')
+const CLIENT = entity(ConsoleClientDocument, 'client', 'clientId')
+const ROLE = entity(ConsoleRoleDocument, 'role', 'roleId')
+const PERMISSION = entity(ConsolePermissionDocument, 'permission', 'scopeId')
+const USER_ROLES = [
+  userRoles(ConsoleUserRolesDocument),
+  userRoles(ConsoleUserRoleVersionDocument),
+]
 
-  ConsoleUpdateClient: [entity('ConsoleClient', 'client', 'clientId')],
-  ConsoleEnableClient: [entity('ConsoleClient', 'client', 'clientId', 'version', true)],
-  ConsoleDisableClient: [entity('ConsoleClient', 'client', 'clientId', 'version', false)],
-  ConsoleCreateClientSecret: [entity('ConsoleClient', 'client', 'clientId')],
-  ConsoleRotateClientSecret: [entity('ConsoleClient', 'client', 'clientId')],
-  ConsoleRevokeClientCredential: [entity('ConsoleClient', 'client', 'clientId')],
-  ConsoleSetClientScopes: [entity('ConsoleClient', 'client', 'clientId')],
-
-  ConsoleUpdateGroup: GROUP_TARGETS,
-  ConsoleSetGroupEnabled: GROUP_TARGETS,
-  ConsoleAddGroupMember: GROUP_VERSION_TARGETS,
-  ConsoleRemoveGroupMember: GROUP_VERSION_TARGETS,
-  ConsoleSetGroupRoles: GROUP_VERSION_TARGETS,
-
-  ConsoleUpdateRole: [entity('ConsoleRole', 'role', 'roleId')],
-  ConsoleEnableRole: [entity('ConsoleRole', 'role', 'roleId', 'version', true)],
-  ConsoleDisableRole: [entity('ConsoleRole', 'role', 'roleId', 'version', false)],
-  ConsoleSetRolePermissions: [entity('ConsoleRole', 'role', 'roleId')],
-  ConsoleAssignUserRoles: [userRoles('ConsoleUserRoles'), userRoles('ConsoleUserRoleVersion')],
-  ConsoleRevokeUserRoles: [userRoles('ConsoleUserRoles'), userRoles('ConsoleUserRoleVersion')],
-
-  ConsoleUpdatePermission: [entity('ConsolePermission', 'permission', 'scopeId')],
-  ConsoleEnablePermission: [
-    entity('ConsolePermission', 'permission', 'scopeId', 'version', true),
-  ],
-  ConsoleDisablePermission: [
-    entity('ConsolePermission', 'permission', 'scopeId', 'version', false),
-  ],
+/** The same entity target, carrying the state an enable/disable sets. */
+function withEnabled(target: EntityTarget, enabled: boolean): EntityTarget {
+  return { ...target, enabled }
 }
+
+/**
+ * Mutation payloads that carry the new optimistic-lock version of a resource,
+ * keyed by mutation document. The payload field is the lower-cased operation
+ * without its `Console` prefix, so each entry stays a single declaration.
+ */
+const VERSION_TARGETS = new Map<string, readonly VersionTarget[]>(
+  (
+    [
+      [ConsoleUpdateUserDocument, [USER]],
+      [ConsoleEnableUserDocument, [withEnabled(USER, true)]],
+      [ConsoleDisableUserDocument, [withEnabled(USER, false)]],
+      [ConsoleUnlockUserDocument, [USER]],
+
+      [ConsoleUpdateClientDocument, [CLIENT]],
+      [ConsoleEnableClientDocument, [withEnabled(CLIENT, true)]],
+      [ConsoleDisableClientDocument, [withEnabled(CLIENT, false)]],
+      [ConsoleCreateClientSecretDocument, [CLIENT]],
+      [ConsoleRotateClientSecretDocument, [CLIENT]],
+      [ConsoleRevokeClientCredentialDocument, [CLIENT]],
+      [ConsoleSetClientScopesDocument, [CLIENT]],
+
+      [ConsoleUpdateGroupDocument, GROUP_TARGETS],
+      [ConsoleSetGroupEnabledDocument, GROUP_TARGETS],
+      [ConsoleAddGroupMemberDocument, GROUP_VERSION_TARGETS],
+      [ConsoleRemoveGroupMemberDocument, GROUP_VERSION_TARGETS],
+      [ConsoleSetGroupRolesDocument, GROUP_VERSION_TARGETS],
+
+      [ConsoleUpdateRoleDocument, [ROLE]],
+      [ConsoleEnableRoleDocument, [withEnabled(ROLE, true)]],
+      [ConsoleDisableRoleDocument, [withEnabled(ROLE, false)]],
+      [ConsoleSetRolePermissionsDocument, [ROLE]],
+      [ConsoleAssignUserRolesDocument, USER_ROLES],
+      [ConsoleRevokeUserRolesDocument, USER_ROLES],
+
+      [ConsoleUpdatePermissionDocument, [PERMISSION]],
+      [ConsoleEnablePermissionDocument, [withEnabled(PERMISSION, true)]],
+      [ConsoleDisablePermissionDocument, [withEnabled(PERMISSION, false)]],
+    ] as const satisfies ReadonlyArray<readonly [AnyDocument, readonly VersionTarget[]]>
+  ).map(([document, targets]) => [operationNameOf(document), targets]),
+)
 
 function payloadField(operation: string): string {
   const name = operation.startsWith('Console')
@@ -162,9 +209,10 @@ export function usePatchVersionedEntities() {
   const { locale } = useLocale()
 
   return useCallback(
-    (operationName: string | undefined, data: unknown) => {
-      if (!operationName || !data) return
-      const targets = VERSION_TARGETS[operationName]
+    (mutation: AnyDocument, data: unknown) => {
+      if (!data) return
+      const operationName = operationNameOf(mutation)
+      const targets = VERSION_TARGETS.get(operationName)
       if (!targets) return
       const payload = (data as Record<string, unknown>)[payloadField(operationName)]
       if (!payload || typeof payload !== 'object') return
@@ -175,7 +223,7 @@ export function usePatchVersionedEntities() {
         if (typeof id !== 'string' || typeof version !== 'string') continue
 
         const queries = client.getQueryCache().findAll({
-          queryKey: ['console', sessionVersion, locale, target.operation],
+          queryKey: consoleQueryKeys.operation(sessionVersion, locale, target.read),
         })
         for (const query of queries) {
           const current = query.state.data as GraphQLResult<unknown> | undefined

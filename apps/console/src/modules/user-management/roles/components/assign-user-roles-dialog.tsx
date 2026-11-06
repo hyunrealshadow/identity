@@ -98,9 +98,9 @@ export function AssignRolesDialog({
   const roles = useConsoleQuery<ConsoleRolesQuery, ConsoleRolesQueryVariables>(
     ConsoleRolesDocument,
     variables,
-    'ConsoleRoles',
     Boolean(variables),
     'missing_role_connection',
+    { keepPreviousData: true },
   )
 
   async function submit() {

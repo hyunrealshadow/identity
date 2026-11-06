@@ -107,9 +107,9 @@ function AddMembershipDialog({
   const users = useConsoleQuery<ConsoleUsersQuery, ConsoleUsersQueryVariables>(
     ConsoleUsersDocument,
     userVariables,
-    'ConsoleUsers',
     Boolean(userVariables),
     'missing_user_connection',
+    { keepPreviousData: true },
   )
   const groups = useConsoleQuery<
     ConsoleGroupsQuery,
@@ -117,9 +117,9 @@ function AddMembershipDialog({
   >(
     ConsoleGroupsDocument,
     groupVariables,
-    'ConsoleGroups',
     Boolean(groupVariables),
     'missing_group_connection',
+    { keepPreviousData: true },
   )
   const candidates = fixedGroup ? users : groups
   const userEdges = users.data?.users.edges ?? []

@@ -156,7 +156,6 @@ export function PermissionPickerDialog({
   >(
     ConsolePermissionOptionsDocument,
     catalogVariables,
-    'ConsolePermissionOptions',
     Boolean(catalogVariables),
     'missing_permission_catalog',
   )
@@ -179,7 +178,6 @@ export function PermissionPickerDialog({
   >(
     ConsoleResourceOptionsDocument,
     resourceVariables,
-    'ConsoleResourceOptions',
     Boolean(resourceVariables),
     'missing_resource_connection',
   )
