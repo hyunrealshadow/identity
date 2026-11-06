@@ -122,7 +122,7 @@ pub struct InstanceUserCounts {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InstanceApplicationCounts {
+pub struct InstanceClientCounts {
     pub total: i64,
     pub enabled: i64,
     pub built_in: i64,
@@ -161,9 +161,7 @@ pub trait InstanceOverviewRepository: Send + Sync {
         window: NewUserWindow,
     ) -> Result<InstanceUserCounts, InstanceOverviewRepositoryError>;
 
-    async fn application_counts(
-        &self,
-    ) -> Result<InstanceApplicationCounts, InstanceOverviewRepositoryError>;
+    async fn client_counts(&self) -> Result<InstanceClientCounts, InstanceOverviewRepositoryError>;
 
     /// `generated_at` is the same instant captured by the overview container.
     async fn session_counts(

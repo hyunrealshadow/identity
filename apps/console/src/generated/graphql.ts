@@ -458,7 +458,7 @@ export type ConsoleClientsQueryVariables = Exact<{
 }>;
 
 
-export type ConsoleClientsQuery = { clients: { totalCount: number, pageInfo: { hasNextPage: boolean, hasPreviousPage: boolean, startCursor: string | null, endCursor: string | null }, edges: Array<{ cursor: string, node: { id: string, clientId: string, name: string, builtIn: boolean, enabled: boolean, grantTypes: Array<ClientGrantType>, tokenEndpointAuthMethod: ClientAuthMethod, version: string, createdAt: string, names: Array<{ locale: string, value: string }> } }> } };
+export type ConsoleClientsQuery = { clients: { totalCount: number, pageInfo: { hasNextPage: boolean, hasPreviousPage: boolean, startCursor: string | null, endCursor: string | null }, edges: Array<{ cursor: string, node: { id: string, clientId: string, name: string, builtIn: boolean, enabled: boolean, version: string, createdAt: string, names: Array<{ locale: string, value: string }> } }> } };
 
 export type ConsoleClientQueryVariables = Exact<{
   id: string | number;
@@ -661,13 +661,13 @@ export type ConsoleResourcePermissionsQuery = { permissions: { totalCount: numbe
 export type InstanceDashboardQueryVariables = Exact<{
   timeZone: string;
   includeUsers: boolean;
-  includeApplications: boolean;
+  includeClients: boolean;
   includeSessions: boolean;
   includeResources: boolean;
 }>;
 
 
-export type InstanceDashboardQuery = { instanceOverview: { generatedAt: string, users?: { total: number, enabled: number, createdLast7Days: number, registrations: Array<{ date: string, count: number }> } | null, applications?: { total: number, enabled: number, builtIn: number } | null, sessions?: { active: number, createdLast24Hours: number } | null, resources?: { total: number, enabled: number } | null } };
+export type InstanceDashboardQuery = { instanceOverview: { generatedAt: string, users?: { total: number, enabled: number, createdLast7Days: number, registrations: Array<{ date: string, count: number }> } | null, clients?: { total: number, enabled: number, builtIn: number } | null, sessions?: { active: number, createdLast24Hours: number } | null, resources?: { total: number, enabled: number } | null } };
 
 export type ConsoleUserRolesQueryVariables = Exact<{
   userId: string | number;
@@ -1103,8 +1103,6 @@ export const ConsoleClientsDocument = new TypedDocumentString(`
         }
         builtIn
         enabled
-        grantTypes
-        tokenEndpointAuthMethod
         version
         createdAt
       }
@@ -1575,7 +1573,7 @@ export const ConsoleResourcePermissionsDocument = new TypedDocumentString(`
 }
     `) as unknown as TypedDocumentString<ConsoleResourcePermissionsQuery, ConsoleResourcePermissionsQueryVariables>;
 export const InstanceDashboardDocument = new TypedDocumentString(`
-    query InstanceDashboard($timeZone: String!, $includeUsers: Boolean!, $includeApplications: Boolean!, $includeSessions: Boolean!, $includeResources: Boolean!) {
+    query InstanceDashboard($timeZone: String!, $includeUsers: Boolean!, $includeClients: Boolean!, $includeSessions: Boolean!, $includeResources: Boolean!) {
   instanceOverview {
     generatedAt
     users(timeZone: $timeZone) @include(if: $includeUsers) {
@@ -1587,7 +1585,7 @@ export const InstanceDashboardDocument = new TypedDocumentString(`
         count
       }
     }
-    applications @include(if: $includeApplications) {
+    clients @include(if: $includeClients) {
       total
       enabled
       builtIn

@@ -30,7 +30,7 @@ function overview(overrides: Partial<InstanceOverview> = {}): InstanceOverview {
       createdLast7Days: 3,
       registrations: buckets([0, 1, 0, 2, 0, 0, 0]),
     },
-    applications: { total: 4, enabled: 3, builtIn: 2 },
+    clients: { total: 4, enabled: 3, builtIn: 2 },
     sessions: { active: 8, createdLast24Hours: 5 },
     resources: { total: 2, enabled: 2 },
     ...overrides,
@@ -40,7 +40,7 @@ function overview(overrides: Partial<InstanceOverview> = {}): InstanceOverview {
 function scope(overrides: Partial<DashboardScope> = {}): DashboardScope {
   return {
     users: true,
-    applications: true,
+    clients: true,
     sessions: true,
     resources: true,
     hasAny: true,
@@ -67,9 +67,9 @@ describe('instance dashboard states', () => {
             createdLast7Days: 0,
             registrations: buckets([0, 0, 0, 0, 0, 0, 0]),
           },
-          applications: null,
+          clients: null,
         })}
-        scope={scope({ applications: false })}
+        scope={scope({ clients: false })}
         issues={[]}
         partial={false}
         onRefresh={() => undefined}
@@ -79,9 +79,9 @@ describe('instance dashboard states', () => {
     const users = screen.getByRole('region', { name: 'Users' })
     expect(within(users).getByText('0')).toBeTruthy()
 
-    const applications = screen.getByRole('region', { name: 'Applications' })
-    expect(within(applications).getByText('No access')).toBeTruthy()
-    expect(within(applications).queryByText('0')).toBeNull()
+    const clients = screen.getByRole('region', { name: 'Clients' })
+    expect(within(clients).getByText('No access')).toBeTruthy()
+    expect(within(clients).queryByText('0')).toBeNull()
   })
 
   it('renders an honest empty trend without a chart', () => {
@@ -113,9 +113,9 @@ describe('instance dashboard states', () => {
     const onRefresh = vi.fn()
     renderWithLocale(
       <InstanceDashboardView
-        data={overview({ applications: null })}
+        data={overview({ clients: null })}
         scope={scope()}
-        issues={[issue('applications')]}
+        issues={[issue('clients')]}
         partial
         onRefresh={onRefresh}
       />,
@@ -128,15 +128,15 @@ describe('instance dashboard states', () => {
       screen.getByText('Some overview data could not be loaded'),
     ).toBeTruthy()
 
-    const applications = screen.getByRole('region', { name: 'Applications' })
-    expect(within(applications).getByText('Not available')).toBeTruthy()
+    const clients = screen.getByRole('region', { name: 'Clients' })
+    expect(within(clients).getByText('Not available')).toBeTruthy()
     expect(
-      within(applications).getByText('applications unavailable'),
+      within(clients).getByText('clients unavailable'),
     ).toBeTruthy()
-    expect(within(applications).queryByText('0')).toBeNull()
+    expect(within(clients).queryByText('0')).toBeNull()
 
     await user.click(
-      within(applications).getByRole('button', { name: 'Try again' }),
+      within(clients).getByRole('button', { name: 'Try again' }),
     )
     expect(onRefresh).toHaveBeenCalledTimes(1)
   })

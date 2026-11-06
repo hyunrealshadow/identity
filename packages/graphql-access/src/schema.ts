@@ -1216,7 +1216,7 @@ export const schemaMetadata: SchemaMetadata = {
         }
       }
     },
-    "InstanceApplicationOverview": {
+    "InstanceClientOverview": {
       "kind": "OBJECT",
       "interfaces": [],
       "possibleTypes": [],
@@ -1287,9 +1287,9 @@ export const schemaMetadata: SchemaMetadata = {
       "interfaces": [],
       "possibleTypes": [],
       "fields": {
-        "applications": {
-          "name": "applications",
-          "returnType": "InstanceApplicationOverview",
+        "clients": {
+          "name": "clients",
+          "returnType": "InstanceClientOverview",
           "policies": [
             {
               "scopes": [

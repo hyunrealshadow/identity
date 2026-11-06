@@ -13,7 +13,7 @@ it('selects authorized overview fields without reviving historical grants', () =
   expect(scope).toEqual({
     users: true,
     sessions: true,
-    applications: false,
+    clients: false,
     resources: false,
     hasAny: true,
   })

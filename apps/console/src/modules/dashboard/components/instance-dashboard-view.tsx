@@ -319,7 +319,7 @@ export function InstanceDashboardView({
   const t = useTranslator()
 
   const users = data.users ?? null
-  const applications = data.applications ?? null
+  const clients = data.clients ?? null
   const sessions = data.sessions ?? null
   const resources = data.resources ?? null
 
@@ -347,12 +347,12 @@ export function InstanceDashboardView({
           issues={issuesFor(issues, 'users')}
         />
         <KpiCard
-          title={t('dashboardApplicationsTitle')}
+          title={t('dashboardClientsTitle')}
           icon={AppWindow}
-          included={scope.applications}
-          value={applications?.total}
+          included={scope.clients}
+          value={clients?.total}
           onRetry={onRefresh}
-          issues={issuesFor(issues, 'applications')}
+          issues={issuesFor(issues, 'clients')}
         />
         <KpiCard
           title={t('dashboardSessionsTitle')}

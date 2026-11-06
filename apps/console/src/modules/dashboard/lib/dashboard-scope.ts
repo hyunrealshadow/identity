@@ -5,10 +5,10 @@ export function dashboardScope(
   permissions: EffectivePermissions | null | undefined,
 ) {
   const users = fieldAffordance(permissions, 'InstanceOverview', 'users')
-  const applications = fieldAffordance(
+  const clients = fieldAffordance(
     permissions,
     'InstanceOverview',
-    'applications',
+    'clients',
   )
   const sessions = fieldAffordance(permissions, 'InstanceOverview', 'sessions')
   const resources = fieldAffordance(
@@ -18,10 +18,10 @@ export function dashboardScope(
   )
   return {
     users,
-    applications,
+    clients,
     sessions,
     resources,
-    hasAny: users || applications || sessions || resources,
+    hasAny: users || clients || sessions || resources,
   }
 }
 

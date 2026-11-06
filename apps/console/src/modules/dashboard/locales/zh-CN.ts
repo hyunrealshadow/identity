@@ -2,9 +2,9 @@ import type enUS from './en-US'
 
 const zhCN = {
   overviewTitle: '概览',
-  overviewDescription: '汇总查看本实例的用户、应用、有效登录会话和 API 资源',
+  overviewDescription: '汇总查看本实例的用户、客户端、有效登录会话和 API 资源',
   dashboardUsersTitle: '用户',
-  dashboardApplicationsTitle: '应用',
+  dashboardClientsTitle: '客户端',
   dashboardSessionsTitle: '有效登录会话',
   dashboardResourcesTitle: 'API 资源',
   dashboardKpiValue: '{title}：{value}',

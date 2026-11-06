@@ -36,7 +36,7 @@ pub struct InstanceUserOverviewView {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InstanceApplicationOverviewView {
+pub struct InstanceClientOverviewView {
     pub total: i32,
     pub enabled: i32,
     pub built_in: i32,
@@ -109,17 +109,17 @@ impl InstanceOverviewService {
         })
     }
 
-    #[tracing::instrument(skip_all, name = "instance_overview.applications")]
-    pub async fn application_overview(&self) -> Result<InstanceApplicationOverviewView, AppError> {
+    #[tracing::instrument(skip_all, name = "instance_overview.clients")]
+    pub async fn client_overview(&self) -> Result<InstanceClientOverviewView, AppError> {
         let counts = self
             .repository
-            .application_counts()
+            .client_counts()
             .await
             .map_err(AppError::from)?;
-        Ok(InstanceApplicationOverviewView {
-            total: checked_count("applications.total", counts.total)?,
-            enabled: checked_count("applications.enabled", counts.enabled)?,
-            built_in: checked_count("applications.built_in", counts.built_in)?,
+        Ok(InstanceClientOverviewView {
+            total: checked_count("clients.total", counts.total)?,
+            enabled: checked_count("clients.enabled", counts.enabled)?,
+            built_in: checked_count("clients.built_in", counts.built_in)?,
         })
     }
 
@@ -177,7 +177,7 @@ mod tests {
     use async_trait::async_trait;
     use chrono::{DateTime, NaiveDate, Utc};
     use identity_domain::instance_overview::{
-        InstanceApplicationCounts, InstanceDailyCount, InstanceOverviewRepository,
+        InstanceClientCounts, InstanceDailyCount, InstanceOverviewRepository,
         InstanceOverviewRepositoryError, InstanceResourceCounts, InstanceSessionCounts,
         InstanceUserCounts, NewUserWindow,
     };
@@ -203,10 +203,10 @@ mod tests {
             }
         }
 
-        async fn application_counts(
+        async fn client_counts(
             &self,
-        ) -> Result<InstanceApplicationCounts, InstanceOverviewRepositoryError> {
-            Ok(InstanceApplicationCounts {
+        ) -> Result<InstanceClientCounts, InstanceOverviewRepositoryError> {
+            Ok(InstanceClientCounts {
                 total: 0,
                 enabled: 0,
                 built_in: 0,

@@ -225,7 +225,7 @@ mod tests {
             ),
             (
                 "InstanceOverview",
-                &["users", "applications", "sessions", "resources"][..],
+                &["users", "clients", "sessions", "resources"][..],
             ),
         ] {
             let object = document

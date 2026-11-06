@@ -1,7 +1,7 @@
 query InstanceDashboard(
   $timeZone: String!
   $includeUsers: Boolean!
-  $includeApplications: Boolean!
+  $includeClients: Boolean!
   $includeSessions: Boolean!
   $includeResources: Boolean!
 ) {
@@ -16,7 +16,7 @@ query InstanceDashboard(
         count
       }
     }
-    applications @include(if: $includeApplications) {
+    clients @include(if: $includeClients) {
       total
       enabled
       builtIn

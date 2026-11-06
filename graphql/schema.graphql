@@ -698,7 +698,7 @@ input GroupStateInput {
 	clientMutationId: String
 }
 
-type InstanceApplicationOverview {
+type InstanceClientOverview {
 	total: Int!
 	enabled: Int!
 	builtIn: Int!
@@ -719,7 +719,7 @@ type InstanceInfo {
 type InstanceOverview {
 	generatedAt: DateTime!
 	users(timeZone: String! = "UTC"): InstanceUserOverview @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
-	applications: InstanceApplicationOverview @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	clients: InstanceClientOverview @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	sessions: InstanceSessionOverview @access(policy: {scopes: ["management.session.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	resources: InstanceResourceOverview @access(policy: {scopes: ["management.resource.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 }

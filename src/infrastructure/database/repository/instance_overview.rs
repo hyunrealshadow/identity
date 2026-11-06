@@ -3,7 +3,7 @@ use chrono::{DateTime, Duration, Utc};
 use identity_domain::{
     auth::SessionStatus,
     instance_overview::{
-        InstanceApplicationCounts, InstanceDailyCount, InstanceOverviewRepository,
+        InstanceClientCounts, InstanceDailyCount, InstanceOverviewRepository,
         InstanceOverviewRepositoryError, InstanceResourceCounts, InstanceSessionCounts,
         InstanceUserCounts, NewUserWindow,
     },
@@ -104,11 +104,9 @@ impl InstanceOverviewRepository for InstanceOverviewRepositoryImpl {
     #[tracing::instrument(
         skip_all,
         name = "db.query",
-        fields(db.system = "postgresql", db.operation = "instance_overview_applications")
+        fields(db.system = "postgresql", db.operation = "instance_overview_clients")
     )]
-    async fn application_counts(
-        &self,
-    ) -> Result<InstanceApplicationCounts, InstanceOverviewRepositoryError> {
+    async fn client_counts(&self) -> Result<InstanceClientCounts, InstanceOverviewRepositoryError> {
         let row = self
             .db
             .query_one_raw(Statement::from_string(
@@ -124,7 +122,7 @@ impl InstanceOverviewRepository for InstanceOverviewRepositoryImpl {
             .await
             .map_err(storage_error)?
             .ok_or_else(missing_row)?;
-        Ok(InstanceApplicationCounts {
+        Ok(InstanceClientCounts {
             total: column(&row, "total")?,
             enabled: column(&row, "enabled")?,
             built_in: column(&row, "built_in")?,

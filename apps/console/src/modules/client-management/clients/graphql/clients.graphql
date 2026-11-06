@@ -64,8 +64,6 @@ query ConsoleClients(
         }
         builtIn
         enabled
-        grantTypes
-        tokenEndpointAuthMethod
         version
         createdAt
       }

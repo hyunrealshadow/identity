@@ -16,7 +16,7 @@ import { dashboardScope, type DashboardScope } from '#/modules/dashboard/lib/das
 
 export type InstanceOverview = NonNullable<InstanceDashboardQuery['instanceOverview']>
 export type InstanceDashboardUsers = NonNullable<InstanceOverview['users']>
-export type InstanceDashboardApplications = NonNullable<InstanceOverview['applications']>
+export type InstanceDashboardClients = NonNullable<InstanceOverview['clients']>
 export type InstanceDashboardSessions = NonNullable<InstanceOverview['sessions']>
 export type InstanceDashboardResources = NonNullable<InstanceOverview['resources']>
 export type RegistrationBucket = InstanceDashboardUsers['registrations'][number]
@@ -63,7 +63,7 @@ export function useInstanceDashboard(
     () => ({
       timeZone,
       includeUsers: scope.users,
-      includeApplications: scope.applications,
+      includeClients: scope.clients,
       includeSessions: scope.sessions,
       includeResources: scope.resources,
     }),

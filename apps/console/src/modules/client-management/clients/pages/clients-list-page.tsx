@@ -30,7 +30,6 @@ import {
   UserSelectField,
   UserTextField,
 } from '#/modules/user-management/users/components/user-form-fields'
-import { AUTH_METHOD_LABELS } from '../components/client-settings-fields'
 import { ClientBuiltInChip, ClientStatusChip } from '../components/client-status'
 import { clientScope } from '../lib/client-scope'
 import { clientsQueryVariables, type ClientsSearch } from '../lib/clients-search'
@@ -218,15 +217,6 @@ export function ClientsListPage({ search }: { search: ClientsSearch }) {
                       <code className="break-all text-xs">{client.clientId}</code>
                       <CopyButton value={client.clientId} label={t('clientsClientId')} />
                     </div>
-                  ),
-                },
-                {
-                  id: 'authentication',
-                  label: t('clientsAuthMethod'),
-                  render: (client) => (
-                    <span className="text-sm">
-                      {t(AUTH_METHOD_LABELS[client.tokenEndpointAuthMethod])}
-                    </span>
                   ),
                 },
                 {

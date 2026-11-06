@@ -1,8 +1,8 @@
 const enUS = {
   overviewTitle: 'Overview',
-  overviewDescription: 'A consolidated view of users, applications, valid sessions, and API resources in this instance.',
+  overviewDescription: 'A consolidated view of users, clients, valid sessions, and API resources in this instance.',
   dashboardUsersTitle: 'Users',
-  dashboardApplicationsTitle: 'Applications',
+  dashboardClientsTitle: 'Clients',
   dashboardSessionsTitle: 'Valid sessions',
   dashboardResourcesTitle: 'API resources',
   dashboardKpiValue: '{title}: {value}',

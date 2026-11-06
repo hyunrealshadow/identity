@@ -10,7 +10,7 @@ use chrono::{DateTime, NaiveDate, Utc};
 use identity_application::{
     authorization::ManagementTarget,
     instance_overview::{
-        InstanceApplicationOverviewView, InstanceDailyCountView, InstanceResourceOverviewView,
+        InstanceClientOverviewView, InstanceDailyCountView, InstanceResourceOverviewView,
         InstanceSessionOverviewView, InstanceUserOverviewView,
     },
 };
@@ -63,16 +63,16 @@ impl InstanceOverview {
         directive = access::apply(ManagementGuard::policy(ManagementScope::ClientsRead)),
         complexity = 10
     )]
-    async fn applications(&self, ctx: &Context<'_>) -> Result<Option<InstanceApplicationOverview>> {
+    async fn clients(&self, ctx: &Context<'_>) -> Result<Option<InstanceClientOverview>> {
         let request = request_context(ctx)?;
         let view = request
             .state
             .services()
             .instance_overview()
-            .application_overview()
+            .client_overview()
             .await
             .map_err(|error| app_error(ctx, error))?;
-        Ok(Some(InstanceApplicationOverview::from(view)))
+        Ok(Some(InstanceClientOverview::from(view)))
     }
 
     #[graphql(
@@ -126,7 +126,7 @@ pub(crate) struct InstanceDailyCount {
 }
 
 #[derive(SimpleObject)]
-pub(crate) struct InstanceApplicationOverview {
+pub(crate) struct InstanceClientOverview {
     total: i32,
     enabled: i32,
     #[graphql(name = "builtIn")]
@@ -170,8 +170,8 @@ impl From<InstanceDailyCountView> for InstanceDailyCount {
     }
 }
 
-impl From<InstanceApplicationOverviewView> for InstanceApplicationOverview {
-    fn from(view: InstanceApplicationOverviewView) -> Self {
+impl From<InstanceClientOverviewView> for InstanceClientOverview {
+    fn from(view: InstanceClientOverviewView) -> Self {
         Self {
             total: view.total,
             enabled: view.enabled,
