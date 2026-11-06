@@ -1,4 +1,4 @@
-use std::{io::Error, sync::Arc};
+use std::{io::Error, net::UdpSocket, sync::Arc};
 
 use identity_infrastructure::{
     config::{AppConfig, TlsTermination},
@@ -23,7 +23,7 @@ use salvo::{
     },
 };
 use tokio::{spawn, task::JoinSet};
-use tracing::info;
+use tracing::{info, warn};
 
 use super::AppResult;
 
@@ -51,125 +51,78 @@ pub async fn start_servers(
     let shutdown = Arc::new(state.lifecycle().clone());
     let mut servers = JoinSet::new();
 
-    match listener_mode(config) {
-        ListenerMode::UpstreamTls => {
-            let main_listener = build_upstream_tls_listener(&main_address).await?;
-            servers.spawn(serve_with_shutdown(
-                main_listener,
-                app,
-                Arc::clone(&shutdown),
-            ));
-            let internal_listener = build_upstream_tls_listener(&internal_address).await?;
-            info!(address = internal_address, "internal API listening");
-            servers.spawn(serve_with_shutdown(
-                internal_listener,
-                internal,
-                Arc::clone(&shutdown),
-            ));
-            if needs_separate_health {
-                let health_address = health::bind_address(&config.health, &config.server);
-                let health_listener = TcpListener::new(health_address.clone()).try_bind().await?;
-                let health_app = health::router(&config.health)
-                    .hoop(inject(state.clone()))
-                    .hoop(TraceContextMiddleware::new(TraceTrustPolicy::new(
-                        config.observability.trace_context.clone(),
-                    )));
+    let mode = listener_mode(config);
+    spawn_app(&mut servers, config, mode, &main_address, app, &shutdown).await?;
+    spawn_app(
+        &mut servers,
+        config,
+        mode,
+        &internal_address,
+        internal,
+        &shutdown,
+    )
+    .await?;
+    info!(address = internal_address, "internal API listening");
 
-                info!(
-                    environment,
-                    address = health_address.as_str(),
-                    route = config.health.route.as_str(),
-                    "health listening"
-                );
-                servers.spawn(serve_with_shutdown(
-                    health_listener,
-                    health_app,
-                    Arc::clone(&shutdown),
-                ));
-            }
-            if needs_separate_graphql {
-                let graphql_address = graphql::bind_address(&config.graphql, &config.server);
-                let graphql_listener = build_upstream_tls_listener(&graphql_address).await?;
-                let graphql_app = graphql::router(state.clone(), &config.graphql)
-                    .hoop(RequestIdMiddleware::new(TraceTrustPolicy::new(
-                        config.observability.trace_context.clone(),
-                    )))
-                    .hoop(RequireUpstreamHttps::new(
-                        &config.server.tls.trusted_proxies,
-                        &config.server.tls.direct_http_clients,
-                    ))
-                    .hoop(TraceContextMiddleware::new(TraceTrustPolicy::new(
-                        config.observability.trace_context.clone(),
-                    )));
-                info!(
-                    environment,
-                    address = graphql_address.as_str(),
-                    route = "/graphql",
-                    "graphql listening"
-                );
-                servers.spawn(serve_with_shutdown(
-                    graphql_listener,
-                    graphql_app,
-                    Arc::clone(&shutdown),
-                ));
-            }
+    if needs_separate_health {
+        let health_address = health::bind_address(&config.health, &config.server);
+        let health_app = health::router(&config.health)
+            .hoop(inject(state.clone()))
+            .hoop(TraceContextMiddleware::new(TraceTrustPolicy::new(
+                config.observability.trace_context.clone(),
+            )));
+        // The health probe stays plain TCP in both modes.
+        let health_app = Arc::new(health_app);
+        for address in listen_addresses(&health_address) {
+            let listener = TcpListener::new(address).try_bind().await?;
+            servers.spawn(serve_with_shutdown(
+                listener,
+                Arc::clone(&health_app),
+                Arc::clone(&shutdown),
+            ));
         }
-        ListenerMode::DirectTls => {
-            let main_listener = build_https_listener(config, &main_address).await?;
-            servers.spawn(serve_with_shutdown(
-                main_listener,
-                app,
-                Arc::clone(&shutdown),
-            ));
-            let internal_listener = build_https_listener(config, &internal_address).await?;
-            info!(address = internal_address, "internal API listening");
-            servers.spawn(serve_with_shutdown(
-                internal_listener,
-                internal,
-                Arc::clone(&shutdown),
-            ));
-            if needs_separate_health {
-                let health_address = health::bind_address(&config.health, &config.server);
-                let health_listener = TcpListener::new(health_address.clone()).try_bind().await?;
-                let health_app = health::router(&config.health)
-                    .hoop(inject(state.clone()))
-                    .hoop(TraceContextMiddleware::new(TraceTrustPolicy::new(
-                        config.observability.trace_context.clone(),
-                    )));
+        info!(
+            environment,
+            address = health_address.as_str(),
+            route = config.health.route.as_str(),
+            "health listening"
+        );
+    }
 
-                info!(
-                    environment,
-                    address = health_address.as_str(),
-                    route = config.health.route.as_str(),
-                    "health listening"
-                );
-                servers.spawn(serve_with_shutdown(
-                    health_listener,
-                    health_app,
-                    Arc::clone(&shutdown),
-                ));
+    if needs_separate_graphql {
+        let graphql_address = graphql::bind_address(&config.graphql, &config.server);
+        let trace_context = TraceContextMiddleware::new(TraceTrustPolicy::new(
+            config.observability.trace_context.clone(),
+        ));
+        let graphql_app = match mode {
+            ListenerMode::UpstreamTls => graphql::router(state.clone(), &config.graphql)
+                .hoop(RequestIdMiddleware::new(TraceTrustPolicy::new(
+                    config.observability.trace_context.clone(),
+                )))
+                .hoop(RequireUpstreamHttps::new(
+                    &config.server.tls.trusted_proxies,
+                    &config.server.tls.direct_http_clients,
+                ))
+                .hoop(trace_context),
+            ListenerMode::DirectTls => {
+                graphql::router(state.clone(), &config.graphql).hoop(trace_context)
             }
-            if needs_separate_graphql {
-                let graphql_address = graphql::bind_address(&config.graphql, &config.server);
-                let graphql_listener = build_https_listener(config, &graphql_address).await?;
-                let graphql_app = graphql::router(state.clone(), &config.graphql).hoop(
-                    TraceContextMiddleware::new(TraceTrustPolicy::new(
-                        config.observability.trace_context.clone(),
-                    )),
-                );
-                info!(
-                    environment,
-                    address = graphql_address.as_str(),
-                    route = "/graphql",
-                    "graphql listening"
-                );
-                servers.spawn(serve_with_shutdown(
-                    graphql_listener,
-                    graphql_app,
-                    Arc::clone(&shutdown),
-                ));
-            }
-        }
+        };
+        spawn_app(
+            &mut servers,
+            config,
+            mode,
+            &graphql_address,
+            graphql_app,
+            &shutdown,
+        )
+        .await?;
+        info!(
+            environment,
+            address = graphql_address.as_str(),
+            route = "/graphql",
+            "graphql listening"
+        );
     }
 
     while let Some(result) = servers.join_next().await {
@@ -184,7 +137,7 @@ pub async fn start_servers(
 
 async fn serve_with_shutdown<A>(
     acceptor: A,
-    app: Router,
+    app: Arc<Router>,
     lifecycle: Arc<AppLifecycle>,
 ) -> Result<(), Error>
 where
@@ -213,6 +166,73 @@ fn listener_mode(config: &AppConfig) -> ListenerMode {
         TlsTermination::Direct => ListenerMode::DirectTls,
         TlsTermination::Upstream => ListenerMode::UpstreamTls,
     }
+}
+
+/// Binds every listen address of one configured address and serves the same
+/// router on each of them.
+async fn spawn_app(
+    servers: &mut JoinSet<Result<(), Error>>,
+    config: &AppConfig,
+    mode: ListenerMode,
+    address: &str,
+    app: Router,
+    shutdown: &Arc<AppLifecycle>,
+) -> AppResult<()> {
+    let app = Arc::new(app);
+    for address in listen_addresses(address) {
+        match mode {
+            ListenerMode::UpstreamTls => {
+                let listener = build_upstream_tls_listener(&address).await?;
+                servers.spawn(serve_with_shutdown(
+                    listener,
+                    Arc::clone(&app),
+                    Arc::clone(shutdown),
+                ));
+            }
+            ListenerMode::DirectTls => {
+                let listener = build_https_listener(config, &address).await?;
+                servers.spawn(serve_with_shutdown(
+                    listener,
+                    Arc::clone(&app),
+                    Arc::clone(shutdown),
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+/// The socket addresses to bind for a configured `host:port`.
+///
+/// `localhost` resolves to a single address family, which differs between
+/// systems: a client that resolves it to the other family would be refused.
+/// It therefore binds both loopback addresses. The IPv6 loopback is skipped
+/// on hosts without IPv6. Any other host is bound exactly as configured.
+fn listen_addresses(address: &str) -> Vec<String> {
+    expand_localhost(address, ipv6_loopback_available())
+}
+
+fn expand_localhost(address: &str, ipv6: bool) -> Vec<String> {
+    let Some((host, port)) = address.rsplit_once(':') else {
+        return vec![address.to_owned()];
+    };
+    if !host.eq_ignore_ascii_case("localhost") {
+        return vec![address.to_owned()];
+    }
+    let mut addresses = vec![format!("127.0.0.1:{port}")];
+    if ipv6 {
+        addresses.push(format!("[::1]:{port}"));
+    } else {
+        warn!(
+            address,
+            "IPv6 loopback is unavailable; listening on 127.0.0.1 only"
+        );
+    }
+    addresses
+}
+
+fn ipv6_loopback_available() -> bool {
+    UdpSocket::bind("[::1]:0").is_ok()
 }
 
 async fn build_upstream_tls_listener(address: &str) -> AppResult<TcpAcceptor> {
@@ -276,7 +296,40 @@ mod tests {
         SettingsConfig, TlsTermination,
     };
 
-    use super::{ListenerMode, listener_mode};
+    use super::{ListenerMode, expand_localhost, listener_mode};
+
+    #[test]
+    fn localhost_binds_both_loopback_families() {
+        assert_eq!(
+            expand_localhost("localhost:5150", true),
+            ["127.0.0.1:5150", "[::1]:5150"]
+        );
+        assert_eq!(
+            expand_localhost("LocalHost:5151", true),
+            ["127.0.0.1:5151", "[::1]:5151"]
+        );
+    }
+
+    #[test]
+    fn localhost_falls_back_to_ipv4_without_ipv6() {
+        assert_eq!(
+            expand_localhost("localhost:5150", false),
+            ["127.0.0.1:5150"]
+        );
+    }
+
+    #[test]
+    fn other_hosts_bind_as_configured() {
+        for address in [
+            "0.0.0.0:5150",
+            "127.0.0.1:5150",
+            "[::1]:5150",
+            "[::]:5150",
+            "example.test:5150",
+        ] {
+            assert_eq!(expand_localhost(address, true), [address]);
+        }
+    }
 
     #[test]
     fn listener_mode_is_upstream_tls_when_configured() {

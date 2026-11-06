@@ -31,7 +31,8 @@ observability:
 server:
   # Port on which the server will listen. the server binding is 0.0.0.0:{PORT}
   port: 5150
-  # Binding for the server (which interface to bind to)
+  # Binding for the server (which interface to bind to). `localhost` listens
+  # on both 127.0.0.1 and [::1]; any other value is bound exactly as written.
   binding: localhost
   # The UI hostname or IP address that mailers will point to.
   host: https://localhost:5150
