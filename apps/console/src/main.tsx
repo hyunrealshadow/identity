@@ -4,6 +4,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 
 import './styles.css'
+import { FullPageLoading } from '#/components/full-page-loading'
 import { ConfigError, loadRuntimeConfig } from '#/lib/config'
 import { queryClient } from '#/lib/graphql/query-client'
 import { resolveBrowserLocale, translate } from '#/lib/i18n'
@@ -17,15 +18,7 @@ const root = createRoot(container)
 function StartupLoading() {
   const locale = resolveBrowserLocale()
   document.documentElement.lang = locale
-  return (
-    <main
-      className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground"
-      role="status"
-      aria-live="polite"
-    >
-      <p className="text-sm text-muted">{translate(locale, 'startupLoading')}</p>
-    </main>
-  )
+  return <FullPageLoading label={translate(locale, 'startupLoading')} />
 }
 
 function StartupError({ error }: { error: unknown }) {

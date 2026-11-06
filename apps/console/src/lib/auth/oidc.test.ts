@@ -263,6 +263,7 @@ describe('authorization error responses', () => {
   it.each([
     ['unmet_authentication_requirements', 'authentication_requirements_unmet'],
     ['access_denied', 'authorization_denied'],
+    ['invalid_scope', 'scope_not_allowed'],
     ['server_error', 'authorization_failed'],
   ])('reports %s without attempting a code exchange', async (error, code) => {
     await expect(

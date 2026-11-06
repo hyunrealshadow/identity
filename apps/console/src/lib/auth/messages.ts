@@ -14,6 +14,7 @@ const authMessages: Record<AuthErrorCode, MessageKey> = {
   authorization_denied: 'authAuthorizationDenied',
   authentication_requirements_unmet: 'authAuthenticationRequirementsUnmet',
   authorization_failed: 'authAuthorizationFailed',
+  scope_not_allowed: 'authScopeNotAllowed',
   claims_invalid: 'authClaimsInvalid',
   token_response_invalid: 'authTokenResponseInvalid',
   missing_end_session: 'signOutSsoUnavailable',

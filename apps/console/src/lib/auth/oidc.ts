@@ -78,6 +78,8 @@ function authorizationErrorCode(error: string): AuthErrorCode {
       return 'authorization_denied'
     case 'unmet_authentication_requirements':
       return 'authentication_requirements_unmet'
+    case 'invalid_scope':
+      return 'scope_not_allowed'
     default:
       return 'authorization_failed'
   }

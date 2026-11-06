@@ -1,7 +1,9 @@
-import { Link, createFileRoute } from '@tanstack/react-router'
+import { createFileRoute } from '@tanstack/react-router'
+import { useState } from 'react'
 import { createServerFn } from '@tanstack/react-start'
 
 import { AuthShell } from '#/components/auth-shell'
+import { beginAuthorization } from '#/lib/authorization-flow'
 import { translate } from '#/lib/i18n'
 import { requestLocale } from '#/lib/i18n.server'
 
@@ -36,6 +38,23 @@ export const Route = createFileRoute('/logout')({
 function SignedOutPage() {
   const { locale } = Route.useLoaderData()
   const t = (key: Parameters<typeof translate>[1]) => translate(locale, key)
+  const [starting, setStarting] = useState(false)
+
+  // The browser may still remember other accounts. Signing in again after an
+  // explicit sign-out lets the user choose one instead of silently continuing
+  // as whichever account remains.
+  async function signInAgain() {
+    setStarting(true)
+    try {
+      window.location.assign(
+        await beginAuthorization({
+          data: { returnTo: '/account/profile', selectAccount: true },
+        }),
+      )
+    } catch {
+      setStarting(false)
+    }
+  }
 
   return (
     <AuthShell
@@ -45,12 +64,14 @@ function SignedOutPage() {
       title={t('signedOutTitle')}
       description={t('signedOutDescription')}
     >
-      <Link
-        to="/login"
-        className="mt-6 flex min-h-9 w-full items-center justify-center rounded-field bg-accent px-4 text-sm font-semibold text-accent-foreground transition-opacity hover:opacity-90"
+      <button
+        type="button"
+        disabled={starting}
+        onClick={() => void signInAgain()}
+        className="mt-6 flex min-h-9 w-full items-center justify-center rounded-field bg-accent px-4 text-sm font-semibold text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
       >
         {t('signInAgain')}
-      </Link>
+      </button>
     </AuthShell>
   )
 }

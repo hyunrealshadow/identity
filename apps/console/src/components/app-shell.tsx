@@ -1,12 +1,8 @@
 import {
-  Alert,
   Button,
   Dropdown,
   Label,
-  Modal,
-  Spinner,
   Toast,
-  useOverlayState,
   useTheme,
 } from '@heroui/react'
 import { Outlet, useNavigate } from '@tanstack/react-router'
@@ -152,12 +148,10 @@ export function AppShell() {
 function AppShellLayout() {
   const t = useTranslator()
   const config = useRuntimeConfig()
-  const { claims, ssoAvailable, signIn, logoutLocal, logoutSso } = useAuth()
+  const { claims, signIn, logoutSso } = useAuth()
   const { theme, setTheme } = useTheme()
   const navigate = useNavigate()
   const [collapsed, setCollapsed] = useState(readCollapsed)
-  const [logoutPending, setLogoutPending] = useState(false)
-  const logoutState = useOverlayState()
 
   const name = displayName(claims, t('unknown'))
   const email = emailOf(claims)
@@ -186,25 +180,14 @@ function AppShellLayout() {
     })
   }
 
-  function signOutLocal() {
-    setLogoutPending(true)
-    logoutLocal()
-    logoutState.close()
-    void navigate({ to: '/signed-out', replace: true })
-  }
-
-  function signOutSso() {
-    setLogoutPending(true)
-    const redirected = logoutSso()
-    if (!redirected) {
-      logoutLocal()
-      logoutState.close()
-      void navigate({ to: '/signed-out', replace: true })
-    }
+  // Signing out ends the Identity session as well, so the next sign-in asks
+  // for credentials instead of silently restoring the same account. Without
+  // an end-session endpoint the console still clears its own session.
+  function signOut() {
+    if (!logoutSso()) void navigate({ to: '/signed-out', replace: true })
   }
 
   function switchAccount() {
-    logoutState.close()
     // Explicit account selection on a normal sign-in. The current page is kept
     // as the safe return target, and no single sign-out is started first.
     void signIn({ selectAccount: true, returnTo: currentReturnTo() })
@@ -269,7 +252,7 @@ function AppShellLayout() {
                   picture={picture}
                   accountUrl={config.accountUrl}
                   onSwitchAccount={switchAccount}
-                  onSignOut={() => logoutState.open()}
+                  onSignOut={signOut}
                 />
               </div>
             </div>
@@ -280,87 +263,6 @@ function AppShellLayout() {
           </main>
         </div>
 
-        <Modal state={logoutState}>
-          <Modal.Backdrop isDismissable={!logoutPending}>
-            <Modal.Container size="md">
-              <Modal.Dialog>
-                {({ close }) => (
-                  <>
-                    <Modal.CloseTrigger
-                      aria-label={t('close')}
-                      isDisabled={logoutPending}
-                    />
-                    <Modal.Header>
-                      <Modal.Heading>{t('signOutTitle')}</Modal.Heading>
-                    </Modal.Header>
-                    <Modal.Body>
-                      <p className="text-sm leading-6 text-muted">
-                        {t('signOutDescription')}
-                      </p>
-                      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                        <div className="rounded-field border border-border p-3">
-                          <p className="text-sm font-medium">
-                            {t('signOutLocalTitle')}
-                          </p>
-                          <p className="mt-1 text-xs leading-5 text-muted">
-                            {t('signOutLocalDescription')}
-                          </p>
-                        </div>
-                        <div className="rounded-field border border-border p-3">
-                          <p className="text-sm font-medium">
-                            {t('signOutSsoTitle')}
-                          </p>
-                          <p className="mt-1 text-xs leading-5 text-muted">
-                            {t('signOutSsoDescription')}
-                          </p>
-                        </div>
-                      </div>
-                      {!ssoAvailable ? (
-                        <Alert status="warning" className="mt-3">
-                          <Alert.Indicator />
-                          <Alert.Content>
-                            <Alert.Description>
-                              {t('signOutSsoUnavailable')}
-                            </Alert.Description>
-                          </Alert.Content>
-                        </Alert>
-                      ) : null}
-                    </Modal.Body>
-                    <Modal.Footer>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        isDisabled={logoutPending}
-                        onPress={close}
-                      >
-                        {t('cancel')}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        isDisabled={logoutPending}
-                        onPress={signOutLocal}
-                      >
-                        {t('signOutLocalAction')}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="danger"
-                        isDisabled={logoutPending || !ssoAvailable}
-                        onPress={signOutSso}
-                      >
-                        {logoutPending ? (
-                          <Spinner size="sm" aria-label={t('signOutPending')} />
-                        ) : null}
-                        {t('signOutSsoAction')}
-                      </Button>
-                    </Modal.Footer>
-                  </>
-                )}
-              </Modal.Dialog>
-            </Modal.Container>
-          </Modal.Backdrop>
-        </Modal>
       </div>
     </>
   )

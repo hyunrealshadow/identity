@@ -1,9 +1,9 @@
-import { Button, Card } from '@heroui/react'
+import { Button } from '@heroui/react'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 
-import { Brand } from '#/components/app-navigation'
-import { AsyncState } from '#/components/async-state'
+import { AuthStatusPage } from '#/components/auth-status-page'
+import { FullPageLoading } from '#/components/full-page-loading'
 import { useAuth } from '#/lib/auth/context'
 import {
   isPopupCallback,
@@ -65,38 +65,18 @@ function CallbackPage() {
 
   if (popup) return null
 
+  if (processing) return <FullPageLoading label={t('authCompletingTitle')} />
+
   return (
-    <main className="flex min-h-screen items-center justify-center bg-background p-4 text-foreground sm:p-6">
-      <div className="w-full max-w-lg">
-        <div className="mb-5 flex justify-center">
-          <Brand displayName={config.displayName} />
-        </div>
-        {processing ? (
-          <AsyncState
-            kind="loading"
-            title={t('authCompletingTitle')}
-            description={t('authCompletingDescription')}
-          />
-        ) : (
-          <Card className="console-card border border-border">
-            <Card.Content className="p-5">
-              <AsyncState
-                kind="error"
-                title={t('authFailedTitle')}
-                description={t(authErrorKey(errorCode))}
-                action={
-                  <Button onPress={() => void signIn({ returnTo: '/' })}>
-                    {t('authRetry')}
-                  </Button>
-                }
-              />
-              <p className="mt-4 text-center text-xs text-muted">
-                {t('authFailedDescription')}
-              </p>
-            </Card.Content>
-          </Card>
-        )}
-      </div>
-    </main>
+    <AuthStatusPage
+      tone="error"
+      title={t('authFailedTitle')}
+      description={t(authErrorKey(errorCode))}
+      action={
+        <Button onPress={() => void signIn({ returnTo: '/' })}>
+          {t('authRetry')}
+        </Button>
+      }
+    />
   )
 }

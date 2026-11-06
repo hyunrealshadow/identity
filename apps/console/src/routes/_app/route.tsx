@@ -4,6 +4,7 @@ import type { ReactNode } from 'react'
 
 import { AppShell } from '#/components/app-shell'
 import { AsyncState } from '#/components/async-state'
+import { FullPageLoading } from '#/components/full-page-loading'
 import { AutomaticReauthenticationGate } from '#/components/automatic-reauthentication'
 import { SessionExpired } from '#/components/session-expired'
 import { useAuth } from '#/lib/auth/context'
@@ -85,13 +86,5 @@ function AuthenticatedLayout() {
     )
   }
 
-  return (
-    <Centered>
-      <AsyncState
-        kind="loading"
-        title={t('loading')}
-        description={t('authLoadingDescription')}
-      />
-    </Centered>
-  )
+  return <FullPageLoading label={t('authLoadingDescription')} />
 }

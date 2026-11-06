@@ -112,8 +112,6 @@ const shared = {
   startupConfigRetry: 'Reload the console',
 
   authCompletingTitle: 'Completing sign-in',
-  authCompletingDescription:
-    'Validating the authorization response and establishing this console session.',
   authFailedTitle: 'Sign-in could not be completed',
   authFailedDescription:
     'No tokens were stored. Start sign-in again to create a new authorization request.',
@@ -136,6 +134,8 @@ const shared = {
   authAuthenticationRequirementsUnmet:
     'Your sign-in does not meet what the console requires, such as two-step verification.',
   authAuthorizationFailed: 'The identity provider could not complete the sign-in request.',
+  authScopeNotAllowed:
+    'The console client is not allowed to request a permission this action needs. Ask an administrator to add it to the console client\'s scopes, then try again.',
   authExchangeFailed:
     'The authorization code could not be exchanged for tokens.',
   authClaimsInvalid: 'The identity token claims are incomplete or invalid.',
@@ -144,25 +144,10 @@ const shared = {
   authRetry: 'Start sign-in again',
   authBackToConsole: 'Return to console',
   signedOutTitle: 'Signed out',
-  signedOutDescription:
-    'The in-memory tokens and page data for this console tab were cleared.',
-  signedOutSsoNote:
-    'If you chose single sign-out, the Identity provider session was also ended. Signing in again may ask for credentials.',
+  signedOutDescription: 'You have signed out of the console. You can sign in again at any time.',
   signInAgain: 'Sign in again',
-  signOutTitle: 'Sign out of the console?',
-  signOutDescription:
-    'Choose whether to end only this console session or also end the Identity single sign-on session.',
-  signOutLocalTitle: 'Console only',
-  signOutLocalDescription:
-    'Clears tokens and page data in this tab. Your Identity single sign-on session remains available.',
-  signOutSsoTitle: 'Single sign-out',
-  signOutSsoDescription:
-    'Clears this console and asks Identity to end the single sign-on session for this browser.',
-  signOutLocalAction: 'Sign out of console only',
-  signOutSsoAction: 'Sign out of Identity too',
   signOutSsoUnavailable:
     'The identity provider did not publish a logout endpoint, so single sign-out is unavailable.',
-  signOutPending: 'Signing out…',
   sessionExpiredTitle: 'This console session expired',
   sessionExpiredDescription:
     'Your tokens are no longer valid. Sign in again to continue from this page.',

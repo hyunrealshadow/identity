@@ -36,6 +36,7 @@ export type AuthErrorCode =
   | 'authorization_denied'
   | 'authentication_requirements_unmet'
   | 'authorization_failed'
+  | 'scope_not_allowed'
   | 'claims_invalid'
   | 'token_response_invalid'
   | 'missing_end_session'
