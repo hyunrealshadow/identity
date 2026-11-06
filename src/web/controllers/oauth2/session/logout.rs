@@ -15,8 +15,9 @@ use crate::{
             WebError, WebResult, app_state, redirect_to_response, render_app_error, render_html,
         },
         shared::{
-            SessionCookieEntry, append_set_cookie, build_session_cookie_from_protected_ids,
-            generate_csp_nonce, load_op_active_session_entries, parse_op_session_cookie,
+            ActiveSessionEntry, SessionCookieEntry, append_set_cookie,
+            build_session_cookie_from_protected_ids, generate_csp_nonce,
+            load_op_active_session_entries, parse_op_session_cookie, unprotect_session_id,
         },
     },
     views::oauth2::{FrontChannelNotificationView, LogoutPageData},
@@ -159,6 +160,31 @@ fn csp_origin_source(uri: &Url) -> Option<String> {
     Some(origin)
 }
 
+/// Which remembered browser session a logout request ends.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LogoutTarget {
+    /// No `id_token_hint`: the browser's current (first active) session.
+    Current,
+    /// A verified hint: only the session its `sid` names, if still active.
+    Hinted(Option<SessionOid>),
+}
+
+/// A hint that names a session which is no longer remembered, or that carries
+/// no session at all, ends nothing: another remembered account must never be
+/// signed out on its behalf.
+fn session_for_logout(
+    entries: &[ActiveSessionEntry],
+    target: LogoutTarget,
+) -> Option<&ActiveSessionEntry> {
+    match target {
+        LogoutTarget::Current => entries.first(),
+        LogoutTarget::Hinted(Some(session_oid)) => entries
+            .iter()
+            .find(|entry| entry.session.session_oid == session_oid),
+        LogoutTarget::Hinted(None) => None,
+    }
+}
+
 struct LogoutContext {
     request: RpInitiatedLogoutRequest,
     session_entries: Vec<SessionCookieEntry>,
@@ -193,7 +219,22 @@ async fn load_session(depot: &mut Depot, req: &mut Request) -> WebResult<()> {
     let headers = req.headers().clone();
     let session_entries = parse_op_session_cookie(&ctx, &headers).await;
     let active_entries = load_op_active_session_entries(&ctx, &headers).await?;
-    let session_to_revoke = active_entries.first().map(|entry| {
+    let hinted = match params.id_token_hint.as_deref() {
+        Some(raw) => {
+            let sid = ctx
+                .services()
+                .oidc_logout()
+                .id_token_hint_session_id(raw)
+                .await?;
+            let session_oid = match sid {
+                Some(sid) => unprotect_session_id(&ctx, &sid).await.ok(),
+                None => None,
+            };
+            LogoutTarget::Hinted(session_oid)
+        }
+        None => LogoutTarget::Current,
+    };
+    let session_to_revoke = session_for_logout(&active_entries, hinted).map(|entry| {
         (
             entry.session.session_oid,
             entry.protected_session_id.clone(),
@@ -270,8 +311,68 @@ mod tests {
     use url::Url;
     use uuid::Uuid;
 
-    use super::{redirect_or_page_response, render_logout_page, session_cookie_without};
-    use crate::controllers::shared::SessionCookieEntry;
+    use super::{
+        LogoutTarget, redirect_or_page_response, render_logout_page, session_cookie_without,
+        session_for_logout,
+    };
+    use crate::controllers::shared::{ActiveSessionEntry, SessionCookieEntry};
+    use chrono::Utc;
+    use identity_domain::auth::model::ActiveSession;
+
+    fn active(name: &str) -> ActiveSessionEntry {
+        ActiveSessionEntry {
+            session: ActiveSession {
+                session_oid: SessionOid(Uuid::new_v4()),
+                user_oid: Uuid::new_v4(),
+                user_name: name.to_owned(),
+                user_email: format!("{name}@example.test"),
+                user_picture: None,
+                last_active_at: None,
+                expires_at: None,
+                created_at: Utc::now(),
+                authenticated_at: Utc::now(),
+                acr: None,
+                amr: Vec::new(),
+            },
+            protected_session_id: format!("protected-{name}"),
+        }
+    }
+
+    #[test]
+    fn hinted_logout_ends_only_the_hinted_remembered_account() {
+        let entries = [active("first"), active("second")];
+        let second = entries[1].session.session_oid;
+
+        let target = session_for_logout(&entries, LogoutTarget::Hinted(Some(second)));
+
+        assert_eq!(target.map(|entry| entry.session.session_oid), Some(second));
+    }
+
+    #[test]
+    fn hint_for_a_session_no_longer_remembered_ends_nothing() {
+        let entries = [active("first"), active("second")];
+
+        assert!(
+            session_for_logout(
+                &entries,
+                LogoutTarget::Hinted(Some(SessionOid(Uuid::new_v4())))
+            )
+            .is_none()
+        );
+        assert!(session_for_logout(&entries, LogoutTarget::Hinted(None)).is_none());
+    }
+
+    #[test]
+    fn unhinted_logout_ends_the_current_session() {
+        let entries = [active("first"), active("second")];
+
+        let target = session_for_logout(&entries, LogoutTarget::Current);
+
+        assert_eq!(
+            target.map(|entry| entry.session.session_oid),
+            Some(entries[0].session.session_oid)
+        );
+    }
 
     #[test]
     fn remove_session_cookie_entry_keeps_other_sessions() {

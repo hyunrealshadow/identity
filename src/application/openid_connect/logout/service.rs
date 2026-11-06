@@ -85,6 +85,8 @@ pub enum LogoutOutcome {
 struct IdTokenHintClaims {
     audience: Vec<String>,
     authorized_party: Option<String>,
+    /// Protected browser session id (`sid`) the token was issued for.
+    session_id: Option<String>,
 }
 
 pub struct LogoutService {
@@ -135,6 +137,13 @@ impl LogoutService {
     }
 
     #[tracing::instrument(skip_all, name = "logout.rp_initiated")]
+    /// The protected browser session id (`sid`) a verified `id_token_hint` was
+    /// issued for. A browser may remember several accounts; logout ends only
+    /// the session this hint names, never another remembered account.
+    pub async fn id_token_hint_session_id(&self, raw: &str) -> Result<Option<String>, AppError> {
+        Ok(self.verify_id_token_hint(raw).await?.session_id)
+    }
+
     pub async fn rp_initiated_logout(
         &self,
         request: RpInitiatedLogoutRequest,
@@ -572,9 +581,16 @@ impl LogoutService {
             .and_then(|value| value.as_str())
             .map(str::to_owned);
 
+        let session_id = payload
+            .claim("sid")
+            .and_then(|value| value.as_str())
+            .filter(|sid| !sid.is_empty())
+            .map(str::to_owned);
+
         Ok(IdTokenHintClaims {
             audience,
             authorized_party,
+            session_id,
         })
     }
 }
