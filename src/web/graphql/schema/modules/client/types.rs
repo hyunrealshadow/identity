@@ -353,8 +353,20 @@ impl ClientNode {
             .collect()
     }
 
-    async fn token_endpoint_auth_method(&self) -> ClientAuthMethod {
-        self.record.settings.token_endpoint_auth_method.into()
+    async fn token_endpoint_auth_methods(&self) -> Vec<ClientAuthMethod> {
+        self.record
+            .settings
+            .token_endpoint_auth_methods
+            .iter()
+            .copied()
+            .map(Into::into)
+            .collect()
+    }
+
+    /// Whether the public client flow is enabled. A client that registers
+    /// `none` still cannot skip authentication while this is off.
+    async fn allow_public_client_flow(&self) -> bool {
+        self.record.settings.allow_public_client_flow
     }
 
     async fn require_pushed_authorization_requests(&self) -> bool {
@@ -443,7 +455,10 @@ pub(crate) struct ClientSettingsInput {
     pub post_logout_redirect_uris: Vec<String>,
     #[graphql(validator(min_items = 1, max_items = 4))]
     pub grant_types: Vec<ClientGrantType>,
-    pub token_endpoint_auth_method: ClientAuthMethod,
+    #[graphql(validator(min_items = 1, max_items = 4))]
+    pub token_endpoint_auth_methods: Vec<ClientAuthMethod>,
+    #[graphql(default)]
+    pub allow_public_client_flow: bool,
     #[graphql(default)]
     pub require_pushed_authorization_requests: bool,
     #[graphql(default)]
@@ -465,7 +480,12 @@ impl From<ClientSettingsInput> for ClientProtocolSettings {
                 .collect(),
             post_logout_redirect_uris: input.post_logout_redirect_uris,
             grant_types: input.grant_types.into_iter().map(Into::into).collect(),
-            token_endpoint_auth_method: input.token_endpoint_auth_method.into(),
+            token_endpoint_auth_methods: input
+                .token_endpoint_auth_methods
+                .into_iter()
+                .map(Into::into)
+                .collect(),
+            allow_public_client_flow: input.allow_public_client_flow,
             require_pushed_authorization_requests: input.require_pushed_authorization_requests,
             skip_consent: input.skip_consent,
             cors_enabled: input.cors_enabled,

@@ -23,7 +23,8 @@ fn settings(
             .collect(),
         post_logout_redirect_uris: Vec::new(),
         grant_types: grant_types.to_vec(),
-        token_endpoint_auth_method: method,
+        token_endpoint_auth_methods: vec![method],
+        allow_public_client_flow: method == TokenEndpointAuthMethod::None,
         require_pushed_authorization_requests: false,
         skip_consent: false,
         cors_enabled: false,
@@ -176,6 +177,67 @@ fn grant_and_authentication_combinations_are_enforced() {
         ))
         .is_ok()
     );
+}
+
+#[test]
+fn auth_methods_combine_and_client_credentials_needs_a_secret() {
+    let web = || {
+        vec![(
+            OpenIdConnectClientPlatformType::Web,
+            &["https://app.example.com/cb"][..],
+        )]
+    };
+    let mut combined = settings(
+        web(),
+        &[GrantType::AuthorizationCode],
+        TokenEndpointAuthMethod::ClientSecretPost,
+    );
+    combined.token_endpoint_auth_methods = vec![
+        TokenEndpointAuthMethod::None,
+        TokenEndpointAuthMethod::ClientSecretPost,
+        TokenEndpointAuthMethod::ClientSecretBasic,
+        TokenEndpointAuthMethod::ClientSecretPost,
+    ];
+    assert_eq!(
+        validate_settings(combined)
+            .unwrap()
+            .token_endpoint_auth_methods,
+        [
+            TokenEndpointAuthMethod::ClientSecretBasic,
+            TokenEndpointAuthMethod::ClientSecretPost,
+            TokenEndpointAuthMethod::None,
+        ]
+    );
+
+    // A client with the public flow may keep a secret for client credentials.
+    let mut machine = settings(
+        Vec::new(),
+        &[GrantType::ClientCredentials],
+        TokenEndpointAuthMethod::None,
+    );
+    machine.token_endpoint_auth_methods = vec![
+        TokenEndpointAuthMethod::None,
+        TokenEndpointAuthMethod::ClientSecretBasic,
+    ];
+    assert!(validate_settings(machine).is_ok());
+
+    let public_only = settings(
+        Vec::new(),
+        &[GrantType::ClientCredentials],
+        TokenEndpointAuthMethod::None,
+    );
+    assert_eq!(
+        rejected(public_only),
+        ClientErrorCode::PublicClientGrantNotAllowed.code()
+    );
+
+    let mut empty = settings(
+        web(),
+        &[GrantType::AuthorizationCode],
+        TokenEndpointAuthMethod::None,
+    );
+    empty.token_endpoint_auth_methods = Vec::new();
+    assert_eq!(rejected(empty), ClientErrorCode::ValidationFailed.code());
 }
 
 #[test]

@@ -127,6 +127,11 @@ export const schemaMetadata: SchemaMetadata = {
       ],
       "possibleTypes": [],
       "fields": {
+        "allowPublicClientFlow": {
+          "name": "allowPublicClientFlow",
+          "returnType": "Boolean",
+          "policies": []
+        },
         "builtIn": {
           "name": "builtIn",
           "returnType": "Boolean",
@@ -235,8 +240,8 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "Boolean",
           "policies": []
         },
-        "tokenEndpointAuthMethod": {
-          "name": "tokenEndpointAuthMethod",
+        "tokenEndpointAuthMethods": {
+          "name": "tokenEndpointAuthMethods",
           "returnType": "ClientAuthMethod",
           "policies": []
         },

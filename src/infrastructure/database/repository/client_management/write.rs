@@ -22,7 +22,7 @@ use identity_domain::{
     client::model::ClientOid,
     openid_connect::{
         GrantType, OpenIdConnectClientPlatform, OpenIdConnectClientSettings,
-        OpenIdConnectCredentialOid, OpenIdConnectCredentialType, TokenEndpointAuthMethod,
+        OpenIdConnectCredentialOid, OpenIdConnectCredentialType,
     },
 };
 use sea_orm::{
@@ -175,8 +175,7 @@ async fn write_protocol(
     stored.require_pushed_authorization_requests = settings.require_pushed_authorization_requests;
     stored.skip_consent = settings.skip_consent;
     stored.cors_enabled = settings.cors_enabled;
-    stored.allow_public_client_flow =
-        settings.token_endpoint_auth_method == TokenEndpointAuthMethod::None;
+    stored.allow_public_client_flow = settings.allow_public_client_flow;
     let stored_json = to_value(&stored).map_err(|_| corrupt())?;
     let response_types = if settings.grant_types.contains(&GrantType::AuthorizationCode) {
         json!(["code"])
@@ -184,7 +183,13 @@ async fn write_protocol(
         json!([])
     };
     let post_logout = json!(settings.post_logout_redirect_uris);
-    let methods = json!([settings.token_endpoint_auth_method.to_string()]);
+    let methods = json!(
+        settings
+            .token_endpoint_auth_methods
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+    );
     match existing {
         Some(row) => {
             let mut active: client_openid_connect::ActiveModel = row.into();

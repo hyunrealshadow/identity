@@ -330,7 +330,7 @@ impl ClientManagementService {
                 .await
                 .map_err(map_repository_error)?
                 .ok_or_else(|| AppError::from_code(ClientErrorCode::ClientNotFound))?;
-            if !uses_client_secret(client.settings.token_endpoint_auth_method) {
+            if !uses_client_secret(&client.settings.token_endpoint_auth_methods) {
                 return Err(AppError::from_code(ClientErrorCode::SecretNotUsed));
             }
             self.repository
@@ -576,12 +576,27 @@ pub(crate) fn validate_settings(
         }
     }
 
-    let method = settings.token_endpoint_auth_method;
-    if !MANAGEABLE_AUTH_METHODS.contains(&method) {
-        return Err(AppError::from_code(ClientErrorCode::UnsupportedAuthMethod)
-            .with_param("method", method.to_string())
-            .with_field("tokenEndpointAuthMethod"));
+    let mut methods: Vec<TokenEndpointAuthMethod> = Vec::new();
+    for method in settings.token_endpoint_auth_methods {
+        if !MANAGEABLE_AUTH_METHODS.contains(&method) {
+            return Err(AppError::from_code(ClientErrorCode::UnsupportedAuthMethod)
+                .with_param("method", method.to_string())
+                .with_field("tokenEndpointAuthMethods"));
+        }
+        if !methods.contains(&method) {
+            methods.push(method);
+        }
     }
+    if methods.is_empty() {
+        return Err(AppError::from_code(ClientErrorCode::ValidationFailed)
+            .with_param("field", "tokenEndpointAuthMethods")
+            .with_field("tokenEndpointAuthMethods"));
+    }
+    methods.sort_by_key(|method| {
+        MANAGEABLE_AUTH_METHODS
+            .iter()
+            .position(|candidate| candidate == method)
+    });
 
     let mut grant_types = Vec::new();
     for grant in settings.grant_types {
@@ -608,9 +623,9 @@ pub(crate) fn validate_settings(
                 .with_field("grantTypes"),
         );
     }
-    if method == TokenEndpointAuthMethod::None
-        && grant_types.contains(&GrantType::ClientCredentials)
-    {
+    // `none` coexists with secret methods (the public client flow is a
+    // separate switch), but client credentials always needs a real secret.
+    if grant_types.contains(&GrantType::ClientCredentials) && !uses_client_secret(&methods) {
         return Err(
             AppError::from_code(ClientErrorCode::PublicClientGrantNotAllowed)
                 .with_param("grant_type", GrantType::ClientCredentials.as_str())
@@ -632,7 +647,8 @@ pub(crate) fn validate_settings(
         platforms,
         post_logout_redirect_uris,
         grant_types,
-        token_endpoint_auth_method: method,
+        token_endpoint_auth_methods: methods,
+        allow_public_client_flow: settings.allow_public_client_flow,
         require_pushed_authorization_requests: settings.require_pushed_authorization_requests,
         skip_consent: settings.skip_consent,
         cors_enabled: settings.cors_enabled,

@@ -41,9 +41,15 @@ pub const MANAGEABLE_AUTH_METHODS: [TokenEndpointAuthMethod; 4] = [
     TokenEndpointAuthMethod::None,
 ];
 
+/// Whether any configured method authenticates with a shared client secret.
+#[must_use]
+pub fn uses_client_secret(methods: &[TokenEndpointAuthMethod]) -> bool {
+    methods.iter().copied().any(is_secret_method)
+}
+
 /// Whether the method authenticates with a shared client secret.
 #[must_use]
-pub const fn uses_client_secret(method: TokenEndpointAuthMethod) -> bool {
+pub const fn is_secret_method(method: TokenEndpointAuthMethod) -> bool {
     matches!(
         method,
         TokenEndpointAuthMethod::ClientSecretBasic
@@ -65,7 +71,12 @@ pub struct ClientProtocolSettings {
     pub platforms: Vec<ClientPlatform>,
     pub post_logout_redirect_uris: Vec<String>,
     pub grant_types: Vec<GrantType>,
-    pub token_endpoint_auth_method: TokenEndpointAuthMethod,
+    /// Methods the client may use at the token endpoint. A public client uses
+    /// only `none`; a confidential client may accept several secret methods.
+    pub token_endpoint_auth_methods: Vec<TokenEndpointAuthMethod>,
+    /// Whether the public client flow is enabled. It is a separate switch:
+    /// registering `none` alone does not let a client skip authentication.
+    pub allow_public_client_flow: bool,
     pub require_pushed_authorization_requests: bool,
     pub skip_consent: bool,
     /// Allow browser requests from the origins of the redirect URIs.

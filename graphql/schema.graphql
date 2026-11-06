@@ -102,7 +102,12 @@ type Client implements Node {
 	platforms: [ClientPlatform!]!
 	postLogoutRedirectUris: [String!]!
 	grantTypes: [ClientGrantType!]!
-	tokenEndpointAuthMethod: ClientAuthMethod!
+	tokenEndpointAuthMethods: [ClientAuthMethod!]!
+	"""
+	Whether the public client flow is enabled. A client that registers
+	`none` still cannot skip authentication while this is off.
+	"""
+	allowPublicClientFlow: Boolean!
 	requirePushedAuthorizationRequests: Boolean!
 	skipConsent: Boolean!
 	corsEnabled: Boolean!
@@ -323,7 +328,8 @@ input ClientSettingsInput {
 	platforms: [ClientPlatformInput!]!
 	postLogoutRedirectUris: [String!]! = []
 	grantTypes: [ClientGrantType!]!
-	tokenEndpointAuthMethod: ClientAuthMethod!
+	tokenEndpointAuthMethods: [ClientAuthMethod!]!
+	allowPublicClientFlow: Boolean! = false
 	requirePushedAuthorizationRequests: Boolean! = false
 	skipConsent: Boolean! = false
 	corsEnabled: Boolean! = false

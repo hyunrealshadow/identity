@@ -92,10 +92,10 @@ pub(super) async fn load_records<C: ConnectionTrait>(
         .map(|model| {
             let row = metadata.remove(&model.id).ok_or_else(corrupt)?;
             let metadata = to_metadata(row).map_err(|_| corrupt())?;
-            let method = *metadata
-                .effective_token_endpoint_auth_methods()
-                .first()
-                .ok_or_else(corrupt)?;
+            let methods = metadata.effective_token_endpoint_auth_methods().to_vec();
+            if methods.is_empty() {
+                return Err(corrupt());
+            }
             Ok(ClientRecord {
                 oid: model.oid,
                 name: model.name,
@@ -113,7 +113,8 @@ pub(super) async fn load_records<C: ConnectionTrait>(
                         .map(ToString::to_string)
                         .collect(),
                     grant_types: metadata.effective_grant_types().to_vec(),
-                    token_endpoint_auth_method: method,
+                    token_endpoint_auth_methods: methods,
+                    allow_public_client_flow: metadata.settings.allow_public_client_flow,
                     require_pushed_authorization_requests: metadata
                         .settings
                         .require_pushed_authorization_requests,
