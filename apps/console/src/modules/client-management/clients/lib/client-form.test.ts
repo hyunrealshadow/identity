@@ -5,6 +5,7 @@ import {
   settingsDraftFromClient,
   settingsForKind,
   settingsInput,
+  toggleAuthMethod,
   validateSettings,
 } from './client-form'
 
@@ -35,7 +36,8 @@ describe('client settings draft', () => {
       ],
       postLogoutRedirectUris: [],
       grantTypes: ['AUTHORIZATION_CODE' as const],
-      tokenEndpointAuthMethod: 'NONE' as const,
+      tokenEndpointAuthMethods: ['NONE' as const],
+      allowPublicClientFlow: true,
       requirePushedAuthorizationRequests: true,
       skipConsent: false,
       corsEnabled: false,
@@ -53,7 +55,7 @@ describe('client settings draft', () => {
     expect(
       validateSettings({
         ...settingsForKind('machine'),
-        tokenEndpointAuthMethod: 'NONE',
+        tokenEndpointAuthMethods: ['NONE'],
       }).grantTypes,
     ).toBe('clientsGrantPublicMachine')
     expect(
@@ -64,5 +66,31 @@ describe('client settings draft', () => {
       validateSettings({ ...settingsForKind('machine'), grantTypes: ['IMPLICIT'] })
         .grantTypes,
     ).toBe('clientsGrantImplicitUnsupported')
+  })
+})
+
+describe('token endpoint authentication methods', () => {
+  it('lets any methods combine, including none with secret methods', () => {
+    expect(toggleAuthMethod(['CLIENT_SECRET_BASIC'], 'NONE', true)).toEqual([
+      'CLIENT_SECRET_BASIC',
+      'NONE',
+    ])
+    expect(toggleAuthMethod(['CLIENT_SECRET_BASIC', 'NONE'], 'NONE', false)).toEqual([
+      'CLIENT_SECRET_BASIC',
+    ])
+  })
+
+  it('requires a method and a secret method for client credentials', () => {
+    const machine = settingsForKind('machine')
+    expect(validateSettings({ ...machine, tokenEndpointAuthMethods: [] }).tokenEndpointAuthMethods).toBe(
+      'clientsAuthMethodRequired',
+    )
+    expect(validateSettings({ ...machine, tokenEndpointAuthMethods: ['NONE'] }).grantTypes).toBe(
+      'clientsGrantPublicMachine',
+    )
+    expect(
+      validateSettings({ ...machine, tokenEndpointAuthMethods: ['NONE', 'CLIENT_SECRET_BASIC'] })
+        .grantTypes,
+    ).toBeUndefined()
   })
 })

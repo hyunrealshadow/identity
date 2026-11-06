@@ -1,10 +1,6 @@
 import {
   Alert,
   Button,
-  Checkbox,
-  CheckboxGroup,
-  Description,
-  Label,
   Spinner,
   Switch,
   toast,
@@ -14,6 +10,7 @@ import { Save } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
+import { SettingsGroup, SettingsRow } from '#/components/settings-section'
 import { TableRowActions } from '#/components/table-row-actions'
 import {
   ConsoleClientScopesDocument,
@@ -287,46 +284,63 @@ export function ClientScopesPage() {
           reloadPending={query.refreshing}
         />
       ) : null}
-      <section className="space-y-3">
-        <div>
-          <h2 className="text-base font-semibold">{t('clientsProtocolScopesTitle')}</h2>
-          <p className="mt-1 text-sm text-muted">{t('clientsProtocolScopesDescription')}</p>
-        </div>
+      <SettingsGroup
+        title={t('clientsProtocolScopesTitle')}
+        description={t('clientsProtocolScopesDescription')}
+      >
         {loading || (rbac.scopesRead && protocolCatalog.status !== 'ready' && protocolCatalog.status !== 'error') ? (
-          <p className="text-sm text-muted">{t('tableLoading')}</p>
+          <SettingsRow description={t('tableLoading')} />
         ) : protocolOptions.length === 0 ? (
-          <p className="text-sm text-muted">{t('clientsProtocolScopesEmpty')}</p>
+          <SettingsRow description={t('clientsProtocolScopesEmpty')} />
         ) : (
-          <CheckboxGroup
-            name="protocol-scopes"
-            aria-label={t('clientsProtocolScopesTitle')}
-            value={protocolRows.map((row) => row.id)}
-            onChange={setProtocolScopes}
-            isDisabled={!editable || pending}
-            className="grid gap-3 sm:grid-cols-2"
-          >
-            {protocolOptions.map((option) => (
-              <Checkbox key={option.id} value={option.id} isInvalid={rejected.has(option.code)}>
-                <Checkbox.Content>
-                  <Checkbox.Control>
-                    <Checkbox.Indicator />
-                  </Checkbox.Control>
-                  <Label>
-                    {resolveLocalizedText(option.names, locale) ?? option.name}{' '}
-                    <code className="text-xs text-muted">{option.code}</code>
-                  </Label>
-                </Checkbox.Content>
-                {option.description ? <Description>{option.description}</Description> : null}
-              </Checkbox>
-            ))}
-          </CheckboxGroup>
+          protocolOptions.map((option) => {
+            const name = resolveLocalizedText(option.names, locale) ?? option.name
+            const selected = protocolRows.map((row) => row.id)
+            return (
+              <SettingsRow
+                key={option.id}
+                label={
+                  <>
+                    {name} <code className="ml-1 text-xs text-muted">{option.code}</code>
+                  </>
+                }
+                description={
+                  rejected.has(option.code) ? (
+                    <span className="text-danger">{option.description ?? option.code}</span>
+                  ) : (
+                    option.description
+                  )
+                }
+                action={
+                  <Switch
+                    aria-label={name}
+                    isSelected={selected.includes(option.id)}
+                    isDisabled={!editable || pending}
+                    onChange={(on) =>
+                      setProtocolScopes(
+                        on
+                          ? [...selected, option.id]
+                          : selected.filter((id) => id !== option.id),
+                      )
+                    }
+                  >
+                    <Switch.Content>
+                      <Switch.Control>
+                        <Switch.Thumb />
+                      </Switch.Control>
+                    </Switch.Content>
+                  </Switch>
+                }
+              />
+            )
+          })
         )}
-      </section>
-      <section className="space-y-4">
-        <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      </SettingsGroup>
+      <section>
+        <header className="mb-2 flex flex-col gap-3 px-1 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-base font-semibold">{t('clientsScopesTitle')}</h2>
-            <p className="mt-1 text-sm text-muted">{t('clientsScopesDescription')}</p>
+            <h2 className="text-sm font-semibold">{t('clientsScopesTitle')}</h2>
+            <p className="mt-0.5 text-xs leading-5 text-muted">{t('clientsScopesDescription')}</p>
           </div>
           {editable ? (
             <PermissionPickerDialog
@@ -428,7 +442,10 @@ export function ClientScopesPage() {
         </DataTable>
       </section>
       {editable ? (
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          {dirty ? (
+            <span className="text-xs text-muted">{t('clientsScopesUnsaved')}</span>
+          ) : null}
           <Button isDisabled={pending || !dirty} onPress={() => void save()}>
             {pending ? (
               <Spinner size="sm" aria-label={t('working')} />
@@ -437,9 +454,6 @@ export function ClientScopesPage() {
             )}
             {t('clientsScopesSave')}
           </Button>
-          {dirty ? (
-            <span className="text-xs text-muted">{t('clientsScopesUnsaved')}</span>
-          ) : null}
         </div>
       ) : null}
     </div>

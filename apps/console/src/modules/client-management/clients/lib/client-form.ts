@@ -29,7 +29,8 @@ export interface ClientSettingsDraft {
   nativeRedirectUris: string
   postLogoutRedirectUris: string
   grantTypes: ClientGrantType[]
-  tokenEndpointAuthMethod: ClientAuthMethod
+  tokenEndpointAuthMethods: ClientAuthMethod[]
+  allowPublicClientFlow: boolean
   requirePushedAuthorizationRequests: boolean
   skipConsent: boolean
   corsEnabled: boolean
@@ -40,13 +41,14 @@ export type ClientSettingsField =
   | 'nativeRedirectUris'
   | 'postLogoutRedirectUris'
   | 'grantTypes'
-  | 'tokenEndpointAuthMethod'
+  | 'tokenEndpointAuthMethods'
 
 interface ClientSettingsSource {
   platforms: ReadonlyArray<{ platform: string; redirectUris: readonly string[] }>
   postLogoutRedirectUris: readonly string[]
   grantTypes: readonly ClientGrantType[]
-  tokenEndpointAuthMethod: ClientAuthMethod
+  tokenEndpointAuthMethods: readonly ClientAuthMethod[]
+  allowPublicClientFlow: boolean
   requirePushedAuthorizationRequests: boolean
   skipConsent: boolean
   corsEnabled: boolean
@@ -59,7 +61,8 @@ export function settingsForKind(kind: ClientKind): ClientSettingsDraft {
     nativeRedirectUris: '',
     postLogoutRedirectUris: '',
     grantTypes: ['AUTHORIZATION_CODE', 'REFRESH_TOKEN'],
-    tokenEndpointAuthMethod: 'CLIENT_SECRET_BASIC',
+    tokenEndpointAuthMethods: ['CLIENT_SECRET_BASIC'],
+    allowPublicClientFlow: false,
     requirePushedAuthorizationRequests: false,
     skipConsent: false,
     corsEnabled: false,
@@ -68,9 +71,14 @@ export function settingsForKind(kind: ClientKind): ClientSettingsDraft {
     case 'web':
       return base
     case 'spa':
-      return { ...base, tokenEndpointAuthMethod: 'NONE', corsEnabled: true }
+      return {
+        ...base,
+        tokenEndpointAuthMethods: ['NONE'],
+        allowPublicClientFlow: true,
+        corsEnabled: true,
+      }
     case 'native':
-      return { ...base, tokenEndpointAuthMethod: 'NONE' }
+      return { ...base, tokenEndpointAuthMethods: ['NONE'], allowPublicClientFlow: true }
     case 'machine':
       return { ...base, grantTypes: ['CLIENT_CREDENTIALS'] }
   }
@@ -89,7 +97,8 @@ export function settingsDraftFromClient(
     nativeRedirectUris: uris('NATIVE'),
     postLogoutRedirectUris: client.postLogoutRedirectUris.join('\n'),
     grantTypes: [...client.grantTypes],
-    tokenEndpointAuthMethod: client.tokenEndpointAuthMethod,
+    tokenEndpointAuthMethods: [...client.tokenEndpointAuthMethods],
+    allowPublicClientFlow: client.allowPublicClientFlow,
     requirePushedAuthorizationRequests:
       client.requirePushedAuthorizationRequests,
     skipConsent: client.skipConsent,
@@ -120,19 +129,43 @@ export function settingsInput(draft: ClientSettingsDraft): ClientSettingsInput {
     grantTypes: SELECTABLE_GRANT_TYPES.filter((grant) =>
       draft.grantTypes.includes(grant),
     ),
-    tokenEndpointAuthMethod: draft.tokenEndpointAuthMethod,
+    // Stable order so an unchanged selection compares equal to the stored one.
+    tokenEndpointAuthMethods: [
+      ...SELECTABLE_AUTH_METHODS.filter((method) =>
+        draft.tokenEndpointAuthMethods.includes(method),
+      ),
+      ...draft.tokenEndpointAuthMethods.filter(
+        (method) => !SELECTABLE_AUTH_METHODS.includes(method),
+      ),
+    ],
+    allowPublicClientFlow: draft.allowPublicClientFlow,
     requirePushedAuthorizationRequests: draft.requirePushedAuthorizationRequests,
     skipConsent: draft.skipConsent,
     corsEnabled: draft.corsEnabled,
   }
 }
 
-export function usesClientSecret(method: ClientAuthMethod): boolean {
+export function isSecretMethod(method: ClientAuthMethod): boolean {
   return (
     method === 'CLIENT_SECRET_BASIC' ||
     method === 'CLIENT_SECRET_POST' ||
     method === 'CLIENT_SECRET_JWT'
   )
+}
+
+/** Whether any configured method authenticates with a client secret. */
+export function usesClientSecret(methods: readonly ClientAuthMethod[]): boolean {
+  return methods.some(isSecretMethod)
+}
+
+/** Turn one method on or off; any combination is allowed. */
+export function toggleAuthMethod(
+  methods: readonly ClientAuthMethod[],
+  method: ClientAuthMethod,
+  on: boolean,
+): ClientAuthMethod[] {
+  const rest = methods.filter((value) => value !== method)
+  return on ? [...rest, method] : rest
 }
 
 /**
@@ -158,13 +191,16 @@ export function validateSettings(
   ) {
     errors.grantTypes = 'clientsGrantRefreshNeedsInteractive'
   } else if (
-    draft.tokenEndpointAuthMethod === 'NONE' &&
-    grants.includes('CLIENT_CREDENTIALS')
+    grants.includes('CLIENT_CREDENTIALS') &&
+    !usesClientSecret(draft.tokenEndpointAuthMethods)
   ) {
     errors.grantTypes = 'clientsGrantPublicMachine'
   }
-  if (!SELECTABLE_AUTH_METHODS.includes(draft.tokenEndpointAuthMethod)) {
-    errors.tokenEndpointAuthMethod = 'clientsAuthMethodUnsupported'
+  const methods = draft.tokenEndpointAuthMethods
+  if (methods.length === 0) {
+    errors.tokenEndpointAuthMethods = 'clientsAuthMethodRequired'
+  } else if (methods.some((method) => !SELECTABLE_AUTH_METHODS.includes(method))) {
+    errors.tokenEndpointAuthMethods = 'clientsAuthMethodUnsupported'
   }
   if (
     grants.includes('AUTHORIZATION_CODE') &&
@@ -181,7 +217,7 @@ export function settingsFieldFor(path: string): ClientSettingsField | undefined 
   if (path.startsWith('platforms')) return 'webRedirectUris'
   if (path.startsWith('postLogoutRedirectUris')) return 'postLogoutRedirectUris'
   if (path.startsWith('grantTypes')) return 'grantTypes'
-  if (path.startsWith('tokenEndpointAuthMethod')) return 'tokenEndpointAuthMethod'
+  if (path.startsWith('tokenEndpointAuthMethods')) return 'tokenEndpointAuthMethods'
   return undefined
 }
 
@@ -213,4 +249,14 @@ export function clientFieldErrors(
     }
   }
   return result
+}
+
+/**
+ * Identity of the server state an edit form was seeded from. A mutation first
+ * patches only the cached `version`; the refetch that follows brings the saved
+ * fields and a new `updatedAt`. Keying on both re-seeds the form once the real
+ * values arrive instead of keeping a draft built from the patched snapshot.
+ */
+export function formSeed(client: { version: string; updatedAt?: string | null }): string {
+  return `${client.version}:${client.updatedAt ?? ''}`
 }

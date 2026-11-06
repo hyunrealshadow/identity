@@ -7,11 +7,12 @@ import {
   useOverlayState,
 } from '@heroui/react'
 import { useNavigate } from '@tanstack/react-router'
-import { Power, Save, Trash2 } from 'lucide-react'
+import { Power, Save, ShieldCheck, ShieldOff, Trash2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
 import { ConfirmationDialog } from '#/components/confirmation-dialog'
 import { LocalizedTextField } from '#/components/localized-text-field'
+import { SettingsGroup, SettingsRow } from '#/components/settings-section'
 import type { UpdateClientInput } from '#/generated/graphql'
 import { formatDateTime } from '#/lib/format'
 import { useLocale, useTranslator, type MessageKey } from '#/lib/i18n'
@@ -25,10 +26,17 @@ import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-
 import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
 import type { RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
 import { useClientDetail, type ConsoleClient } from '../components/client-detail-shell'
-import { ClientSettingsFields } from '../components/client-settings-fields'
+import {
+  CorsRow,
+  GrantTypeRows,
+  ParRow,
+  RedirectUriRows,
+  PublicClientFlowRow,
+} from '../components/client-settings-fields'
 import { useClientMutations } from '../hooks/client-mutations'
 import {
   clientFieldErrors,
+  formSeed,
   settingsDraftFromClient,
   settingsInput,
   validateSettings,
@@ -66,8 +74,7 @@ function feedbackFrom(result: MutationResultLike, code: string): RbacFeedbackSta
 export function ClientDetailPage() {
   const { client } = useClientDetail()
   if (!client) return <ClientDetailSkeleton />
-  // Re-seed the form whenever the server version changes.
-  return <ClientOverview key={client.version} client={client} />
+  return <ClientOverview key={formSeed(client)} client={client} />
 }
 
 function ClientDetailSkeleton() {
@@ -82,15 +89,6 @@ function ClientDetailSkeleton() {
           </Card.Content>
         </Card>
       ))}
-    </div>
-  )
-}
-
-function Fact({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <dt className="text-xs font-medium text-muted">{label}</dt>
-      <dd className="mt-0.5 break-all text-sm">{children}</dd>
     </div>
   )
 }
@@ -117,6 +115,15 @@ function ClientOverview({ client }: { client: ConsoleClient }) {
   const settingsChanged = JSON.stringify(settingsInput(settings)) !== original
   const textChanged = hasLocalizedDraftChanges(client, text)
   const dirty = settingsChanged || textChanged
+  const fieldProps = {
+    draft: settings,
+    onChange: (next: ClientSettingsDraft) => {
+      setSettings(next)
+      touched()
+    },
+    errors: errors.settings,
+    isDisabled: pending || !editable,
+  }
 
   function touched() {
     setFeedback(null)
@@ -168,7 +175,7 @@ function ClientOverview({ client }: { client: ConsoleClient }) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-8">
       {client.builtIn ? (
         <Alert status="default">
           <Alert.Indicator />
@@ -188,41 +195,6 @@ function ClientOverview({ client }: { client: ConsoleClient }) {
         </Alert>
       ) : null}
 
-      <Card className="console-card border border-border">
-        <Card.Content className="p-5">
-          <dl className="grid gap-4 sm:grid-cols-3">
-            <Fact label={t('clientsClientId')}>
-              <code className="text-xs">{client.clientId}</code>
-            </Fact>
-            <Fact label={t('tableColumnCreated')}>
-              {formatDateTime(client.createdAt, locale, timeZone)}
-            </Fact>
-            <Fact label={t('clientsUpdated')}>
-              {client.updatedAt
-                ? formatDateTime(client.updatedAt, locale, timeZone)
-                : t('clientsNeverUpdated')}
-            </Fact>
-            {client.corsEnabled ? (
-              <div className="sm:col-span-3">
-                <Fact label={t('clientsCorsOrigins')}>
-                  {client.corsOrigins.length ? (
-                    <ul className="space-y-0.5">
-                      {client.corsOrigins.map((origin) => (
-                        <li key={origin}>
-                          <code className="text-xs">{origin}</code>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <span className="text-muted">{t('clientsCorsOriginsEmpty')}</span>
-                  )}
-                </Fact>
-              </div>
-            ) : null}
-          </dl>
-        </Card.Content>
-      </Card>
-
       {feedback ? (
         <RbacMutationFeedback
           feedback={feedback}
@@ -234,14 +206,14 @@ function ClientOverview({ client }: { client: ConsoleClient }) {
       <form
         noValidate
         aria-busy={pending}
-        className="space-y-4"
+        className="space-y-6"
         onSubmit={(event) => {
           event.preventDefault()
           void save()
         }}
       >
-        <Card className="console-card border border-border">
-          <Card.Content className="space-y-6 p-5">
+        <SettingsGroup title={t('clientsBasicSection')}>
+          <SettingsRow>
             <LocalizedTextField
               name="names"
               label={t('localizedName')}
@@ -260,6 +232,8 @@ function ClientOverview({ client }: { client: ConsoleClient }) {
               maxLength={256}
               error={nameError ? t(nameError) : (errors.text.name ?? errors.text.names)}
             />
+          </SettingsRow>
+          <SettingsRow>
             <LocalizedTextField
               name="descriptions"
               label={t('localizedDescription')}
@@ -278,23 +252,75 @@ function ClientOverview({ client }: { client: ConsoleClient }) {
               maxLength={1024}
               error={errors.text.description ?? errors.text.descriptions}
             />
-          </Card.Content>
-        </Card>
-        <Card className="console-card border border-border">
-          <Card.Content className="p-5">
-            <ClientSettingsFields
-              draft={settings}
-              onChange={(next) => {
-                setSettings(next)
-                touched()
-              }}
-              errors={errors.settings}
-              isDisabled={pending || !editable}
-            />
-          </Card.Content>
-        </Card>
+          </SettingsRow>
+          <SettingsRow
+            label={t('tableColumnCreated')}
+            action={
+              <span className="text-sm text-muted">
+                {formatDateTime(client.createdAt, locale, timeZone)}
+              </span>
+            }
+          />
+          <SettingsRow
+            label={t('clientsUpdated')}
+            action={
+              <span className="text-sm text-muted">
+                {client.updatedAt
+                  ? formatDateTime(client.updatedAt, locale, timeZone)
+                  : t('clientsNeverUpdated')}
+              </span>
+            }
+          />
+        </SettingsGroup>
+
+        <SettingsGroup title={t('clientsRedirectSection')}>
+          <RedirectUriRows {...fieldProps} />
+        </SettingsGroup>
+
+        <SettingsGroup title={t('clientsCorsSection')}>
+          <CorsRow {...fieldProps} />
+          {client.corsEnabled ? (
+            <SettingsRow
+              label={t('clientsCorsOrigins')}
+              description={t('clientsCorsOriginsHint')}
+            >
+              {client.corsOrigins.length ? (
+                <ul className="flex flex-wrap gap-2">
+                  {client.corsOrigins.map((origin) => (
+                    <li key={origin}>
+                      <code className="rounded-field bg-surface-secondary px-2 py-1 text-xs">
+                        {origin}
+                      </code>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-muted">{t('clientsCorsOriginsEmpty')}</p>
+              )}
+            </SettingsRow>
+          ) : null}
+        </SettingsGroup>
+
+        <SettingsGroup title={t('clientsGrantTypes')}>
+          <GrantTypeRows {...fieldProps} />
+        </SettingsGroup>
+
+        <SettingsGroup
+          title={t('clientsPublicClientSection')}
+          description={t('clientsPublicClientSectionHint')}
+        >
+          <PublicClientFlowRow {...fieldProps} />
+        </SettingsGroup>
+
+        <SettingsGroup title={t('clientsAuthorizationRequestsSection')}>
+          <ParRow {...fieldProps} />
+        </SettingsGroup>
+
         {editable ? (
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            {settingsChanged ? (
+              <span className="text-xs text-muted">{t('clientsSettingsWithdrawNote')}</span>
+            ) : null}
             <Button type="submit" isDisabled={pending || !dirty}>
               {pending ? (
                 <Spinner size="sm" aria-label={t('clientsSavePending')} />
@@ -303,14 +329,11 @@ function ClientOverview({ client }: { client: ConsoleClient }) {
               )}
               {t('clientsSave')}
             </Button>
-            {settingsChanged ? (
-              <span className="text-xs text-muted">{t('clientsSettingsWithdrawNote')}</span>
-            ) : null}
           </div>
         ) : null}
       </form>
 
-      {!client.builtIn && (scope.state || scope.delete) ? (
+      {!client.builtIn && (scope.state || scope.delete || scope.update) ? (
         <ClientLifecycle client={client} />
       ) : null}
     </div>
@@ -325,6 +348,7 @@ function ClientLifecycle({ client }: { client: ConsoleClient }) {
   const mutations = useClientMutations()
   const stateDialog = useOverlayState()
   const deleteDialog = useOverlayState()
+  const consentDialog = useOverlayState()
   const [pending, setPending] = useState(false)
   const [feedback, setFeedback] = useState<RbacFeedbackState | null>(null)
 
@@ -357,6 +381,32 @@ function ClientLifecycle({ client }: { client: ConsoleClient }) {
     }
   }
 
+  async function setSkipConsent(skipConsent: boolean) {
+    setPending(true)
+    try {
+      const result = await mutations.update({
+        id: client.id,
+        expectedVersion: client.version,
+        settings: settingsInput({ ...settingsDraftFromClient(client), skipConsent }),
+      })
+      consentDialog.close()
+      if (!result.data?.updateClient) {
+        setFeedback(feedbackFrom(result, 'missing_update_client_payload'))
+        return
+      }
+      toast.success(t('clientsSavedToast'), { description: t('clientsSavedWithdrawn') })
+    } catch {
+      consentDialog.close()
+      setFeedback({
+        errors: [],
+        failure: { kind: 'network', code: 'client_update_request_failed' },
+        forbidden: false,
+      })
+    } finally {
+      setPending(false)
+    }
+  }
+
   async function remove() {
     setPending(true)
     try {
@@ -378,56 +428,98 @@ function ClientLifecycle({ client }: { client: ConsoleClient }) {
   }
 
   return (
-    <Card className="console-card border border-border">
-      <Card.Content className="space-y-4 p-5">
-        <div>
-          <h3 className="text-sm font-semibold">{t('clientsLifecycleTitle')}</h3>
-          <p className="mt-1 text-sm text-muted">{t('clientsLifecycleDescription')}</p>
-        </div>
-        {feedback ? (
+    <SettingsGroup title={t('clientsLifecycleTitle')} tone="danger">
+      {feedback ? (
+        <div className="px-4 py-3">
           <RbacMutationFeedback
             feedback={feedback}
             onReload={() => void query.refresh()}
             reloadPending={query.refreshing}
           />
-        ) : null}
-        <div className="flex flex-wrap gap-2">
-          {scope.state ? (
-            <Button variant="secondary" onPress={stateDialog.open}>
+        </div>
+      ) : null}
+      {scope.update ? (
+        <SettingsRow
+          label={t('clientsSkipConsent')}
+          description={t(
+            client.skipConsent ? 'clientsSkipConsentOnHint' : 'clientsSkipConsentHint',
+          )}
+          action={
+            client.skipConsent ? (
+              <Button
+                variant="danger-soft"
+                isDisabled={pending}
+                onPress={() => void setSkipConsent(false)}
+              >
+                <ShieldCheck className="size-4" aria-hidden="true" />
+                {t('clientsSkipConsentDisable')}
+              </Button>
+            ) : (
+              <Button variant="danger-soft" onPress={consentDialog.open}>
+                <ShieldOff className="size-4" aria-hidden="true" />
+                {t('clientsSkipConsentEnable')}
+              </Button>
+            )
+          }
+        />
+      ) : null}
+      {scope.state ? (
+        <SettingsRow
+          label={t(client.enabled ? 'clientsDisableRow' : 'clientsEnableRow')}
+          description={t(
+            client.enabled ? 'clientsDisableDescription' : 'clientsEnableDescription',
+          )}
+          action={
+            <Button variant="danger-soft" onPress={stateDialog.open}>
               <Power className="size-4" aria-hidden="true" />
               {t(client.enabled ? 'clientsDisable' : 'clientsEnable')}
             </Button>
-          ) : null}
-          {scope.delete ? (
+          }
+        />
+      ) : null}
+      {scope.delete ? (
+        <SettingsRow
+          label={t('clientsDeleteRow')}
+          description={t('clientsDeleteRowHint')}
+          action={
             <Button variant="danger" onPress={deleteDialog.open}>
               <Trash2 className="size-4" aria-hidden="true" />
               {t('clientsDelete')}
             </Button>
-          ) : null}
-        </div>
-        <ConfirmationDialog
-          state={stateDialog}
-          title={t(client.enabled ? 'clientsDisableTitle' : 'clientsEnableTitle')}
-          description={t(
-            client.enabled ? 'clientsDisableDescription' : 'clientsEnableDescription',
-          )}
-          confirmLabel={t(client.enabled ? 'clientsDisable' : 'clientsEnable')}
-          destructive={client.enabled}
-          pending={pending}
-          onConfirm={() => void toggle()}
+          }
         />
-        <ConfirmationDialog
-          state={deleteDialog}
-          title={t('clientsDeleteTitle')}
-          description={t('clientsDeleteDescription', {
-            name: resolveLocalizedText(client.names, locale) ?? client.name,
-          })}
-          confirmLabel={t('clientsDelete')}
-          destructive
-          pending={pending}
-          onConfirm={() => void remove()}
-        />
-      </Card.Content>
-    </Card>
+      ) : null}
+      <ConfirmationDialog
+        state={stateDialog}
+        title={t(client.enabled ? 'clientsDisableTitle' : 'clientsEnableTitle')}
+        description={t(
+          client.enabled ? 'clientsDisableDescription' : 'clientsEnableDescription',
+        )}
+        confirmLabel={t(client.enabled ? 'clientsDisable' : 'clientsEnable')}
+        destructive={client.enabled}
+        pending={pending}
+        onConfirm={() => void toggle()}
+      />
+      <ConfirmationDialog
+        state={consentDialog}
+        title={t('clientsSkipConsentConfirmTitle')}
+        description={t('clientsSkipConsentConfirmDescription')}
+        confirmLabel={t('clientsSkipConsentEnable')}
+        destructive
+        pending={pending}
+        onConfirm={() => void setSkipConsent(true)}
+      />
+      <ConfirmationDialog
+        state={deleteDialog}
+        title={t('clientsDeleteTitle')}
+        description={t('clientsDeleteDescription', {
+          name: resolveLocalizedText(client.names, locale) ?? client.name,
+        })}
+        confirmLabel={t('clientsDelete')}
+        destructive
+        pending={pending}
+        onConfirm={() => void remove()}
+      />
+    </SettingsGroup>
   )
 }

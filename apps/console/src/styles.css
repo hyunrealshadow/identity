@@ -138,6 +138,30 @@ body {
     0 8px 24px -20px rgb(0 0 0 / 0.22);
 }
 
+/* A danger zone uses the card's own shadow, tinted red. */
+.console-card-danger {
+  box-shadow:
+    0 1px 2px color-mix(in oklab, var(--danger) 3%, transparent),
+    0 8px 24px -20px color-mix(in oklab, var(--danger) 22%, transparent);
+}
+
+/*
+ * Disabled controls keep their not-allowed cursor. The component styles also
+ * turn off pointer events, which hides that cursor, so it is restored here;
+ * the controls themselves still ignore presses while disabled.
+ */
+:root {
+  --cursor-disabled: not-allowed;
+}
+
+:is(.button, .switch, .input, .textarea, .select__trigger, .radio, .checkbox):is(
+    :disabled,
+    [data-disabled='true'],
+    [aria-disabled='true']
+  ) {
+  pointer-events: auto;
+}
+
 .console-nav-link {
   transition:
     color 140ms ease,
@@ -197,7 +221,6 @@ body {
   justify-content: flex-end;
   gap: 0.5rem 1rem;
   padding-block: 0.5rem;
-  border-bottom: 1px solid var(--border);
 }
 
 .resource-collection-pagination {

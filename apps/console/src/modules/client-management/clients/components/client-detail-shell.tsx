@@ -27,6 +27,7 @@ import {
   type ConsoleQueryState,
 } from '#/lib/graphql/use-console-query'
 import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
+import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
 import { clientScope, type ClientScope } from '../lib/client-scope'
 import { ClientBuiltInChip, ClientStatusChip } from './client-status'
@@ -55,7 +56,7 @@ const tabs: ReadonlyArray<{
 }> = [
   {
     to: '/clients/$clientId',
-    label: 'clientsTabOverview',
+    label: 'clientsTabSettings',
     match: (path) => !/\/(credentials|scopes)$/u.test(path),
   },
   {
@@ -95,10 +96,18 @@ export function ClientDetailShell({ clientId }: { clientId: string }) {
     ? (resolveLocalizedText(client.names, locale) ?? client.name)
     : undefined
   useBreadcrumbLabel(`/clients/${clientId}`, name)
-  const loading = query.status === 'idle' || query.status === 'loading'
+  // Until the workspace permissions arrive, the client read is still pending
+  // rather than denied.
+  const permissionsPending =
+    !workspace.data?.effectivePermissions &&
+    (workspace.status === 'idle' || workspace.status === 'loading')
+  const loading =
+    permissionsPending ||
+    (scope.read && (query.status === 'idle' || query.status === 'loading'))
 
   return (
     <ClientDetailContext.Provider value={{ clientId, client, query, scope }}>
+      <div className="w-full">
       <header className="mb-6 space-y-5">
         <Button
           variant="ghost"
@@ -113,7 +122,7 @@ export function ClientDetailShell({ clientId }: { clientId: string }) {
           <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-semibold tracking-tight">
               {name ??
-                (scope.read && loading ? (
+                (loading ? (
                   <Skeleton className="h-8 w-56 rounded-field" />
                 ) : (
                   t('clientsDetailTitle')
@@ -128,7 +137,7 @@ export function ClientDetailShell({ clientId }: { clientId: string }) {
               <code className="break-all text-xs">{client.clientId}</code>
               <CopyButton value={client.clientId} label={t('clientsClientId')} />
             </div>
-          ) : scope.read && loading ? (
+          ) : loading ? (
             <Skeleton className="h-4 w-80 rounded-field" />
           ) : null}
         </div>
@@ -156,6 +165,7 @@ export function ClientDetailShell({ clientId }: { clientId: string }) {
           })}
         </div>
       </nav>
+      <ConsoleWorkspaceGate loading={<Outlet />}>
       {!scope.read ? (
         <RbacAccessRestricted
           title="clientsNoReadTitle"
@@ -178,6 +188,8 @@ export function ClientDetailShell({ clientId }: { clientId: string }) {
       ) : (
         <Outlet />
       )}
+      </ConsoleWorkspaceGate>
+      </div>
     </ClientDetailContext.Provider>
   )
 }

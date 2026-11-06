@@ -76,13 +76,14 @@ export type ClientScopeAssignmentInput = {
 
 /** Protocol configuration, replaced as one unit. */
 export type ClientSettingsInput = {
+  allowPublicClientFlow?: boolean;
   corsEnabled?: boolean;
   grantTypes: Array<ClientGrantType>;
   platforms: Array<ClientPlatformInput>;
   postLogoutRedirectUris?: Array<string>;
   requirePushedAuthorizationRequests?: boolean;
   skipConsent?: boolean;
-  tokenEndpointAuthMethod: ClientAuthMethod;
+  tokenEndpointAuthMethods: Array<ClientAuthMethod>;
 };
 
 /** Enable, disable or delete one client. */
@@ -446,7 +447,7 @@ export type ConsoleBootstrapQueryVariables = Exact<{ [key: string]: never; }>;
 
 export type ConsoleBootstrapQuery = { effectivePermissions: { role: string | null, requestableScopes: Array<string>, grantedScopes: Array<string>, effectiveScopes: Array<string>, authentication: { acr: string | null, authTime: string | null, aal2: boolean, recent: boolean } }, instanceInfo: { name: string, environment: string, issuer: string, version: string } };
 
-export type ConsoleClientFieldsFragment = { id: string, clientId: string, name: string, description: string, builtIn: boolean, enabled: boolean, postLogoutRedirectUris: Array<string>, grantTypes: Array<ClientGrantType>, tokenEndpointAuthMethod: ClientAuthMethod, requirePushedAuthorizationRequests: boolean, skipConsent: boolean, corsEnabled: boolean, corsOrigins: Array<string>, version: string, createdAt: string, updatedAt: string | null, names: Array<{ locale: string, value: string }>, descriptions: Array<{ locale: string, value: string }>, platforms: Array<{ platform: ClientPlatformType, redirectUris: Array<string> }> };
+export type ConsoleClientFieldsFragment = { id: string, clientId: string, name: string, description: string, builtIn: boolean, enabled: boolean, postLogoutRedirectUris: Array<string>, grantTypes: Array<ClientGrantType>, tokenEndpointAuthMethods: Array<ClientAuthMethod>, allowPublicClientFlow: boolean, requirePushedAuthorizationRequests: boolean, skipConsent: boolean, corsEnabled: boolean, corsOrigins: Array<string>, version: string, createdAt: string, updatedAt: string | null, names: Array<{ locale: string, value: string }>, descriptions: Array<{ locale: string, value: string }>, platforms: Array<{ platform: ClientPlatformType, redirectUris: Array<string> }> };
 
 export type ConsoleClientsQueryVariables = Exact<{
   filter?: ClientFilter | null | undefined;
@@ -465,14 +466,14 @@ export type ConsoleClientQueryVariables = Exact<{
 }>;
 
 
-export type ConsoleClientQuery = { client: { id: string, clientId: string, name: string, description: string, builtIn: boolean, enabled: boolean, postLogoutRedirectUris: Array<string>, grantTypes: Array<ClientGrantType>, tokenEndpointAuthMethod: ClientAuthMethod, requirePushedAuthorizationRequests: boolean, skipConsent: boolean, corsEnabled: boolean, corsOrigins: Array<string>, version: string, createdAt: string, updatedAt: string | null, names: Array<{ locale: string, value: string }>, descriptions: Array<{ locale: string, value: string }>, platforms: Array<{ platform: ClientPlatformType, redirectUris: Array<string> }> } | null };
+export type ConsoleClientQuery = { client: { id: string, clientId: string, name: string, description: string, builtIn: boolean, enabled: boolean, postLogoutRedirectUris: Array<string>, grantTypes: Array<ClientGrantType>, tokenEndpointAuthMethods: Array<ClientAuthMethod>, allowPublicClientFlow: boolean, requirePushedAuthorizationRequests: boolean, skipConsent: boolean, corsEnabled: boolean, corsOrigins: Array<string>, version: string, createdAt: string, updatedAt: string | null, names: Array<{ locale: string, value: string }>, descriptions: Array<{ locale: string, value: string }>, platforms: Array<{ platform: ClientPlatformType, redirectUris: Array<string> }> } | null };
 
 export type ConsoleClientCredentialsQueryVariables = Exact<{
   id: string | number;
 }>;
 
 
-export type ConsoleClientCredentialsQuery = { client: { id: string, version: string, tokenEndpointAuthMethod: ClientAuthMethod, credentials: Array<{ id: string, type: ClientCredentialKind, hint: string, expiresAt: string, revokedAt: string | null, active: boolean, createdAt: string }> } | null };
+export type ConsoleClientCredentialsQuery = { client: { id: string, version: string, tokenEndpointAuthMethods: Array<ClientAuthMethod>, credentials: Array<{ id: string, type: ClientCredentialKind, hint: string, expiresAt: string, revokedAt: string | null, active: boolean, createdAt: string }> } | null };
 
 export type ConsoleClientScopesQueryVariables = Exact<{
   id: string | number;
@@ -1042,7 +1043,8 @@ export const ConsoleClientFieldsFragmentDoc = new TypedDocumentString(`
   }
   postLogoutRedirectUris
   grantTypes
-  tokenEndpointAuthMethod
+  tokenEndpointAuthMethods
+  allowPublicClientFlow
   requirePushedAuthorizationRequests
   skipConsent
   corsEnabled
@@ -1137,7 +1139,8 @@ export const ConsoleClientDocument = new TypedDocumentString(`
   }
   postLogoutRedirectUris
   grantTypes
-  tokenEndpointAuthMethod
+  tokenEndpointAuthMethods
+  allowPublicClientFlow
   requirePushedAuthorizationRequests
   skipConsent
   corsEnabled
@@ -1151,7 +1154,7 @@ export const ConsoleClientCredentialsDocument = new TypedDocumentString(`
   client(id: $id) {
     id
     version
-    tokenEndpointAuthMethod
+    tokenEndpointAuthMethods
     credentials {
       id
       type

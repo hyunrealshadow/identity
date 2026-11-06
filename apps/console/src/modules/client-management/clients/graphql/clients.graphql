@@ -19,7 +19,8 @@ fragment ConsoleClientFields on Client {
   }
   postLogoutRedirectUris
   grantTypes
-  tokenEndpointAuthMethod
+  tokenEndpointAuthMethods
+  allowPublicClientFlow
   requirePushedAuthorizationRequests
   skipConsent
   corsEnabled
@@ -81,7 +82,7 @@ query ConsoleClientCredentials($id: ID!) {
   client(id: $id) {
     id
     version
-    tokenEndpointAuthMethod
+    tokenEndpointAuthMethods
     credentials {
       id
       type

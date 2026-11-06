@@ -1,8 +1,6 @@
 import {
   Button,
-  Card,
   Description,
-  Label,
   Radio,
   RadioGroup,
   Spinner,
@@ -13,6 +11,7 @@ import { ArrowLeft, Plus } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { LocalizedTextField } from '#/components/localized-text-field'
+import { SettingsGroup, SettingsRow } from '#/components/settings-section'
 import { PageHeader } from '#/components/page-header'
 import { clearDraft, readDraft, writeDraft } from '#/lib/draft-storage'
 import { useTranslator, type MessageKey } from '#/lib/i18n'
@@ -26,7 +25,14 @@ import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-
 import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
 import type { RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
-import { ClientSettingsFields } from '../components/client-settings-fields'
+import {
+  AuthMethodRows,
+  PublicClientFlowRow,
+  CorsRow,
+  GrantTypeRows,
+  ParRow,
+  RedirectUriRows,
+} from '../components/client-settings-fields'
 import { useClientMutations } from '../hooks/client-mutations'
 import {
   clientFieldErrors,
@@ -174,7 +180,7 @@ export function ClientCreatePage() {
         return
       }
       clearDraft(DRAFT_KEY)
-      const needsSecret = usesClientSecret(draft.settings.tokenEndpointAuthMethod)
+      const needsSecret = usesClientSecret(draft.settings.tokenEndpointAuthMethods)
       toast.success(t('clientsCreatedToast'), {
         description: t(
           needsSecret ? 'clientsCreatedNeedsSecret' : 'clientsCreatedCommitted',
@@ -200,8 +206,15 @@ export function ClientCreatePage() {
     }
   }
 
+  const fieldProps = {
+    draft: draft.settings,
+    onChange: (settings: ClientSettingsDraft) => update({ settings }),
+    errors: errors.settings,
+    isDisabled: pending,
+  }
+
   return (
-    <>
+    <div className="w-full">
       {header}
       <ConsoleWorkspaceGate>
         <div className="space-y-4">
@@ -213,12 +226,13 @@ export function ClientCreatePage() {
               event.preventDefault()
               void submit()
             }}
-            className="space-y-4"
+            className="space-y-6"
           >
-            <Card className="console-card border border-border">
-              <Card.Content className="space-y-6 p-5">
+            <SettingsGroup title={t('clientsKind')}>
+              <SettingsRow description={t('clientsKindHint')}>
                 <RadioGroup
                   name="client-kind"
+                  aria-label={t('clientsKind')}
                   value={draft.kind}
                   isDisabled={pending}
                   onChange={(value) => {
@@ -236,8 +250,6 @@ export function ClientCreatePage() {
                     })
                   }}
                 >
-                  <Label>{t('clientsKind')}</Label>
-                  <Description>{t('clientsKindHint')}</Description>
                   <div className="grid gap-3 sm:grid-cols-2">
                     {KINDS.map((kind) => (
                       <Radio key={kind.id} value={kind.id}>
@@ -252,6 +264,10 @@ export function ClientCreatePage() {
                     ))}
                   </div>
                 </RadioGroup>
+              </SettingsRow>
+            </SettingsGroup>
+            <SettingsGroup title={t('clientsBasicSection')}>
+              <SettingsRow>
                 <LocalizedTextField
                   name="names"
                   label={t('localizedName')}
@@ -268,6 +284,8 @@ export function ClientCreatePage() {
                     nameError ? t(nameError) : (errors.text.name ?? errors.text.names)
                   }
                 />
+              </SettingsRow>
+              <SettingsRow>
                 <LocalizedTextField
                   name="descriptions"
                   label={t('localizedDescription')}
@@ -284,19 +302,33 @@ export function ClientCreatePage() {
                   maxLength={1024}
                   error={errors.text.description ?? errors.text.descriptions}
                 />
-              </Card.Content>
-            </Card>
-            <Card className="console-card border border-border">
-              <Card.Content className="p-5">
-                <ClientSettingsFields
-                  draft={draft.settings}
-                  onChange={(settings) => update({ settings })}
-                  errors={errors.settings}
-                  isDisabled={pending}
-                />
-              </Card.Content>
-            </Card>
-            <div className="flex flex-wrap gap-2">
+              </SettingsRow>
+            </SettingsGroup>
+            <SettingsGroup title={t('clientsRedirectSection')}>
+              <RedirectUriRows {...fieldProps} />
+            </SettingsGroup>
+            <SettingsGroup title={t('clientsCorsSection')}>
+              <CorsRow {...fieldProps} />
+            </SettingsGroup>
+            <SettingsGroup title={t('clientsGrantTypes')}>
+              <GrantTypeRows {...fieldProps} />
+            </SettingsGroup>
+            <SettingsGroup title={t('clientsAuthorizationRequestsSection')}>
+              <ParRow {...fieldProps} />
+            </SettingsGroup>
+            <SettingsGroup
+              title={t('clientsAuthMethodSection')}
+              description={t('clientsAuthMethodsHint')}
+            >
+              <AuthMethodRows {...fieldProps} />
+            </SettingsGroup>
+            <SettingsGroup
+              title={t('clientsPublicClientSection')}
+              description={t('clientsPublicClientSectionHint')}
+            >
+              <PublicClientFlowRow {...fieldProps} />
+            </SettingsGroup>
+            <div className="flex flex-wrap justify-end gap-2">
               <Button type="submit" isDisabled={pending}>
                 {pending ? (
                   <Spinner size="sm" aria-label={t('clientsCreatePending')} />
@@ -317,6 +349,6 @@ export function ClientCreatePage() {
           </form>
         </div>
       </ConsoleWorkspaceGate>
-    </>
+    </div>
   )
 }

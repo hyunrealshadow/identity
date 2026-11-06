@@ -93,6 +93,7 @@ export function UserTextAreaField({
   isDisabled = false,
   maxLength,
   rows = 4,
+  hideLabel = false,
 }: {
   name: string
   label: string
@@ -105,6 +106,8 @@ export function UserTextAreaField({
   isDisabled?: boolean
   maxLength?: number
   rows?: number
+  /** Keep the label for assistive technology when the row shows it already. */
+  hideLabel?: boolean
 }) {
   return (
     <TextField
@@ -116,7 +119,7 @@ export function UserTextAreaField({
       isInvalid={Boolean(error)}
       fullWidth
     >
-      <Label>{label}</Label>
+      <Label className={hideLabel ? 'sr-only' : undefined}>{label}</Label>
       <TextArea
         rows={rows}
         placeholder={placeholder}
@@ -138,6 +141,7 @@ export function UserSelectField({
   description,
   error,
   isDisabled = false,
+  hideLabel = false,
 }: {
   name: string
   label: string
@@ -147,6 +151,8 @@ export function UserSelectField({
   description?: string
   error?: string
   isDisabled?: boolean
+  /** Keep the label for assistive technology when the row shows it already. */
+  hideLabel?: boolean
 }) {
   return (
     <div className="min-w-0">
@@ -160,7 +166,7 @@ export function UserSelectField({
         isInvalid={Boolean(error)}
         fullWidth
       >
-        <Label>{label}</Label>
+        <Label className={hideLabel ? 'sr-only' : undefined}>{label}</Label>
         <Select.Trigger>
           <Select.Value />
           <Select.Indicator />

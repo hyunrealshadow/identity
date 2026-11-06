@@ -32,6 +32,7 @@ import { useConsoleQuery } from '#/lib/graphql/use-console-query'
 import type { RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
 import { UserSelectField } from '#/modules/user-management/users/components/user-form-fields'
+import { ClientAuthMethodSection } from '../components/client-auth-method-section'
 import { useClientDetail } from '../components/client-detail-shell'
 import { useClientMutations } from '../hooks/client-mutations'
 import { usesClientSecret } from '../lib/client-form'
@@ -125,7 +126,7 @@ export function ClientCredentialsPage() {
   }
 
   const builtIn = detail.client?.builtIn ?? false
-  const secretMethod = client ? usesClientSecret(client.tokenEndpointAuthMethod) : false
+  const secretMethod = client ? usesClientSecret(client.tokenEndpointAuthMethods) : false
   const refreshAll = () => {
     void query.refresh()
     void detail.query.refresh()
@@ -220,7 +221,7 @@ export function ClientCredentialsPage() {
   const loading = query.status === 'idle' || query.status === 'loading'
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {client && !secretMethod ? (
         <Alert status="default">
           <Alert.Indicator />
@@ -230,6 +231,7 @@ export function ClientCredentialsPage() {
           </Alert.Content>
         </Alert>
       ) : null}
+      <ClientAuthMethodSection />
       {feedback ? (
         <RbacMutationFeedback
           feedback={feedback}
@@ -237,18 +239,19 @@ export function ClientCredentialsPage() {
           reloadPending={query.refreshing}
         />
       ) : null}
-      <section className="space-y-4">
-        <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <section>
+        <header className="mb-2 flex flex-col gap-3 px-1 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-base font-semibold">{t('clientsCredentialsTitle')}</h2>
-            <p className="mt-1 text-sm text-muted">{t('clientsCredentialsDescription')}</p>
+            <h2 className="text-sm font-semibold">{t('clientsCredentialsTitle')}</h2>
+            <p className="mt-0.5 text-xs leading-5 text-muted">{t('clientsCredentialsDescription')}</p>
           </div>
           {secretMethod && scope.secretCreate && !builtIn ? (
-            <div className="flex flex-wrap items-end gap-2">
-              <div className="w-36">
+            <div className="flex flex-wrap items-stretch gap-2">
+              <div className="w-32">
                 <UserSelectField
                   name="secret-lifetime"
                   label={t('clientsSecretLifetime')}
+                  hideLabel
                   value={lifetime}
                   onChange={setLifetime}
                   options={LIFETIMES.map((days) => ({
@@ -258,7 +261,12 @@ export function ClientCredentialsPage() {
                   isDisabled={pending}
                 />
               </div>
-              <Button isDisabled={pending || !client} onPress={() => void issue()}>
+              {/* Stretch to the select's height so the pair lines up exactly. */}
+              <Button
+                className="h-auto"
+                isDisabled={pending || !client}
+                onPress={() => void issue()}
+              >
                 {pending && !target ? (
                   <Spinner size="sm" aria-label={t('working')} />
                 ) : (

@@ -58,7 +58,8 @@ export function useClientMutations() {
         return request<ConsoleUpdateClientMutation, ConsoleUpdateClientMutationVariables>(
           ConsoleUpdateClientDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          [ConsoleClientDocument, ConsoleClientsDocument],
+          // The credentials view carries the auth method and version too.
+          [ConsoleClientDocument, ConsoleClientsDocument, ConsoleClientCredentialsDocument],
         )
       },
       enable(input: ClientStateInput) {
