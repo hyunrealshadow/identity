@@ -15,6 +15,15 @@ impl OpenIdProviderService {
         )
     }
 
+    /// The discovery documents this provider publishes at the issuer root.
+    pub fn well_known_urls(&self) -> Result<(Url, Url), AppError> {
+        let issuer = self.issuer()?;
+        Ok((
+            endpoint_url(&issuer, "/.well-known/openid-configuration")?,
+            endpoint_url(&issuer, "/.well-known/oauth-authorization-server")?,
+        ))
+    }
+
     pub async fn discovery_metadata(&self) -> Result<OpenIdProviderMetadata, AppError> {
         let issuer = self.issuer()?;
 

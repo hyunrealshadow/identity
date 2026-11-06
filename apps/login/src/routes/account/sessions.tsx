@@ -1,4 +1,4 @@
-import { Button, Chip } from '@heroui/react'
+import { Button, Card, Chip } from '@heroui/react'
 import { createFileRoute } from '@tanstack/react-router'
 import { Globe2, Laptop, Smartphone, Tablet } from 'lucide-react'
 
@@ -27,7 +27,7 @@ function SessionsPage() {
       <PageHeading title={t('accountActiveDevices')} description={t('accountSessionsDescription')} />
       <div className="space-y-4">
         {current ? (
-          <div className="account-card rounded-field border border-separator bg-surface">
+          <Card className="account-card overflow-hidden border border-border">
             <div className="flex gap-3.5 px-5 py-4 sm:items-start sm:gap-4 sm:px-6">
               <div className="mt-0.5 flex size-10 shrink-0 items-center justify-center rounded-xl bg-success/10 text-success">
                 <DeviceIcon type={current.deviceType} />
@@ -42,10 +42,10 @@ function SessionsPage() {
               </div>
               <time className="shrink-0 text-xs text-muted" dateTime={current.lastActiveAt ?? current.createdAt} title={`${formatAccountExactDateTime(current.lastActiveAt ?? current.createdAt, locale, timeZone)} (${timeZone})`}>{formatRecentActivity(current.lastActiveAt ?? current.createdAt, locale, timeZone)}</time>
             </div>
-          </div>
+          </Card>
         ) : null}
-        <div className="account-card overflow-hidden rounded-field border border-separator bg-surface">
-          <h2 className="border-b border-separator px-5 py-3 text-sm font-semibold sm:px-6">{t('accountOtherDevices')}</h2>
+        <Card className="account-card overflow-hidden border border-border">
+          <h2 className="border-b border-separator px-5 py-4 text-sm font-semibold sm:px-6">{t('accountOtherDevices')}</h2>
           {others.length ? (
             <>
               <ul className="max-h-[min(32rem,60dvh)] divide-y divide-separator overflow-y-auto overscroll-contain" tabIndex={0} aria-label={t('accountOtherDevices')}>
@@ -84,7 +84,7 @@ function SessionsPage() {
           ) : (
             <p className="px-5 py-6 text-sm text-muted sm:px-6">{t('accountNoOtherDevices')}</p>
           )}
-        </div>
+        </Card>
       </div>
     </>
   )

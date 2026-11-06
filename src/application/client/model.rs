@@ -4,8 +4,8 @@ use chrono::{DateTime, Utc};
 use identity_domain::{
     client::model::ClientOid,
     openid_connect::{
-        GrantType, OpenIdConnectClientPlatformType, OpenIdConnectCredentialOid,
-        OpenIdConnectCredentialType, TokenEndpointAuthMethod,
+        GrantType, OAuthProtocolVersion, OpenIdConnectClientPlatformType,
+        OpenIdConnectCredentialOid, OpenIdConnectCredentialType, TokenEndpointAuthMethod,
     },
     rbac::LocalizedText,
 };
@@ -81,6 +81,15 @@ pub struct ClientProtocolSettings {
     pub skip_consent: bool,
     /// Allow browser requests from the origins of the redirect URIs.
     pub cors_enabled: bool,
+    /// OAuth rules for this client's authorization-code exchanges. `None`
+    /// inherits the live global `openid_connect.oauth_version` setting.
+    pub oauth_version: Option<OAuthProtocolVersion>,
+    /// Include the standard claims covered by the granted scopes in issued ID
+    /// Tokens, matching implicit-flow behaviour.
+    pub include_scoped_claims_in_id_token: bool,
+    /// Include the standard user claims covered by the granted scopes in access
+    /// tokens issued for a user.
+    pub include_scoped_claims_in_access_token: bool,
 }
 
 /// One managed OAuth client plus its UUID optimistic-lock version.

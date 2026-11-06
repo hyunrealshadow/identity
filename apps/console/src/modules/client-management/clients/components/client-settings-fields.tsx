@@ -1,8 +1,12 @@
-import { Switch } from '@heroui/react'
+import { ListBox, Select, Switch } from '@heroui/react'
 
 import { SettingsRow } from '#/components/settings-section'
 
-import type { ClientAuthMethod, ClientGrantType } from '#/generated/graphql'
+import type {
+  ClientAuthMethod,
+  ClientGrantType,
+  ClientOAuthVersion,
+} from '#/generated/graphql'
 import { useTranslator, type MessageKey } from '#/lib/i18n'
 import { UserTextAreaField } from '#/modules/user-management/users/components/user-form-fields'
 import {
@@ -70,6 +74,49 @@ function RowError({ children }: { children?: string }) {
       {children}
     </p>
   ) : null
+}
+
+/** Sentinel for "use the instance's live OAuth version". */
+const INHERIT_OAUTH_VERSION = 'inherit'
+
+/** A compact select shown at the end of a row. */
+function RowSelect({
+  label,
+  value,
+  onChange,
+  options,
+  isDisabled,
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  options: ReadonlyArray<{ id: string; label: string }>
+  isDisabled: boolean
+}) {
+  return (
+    <Select
+      aria-label={label}
+      selectedKey={value}
+      onSelectionChange={(key) => {
+        if (key !== null) onChange(String(key))
+      }}
+      isDisabled={isDisabled}
+    >
+      <Select.Trigger className="min-h-8 min-w-40 py-1">
+        <Select.Value />
+        <Select.Indicator />
+      </Select.Trigger>
+      <Select.Popover>
+        <ListBox>
+          {options.map((option) => (
+            <ListBox.Item key={option.id} id={option.id} textValue={option.label}>
+              {option.label}
+            </ListBox.Item>
+          ))}
+        </ListBox>
+      </Select.Popover>
+    </Select>
+  )
 }
 
 interface FieldsProps {
@@ -282,5 +329,72 @@ export function PublicClientFlowRow({ draft, onChange, isDisabled = false }: Swi
         />
       }
     />
+  )
+}
+
+/**
+ * OAuth rules for this client's authorization-code exchanges. Inheriting keeps
+ * the instance's live setting, so a later instance-wide change still applies.
+ */
+export function OAuthVersionRow({ draft, onChange, isDisabled = false }: SwitchProps) {
+  const t = useTranslator()
+  const set = setter(draft, onChange)
+  return (
+    <SettingsRow
+      label={t('clientsOAuthVersion')}
+      description={t('clientsOAuthVersionHint')}
+      action={
+        <RowSelect
+          label={t('clientsOAuthVersion')}
+          value={draft.oauthVersion ?? INHERIT_OAUTH_VERSION}
+          onChange={(value) =>
+            set(
+              'oauthVersion',
+              value === INHERIT_OAUTH_VERSION ? null : (value as ClientOAuthVersion),
+            )
+          }
+          options={[
+            { id: INHERIT_OAUTH_VERSION, label: t('clientsOAuthVersionInherit') },
+            { id: 'OAUTH_2_0', label: 'OAuth 2.0' },
+            { id: 'OAUTH_2_1', label: 'OAuth 2.1' },
+          ]}
+          isDisabled={isDisabled}
+        />
+      }
+    />
+  )
+}
+
+/** Standard claims the granted scopes cover, in the issued tokens. */
+export function ScopedClaimRows({ draft, onChange, isDisabled = false }: SwitchProps) {
+  const t = useTranslator()
+  const set = setter(draft, onChange)
+  return (
+    <>
+      <SettingsRow
+        label={t('clientsScopedClaimsIdToken')}
+        description={t('clientsScopedClaimsIdTokenHint')}
+        action={
+          <RowSwitch
+            label={t('clientsScopedClaimsIdToken')}
+            isSelected={draft.includeScopedClaimsInIdToken}
+            onChange={(value) => set('includeScopedClaimsInIdToken', value)}
+            isDisabled={isDisabled}
+          />
+        }
+      />
+      <SettingsRow
+        label={t('clientsScopedClaimsAccessToken')}
+        description={t('clientsScopedClaimsAccessTokenHint')}
+        action={
+          <RowSwitch
+            label={t('clientsScopedClaimsAccessToken')}
+            isSelected={draft.includeScopedClaimsInAccessToken}
+            onChange={(value) => set('includeScopedClaimsInAccessToken', value)}
+            isDisabled={isDisabled}
+          />
+        }
+      />
+    </>
   )
 }

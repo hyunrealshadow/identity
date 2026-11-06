@@ -142,6 +142,7 @@ export function UserSelectField({
   error,
   isDisabled = false,
   hideLabel = false,
+  size,
 }: {
   name: string
   label: string
@@ -153,6 +154,8 @@ export function UserSelectField({
   isDisabled?: boolean
   /** Keep the label for assistive technology when the row shows it already. */
   hideLabel?: boolean
+  /** One step below the default trigger height, for inline toolbar controls. */
+  size?: 'sm'
 }) {
   return (
     <div className="min-w-0">
@@ -167,7 +170,7 @@ export function UserSelectField({
         fullWidth
       >
         <Label className={hideLabel ? 'sr-only' : undefined}>{label}</Label>
-        <Select.Trigger>
+        <Select.Trigger className={size === 'sm' ? 'min-h-8 py-1' : undefined}>
           <Select.Value />
           <Select.Indicator />
         </Select.Trigger>

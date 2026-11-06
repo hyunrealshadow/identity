@@ -120,6 +120,13 @@ pub(super) async fn load_records<C: ConnectionTrait>(
                         .require_pushed_authorization_requests,
                     skip_consent: metadata.settings.skip_consent,
                     cors_enabled: metadata.settings.cors_enabled,
+                    oauth_version: metadata.settings.oauth_version,
+                    include_scoped_claims_in_id_token: metadata
+                        .settings
+                        .include_scoped_claims_in_id_token,
+                    include_scoped_claims_in_access_token: metadata
+                        .settings
+                        .include_scoped_claims_in_access_token,
                 },
                 cors_origins: origins.remove(&model.id).unwrap_or_default(),
                 version: model.version,

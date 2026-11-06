@@ -29,9 +29,11 @@ import { useClientDetail, type ConsoleClient } from '../components/client-detail
 import {
   CorsRow,
   GrantTypeRows,
+  OAuthVersionRow,
   ParRow,
   RedirectUriRows,
   PublicClientFlowRow,
+  ScopedClaimRows,
 } from '../components/client-settings-fields'
 import { useClientMutations } from '../hooks/client-mutations'
 import {
@@ -316,6 +318,17 @@ function ClientOverview({ client }: { client: ConsoleClient }) {
           <ParRow {...fieldProps} />
         </SettingsGroup>
 
+        <SettingsGroup
+          title={t('clientsOAuthSection')}
+          description={t('clientsOAuthSectionHint')}
+        >
+          <OAuthVersionRow {...fieldProps} />
+        </SettingsGroup>
+
+        <SettingsGroup title={t('clientsTokenClaimsSection')}>
+          <ScopedClaimRows {...fieldProps} />
+        </SettingsGroup>
+
         {editable ? (
           <div className="flex flex-wrap items-center justify-end gap-3">
             {settingsChanged ? (
@@ -430,7 +443,7 @@ function ClientLifecycle({ client }: { client: ConsoleClient }) {
   return (
     <SettingsGroup title={t('clientsLifecycleTitle')} tone="danger">
       {feedback ? (
-        <div className="px-4 py-3">
+        <div className="px-5 py-4">
           <RbacMutationFeedback
             feedback={feedback}
             onReload={() => void query.refresh()}

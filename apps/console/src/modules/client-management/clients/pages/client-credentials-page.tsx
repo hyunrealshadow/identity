@@ -252,6 +252,7 @@ export function ClientCredentialsPage() {
                   name="secret-lifetime"
                   label={t('clientsSecretLifetime')}
                   hideLabel
+                  size="sm"
                   value={lifetime}
                   onChange={setLifetime}
                   options={LIFETIMES.map((days) => ({
@@ -263,6 +264,7 @@ export function ClientCredentialsPage() {
               </div>
               {/* Stretch to the select's height so the pair lines up exactly. */}
               <Button
+                size="sm"
                 className="h-auto"
                 isDisabled={pending || !client}
                 onPress={() => void issue()}

@@ -24,6 +24,9 @@ fragment ConsoleClientFields on Client {
   requirePushedAuthorizationRequests
   skipConsent
   corsEnabled
+  oauthVersion
+  includeScopedClaimsInIdToken
+  includeScopedClaimsInAccessToken
   corsOrigins
   version
   createdAt
@@ -242,5 +245,24 @@ mutation ConsoleSetClientScopes($input: SetClientScopesInput!) {
     version
     scopeIds
     clientGrantedScopeIds
+  }
+}
+
+query ConsoleClientMetadata {
+  instanceMetadata {
+    issuer
+    openidConfigurationUrl
+    oauthAuthorizationServerMetadataUrl
+    jwksUri
+    authorizationEndpoint
+    tokenEndpoint
+    pushedAuthorizationRequestEndpoint
+    userinfoEndpoint
+    deviceAuthorizationEndpoint
+    revocationEndpoint
+    introspectionEndpoint
+    endSessionEndpoint
+    checkSessionIframe
+    registrationEndpoint
   }
 }

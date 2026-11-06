@@ -108,6 +108,9 @@ fn web_settings(redirect: &str) -> ClientProtocolSettings {
         require_pushed_authorization_requests: false,
         skip_consent: false,
         cors_enabled: true,
+        oauth_version: None,
+        include_scoped_claims_in_id_token: false,
+        include_scoped_claims_in_access_token: false,
     }
 }
 

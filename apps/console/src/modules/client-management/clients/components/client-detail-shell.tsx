@@ -50,14 +50,18 @@ export function useClientDetail() {
 }
 
 const tabs: ReadonlyArray<{
-  to: '/clients/$clientId' | '/clients/$clientId/credentials' | '/clients/$clientId/scopes'
+  to:
+    | '/clients/$clientId'
+    | '/clients/$clientId/credentials'
+    | '/clients/$clientId/scopes'
+    | '/clients/$clientId/metadata'
   label: MessageKey
   match: (path: string) => boolean
 }> = [
   {
     to: '/clients/$clientId',
     label: 'clientsTabSettings',
-    match: (path) => !/\/(credentials|scopes)$/u.test(path),
+    match: (path) => !/\/(credentials|scopes|metadata)$/u.test(path),
   },
   {
     to: '/clients/$clientId/credentials',
@@ -68,6 +72,11 @@ const tabs: ReadonlyArray<{
     to: '/clients/$clientId/scopes',
     label: 'clientsTabScopes',
     match: (path) => path.endsWith('/scopes'),
+  },
+  {
+    to: '/clients/$clientId/metadata',
+    label: 'clientsTabMetadata',
+    match: (path) => path.endsWith('/metadata'),
   },
 ]
 

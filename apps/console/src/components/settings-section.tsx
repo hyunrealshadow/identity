@@ -33,13 +33,13 @@ export function SettingsGroup({
         {action}
       </div>
       <div
-        className={`divide-y divide-separator overflow-hidden rounded-3xl bg-surface ${
-          danger ? 'console-card-danger' : 'console-card'
+        className={`divide-y divide-separator overflow-hidden rounded-3xl border bg-surface ${
+          danger ? 'console-card-danger border-danger' : 'console-card border-border'
         }`}
       >
         {children}
         {footer ? (
-          <div className="flex flex-wrap items-center justify-end gap-3 px-4 py-3">{footer}</div>
+          <div className="flex flex-wrap items-center justify-end gap-3 px-5 py-4">{footer}</div>
         ) : null}
       </div>
     </section>
@@ -66,7 +66,7 @@ export function SettingsRow({
 }) {
   const heading = label || description || icon || action
   return (
-    <div className="px-4 py-3">
+    <div className="px-5 py-4">
       {heading ? (
         <div className="flex items-center gap-3">
           {icon ? (

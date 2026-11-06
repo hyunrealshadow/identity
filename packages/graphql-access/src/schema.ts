@@ -196,6 +196,16 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "ID",
           "policies": []
         },
+        "includeScopedClaimsInAccessToken": {
+          "name": "includeScopedClaimsInAccessToken",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "includeScopedClaimsInIdToken": {
+          "name": "includeScopedClaimsInIdToken",
+          "returnType": "Boolean",
+          "policies": []
+        },
         "name": {
           "name": "name",
           "returnType": "String",
@@ -204,6 +214,11 @@ export const schemaMetadata: SchemaMetadata = {
         "names": {
           "name": "names",
           "returnType": "LocalizedText",
+          "policies": []
+        },
+        "oauthVersion": {
+          "name": "oauthVersion",
+          "returnType": "ClientOAuthVersion",
           "policies": []
         },
         "platforms": {
@@ -1282,6 +1297,98 @@ export const schemaMetadata: SchemaMetadata = {
         },
         "version": {
           "name": "version",
+          "returnType": "String",
+          "policies": []
+        }
+      }
+    },
+    "InstanceMetadata": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "authorizationEndpoint": {
+          "name": "authorizationEndpoint",
+          "returnType": "String",
+          "policies": []
+        },
+        "checkSessionIframe": {
+          "name": "checkSessionIframe",
+          "returnType": "String",
+          "policies": []
+        },
+        "deviceAuthorizationEndpoint": {
+          "name": "deviceAuthorizationEndpoint",
+          "returnType": "String",
+          "policies": []
+        },
+        "endSessionEndpoint": {
+          "name": "endSessionEndpoint",
+          "returnType": "String",
+          "policies": []
+        },
+        "introspectionEndpoint": {
+          "name": "introspectionEndpoint",
+          "returnType": "String",
+          "policies": []
+        },
+        "issuer": {
+          "name": "issuer",
+          "returnType": "String",
+          "policies": []
+        },
+        "jwksUri": {
+          "name": "jwksUri",
+          "returnType": "String",
+          "policies": []
+        },
+        "oauthAuthorizationServerMetadataUrl": {
+          "name": "oauthAuthorizationServerMetadataUrl",
+          "returnType": "String",
+          "policies": []
+        },
+        "openidConfigurationUrl": {
+          "name": "openidConfigurationUrl",
+          "returnType": "String",
+          "policies": []
+        },
+        "policyUri": {
+          "name": "policyUri",
+          "returnType": "String",
+          "policies": []
+        },
+        "pushedAuthorizationRequestEndpoint": {
+          "name": "pushedAuthorizationRequestEndpoint",
+          "returnType": "String",
+          "policies": []
+        },
+        "registrationEndpoint": {
+          "name": "registrationEndpoint",
+          "returnType": "String",
+          "policies": []
+        },
+        "revocationEndpoint": {
+          "name": "revocationEndpoint",
+          "returnType": "String",
+          "policies": []
+        },
+        "serviceDocumentation": {
+          "name": "serviceDocumentation",
+          "returnType": "String",
+          "policies": []
+        },
+        "termsOfServiceUri": {
+          "name": "termsOfServiceUri",
+          "returnType": "String",
+          "policies": []
+        },
+        "tokenEndpoint": {
+          "name": "tokenEndpoint",
+          "returnType": "String",
+          "policies": []
+        },
+        "userinfoEndpoint": {
+          "name": "userinfoEndpoint",
           "returnType": "String",
           "policies": []
         }
@@ -2517,6 +2624,18 @@ export const schemaMetadata: SchemaMetadata = {
         "instanceInfo": {
           "name": "instanceInfo",
           "returnType": "InstanceInfo",
+          "policies": [
+            {
+              "scopes": [],
+              "authentication": "SESSION",
+              "userOnly": false,
+              "runtime": false
+            }
+          ]
+        },
+        "instanceMetadata": {
+          "name": "instanceMetadata",
+          "returnType": "InstanceMetadata",
           "policies": [
             {
               "scopes": [],

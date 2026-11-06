@@ -154,12 +154,28 @@ body {
   --cursor-disabled: not-allowed;
 }
 
+/*
+ * Restoring pointer events also restores hover feedback, because the component
+ * hover rules do not exclude disabled state. Their compiled declarations read
+ * the base color tokens directly (`background-color: var(--field-hover)`), so
+ * point those tokens at their resting values: a disabled control then shows the
+ * cursor but never a hover background, border, or switch track.
+ */
 :is(.button, .switch, .input, .textarea, .select__trigger, .radio, .checkbox):is(
     :disabled,
     [data-disabled='true'],
     [aria-disabled='true']
   ) {
   pointer-events: auto;
+  --field-hover: var(--field-background, var(--default));
+  --default-hover: var(--default);
+  --accent-hover: var(--accent);
+  --field-border-hover: var(--field-border);
+  --input-bg-hover: var(--input-bg);
+  --textarea-bg-hover: var(--textarea-bg);
+  --select-trigger-bg-hover: var(--select-trigger-bg);
+  --switch-control-bg-hover: var(--switch-control-bg);
+  --switch-control-bg-checked-hover: var(--switch-control-bg-checked);
 }
 
 .console-nav-link {

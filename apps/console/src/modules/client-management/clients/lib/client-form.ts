@@ -1,6 +1,7 @@
 import type {
   ClientAuthMethod,
   ClientGrantType,
+  ClientOAuthVersion,
   ClientSettingsInput,
 } from '#/generated/graphql'
 import type { MessageKey } from '#/lib/i18n'
@@ -34,6 +35,10 @@ export interface ClientSettingsDraft {
   requirePushedAuthorizationRequests: boolean
   skipConsent: boolean
   corsEnabled: boolean
+  /** `null` inherits the instance's live OAuth version. */
+  oauthVersion: ClientOAuthVersion | null
+  includeScopedClaimsInIdToken: boolean
+  includeScopedClaimsInAccessToken: boolean
 }
 
 export type ClientSettingsField =
@@ -52,6 +57,9 @@ interface ClientSettingsSource {
   requirePushedAuthorizationRequests: boolean
   skipConsent: boolean
   corsEnabled: boolean
+  oauthVersion?: ClientOAuthVersion | null
+  includeScopedClaimsInIdToken?: boolean
+  includeScopedClaimsInAccessToken?: boolean
 }
 
 /** A starting point per application kind; every value stays editable. */
@@ -66,6 +74,9 @@ export function settingsForKind(kind: ClientKind): ClientSettingsDraft {
     requirePushedAuthorizationRequests: false,
     skipConsent: false,
     corsEnabled: false,
+    oauthVersion: null,
+    includeScopedClaimsInIdToken: false,
+    includeScopedClaimsInAccessToken: false,
   }
   switch (kind) {
     case 'web':
@@ -103,6 +114,10 @@ export function settingsDraftFromClient(
       client.requirePushedAuthorizationRequests,
     skipConsent: client.skipConsent,
     corsEnabled: client.corsEnabled,
+    oauthVersion: client.oauthVersion ?? null,
+    includeScopedClaimsInIdToken: client.includeScopedClaimsInIdToken ?? false,
+    includeScopedClaimsInAccessToken:
+      client.includeScopedClaimsInAccessToken ?? false,
   }
 }
 
@@ -142,6 +157,9 @@ export function settingsInput(draft: ClientSettingsDraft): ClientSettingsInput {
     requirePushedAuthorizationRequests: draft.requirePushedAuthorizationRequests,
     skipConsent: draft.skipConsent,
     corsEnabled: draft.corsEnabled,
+    oauthVersion: draft.oauthVersion,
+    includeScopedClaimsInIdToken: draft.includeScopedClaimsInIdToken,
+    includeScopedClaimsInAccessToken: draft.includeScopedClaimsInAccessToken,
   }
 }
 

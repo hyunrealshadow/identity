@@ -53,6 +53,14 @@ export type ClientGrantType =
   | 'IMPLICIT'
   | 'REFRESH_TOKEN';
 
+/**
+ * OAuth rules for this client's authorization-code exchanges. Omitting the
+ * input inherits the live global `openid_connect.oauth_version` setting.
+ */
+export type ClientOAuthVersion =
+  | 'OAUTH_2_0'
+  | 'OAUTH_2_1';
+
 export type ClientOrder =
   | 'CREATED_AT_ASC'
   | 'CREATED_AT_DESC'
@@ -79,6 +87,10 @@ export type ClientSettingsInput = {
   allowPublicClientFlow?: boolean;
   corsEnabled?: boolean;
   grantTypes: Array<ClientGrantType>;
+  includeScopedClaimsInAccessToken?: boolean;
+  includeScopedClaimsInIdToken?: boolean;
+  /** Omitting this inherits the live global OAuth version. */
+  oauthVersion?: ClientOAuthVersion | null | undefined;
   platforms: Array<ClientPlatformInput>;
   postLogoutRedirectUris?: Array<string>;
   requirePushedAuthorizationRequests?: boolean;
@@ -447,7 +459,7 @@ export type ConsoleBootstrapQueryVariables = Exact<{ [key: string]: never; }>;
 
 export type ConsoleBootstrapQuery = { effectivePermissions: { role: string | null, requestableScopes: Array<string>, grantedScopes: Array<string>, effectiveScopes: Array<string>, authentication: { acr: string | null, authTime: string | null, aal2: boolean, recent: boolean } }, instanceInfo: { name: string, environment: string, issuer: string, version: string } };
 
-export type ConsoleClientFieldsFragment = { id: string, clientId: string, name: string, description: string, builtIn: boolean, enabled: boolean, postLogoutRedirectUris: Array<string>, grantTypes: Array<ClientGrantType>, tokenEndpointAuthMethods: Array<ClientAuthMethod>, allowPublicClientFlow: boolean, requirePushedAuthorizationRequests: boolean, skipConsent: boolean, corsEnabled: boolean, corsOrigins: Array<string>, version: string, createdAt: string, updatedAt: string | null, names: Array<{ locale: string, value: string }>, descriptions: Array<{ locale: string, value: string }>, platforms: Array<{ platform: ClientPlatformType, redirectUris: Array<string> }> };
+export type ConsoleClientFieldsFragment = { id: string, clientId: string, name: string, description: string, builtIn: boolean, enabled: boolean, postLogoutRedirectUris: Array<string>, grantTypes: Array<ClientGrantType>, tokenEndpointAuthMethods: Array<ClientAuthMethod>, allowPublicClientFlow: boolean, requirePushedAuthorizationRequests: boolean, skipConsent: boolean, corsEnabled: boolean, oauthVersion: ClientOAuthVersion | null, includeScopedClaimsInIdToken: boolean, includeScopedClaimsInAccessToken: boolean, corsOrigins: Array<string>, version: string, createdAt: string, updatedAt: string | null, names: Array<{ locale: string, value: string }>, descriptions: Array<{ locale: string, value: string }>, platforms: Array<{ platform: ClientPlatformType, redirectUris: Array<string> }> };
 
 export type ConsoleClientsQueryVariables = Exact<{
   filter?: ClientFilter | null | undefined;
@@ -466,7 +478,7 @@ export type ConsoleClientQueryVariables = Exact<{
 }>;
 
 
-export type ConsoleClientQuery = { client: { id: string, clientId: string, name: string, description: string, builtIn: boolean, enabled: boolean, postLogoutRedirectUris: Array<string>, grantTypes: Array<ClientGrantType>, tokenEndpointAuthMethods: Array<ClientAuthMethod>, allowPublicClientFlow: boolean, requirePushedAuthorizationRequests: boolean, skipConsent: boolean, corsEnabled: boolean, corsOrigins: Array<string>, version: string, createdAt: string, updatedAt: string | null, names: Array<{ locale: string, value: string }>, descriptions: Array<{ locale: string, value: string }>, platforms: Array<{ platform: ClientPlatformType, redirectUris: Array<string> }> } | null };
+export type ConsoleClientQuery = { client: { id: string, clientId: string, name: string, description: string, builtIn: boolean, enabled: boolean, postLogoutRedirectUris: Array<string>, grantTypes: Array<ClientGrantType>, tokenEndpointAuthMethods: Array<ClientAuthMethod>, allowPublicClientFlow: boolean, requirePushedAuthorizationRequests: boolean, skipConsent: boolean, corsEnabled: boolean, oauthVersion: ClientOAuthVersion | null, includeScopedClaimsInIdToken: boolean, includeScopedClaimsInAccessToken: boolean, corsOrigins: Array<string>, version: string, createdAt: string, updatedAt: string | null, names: Array<{ locale: string, value: string }>, descriptions: Array<{ locale: string, value: string }>, platforms: Array<{ platform: ClientPlatformType, redirectUris: Array<string> }> } | null };
 
 export type ConsoleClientCredentialsQueryVariables = Exact<{
   id: string | number;
@@ -556,6 +568,11 @@ export type ConsoleSetClientScopesMutationVariables = Exact<{
 
 
 export type ConsoleSetClientScopesMutation = { setClientScopes: { clientId: string, version: string, scopeIds: Array<string>, clientGrantedScopeIds: Array<string> } };
+
+export type ConsoleClientMetadataQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type ConsoleClientMetadataQuery = { instanceMetadata: { issuer: string, openidConfigurationUrl: string, oauthAuthorizationServerMetadataUrl: string, jwksUri: string, authorizationEndpoint: string, tokenEndpoint: string | null, pushedAuthorizationRequestEndpoint: string | null, userinfoEndpoint: string | null, deviceAuthorizationEndpoint: string | null, revocationEndpoint: string, introspectionEndpoint: string, endSessionEndpoint: string | null, checkSessionIframe: string | null, registrationEndpoint: string | null } };
 
 export type ConsoleResourcesQueryVariables = Exact<{
   filter?: ResourceFilter | null | undefined;
@@ -1048,6 +1065,9 @@ export const ConsoleClientFieldsFragmentDoc = new TypedDocumentString(`
   requirePushedAuthorizationRequests
   skipConsent
   corsEnabled
+  oauthVersion
+  includeScopedClaimsInIdToken
+  includeScopedClaimsInAccessToken
   corsOrigins
   version
   createdAt
@@ -1144,6 +1164,9 @@ export const ConsoleClientDocument = new TypedDocumentString(`
   requirePushedAuthorizationRequests
   skipConsent
   corsEnabled
+  oauthVersion
+  includeScopedClaimsInIdToken
+  includeScopedClaimsInAccessToken
   corsOrigins
   version
   createdAt
@@ -1321,6 +1344,26 @@ export const ConsoleSetClientScopesDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ConsoleSetClientScopesMutation, ConsoleSetClientScopesMutationVariables>;
+export const ConsoleClientMetadataDocument = new TypedDocumentString(`
+    query ConsoleClientMetadata {
+  instanceMetadata {
+    issuer
+    openidConfigurationUrl
+    oauthAuthorizationServerMetadataUrl
+    jwksUri
+    authorizationEndpoint
+    tokenEndpoint
+    pushedAuthorizationRequestEndpoint
+    userinfoEndpoint
+    deviceAuthorizationEndpoint
+    revocationEndpoint
+    introspectionEndpoint
+    endSessionEndpoint
+    checkSessionIframe
+    registrationEndpoint
+  }
+}
+    `) as unknown as TypedDocumentString<ConsoleClientMetadataQuery, ConsoleClientMetadataQueryVariables>;
 export const ConsoleResourcesDocument = new TypedDocumentString(`
     query ConsoleResources($filter: ResourceFilter, $orderBy: ResourceOrder, $first: Int, $after: String, $last: Int, $before: String) {
   resources(

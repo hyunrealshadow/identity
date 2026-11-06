@@ -154,8 +154,8 @@ fn grant_types_json(grants: &[GrantType]) -> Value {
     Value::Array(grants.iter().map(|grant| json!(grant.as_str())).collect())
 }
 
-/// Persist the protocol configuration, keeping settings this surface does not
-/// edit (OAuth version, scoped-claim options) as they are.
+/// Persist the protocol configuration. The stored settings JSON also carries
+/// fields this surface does not edit; those keep their current value.
 async fn write_protocol(
     txn: &DatabaseTransaction,
     client_id: i64,
@@ -176,6 +176,9 @@ async fn write_protocol(
     stored.skip_consent = settings.skip_consent;
     stored.cors_enabled = settings.cors_enabled;
     stored.allow_public_client_flow = settings.allow_public_client_flow;
+    stored.oauth_version = settings.oauth_version;
+    stored.include_scoped_claims_in_id_token = settings.include_scoped_claims_in_id_token;
+    stored.include_scoped_claims_in_access_token = settings.include_scoped_claims_in_access_token;
     let stored_json = to_value(&stored).map_err(|_| corrupt())?;
     let response_types = if settings.grant_types.contains(&GrantType::AuthorizationCode) {
         json!(["code"])

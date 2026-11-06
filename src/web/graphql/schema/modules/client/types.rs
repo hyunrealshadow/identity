@@ -12,8 +12,8 @@ use identity_domain::{
     authorization::ManagementScope,
     client::model::ClientOid,
     openid_connect::{
-        GrantType, OpenIdConnectClientPlatformType, OpenIdConnectCredentialOid,
-        OpenIdConnectCredentialType, TokenEndpointAuthMethod,
+        GrantType, OAuthProtocolVersion, OpenIdConnectClientPlatformType,
+        OpenIdConnectCredentialOid, OpenIdConnectCredentialType, TokenEndpointAuthMethod,
     },
 };
 use identity_infrastructure::graphql::id::{GlobalId, GlobalIdType};
@@ -151,6 +151,34 @@ impl From<ClientAuthMethod> for TokenEndpointAuthMethod {
             ClientAuthMethod::ClientSecretJwt => Self::ClientSecretJwt,
             ClientAuthMethod::PrivateKeyJwt => Self::PrivateKeyJwt,
             ClientAuthMethod::None => Self::None,
+        }
+    }
+}
+
+/// OAuth rules for this client's authorization-code exchanges. Omitting the
+/// input inherits the live global `openid_connect.oauth_version` setting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]
+pub(crate) enum ClientOAuthVersion {
+    #[graphql(name = "OAUTH_2_0")]
+    V2_0,
+    #[graphql(name = "OAUTH_2_1")]
+    V2_1,
+}
+
+impl From<OAuthProtocolVersion> for ClientOAuthVersion {
+    fn from(value: OAuthProtocolVersion) -> Self {
+        match value {
+            OAuthProtocolVersion::V2_0 => Self::V2_0,
+            OAuthProtocolVersion::V2_1 => Self::V2_1,
+        }
+    }
+}
+
+impl From<ClientOAuthVersion> for OAuthProtocolVersion {
+    fn from(value: ClientOAuthVersion) -> Self {
+        match value {
+            ClientOAuthVersion::V2_0 => Self::V2_0,
+            ClientOAuthVersion::V2_1 => Self::V2_1,
         }
     }
 }
@@ -381,6 +409,21 @@ impl ClientNode {
         self.record.settings.cors_enabled
     }
 
+    /// OAuth rules for this client. `null` inherits the global setting.
+    async fn oauth_version(&self) -> Option<ClientOAuthVersion> {
+        self.record.settings.oauth_version.map(Into::into)
+    }
+
+    /// Whether issued ID Tokens carry the standard claims the granted scopes cover.
+    async fn include_scoped_claims_in_id_token(&self) -> bool {
+        self.record.settings.include_scoped_claims_in_id_token
+    }
+
+    /// Whether access tokens for a user carry the standard claims the granted scopes cover.
+    async fn include_scoped_claims_in_access_token(&self) -> bool {
+        self.record.settings.include_scoped_claims_in_access_token
+    }
+
     /// Browser origins derived from the redirect URIs while CORS is enabled.
     async fn cors_origins(&self) -> &[String] {
         &self.record.cors_origins
@@ -465,6 +508,13 @@ pub(crate) struct ClientSettingsInput {
     pub skip_consent: bool,
     #[graphql(default)]
     pub cors_enabled: bool,
+    /// Omitting this inherits the live global OAuth version.
+    #[graphql(default)]
+    pub oauth_version: Option<ClientOAuthVersion>,
+    #[graphql(default)]
+    pub include_scoped_claims_in_id_token: bool,
+    #[graphql(default)]
+    pub include_scoped_claims_in_access_token: bool,
 }
 
 impl From<ClientSettingsInput> for ClientProtocolSettings {
@@ -489,6 +539,9 @@ impl From<ClientSettingsInput> for ClientProtocolSettings {
             require_pushed_authorization_requests: input.require_pushed_authorization_requests,
             skip_consent: input.skip_consent,
             cors_enabled: input.cors_enabled,
+            oauth_version: input.oauth_version.map(Into::into),
+            include_scoped_claims_in_id_token: input.include_scoped_claims_in_id_token,
+            include_scoped_claims_in_access_token: input.include_scoped_claims_in_access_token,
         }
     }
 }

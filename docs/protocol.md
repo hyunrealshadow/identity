@@ -25,7 +25,9 @@ The global `openid_connect.oauth_version` selects the default OAuth `"2.0"` or
 `"2.1"` rules and defaults to `"2.0"`. Clients inherit this live setting unless
 `OpenIdConnectClientSettings.oauth_version` explicitly overrides it. Existing
 explicit client versions remain effective. The client override is an internal
-setting, not dynamic registration metadata.
+setting, not dynamic registration metadata: administrators set it through the
+instance GraphQL client settings, and clearing it makes the client inherit the
+global value again.
 Selecting it does not imply coverage of every OAuth extension.
 OAuth 2.1 rejects response types that return an access token from the
 authorization endpoint.

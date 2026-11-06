@@ -652,6 +652,9 @@ pub(crate) fn validate_settings(
         require_pushed_authorization_requests: settings.require_pushed_authorization_requests,
         skip_consent: settings.skip_consent,
         cors_enabled: settings.cors_enabled,
+        oauth_version: settings.oauth_version,
+        include_scoped_claims_in_id_token: settings.include_scoped_claims_in_id_token,
+        include_scoped_claims_in_access_token: settings.include_scoped_claims_in_access_token,
     })
 }
 

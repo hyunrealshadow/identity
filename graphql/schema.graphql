@@ -112,6 +112,18 @@ type Client implements Node {
 	skipConsent: Boolean!
 	corsEnabled: Boolean!
 	"""
+	OAuth rules for this client. `null` inherits the global setting.
+	"""
+	oauthVersion: ClientOAuthVersion
+	"""
+	Whether issued ID Tokens carry the standard claims the granted scopes cover.
+	"""
+	includeScopedClaimsInIdToken: Boolean!
+	"""
+	Whether access tokens for a user carry the standard claims the granted scopes cover.
+	"""
+	includeScopedClaimsInAccessToken: Boolean!
+	"""
 	Browser origins derived from the redirect URIs while CORS is enabled.
 	"""
 	corsOrigins: [String!]!
@@ -225,6 +237,15 @@ enum ClientGrantType {
 	IMPLICIT
 }
 
+"""
+OAuth rules for this client's authorization-code exchanges. Omitting the
+input inherits the live global `openid_connect.oauth_version` setting.
+"""
+enum ClientOAuthVersion {
+	OAUTH_2_0
+	OAUTH_2_1
+}
+
 enum ClientOrder {
 	CREATED_AT_ASC
 	CREATED_AT_DESC
@@ -333,6 +354,12 @@ input ClientSettingsInput {
 	requirePushedAuthorizationRequests: Boolean! = false
 	skipConsent: Boolean! = false
 	corsEnabled: Boolean! = false
+	"""
+	Omitting this inherits the live global OAuth version.
+	"""
+	oauthVersion: ClientOAuthVersion = null
+	includeScopedClaimsInIdToken: Boolean! = false
+	includeScopedClaimsInAccessToken: Boolean! = false
 }
 
 """
@@ -722,6 +749,30 @@ type InstanceInfo {
 	version: String!
 }
 
+"""
+Endpoint URLs published by this instance. Optional entries are absent when
+the corresponding capability is not enabled.
+"""
+type InstanceMetadata {
+	issuer: String!
+	openidConfigurationUrl: String!
+	oauthAuthorizationServerMetadataUrl: String!
+	jwksUri: String!
+	authorizationEndpoint: String!
+	tokenEndpoint: String
+	pushedAuthorizationRequestEndpoint: String
+	userinfoEndpoint: String
+	deviceAuthorizationEndpoint: String
+	revocationEndpoint: String!
+	introspectionEndpoint: String!
+	endSessionEndpoint: String
+	checkSessionIframe: String
+	registrationEndpoint: String
+	serviceDocumentation: String
+	policyUri: String
+	termsOfServiceUri: String
+}
+
 type InstanceOverview {
 	generatedAt: DateTime!
 	users(timeZone: String! = "UTC"): InstanceUserOverview @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
@@ -914,6 +965,12 @@ type QueryRoot {
 	the transport still requires a valid access token.
 	"""
 	instanceInfo: InstanceInfo! @access(policy: {scopes: [], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: false})
+	"""
+	Endpoint URLs an integrating application needs. This is the same public
+	discovery data the well-known documents publish; the transport still
+	requires a valid access token.
+	"""
+	instanceMetadata: InstanceMetadata! @access(policy: {scopes: [], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: false})
 	"""
 	Effective permissions for the current principal. This field only needs
 	a valid principal: it never requires a management scope, never accepts a
