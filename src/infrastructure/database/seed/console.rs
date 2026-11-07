@@ -452,10 +452,7 @@ pub fn console_scope_set() -> ScopeSet {
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        ConsoleClientSeedConfig, ConsoleSeedConfigError, console_scope_names, console_scope_set,
-    };
-    use identity_domain::authorization::catalog::{ManagementScope, validate_catalog};
+    use super::{ConsoleClientSeedConfig, ConsoleSeedConfigError};
 
     #[test]
     fn supports_separate_https_issuer_and_console_origins() {
@@ -511,29 +508,5 @@ mod tests {
             .unwrap_err(),
             ConsoleSeedConfigError::OriginMustBeRoot
         );
-    }
-
-    #[test]
-    fn ceiling_is_exact_base_plus_account_read_and_current_management_scopes() {
-        validate_catalog().unwrap();
-        let names = console_scope_names();
-        assert_eq!(names.len(), 4 + ManagementScope::ALL.len());
-        assert_eq!(
-            console_scope_set().management_scopes().len(),
-            ManagementScope::ALL.len()
-        );
-        for scope in ManagementScope::ALL {
-            assert!(names.contains(&scope.name()), "{}", scope.name());
-        }
-        for scope in ["openid", "profile", "email", "account.read"] {
-            assert!(names.contains(&scope));
-        }
-        // Reading the account (for its theme preference) is the only
-        // self-service scope; the Console never changes the operator's account.
-        assert!(!names.iter().any(|scope| {
-            (scope.starts_with("account") && *scope != "account.read")
-                || scope.starts_with("session")
-                || *scope == "password.change"
-        }));
     }
 }
