@@ -8,17 +8,17 @@
 //! - `token_endpoint_auth_methods = ["none"]` with the public flow enabled;
 //! - S256 PKCE is required by the public code flow;
 //! - no client secret or any other credential is inserted;
-//! - fixed allowed scope ceiling: `openid profile email` plus the
-//!   exact trusted management scopes on first provisioning;
+//! - allowed scope ceiling: `openid profile email`, `account.read` (to follow
+//!   the operator's account preferences such as the theme) and the exact
+//!   trusted management scopes, reconciled on every start so upgrades keep the
+//!   system-managed client usable;
 //! - the GraphQL resource covers those scopes.
-//!
-//! The existing Login/Account clients are never touched.
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use identity_domain::{
     authorization::catalog::{ManagementScope, validate_catalog},
-    openid_connect::{ScopeSet, model::claim::StandardScopes},
+    openid_connect::{ApiScope, ScopeSet, model::claim::StandardScopes},
 };
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DatabaseTransaction,
@@ -70,6 +70,7 @@ pub fn console_scope_names() -> Vec<&'static str> {
         StandardScopes::OPENID,
         StandardScopes::PROFILE,
         StandardScopes::EMAIL,
+        ApiScope::ACCOUNT_READ,
     ];
     names.extend(ManagementScope::ALL.into_iter().map(|scope| scope.name()));
     names
@@ -261,12 +262,9 @@ async fn configure_console_client(
     let mut material_change = created;
     material_change |= ensure_oidc_metadata(db, client_id, &config.redirect_uri, now).await?;
     material_change |= ensure_web_platform(db, client_id, &config.redirect_uri, now).await?;
-    // An upgrade never expands an already issued client's scope ceiling.
-    // Existing deployments deliberately update it through their configuration
-    // workflow; only a newly provisioned client receives the current catalog.
-    if created {
-        material_change |= replace_client_scopes(db, client_id, &scope_ids).await?;
-    }
+    // The Console is system-managed: every start reconciles its ceiling to the
+    // current catalog, so an upgrade that needs a new scope keeps it usable.
+    material_change |= replace_client_scopes(db, client_id, &scope_ids).await?;
     // CORS origins are derived only from the explicitly configured Console origin.
     let origin = config.origin.origin().ascii_serialization();
     let cors = db
@@ -287,7 +285,7 @@ async fn configure_console_client(
     Ok(())
 }
 
-async fn ensure_scope_rows(
+pub(super) async fn ensure_scope_rows(
     db: &impl ConnectionTrait,
     names: &[&'static str],
     graphql_resource_oid: uuid::Uuid,
@@ -400,7 +398,9 @@ async fn ensure_web_platform(
     Ok(true)
 }
 
-async fn replace_client_scopes(
+/// Make the client's scope assignments exactly `scope_ids`; returns whether
+/// anything changed. Shared by the system-managed client seeds.
+pub(super) async fn replace_client_scopes(
     db: &impl ConnectionTrait,
     client_id: i64,
     scope_ids: &[i64],
@@ -514,10 +514,10 @@ mod tests {
     }
 
     #[test]
-    fn fresh_ceiling_is_exact_base_plus_current_management_scopes() {
+    fn ceiling_is_exact_base_plus_account_read_and_current_management_scopes() {
         validate_catalog().unwrap();
         let names = console_scope_names();
-        assert_eq!(names.len(), 3 + ManagementScope::ALL.len());
+        assert_eq!(names.len(), 4 + ManagementScope::ALL.len());
         assert_eq!(
             console_scope_set().management_scopes().len(),
             ManagementScope::ALL.len()
@@ -525,11 +525,13 @@ mod tests {
         for scope in ManagementScope::ALL {
             assert!(names.contains(&scope.name()), "{}", scope.name());
         }
-        for scope in ["openid", "profile", "email"] {
+        for scope in ["openid", "profile", "email", "account.read"] {
             assert!(names.contains(&scope));
         }
+        // Reading the account (for its theme preference) is the only
+        // self-service scope; the Console never changes the operator's account.
         assert!(!names.iter().any(|scope| {
-            scope.starts_with("account")
+            (scope.starts_with("account") && *scope != "account.read")
                 || scope.starts_with("session")
                 || *scope == "password.change"
         }));

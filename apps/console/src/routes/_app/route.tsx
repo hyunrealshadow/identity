@@ -3,6 +3,7 @@ import { createFileRoute } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 
 import { AppShell } from '#/components/app-shell'
+import { AccountThemeSync } from '#/lib/account-theme'
 import { AsyncState } from '#/components/async-state'
 import { FullPageLoading } from '#/components/full-page-loading'
 import { AutomaticReauthenticationGate } from '#/components/automatic-reauthentication'
@@ -32,6 +33,7 @@ function AuthenticatedLayout() {
   if (status === 'authenticated') {
     return (
       <WorkspaceProvider>
+        <AccountThemeSync />
         <AutomaticReauthenticationGate>
           <AppShell />
         </AutomaticReauthenticationGate>

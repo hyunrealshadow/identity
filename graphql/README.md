@@ -16,9 +16,10 @@ or optimistic-lock version is involved. Counts inherit the parent operation's
 authorization requirements. Cursor pagination still determines which pages can
 be addressed; a total count does not provide a cursor for an unvisited page.
 
-The static management Console requests only `openid profile email` and exact
-management scopes. Its bootstrap queries `effectivePermissions` and `instanceInfo`;
-validated ID-token claims supply the operator summary. Personal profile, sessions
+The static management Console requests only `openid profile email`, `account.read`
+and exact management scopes. Its bootstrap queries `effectivePermissions` and
+`instanceInfo`; validated ID-token claims supply the operator summary, and
+`account { theme }` applies the operator's theme preference. Personal profile, sessions
 and credential management remain in Login's account center, linked by the public
 `accountUrl` configuration without passing Console tokens. Self-service fields
 below remain available to Login and authorized consumers.

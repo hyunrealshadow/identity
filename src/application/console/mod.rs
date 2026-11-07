@@ -64,7 +64,7 @@ impl ConsoleRuntimeService {
             redirect_uri: endpoint(&console, "callback")?,
             post_logout_redirect_uri: endpoint(&console, "signed-out")?,
             account_url: endpoint(&login, "account")?,
-            scope: "openid profile email management.*",
+            scope: "openid profile email account.read management.*",
             display_name: CONSOLE_CLIENT_NAME,
             environment: environment.to_owned(),
         }))

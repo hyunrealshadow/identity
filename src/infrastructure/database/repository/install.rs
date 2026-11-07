@@ -31,7 +31,7 @@ use crate::{
     database::{
         owner_bootstrap,
         query::advisory_transaction_lock,
-        seed::{console, console::ConsoleClientSeedConfig, rbac},
+        seed::{console, console::ConsoleClientSeedConfig, login, rbac},
     },
     domain::{
         key::{KeyData, KeyType, SymmetricKeyAlgorithm, SymmetricKeyData},
@@ -280,17 +280,7 @@ impl InstallRepository for InstallRepositoryImpl {
         .await
         .map_err(AppError::internal)?;
 
-        let assigned_scope_names = [
-            "openid",
-            "profile",
-            "email",
-            "offline_access",
-            "account.read",
-            "account.update",
-            "session.read",
-            "session.revoke",
-            "password.change",
-        ];
+        let assigned_scope_names = login::LOGIN_SCOPE_NAMES;
         let assigned_scopes = ScopeEntity::find()
             .filter(ScopeColumn::Code.is_in(assigned_scope_names))
             .filter(ScopeColumn::BuiltIn.eq(true))

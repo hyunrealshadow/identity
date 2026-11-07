@@ -13,6 +13,7 @@ use crate::{
 #[cfg(feature = "oidc-conformance")]
 pub mod conformance;
 pub mod console;
+pub mod login;
 pub mod oauth_resource;
 pub mod rbac;
 pub mod scope;

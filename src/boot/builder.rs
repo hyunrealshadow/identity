@@ -24,7 +24,7 @@ use identity_infrastructure::{
     database::{
         repository::{install::InstallRepositoryImpl, setting::read_section},
         seed,
-        seed::{console, console::ConsoleClientSeedConfig},
+        seed::{console, console::ConsoleClientSeedConfig, login},
     },
     i18n::{I18n, init_error_i18n},
     observability,
@@ -118,6 +118,10 @@ impl AppBuilder {
             .snapshot()
             .section::<InstallationSettings>()
             .initialized;
+        // Both first-party clients are system-managed and reconciled on start.
+        if installed {
+            login::ensure_login_client(db).await?;
+        }
         if installed && let Some(config) = installed_console_seed_config(settings.as_ref())? {
             console::ensure_console_client(db, &config).await?;
         }
