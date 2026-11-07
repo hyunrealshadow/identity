@@ -21,6 +21,8 @@ interface DataTableProps {
   minWidth?: number
   maxHeight?: CSSProperties['maxHeight']
   density?: 'compact' | 'comfortable'
+  /** `primary` (the default) sets the rows on a white surface inside the header's frame. */
+  variant?: 'primary' | 'secondary'
   wrap?: boolean
   loading?: boolean
   loadingLabel?: string
@@ -36,6 +38,7 @@ function DataTableRoot({
   minWidth = 760,
   maxHeight,
   density = 'comfortable',
+  variant = 'primary',
   wrap,
   loading = false,
   loadingLabel,
@@ -74,7 +77,7 @@ function DataTableRoot({
   }, [children, loading])
 
   return (
-    <Table variant="secondary" className="identity-data-table">
+    <Table variant={variant} className="identity-data-table">
       <Table.ScrollContainer
         className="identity-data-table-scroll"
         style={{ maxHeight }}

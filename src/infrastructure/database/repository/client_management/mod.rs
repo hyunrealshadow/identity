@@ -6,7 +6,8 @@ mod write;
 
 use async_trait::async_trait;
 use identity_application::client::{
-    ClientCredentialRecord, ClientCredentialRevokeResult, ClientFilter, ClientManagementRepository,
+    AddClientCredentialTransaction, ClientCredentialRecord, ClientCredentialResult,
+    ClientCredentialRevokeResult, ClientFilter, ClientManagementRepository,
     ClientManagementRepositoryError, ClientPageData, ClientQuery, ClientRecord, ClientSecretResult,
     ClientStateTransaction, CreateClientSecretTransaction, CreateClientTransaction,
     RevokeClientCredentialTransaction, UpdateClientTransaction,
@@ -101,6 +102,14 @@ impl ClientManagementRepository for ClientManagementRepositoryImpl {
         command: CreateClientSecretTransaction,
     ) -> Result<ClientSecretResult, ClientManagementRepositoryError> {
         write::create_secret(&self.db, command).await
+    }
+
+    #[tracing::instrument(skip_all, name = "db.transaction", fields(db.system = "postgresql", db.operation = "client.credential.add"))]
+    async fn add_client_credential(
+        &self,
+        command: AddClientCredentialTransaction,
+    ) -> Result<ClientCredentialResult, ClientManagementRepositoryError> {
+        write::add_credential(&self.db, command).await
     }
 
     #[tracing::instrument(skip_all, name = "db.transaction", fields(db.system = "postgresql", db.operation = "client.credential.revoke"))]

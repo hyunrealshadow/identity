@@ -23,13 +23,10 @@ pub enum ClientErrorCode {
     DuplicatePlatform = 18011,
     InvalidGrantTypes = 18012,
     UnsupportedGrantType = 18013,
-    UnsupportedAuthMethod = 18014,
     RedirectUriRequired = 18015,
-    PublicClientGrantNotAllowed = 18016,
     RefreshTokenRequiresInteractiveGrant = 18017,
     CredentialNotSecret = 18018,
     CredentialRevoked = 18019,
-    SecretNotUsed = 18020,
     InvalidSecretLifetime = 18021,
     InvalidFilter = 18022,
     InvalidReason = 18023,
@@ -37,6 +34,14 @@ pub enum ClientErrorCode {
     EmptyUpdate = 18025,
     InvalidCollectionSize = 18026,
     StorageFailed = 18027,
+    InvalidPublicKey = 18028,
+    PrivateKeyNotAccepted = 18029,
+    CertificateExpired = 18030,
+    PublicKeyExpiryRequired = 18031,
+    InvalidCredentialExpiry = 18032,
+    InvalidJwksUri = 18033,
+    JwksUnavailable = 18034,
+    CredentialLimitReached = 18035,
 }
 
 impl ClientErrorCode {
@@ -56,18 +61,23 @@ impl ClientErrorCode {
             | Self::DuplicatePlatform
             | Self::InvalidGrantTypes
             | Self::UnsupportedGrantType
-            | Self::UnsupportedAuthMethod
             | Self::RedirectUriRequired
-            | Self::PublicClientGrantNotAllowed
             | Self::RefreshTokenRequiresInteractiveGrant
             | Self::CredentialNotSecret
-            | Self::SecretNotUsed
             | Self::InvalidSecretLifetime
             | Self::InvalidFilter
             | Self::InvalidReason
             | Self::InvalidClientMutationId
             | Self::EmptyUpdate
-            | Self::InvalidCollectionSize => ErrorKind::Validation,
+            | Self::InvalidCollectionSize
+            | Self::InvalidPublicKey
+            | Self::PrivateKeyNotAccepted
+            | Self::CertificateExpired
+            | Self::PublicKeyExpiryRequired
+            | Self::InvalidCredentialExpiry
+            | Self::InvalidJwksUri
+            | Self::JwksUnavailable
+            | Self::CredentialLimitReached => ErrorKind::Validation,
         }
     }
 }
@@ -128,19 +138,7 @@ pub const CLIENT_ERROR_INVENTORY: &[ClientErrorCodeDefinition] = &[
         &["grant_type"],
         &[],
     ),
-    entry(
-        ClientErrorCode::UnsupportedAuthMethod,
-        "E18014",
-        &["method"],
-        &[],
-    ),
     entry(ClientErrorCode::RedirectUriRequired, "E18015", &[], &[]),
-    entry(
-        ClientErrorCode::PublicClientGrantNotAllowed,
-        "E18016",
-        &["grant_type"],
-        &[],
-    ),
     entry(
         ClientErrorCode::RefreshTokenRequiresInteractiveGrant,
         "E18017",
@@ -149,7 +147,6 @@ pub const CLIENT_ERROR_INVENTORY: &[ClientErrorCodeDefinition] = &[
     ),
     entry(ClientErrorCode::CredentialNotSecret, "E18018", &[], &[]),
     entry(ClientErrorCode::CredentialRevoked, "E18019", &[], &[]),
-    entry(ClientErrorCode::SecretNotUsed, "E18020", &[], &[]),
     entry(
         ClientErrorCode::InvalidSecretLifetime,
         "E18021",
@@ -172,6 +169,24 @@ pub const CLIENT_ERROR_INVENTORY: &[ClientErrorCodeDefinition] = &[
         &[],
     ),
     entry(ClientErrorCode::StorageFailed, "E18027", &[], &[]),
+    entry(ClientErrorCode::InvalidPublicKey, "E18028", &[], &[]),
+    entry(ClientErrorCode::PrivateKeyNotAccepted, "E18029", &[], &[]),
+    entry(ClientErrorCode::CertificateExpired, "E18030", &[], &[]),
+    entry(ClientErrorCode::PublicKeyExpiryRequired, "E18031", &[], &[]),
+    entry(
+        ClientErrorCode::InvalidCredentialExpiry,
+        "E18032",
+        &["min", "max"],
+        &[],
+    ),
+    entry(ClientErrorCode::InvalidJwksUri, "E18033", &[], &[]),
+    entry(ClientErrorCode::JwksUnavailable, "E18034", &[], &[]),
+    entry(
+        ClientErrorCode::CredentialLimitReached,
+        "E18035",
+        &["max"],
+        &[],
+    ),
 ];
 
 const fn entry(

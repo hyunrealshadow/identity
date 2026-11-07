@@ -4,6 +4,27 @@ type Exact<T extends { [key: string]: unknown }> = { [K in keyof T]: T[K] };
 /** Internal type. DO NOT USE DIRECTLY. */
 export type Incremental<T> = T | { [P in keyof T]?: P extends ' $fragmentName' | '__typename' ? T[P] : never };
 import type { DocumentTypeDecoration } from '@graphql-typed-document-node/core';
+/** Register a JWKS URI for `private_key_jwt`. Its keys refresh from the URI. */
+export type AddClientJwksUriInput = {
+  clientId: string | number;
+  clientMutationId?: string | null | undefined;
+  expectedVersion: string;
+  jwksUri: string;
+  reason?: string;
+};
+
+/** Register a public key for `private_key_jwt`. */
+export type AddClientPublicKeyInput = {
+  clientId: string | number;
+  clientMutationId?: string | null | undefined;
+  expectedVersion: string;
+  /** Required unless `key` is a certificate, whose own expiry is used. */
+  expiresAt?: string | null | undefined;
+  /** A PEM public key, a PEM certificate or a single public JWK. */
+  key: string;
+  reason?: string;
+};
+
 export type AddGroupMemberInput = {
   clientMutationId?: string | null | undefined;
   expectedVersion: string;
@@ -19,17 +40,6 @@ export type AssignUserRolesInput = {
   roleIds: Array<string | number>;
   userId: string | number;
 };
-
-/**
- * Token endpoint client authentication. Key-based `PRIVATE_KEY_JWT` is shown
- * for existing registrations only.
- */
-export type ClientAuthMethod =
-  | 'CLIENT_SECRET_BASIC'
-  | 'CLIENT_SECRET_JWT'
-  | 'CLIENT_SECRET_POST'
-  | 'NONE'
-  | 'PRIVATE_KEY_JWT';
 
 export type ClientCredentialKind =
   | 'CLIENT_SECRET'
@@ -84,6 +94,10 @@ export type ClientScopeAssignmentInput = {
 
 /** Protocol configuration, replaced as one unit. */
 export type ClientSettingsInput = {
+  /**
+   * Lets the client authenticate without a credential (PKCE public client
+   * flow); this also lists `NONE` among its token endpoint methods.
+   */
   allowPublicClientFlow?: boolean;
   corsEnabled?: boolean;
   grantTypes: Array<ClientGrantType>;
@@ -95,7 +109,6 @@ export type ClientSettingsInput = {
   postLogoutRedirectUris?: Array<string>;
   requirePushedAuthorizationRequests?: boolean;
   skipConsent?: boolean;
-  tokenEndpointAuthMethods: Array<ClientAuthMethod>;
 };
 
 /** Enable, disable or delete one client. */
@@ -459,7 +472,12 @@ export type ConsoleBootstrapQueryVariables = Exact<{ [key: string]: never; }>;
 
 export type ConsoleBootstrapQuery = { effectivePermissions: { role: string | null, requestableScopes: Array<string>, grantedScopes: Array<string>, effectiveScopes: Array<string>, authentication: { acr: string | null, authTime: string | null, aal2: boolean, recent: boolean } }, instanceInfo: { name: string, environment: string, issuer: string, version: string } };
 
-export type ConsoleClientFieldsFragment = { id: string, clientId: string, name: string, description: string, builtIn: boolean, enabled: boolean, postLogoutRedirectUris: Array<string>, grantTypes: Array<ClientGrantType>, tokenEndpointAuthMethods: Array<ClientAuthMethod>, allowPublicClientFlow: boolean, requirePushedAuthorizationRequests: boolean, skipConsent: boolean, corsEnabled: boolean, oauthVersion: ClientOAuthVersion | null, includeScopedClaimsInIdToken: boolean, includeScopedClaimsInAccessToken: boolean, corsOrigins: Array<string>, version: string, createdAt: string, updatedAt: string | null, names: Array<{ locale: string, value: string }>, descriptions: Array<{ locale: string, value: string }>, platforms: Array<{ platform: ClientPlatformType, redirectUris: Array<string> }> };
+export type ConsoleAccountThemeQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type ConsoleAccountThemeQuery = { account: { id: string, theme: string | null } | null };
+
+export type ConsoleClientFieldsFragment = { id: string, clientId: string, name: string, description: string, builtIn: boolean, enabled: boolean, postLogoutRedirectUris: Array<string>, grantTypes: Array<ClientGrantType>, allowPublicClientFlow: boolean, requirePushedAuthorizationRequests: boolean, skipConsent: boolean, corsEnabled: boolean, oauthVersion: ClientOAuthVersion | null, includeScopedClaimsInIdToken: boolean, includeScopedClaimsInAccessToken: boolean, corsOrigins: Array<string>, version: string, createdAt: string, updatedAt: string | null, names: Array<{ locale: string, value: string }>, descriptions: Array<{ locale: string, value: string }>, platforms: Array<{ platform: ClientPlatformType, redirectUris: Array<string> }> };
 
 export type ConsoleClientsQueryVariables = Exact<{
   filter?: ClientFilter | null | undefined;
@@ -478,14 +496,14 @@ export type ConsoleClientQueryVariables = Exact<{
 }>;
 
 
-export type ConsoleClientQuery = { client: { id: string, clientId: string, name: string, description: string, builtIn: boolean, enabled: boolean, postLogoutRedirectUris: Array<string>, grantTypes: Array<ClientGrantType>, tokenEndpointAuthMethods: Array<ClientAuthMethod>, allowPublicClientFlow: boolean, requirePushedAuthorizationRequests: boolean, skipConsent: boolean, corsEnabled: boolean, oauthVersion: ClientOAuthVersion | null, includeScopedClaimsInIdToken: boolean, includeScopedClaimsInAccessToken: boolean, corsOrigins: Array<string>, version: string, createdAt: string, updatedAt: string | null, names: Array<{ locale: string, value: string }>, descriptions: Array<{ locale: string, value: string }>, platforms: Array<{ platform: ClientPlatformType, redirectUris: Array<string> }> } | null };
+export type ConsoleClientQuery = { client: { id: string, clientId: string, name: string, description: string, builtIn: boolean, enabled: boolean, postLogoutRedirectUris: Array<string>, grantTypes: Array<ClientGrantType>, allowPublicClientFlow: boolean, requirePushedAuthorizationRequests: boolean, skipConsent: boolean, corsEnabled: boolean, oauthVersion: ClientOAuthVersion | null, includeScopedClaimsInIdToken: boolean, includeScopedClaimsInAccessToken: boolean, corsOrigins: Array<string>, version: string, createdAt: string, updatedAt: string | null, names: Array<{ locale: string, value: string }>, descriptions: Array<{ locale: string, value: string }>, platforms: Array<{ platform: ClientPlatformType, redirectUris: Array<string> }> } | null };
 
 export type ConsoleClientCredentialsQueryVariables = Exact<{
   id: string | number;
 }>;
 
 
-export type ConsoleClientCredentialsQuery = { client: { id: string, version: string, tokenEndpointAuthMethods: Array<ClientAuthMethod>, credentials: Array<{ id: string, type: ClientCredentialKind, hint: string, expiresAt: string, revokedAt: string | null, active: boolean, createdAt: string }> } | null };
+export type ConsoleClientCredentialsQuery = { client: { id: string, version: string, credentials: Array<{ id: string, type: ClientCredentialKind, hint: string, expiresAt: string | null, active: boolean, createdAt: string }> } | null };
 
 export type ConsoleClientScopesQueryVariables = Exact<{
   id: string | number;
@@ -546,14 +564,28 @@ export type ConsoleCreateClientSecretMutationVariables = Exact<{
 }>;
 
 
-export type ConsoleCreateClientSecretMutation = { createClientSecret: { clientId: string, version: string, secret: string, credential: { id: string, hint: string, expiresAt: string } } };
+export type ConsoleCreateClientSecretMutation = { createClientSecret: { clientId: string, version: string, secret: string, credential: { id: string, hint: string, expiresAt: string | null } } };
 
 export type ConsoleRotateClientSecretMutationVariables = Exact<{
   input: RotateClientSecretInput;
 }>;
 
 
-export type ConsoleRotateClientSecretMutation = { rotateClientSecret: { clientId: string, version: string, secret: string, credential: { id: string, hint: string, expiresAt: string } } };
+export type ConsoleRotateClientSecretMutation = { rotateClientSecret: { clientId: string, version: string, secret: string, credential: { id: string, hint: string, expiresAt: string | null } } };
+
+export type ConsoleAddClientPublicKeyMutationVariables = Exact<{
+  input: AddClientPublicKeyInput;
+}>;
+
+
+export type ConsoleAddClientPublicKeyMutation = { addClientPublicKey: { clientId: string, version: string } };
+
+export type ConsoleAddClientJwksUriMutationVariables = Exact<{
+  input: AddClientJwksUriInput;
+}>;
+
+
+export type ConsoleAddClientJwksUriMutation = { addClientJwksUri: { clientId: string, version: string } };
 
 export type ConsoleRevokeClientCredentialMutationVariables = Exact<{
   input: RevokeClientCredentialInput;
@@ -1060,7 +1092,6 @@ export const ConsoleClientFieldsFragmentDoc = new TypedDocumentString(`
   }
   postLogoutRedirectUris
   grantTypes
-  tokenEndpointAuthMethods
   allowPublicClientFlow
   requirePushedAuthorizationRequests
   skipConsent
@@ -1096,6 +1127,14 @@ export const ConsoleBootstrapDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ConsoleBootstrapQuery, ConsoleBootstrapQueryVariables>;
+export const ConsoleAccountThemeDocument = new TypedDocumentString(`
+    query ConsoleAccountTheme {
+  account {
+    id
+    theme
+  }
+}
+    `) as unknown as TypedDocumentString<ConsoleAccountThemeQuery, ConsoleAccountThemeQueryVariables>;
 export const ConsoleClientsDocument = new TypedDocumentString(`
     query ConsoleClients($filter: ClientFilter, $orderBy: ClientOrder, $first: Int, $after: String, $last: Int, $before: String) {
   clients(
@@ -1159,7 +1198,6 @@ export const ConsoleClientDocument = new TypedDocumentString(`
   }
   postLogoutRedirectUris
   grantTypes
-  tokenEndpointAuthMethods
   allowPublicClientFlow
   requirePushedAuthorizationRequests
   skipConsent
@@ -1177,13 +1215,11 @@ export const ConsoleClientCredentialsDocument = new TypedDocumentString(`
   client(id: $id) {
     id
     version
-    tokenEndpointAuthMethods
     credentials {
       id
       type
       hint
       expiresAt
-      revokedAt
       active
       createdAt
     }
@@ -1326,6 +1362,22 @@ export const ConsoleRotateClientSecretDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ConsoleRotateClientSecretMutation, ConsoleRotateClientSecretMutationVariables>;
+export const ConsoleAddClientPublicKeyDocument = new TypedDocumentString(`
+    mutation ConsoleAddClientPublicKey($input: AddClientPublicKeyInput!) {
+  addClientPublicKey(input: $input) {
+    clientId
+    version
+  }
+}
+    `) as unknown as TypedDocumentString<ConsoleAddClientPublicKeyMutation, ConsoleAddClientPublicKeyMutationVariables>;
+export const ConsoleAddClientJwksUriDocument = new TypedDocumentString(`
+    mutation ConsoleAddClientJwksUri($input: AddClientJwksUriInput!) {
+  addClientJwksUri(input: $input) {
+    clientId
+    version
+  }
+}
+    `) as unknown as TypedDocumentString<ConsoleAddClientJwksUriMutation, ConsoleAddClientJwksUriMutationVariables>;
 export const ConsoleRevokeClientCredentialDocument = new TypedDocumentString(`
     mutation ConsoleRevokeClientCredential($input: RevokeClientCredentialInput!) {
   revokeClientCredential(input: $input) {

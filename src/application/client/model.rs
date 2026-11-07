@@ -32,31 +32,46 @@ pub const MANAGEABLE_GRANT_TYPES: [GrantType; 4] = [
     GrantType::DeviceCode,
 ];
 
-/// Authentication methods an administrator can configure here. Key-based
-/// methods need public key management, which this surface does not offer.
-pub const MANAGEABLE_AUTH_METHODS: [TokenEndpointAuthMethod; 4] = [
-    TokenEndpointAuthMethod::ClientSecretBasic,
-    TokenEndpointAuthMethod::ClientSecretPost,
-    TokenEndpointAuthMethod::ClientSecretJwt,
-    TokenEndpointAuthMethod::None,
-];
-
-/// Whether any configured method authenticates with a shared client secret.
+/// Token endpoint methods follow the client's live credentials instead of
+/// being chosen directly: an active secret enables HTTP Basic and the request
+/// body, an active public key or JWKS URI enables `private_key_jwt`, and the
+/// public client flow switch adds `none`. The order is stable so equal inputs
+/// persist identically.
 #[must_use]
-pub fn uses_client_secret(methods: &[TokenEndpointAuthMethod]) -> bool {
-    methods.iter().copied().any(is_secret_method)
+pub fn derived_auth_methods(
+    has_secret: bool,
+    has_public_key: bool,
+    allow_public_client_flow: bool,
+) -> Vec<TokenEndpointAuthMethod> {
+    let mut methods = Vec::new();
+    if has_secret {
+        methods.push(TokenEndpointAuthMethod::ClientSecretBasic);
+        methods.push(TokenEndpointAuthMethod::ClientSecretPost);
+    }
+    if has_public_key {
+        methods.push(TokenEndpointAuthMethod::PrivateKeyJwt);
+    }
+    if allow_public_client_flow {
+        methods.push(TokenEndpointAuthMethod::None);
+    }
+    methods
 }
 
-/// Whether the method authenticates with a shared client secret.
+/// Usable credentials a client may hold at once, per kind. Rotation counts
+/// after the replaced secret is revoked.
 #[must_use]
-pub const fn is_secret_method(method: TokenEndpointAuthMethod) -> bool {
-    matches!(
-        method,
-        TokenEndpointAuthMethod::ClientSecretBasic
-            | TokenEndpointAuthMethod::ClientSecretPost
-            | TokenEndpointAuthMethod::ClientSecretJwt
-    )
+pub const fn max_active_credentials(kind: &OpenIdConnectCredentialType) -> usize {
+    match kind {
+        OpenIdConnectCredentialType::ClientSecret
+        | OpenIdConnectCredentialType::ClientPublicKey => 5,
+        OpenIdConnectCredentialType::ClientJsonWebKeySet => 1,
+    }
 }
+
+pub const MIN_PUBLIC_KEY_LIFETIME_DAYS: i64 = 1;
+pub const MAX_PUBLIC_KEY_LIFETIME_DAYS: i64 = 3_650;
+/// Upper bound for a pasted PEM key, certificate or JWK.
+pub const MAX_PUBLIC_KEY_INPUT_LENGTH: usize = 16 * 1024;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClientPlatform {
@@ -71,11 +86,11 @@ pub struct ClientProtocolSettings {
     pub platforms: Vec<ClientPlatform>,
     pub post_logout_redirect_uris: Vec<String>,
     pub grant_types: Vec<GrantType>,
-    /// Methods the client may use at the token endpoint. A public client uses
-    /// only `none`; a confidential client may accept several secret methods.
+    /// Methods the client may use at the token endpoint. Read-only: they are
+    /// derived from the live credentials and the public flow switch (see
+    /// [`derived_auth_methods`]), and a write ignores this field.
     pub token_endpoint_auth_methods: Vec<TokenEndpointAuthMethod>,
-    /// Whether the public client flow is enabled. It is a separate switch:
-    /// registering `none` alone does not let a client skip authentication.
+    /// Whether the public client flow is enabled, which also lists `none`.
     pub allow_public_client_flow: bool,
     pub require_pushed_authorization_requests: bool,
     pub skip_consent: bool,
@@ -116,8 +131,12 @@ pub struct ClientRecord {
 pub struct ClientCredentialRecord {
     pub oid: OpenIdConnectCredentialOid,
     pub kind: OpenIdConnectCredentialType,
+    /// Identifies the credential without revealing it: the last characters of
+    /// a secret, a key's SHA-256 thumbprint, or a JWKS URI. Masking is left to
+    /// the presentation.
     pub hint: String,
-    pub expires_at: DateTime<Utc>,
+    /// `None` for a JWKS URI, whose keys refresh from the URI.
+    pub expires_at: Option<DateTime<Utc>>,
     pub revoked_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
 }
@@ -229,6 +248,36 @@ pub struct RevokeClientCredentialCommand {
     pub expected_version: Uuid,
     pub reason: String,
     pub client_mutation_id: Option<String>,
+}
+
+/// Register a public key for `private_key_jwt`. `key` is a PEM public key,
+/// a PEM certificate or a single public JWK. A certificate supplies its own
+/// expiry; other keys need `expires_at`.
+#[derive(Debug, Clone)]
+pub struct AddClientPublicKeyCommand {
+    pub client_oid: ClientOid,
+    pub expected_version: Uuid,
+    pub key: String,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub reason: String,
+    pub client_mutation_id: Option<String>,
+}
+
+/// Register a JWKS URI for `private_key_jwt`. The key set is fetched once to
+/// validate it and refreshed from the URI afterwards, so it does not expire.
+#[derive(Debug, Clone)]
+pub struct AddClientJwksUriCommand {
+    pub client_oid: ClientOid,
+    pub expected_version: Uuid,
+    pub jwks_uri: String,
+    pub reason: String,
+    pub client_mutation_id: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ClientCredentialResult {
+    pub client: ClientRecord,
+    pub credential: ClientCredentialRecord,
 }
 
 /// A newly issued secret. `secret` is returned exactly once and never stored

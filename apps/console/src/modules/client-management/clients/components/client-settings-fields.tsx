@@ -3,16 +3,13 @@ import { ListBox, Select, Switch } from '@heroui/react'
 import { SettingsRow } from '#/components/settings-section'
 
 import type {
-  ClientAuthMethod,
   ClientGrantType,
   ClientOAuthVersion,
 } from '#/generated/graphql'
 import { useTranslator, type MessageKey } from '#/lib/i18n'
 import { UserTextAreaField } from '#/modules/user-management/users/components/user-form-fields'
 import {
-  SELECTABLE_AUTH_METHODS,
   SELECTABLE_GRANT_TYPES,
-  toggleAuthMethod,
   type ClientSettingsDraft,
   type ClientSettingsField,
 } from '../lib/client-form'
@@ -30,14 +27,6 @@ const GRANT_DESCRIPTIONS: Partial<Record<ClientGrantType, MessageKey>> = {
   REFRESH_TOKEN: 'clientsGrantRefreshTokenHint',
   CLIENT_CREDENTIALS: 'clientsGrantClientCredentialsHint',
   DEVICE_CODE: 'clientsGrantDeviceCodeHint',
-}
-
-export const AUTH_METHOD_LABELS: Record<ClientAuthMethod, MessageKey> = {
-  CLIENT_SECRET_BASIC: 'clientsAuthSecretBasic',
-  CLIENT_SECRET_POST: 'clientsAuthSecretPost',
-  CLIENT_SECRET_JWT: 'clientsAuthSecretJwt',
-  PRIVATE_KEY_JWT: 'clientsAuthPrivateKeyJwt',
-  NONE: 'clientsAuthNone',
 }
 
 /** A switch whose name and explanation are shown by the surrounding row. */
@@ -263,57 +252,6 @@ export function ParRow({ draft, onChange, isDisabled = false }: SwitchProps) {
 }
 
 /** Whether users are asked to confirm the requested scopes. */
-const AUTH_METHOD_DESCRIPTIONS: Partial<Record<ClientAuthMethod, MessageKey>> = {
-  CLIENT_SECRET_BASIC: 'clientsAuthSecretBasicHint',
-  CLIENT_SECRET_POST: 'clientsAuthSecretPostHint',
-  CLIENT_SECRET_JWT: 'clientsAuthSecretJwtHint',
-  NONE: 'clientsAuthNoneHint',
-}
-
-/** One row per method the client may use at the token endpoint. */
-export function AuthMethodRows({ draft, onChange, errors, isDisabled = false }: FieldsProps) {
-  const t = useTranslator()
-  const set = setter(draft, onChange)
-  // Keep a display-only value (such as private_key_jwt) visible so it can be removed.
-  const methodOptions = [
-    ...SELECTABLE_AUTH_METHODS,
-    ...draft.tokenEndpointAuthMethods.filter(
-      (method) => !SELECTABLE_AUTH_METHODS.includes(method),
-    ),
-  ]
-  return (
-    <>
-      {methodOptions.map((method) => (
-        <SettingsRow
-          key={method}
-          label={t(AUTH_METHOD_LABELS[method])}
-          description={
-            AUTH_METHOD_DESCRIPTIONS[method] ? t(AUTH_METHOD_DESCRIPTIONS[method]) : undefined
-          }
-          action={
-            <RowSwitch
-              label={t(AUTH_METHOD_LABELS[method])}
-              isSelected={draft.tokenEndpointAuthMethods.includes(method)}
-              onChange={(on) =>
-                set(
-                  'tokenEndpointAuthMethods',
-                  toggleAuthMethod(draft.tokenEndpointAuthMethods, method, on),
-                )
-              }
-              isDisabled={isDisabled}
-            />
-          }
-        />
-      ))}
-      <RowError>{errors.tokenEndpointAuthMethods}</RowError>
-    </>
-  )
-}
-
-/**
- * The public client flow is a separate switch: registering `none` alone does
- * not let a client authenticate without a secret.
- */
 export function PublicClientFlowRow({ draft, onChange, isDisabled = false }: SwitchProps) {
   const t = useTranslator()
   return (

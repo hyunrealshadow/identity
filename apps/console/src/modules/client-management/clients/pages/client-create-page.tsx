@@ -26,7 +26,6 @@ import { ConsoleWorkspaceGate } from '#/modules/user-management/components/works
 import type { RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
 import {
-  AuthMethodRows,
   PublicClientFlowRow,
   CorsRow,
   GrantTypeRows,
@@ -37,8 +36,8 @@ import { useClientMutations } from '../hooks/client-mutations'
 import {
   clientFieldErrors,
   settingsForKind,
+  kindUsesSecret,
   settingsInput,
-  usesClientSecret,
   validateSettings,
   type ClientFieldErrors,
   type ClientKind,
@@ -180,7 +179,7 @@ export function ClientCreatePage() {
         return
       }
       clearDraft(DRAFT_KEY)
-      const needsSecret = usesClientSecret(draft.settings.tokenEndpointAuthMethods)
+      const needsSecret = kindUsesSecret(draft.kind)
       toast.success(t('clientsCreatedToast'), {
         description: t(
           needsSecret ? 'clientsCreatedNeedsSecret' : 'clientsCreatedCommitted',
@@ -313,20 +312,14 @@ export function ClientCreatePage() {
             <SettingsGroup title={t('clientsGrantTypes')}>
               <GrantTypeRows {...fieldProps} />
             </SettingsGroup>
-            <SettingsGroup title={t('clientsAuthorizationRequestsSection')}>
-              <ParRow {...fieldProps} />
-            </SettingsGroup>
-            <SettingsGroup
-              title={t('clientsAuthMethodSection')}
-              description={t('clientsAuthMethodsHint')}
-            >
-              <AuthMethodRows {...fieldProps} />
-            </SettingsGroup>
             <SettingsGroup
               title={t('clientsPublicClientSection')}
               description={t('clientsPublicClientSectionHint')}
             >
               <PublicClientFlowRow {...fieldProps} />
+            </SettingsGroup>
+            <SettingsGroup title={t('clientsAuthorizationRequestsSection')}>
+              <ParRow {...fieldProps} />
             </SettingsGroup>
             <div className="flex flex-wrap justify-end gap-2">
               <Button type="submit" isDisabled={pending}>

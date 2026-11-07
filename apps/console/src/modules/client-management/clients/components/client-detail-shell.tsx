@@ -39,6 +39,8 @@ interface ClientDetailContextValue {
   client: ConsoleClient | null
   query: ConsoleQueryState<ConsoleClientQuery>
   scope: ClientScope
+  /** Workspace permissions are still loading, so a missing scope is not yet a denial. */
+  permissionsPending: boolean
 }
 
 const ClientDetailContext = createContext<ClientDetailContextValue | null>(null)
@@ -110,12 +112,16 @@ export function ClientDetailShell({ clientId }: { clientId: string }) {
   const permissionsPending =
     !workspace.data?.effectivePermissions &&
     (workspace.status === 'idle' || workspace.status === 'loading')
+  const workspaceFailed =
+    !workspace.data?.effectivePermissions && workspace.status === 'error'
   const loading =
     permissionsPending ||
     (scope.read && (query.status === 'idle' || query.status === 'loading'))
 
   return (
-    <ClientDetailContext.Provider value={{ clientId, client, query, scope }}>
+    <ClientDetailContext.Provider
+      value={{ clientId, client, query, scope, permissionsPending }}
+    >
       <div className="w-full">
       <header className="mb-6 space-y-5">
         <Button
@@ -174,8 +180,12 @@ export function ClientDetailShell({ clientId }: { clientId: string }) {
           })}
         </div>
       </nav>
-      <ConsoleWorkspaceGate loading={<Outlet />}>
-      {!scope.read ? (
+      {/* One branch chain keeps the routed page mounted at the same position
+          while permissions load or refresh (after a step-up, for example), so
+          open dialogs and drafts survive. */}
+      {workspaceFailed ? (
+        <ConsoleWorkspaceGate>{null}</ConsoleWorkspaceGate>
+      ) : !scope.read && !permissionsPending ? (
         <RbacAccessRestricted
           title="clientsNoReadTitle"
           description="clientsNoReadDescription"
@@ -197,7 +207,6 @@ export function ClientDetailShell({ clientId }: { clientId: string }) {
       ) : (
         <Outlet />
       )}
-      </ConsoleWorkspaceGate>
       </div>
     </ClientDetailContext.Provider>
   )

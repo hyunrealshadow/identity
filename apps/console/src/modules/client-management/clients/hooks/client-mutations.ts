@@ -1,6 +1,8 @@
 import { useMemo } from 'react'
 
 import {
+  ConsoleAddClientJwksUriDocument,
+  ConsoleAddClientPublicKeyDocument,
   ConsoleClientCredentialsDocument,
   ConsoleClientDocument,
   ConsoleClientScopesDocument,
@@ -14,7 +16,13 @@ import {
   ConsoleRotateClientSecretDocument,
   ConsoleSetClientScopesDocument,
   ConsoleUpdateClientDocument,
+  type AddClientJwksUriInput,
+  type AddClientPublicKeyInput,
   type ClientStateInput,
+  type ConsoleAddClientJwksUriMutation,
+  type ConsoleAddClientJwksUriMutationVariables,
+  type ConsoleAddClientPublicKeyMutation,
+  type ConsoleAddClientPublicKeyMutationVariables,
   type ConsoleCreateClientMutation,
   type ConsoleCreateClientMutationVariables,
   type ConsoleCreateClientSecretMutation,
@@ -58,7 +66,7 @@ export function useClientMutations() {
         return request<ConsoleUpdateClientMutation, ConsoleUpdateClientMutationVariables>(
           ConsoleUpdateClientDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          // The credentials view carries the auth method and version too.
+          // The credentials view carries the version too.
           [ConsoleClientDocument, ConsoleClientsDocument, ConsoleClientCredentialsDocument],
         )
       },
@@ -99,6 +107,23 @@ export function useClientMutations() {
           ConsoleRotateClientSecretMutationVariables
         >(
           ConsoleRotateClientSecretDocument,
+          { input: { ...input, clientMutationId: nextClientMutationId() } },
+          [ConsoleClientCredentialsDocument, ConsoleClientDocument],
+        )
+      },
+      addPublicKey(input: AddClientPublicKeyInput) {
+        return request<
+          ConsoleAddClientPublicKeyMutation,
+          ConsoleAddClientPublicKeyMutationVariables
+        >(
+          ConsoleAddClientPublicKeyDocument,
+          { input: { ...input, clientMutationId: nextClientMutationId() } },
+          [ConsoleClientCredentialsDocument, ConsoleClientDocument],
+        )
+      },
+      addJwksUri(input: AddClientJwksUriInput) {
+        return request<ConsoleAddClientJwksUriMutation, ConsoleAddClientJwksUriMutationVariables>(
+          ConsoleAddClientJwksUriDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
           [ConsoleClientCredentialsDocument, ConsoleClientDocument],
         )

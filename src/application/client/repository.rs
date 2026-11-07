@@ -9,6 +9,7 @@
 use std::{error::Error as StdError, sync::Arc};
 
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use identity_domain::{
     client::model::ClientOid,
     openid_connect::{OpenIdConnectCredentialData, OpenIdConnectCredentialOid},
@@ -17,8 +18,8 @@ use identity_domain::{
 use uuid::Uuid;
 
 use super::model::{
-    ClientCredentialRecord, ClientCredentialRevokeResult, ClientFilter, ClientOrder,
-    ClientProtocolSettings, ClientRecord, ClientSecretResult,
+    ClientCredentialRecord, ClientCredentialResult, ClientCredentialRevokeResult, ClientFilter,
+    ClientOrder, ClientProtocolSettings, ClientRecord, ClientSecretResult,
 };
 use crate::{
     authorization::ManagementAuthorizationError,
@@ -56,6 +57,8 @@ pub enum ClientManagementRepositoryError {
     CredentialNotSecret,
     #[error("the credential has already been revoked")]
     CredentialRevoked,
+    #[error("the client already holds {max} usable credentials of this kind")]
+    CredentialLimitReached { max: usize },
 }
 
 #[derive(Debug, Clone)]
@@ -143,6 +146,22 @@ pub struct CreateClientSecretTransaction {
     pub authority: RbacManagementAuthority,
 }
 
+/// Store an already validated key credential. `expires_at` of `None` never
+/// expires; `action` names the audit fact.
+#[derive(Debug, Clone)]
+pub struct AddClientCredentialTransaction {
+    pub client_oid: ClientOid,
+    pub expected_version: Uuid,
+    pub credential_oid: OpenIdConnectCredentialOid,
+    pub data: OpenIdConnectCredentialData,
+    /// Replaces the stored hint derived from `data`, such as a key thumbprint.
+    pub hint: Option<String>,
+    pub expires_at: Option<DateTime<Utc>>,
+    pub action: &'static str,
+    pub reason: String,
+    pub authority: RbacManagementAuthority,
+}
+
 #[derive(Debug, Clone)]
 pub struct RevokeClientCredentialTransaction {
     pub client_oid: ClientOid,
@@ -169,7 +188,9 @@ pub trait ClientManagementRepository: Send + Sync {
         oid: ClientOid,
     ) -> Result<Option<ClientRecord>, ClientManagementRepositoryError>;
 
-    /// Credential metadata, newest first. Secret values are never read.
+    /// Metadata of the credentials not revoked, expired ones included, newest
+    /// first. Revocation is permanent and recorded in the audit log, so revoked
+    /// credentials are not listed. Secret values are never read.
     async fn list_client_credentials(
         &self,
         oid: ClientOid,
@@ -204,6 +225,12 @@ pub trait ClientManagementRepository: Send + Sync {
         &self,
         command: CreateClientSecretTransaction,
     ) -> Result<ClientSecretResult, ClientManagementRepositoryError>;
+
+    /// Add a public key or JWKS URI. Existing credentials stay valid.
+    async fn add_client_credential(
+        &self,
+        command: AddClientCredentialTransaction,
+    ) -> Result<ClientCredentialResult, ClientManagementRepositoryError>;
 
     async fn revoke_client_credential(
         &self,

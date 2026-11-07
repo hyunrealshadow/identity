@@ -1545,6 +1545,36 @@ export const schemaMetadata: SchemaMetadata = {
       "interfaces": [],
       "possibleTypes": [],
       "fields": {
+        "addClientJwksUri": {
+          "name": "addClientJwksUri",
+          "returnType": "ClientCredentialPayload",
+          "policies": [
+            {
+              "scopes": [
+                "management.client_credential.create"
+              ],
+              "authentication": "RECENT_AAL2",
+              "userOnly": true,
+              "runtime": true,
+              "maxAge": 300
+            }
+          ]
+        },
+        "addClientPublicKey": {
+          "name": "addClientPublicKey",
+          "returnType": "ClientCredentialPayload",
+          "policies": [
+            {
+              "scopes": [
+                "management.client_credential.create"
+              ],
+              "authentication": "RECENT_AAL2",
+              "userOnly": true,
+              "runtime": true,
+              "maxAge": 300
+            }
+          ]
+        },
         "addGroupMember": {
           "name": "addGroupMember",
           "returnType": "GroupMemberPayload",

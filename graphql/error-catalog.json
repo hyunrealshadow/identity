@@ -3074,30 +3074,10 @@
     "module": "client"
   },
   {
-    "code": 18014,
-    "kind": "validation",
-    "fluentKey": "E18014",
-    "requiredParams": [
-      "method"
-    ],
-    "optionalParams": [],
-    "module": "client"
-  },
-  {
     "code": 18015,
     "kind": "validation",
     "fluentKey": "E18015",
     "requiredParams": [],
-    "optionalParams": [],
-    "module": "client"
-  },
-  {
-    "code": 18016,
-    "kind": "validation",
-    "fluentKey": "E18016",
-    "requiredParams": [
-      "grant_type"
-    ],
     "optionalParams": [],
     "module": "client"
   },
@@ -3121,14 +3101,6 @@
     "code": 18019,
     "kind": "conflict",
     "fluentKey": "E18019",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "client"
-  },
-  {
-    "code": 18020,
-    "kind": "validation",
-    "fluentKey": "E18020",
     "requiredParams": [],
     "optionalParams": [],
     "module": "client"
@@ -3197,6 +3169,75 @@
     "kind": "internal",
     "fluentKey": "E18027",
     "requiredParams": [],
+    "optionalParams": [],
+    "module": "client"
+  },
+  {
+    "code": 18028,
+    "kind": "validation",
+    "fluentKey": "E18028",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "client"
+  },
+  {
+    "code": 18029,
+    "kind": "validation",
+    "fluentKey": "E18029",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "client"
+  },
+  {
+    "code": 18030,
+    "kind": "validation",
+    "fluentKey": "E18030",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "client"
+  },
+  {
+    "code": 18031,
+    "kind": "validation",
+    "fluentKey": "E18031",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "client"
+  },
+  {
+    "code": 18032,
+    "kind": "validation",
+    "fluentKey": "E18032",
+    "requiredParams": [
+      "min",
+      "max"
+    ],
+    "optionalParams": [],
+    "module": "client"
+  },
+  {
+    "code": 18033,
+    "kind": "validation",
+    "fluentKey": "E18033",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "client"
+  },
+  {
+    "code": 18034,
+    "kind": "validation",
+    "fluentKey": "E18034",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "client"
+  },
+  {
+    "code": 18035,
+    "kind": "validation",
+    "fluentKey": "E18035",
+    "requiredParams": [
+      "max"
+    ],
     "optionalParams": [],
     "module": "client"
   },

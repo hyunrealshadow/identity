@@ -1,3 +1,4 @@
+import { Skeleton } from '@heroui/react'
 import type { ReactNode } from 'react'
 
 /**
@@ -88,5 +89,91 @@ export function SettingsRow({
       ) : null}
       {children ? <div className={heading ? 'mt-3' : undefined}>{children}</div> : null}
     </div>
+  )
+}
+
+/** The shape of one row a {@link SettingsGroupSkeleton} stands in for. */
+export type SettingsRowSkeletonKind =
+  /** A label and description with a switch at the end. */
+  | 'switch'
+  /** A label and description with a select or button at the end. */
+  | 'control'
+  /** A label with a short value at the end. */
+  | 'value'
+  /** A label and description above a text area. */
+  | 'textarea'
+  /** A default value beside a translation editor. */
+  | 'localized'
+  /** A default text area beside a translation editor. */
+  | 'localizedTextarea'
+
+function RowTextSkeleton({ description }: { description: boolean }) {
+  return (
+    <div className="min-w-0 flex-1 space-y-2">
+      <Skeleton className="h-4 w-32 rounded-field" />
+      {description ? <Skeleton className="h-3 w-64 max-w-full rounded-field" /> : null}
+    </div>
+  )
+}
+
+function LocalizedSkeleton({ field }: { field: string }) {
+  return (
+    <div className="space-y-3">
+      <Skeleton className="h-4 w-16 rounded-field" />
+      <div className="grid gap-4 md:grid-cols-2">
+        {[0, 1].map((column) => (
+          <div key={column} className="space-y-2">
+            <Skeleton className="h-4 w-20 rounded-field" />
+            <Skeleton className={`${field} w-full rounded-field`} />
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+/**
+ * Loading stand-in for a {@link SettingsGroup} with the same title spacing,
+ * card and row padding, so the page keeps its layout once data arrives.
+ */
+export function SettingsGroupSkeleton({
+  rows,
+  description = false,
+}: {
+  rows: readonly SettingsRowSkeletonKind[]
+  description?: boolean
+}) {
+  return (
+    <section aria-hidden="true">
+      <div className="mb-2 flex min-h-8 flex-col justify-center gap-1.5 px-1">
+        <Skeleton className="h-4 w-24 rounded-field" />
+        {description ? <Skeleton className="h-3 w-56 rounded-field" /> : null}
+      </div>
+      <div className="console-card divide-y divide-separator overflow-hidden rounded-3xl border border-border bg-surface">
+        {rows.map((kind, index) => (
+          <div key={index} className="px-5 py-4">
+            {kind === 'localized' || kind === 'localizedTextarea' ? (
+              <LocalizedSkeleton field={kind === 'localized' ? 'h-10' : 'h-24'} />
+            ) : kind === 'textarea' ? (
+              <div className="space-y-3">
+                <RowTextSkeleton description />
+                <Skeleton className="h-20 w-full rounded-field" />
+              </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                <RowTextSkeleton description={kind !== 'value'} />
+                {kind === 'switch' ? (
+                  <Skeleton className="h-5 w-10 shrink-0 rounded-full" />
+                ) : kind === 'control' ? (
+                  <Skeleton className="h-9 w-36 shrink-0 rounded-field" />
+                ) : (
+                  <Skeleton className="h-4 w-36 shrink-0 rounded-field" />
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </section>
   )
 }

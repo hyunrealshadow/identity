@@ -3,11 +3,13 @@
 
 use std::collections::BTreeSet;
 
+use chrono::{Duration, Utc};
 use identity_application::{
     client::{
-        ClientManagementRepository, ClientManagementRepositoryError, ClientPlatform,
-        ClientProtocolSettings, ClientStateTransaction, CreateClientSecretTransaction,
-        CreateClientTransaction, NewClientSecret, UpdateClientTransaction,
+        AddClientCredentialTransaction, ClientManagementRepository,
+        ClientManagementRepositoryError, ClientPlatform, ClientProtocolSettings,
+        ClientStateTransaction, CreateClientSecretTransaction, CreateClientTransaction,
+        NewClientSecret, RevokeClientCredentialTransaction, UpdateClientTransaction,
     },
     rbac::{
         ClientScopeAssignment, RbacManagementAuthority, RbacManagementRepository,
@@ -15,14 +17,20 @@ use identity_application::{
     },
 };
 use identity_domain::{
-    authorization::{ActorContext, ManagementScope, RequestId},
+    authorization::{
+        ActorContext, HumanAuthenticationContext, ManagementAuthorityRepository,
+        ManagementAuthorizationSnapshot, ManagementScope, RequestId,
+    },
     openid_connect::{
         GrantType, OpenIdConnectClientPlatformType, OpenIdConnectClientRepository,
-        OpenIdConnectCredentialData, TokenEndpointAuthMethod, resource::OAuthResourceRepository,
+        OpenIdConnectCredentialData, OpenIdConnectCredentialOid, TokenEndpointAuthMethod,
+        resource::OAuthResourceRepository,
     },
+    user::UserOid,
 };
 use identity_infrastructure::database::{
     repository::{
+        authorization::AuthorizationRepositoryImpl,
         client_management::ClientManagementRepositoryImpl,
         oauth_resource::OAuthResourceRepositoryImpl,
         openid_connect::OpenIdConnectClientRepositoryImpl,
@@ -103,7 +111,8 @@ fn web_settings(redirect: &str) -> ClientProtocolSettings {
         }],
         post_logout_redirect_uris: vec!["https://app.example.test/signed-out".to_owned()],
         grant_types: vec![GrantType::AuthorizationCode, GrantType::RefreshToken],
-        token_endpoint_auth_methods: vec![TokenEndpointAuthMethod::ClientSecretBasic],
+        // Derived from credentials by the repository; ignored on write.
+        token_endpoint_auth_methods: Vec::new(),
         allow_public_client_flow: false,
         require_pushed_authorization_requests: false,
         skip_consent: false,
@@ -410,4 +419,276 @@ async fn postgres_seed_removes_retired_management_scopes_and_their_relations() {
         // Running the seed again is a no-op.
         seed::run_all(&db).await.unwrap();
     }).await;
+}
+
+/// The recoverable owner acting through an issuing client with a fresh AAL2
+/// sign-in, which credential writes require.
+async fn administrator(
+    db: &DatabaseConnection,
+    scopes: &[ManagementScope],
+) -> RbacManagementAuthority {
+    let machine = machine(db, scopes).await;
+    let user =
+        UserOid(scalar::<Uuid>(db, r#"SELECT oid AS value FROM "user" WHERE name='owner'"#).await);
+    let authorization = AuthorizationRepositoryImpl::new(db.clone());
+    let current = authorization
+        .find_user_permission_authority(user)
+        .await
+        .unwrap()
+        .expect("owner has management permissions");
+    let policy = authorization.current_policy_version().await.unwrap();
+    RbacManagementAuthority::new(
+        ActorContext::for_user(
+            user,
+            HumanAuthenticationContext::aal2(Some(Utc::now())),
+            RequestId::new("client-credential-test").unwrap(),
+            None,
+        ),
+        scopes.iter().copied().collect::<BTreeSet<_>>(),
+        Some(ManagementAuthorizationSnapshot::for_user_permissions(
+            &current, policy,
+        )),
+        machine.client_oid,
+        machine.client_policy_version,
+    )
+}
+
+fn new_secret() -> NewClientSecret {
+    let secret = format!("secret-{}", Uuid::new_v4());
+    NewClientSecret {
+        credential_oid: Uuid::new_v4(),
+        data: OpenIdConnectCredentialData::ClientSecret {
+            secret: secret.clone(),
+        },
+        plaintext: secret,
+        lifetime_days: 30,
+    }
+}
+
+fn public_key() -> OpenIdConnectCredentialData {
+    OpenIdConnectCredentialData::ClientPublicKey {
+        public_key: "-----BEGIN PUBLIC KEY-----\nunused\n-----END PUBLIC KEY-----".to_owned(),
+        jwk: None,
+    }
+}
+
+fn jwks_uri() -> OpenIdConnectCredentialData {
+    OpenIdConnectCredentialData::ClientJsonWebKeySet {
+        jwks_uri: "https://client.example.test/jwks.json".parse().unwrap(),
+        last_updated: Utc::now(),
+        expires_at: Utc::now() + Duration::hours(1),
+        public_keys: Vec::new(),
+        jwks: Vec::new(),
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires explicitly configured PostgreSQL test database"]
+async fn postgres_client_auth_methods_follow_credentials_within_their_limits() {
+    use TokenEndpointAuthMethod::{
+        ClientSecretBasic, ClientSecretPost, None as NoAuth, PrivateKeyJwt,
+    };
+
+    isolated(|db| async move {
+        seed::run_all(&db).await.unwrap();
+        owner(&db).await;
+        let authority = administrator(
+            &db,
+            &[
+                ManagementScope::ClientsCreate,
+                ManagementScope::ClientsUpdate,
+                ManagementScope::ClientCredentialsCreate,
+                ManagementScope::ClientCredentialsRotate,
+                ManagementScope::ClientCredentialsRevoke,
+            ],
+        )
+        .await;
+        let repo = ClientManagementRepositoryImpl::new(db.clone());
+        let methods = |oid: Uuid| {
+            let repo = &repo;
+            async move {
+                repo.find_client(oid)
+                    .await
+                    .unwrap()
+                    .unwrap()
+                    .settings
+                    .token_endpoint_auth_methods
+            }
+        };
+
+        // Submitted methods are ignored: a new client without credentials and
+        // without the public flow cannot authenticate at all.
+        let mut settings = web_settings("https://app.example.test/callback");
+        settings.token_endpoint_auth_methods = vec![ClientSecretBasic, PrivateKeyJwt];
+        let client = repo
+            .create_client(CreateClientTransaction {
+                client_oid: Uuid::new_v4(),
+                name: "Payments".to_owned(),
+                description: String::new(),
+                names: Vec::new(),
+                descriptions: Vec::new(),
+                settings,
+                reason: String::new(),
+                authority: authority.clone(),
+            })
+            .await
+            .unwrap();
+        assert!(client.settings.token_endpoint_auth_methods.is_empty());
+        let oid = client.oid;
+        let mut version = client.version;
+
+        // Each issued secret keeps HTTP Basic and the request body; five is the limit.
+        let mut secrets = Vec::new();
+        for _ in 0..5 {
+            let issued = repo
+                .create_client_secret(CreateClientSecretTransaction {
+                    client_oid: oid,
+                    expected_version: version,
+                    replaces: None,
+                    secret: new_secret(),
+                    reason: String::new(),
+                    authority: authority.clone(),
+                })
+                .await
+                .unwrap();
+            version = issued.client.version;
+            secrets.push(issued.secret.credential.oid);
+        }
+        assert_eq!(methods(oid).await, [ClientSecretBasic, ClientSecretPost]);
+        let sixth = repo
+            .create_client_secret(CreateClientSecretTransaction {
+                client_oid: oid,
+                expected_version: version,
+                replaces: None,
+                secret: new_secret(),
+                reason: String::new(),
+                authority: authority.clone(),
+            })
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(
+                sixth,
+                ClientManagementRepositoryError::CredentialLimitReached { max: 5 }
+            ),
+            "{sixth:?}"
+        );
+        assert_eq!(repo.list_client_credentials(oid).await.unwrap().len(), 5);
+
+        // Rotation at the limit revokes first, so it still succeeds.
+        let rotated = repo
+            .create_client_secret(CreateClientSecretTransaction {
+                client_oid: oid,
+                expected_version: version,
+                replaces: Some(secrets[0]),
+                secret: new_secret(),
+                reason: String::new(),
+                authority: authority.clone(),
+            })
+            .await
+            .unwrap();
+        version = rotated.client.version;
+
+        // A public key adds private_key_jwt; only one JWKS URI may be usable.
+        let add = |data: OpenIdConnectCredentialData, version: Uuid, action: &'static str| {
+            AddClientCredentialTransaction {
+                client_oid: oid,
+                expected_version: version,
+                credential_oid: Uuid::new_v4(),
+                data,
+                hint: None,
+                expires_at: Some(Utc::now() + Duration::days(30)),
+                action,
+                reason: String::new(),
+                authority: authority.clone(),
+            }
+        };
+        let key = repo
+            .add_client_credential(add(public_key(), version, "client.public_key.create"))
+            .await
+            .unwrap();
+        version = key.client.version;
+        assert_eq!(
+            key.client.settings.token_endpoint_auth_methods,
+            [ClientSecretBasic, ClientSecretPost, PrivateKeyJwt]
+        );
+        assert_eq!(audit_count(&db, "client.public_key.create", oid).await, 1);
+
+        let mut jwks = add(jwks_uri(), version, "client.jwks_uri.create");
+        jwks.expires_at = None;
+        let first = repo.add_client_credential(jwks.clone()).await.unwrap();
+        version = first.client.version;
+        assert!(first.credential.expires_at.is_none());
+        jwks.expected_version = version;
+        jwks.credential_oid = Uuid::new_v4();
+        let second = repo.add_client_credential(jwks).await.unwrap_err();
+        assert!(
+            matches!(
+                second,
+                ClientManagementRepositoryError::CredentialLimitReached { max: 1 }
+            ),
+            "{second:?}"
+        );
+        assert_eq!(
+            repo.find_client(oid).await.unwrap().unwrap().version,
+            version
+        );
+
+        // Revoking every key credential removes private_key_jwt; revoked
+        // credentials drop out of the listing.
+        let revoke = |credential_oid: OpenIdConnectCredentialOid, version: Uuid| {
+            RevokeClientCredentialTransaction {
+                client_oid: oid,
+                credential_oid,
+                expected_version: version,
+                reason: String::new(),
+                authority: authority.clone(),
+            }
+        };
+        let revoked = repo
+            .revoke_client_credential(revoke(key.credential.oid, version))
+            .await
+            .unwrap();
+        version = revoked.client.version;
+        assert_eq!(
+            methods(oid).await,
+            [ClientSecretBasic, ClientSecretPost, PrivateKeyJwt]
+        );
+        let revoked = repo
+            .revoke_client_credential(revoke(first.credential.oid, version))
+            .await
+            .unwrap();
+        version = revoked.client.version;
+        assert_eq!(methods(oid).await, [ClientSecretBasic, ClientSecretPost]);
+        let listed = repo.list_client_credentials(oid).await.unwrap();
+        assert_eq!(listed.len(), 5);
+        assert!(
+            listed
+                .iter()
+                .all(|credential| credential.revoked_at.is_none())
+        );
+
+        // The public flow switch alone adds or removes `none`.
+        let mut public = web_settings("https://app.example.test/callback");
+        public.allow_public_client_flow = true;
+        let updated = repo
+            .update_client(UpdateClientTransaction {
+                client_oid: oid,
+                expected_version: version,
+                name: None,
+                description: None,
+                names: None,
+                descriptions: None,
+                settings: Some(public),
+                reason: String::new(),
+                authority: authority.clone(),
+            })
+            .await
+            .unwrap();
+        assert_eq!(
+            updated.settings.token_endpoint_auth_methods,
+            [ClientSecretBasic, ClientSecretPost, NoAuth]
+        );
+    })
+    .await;
 }

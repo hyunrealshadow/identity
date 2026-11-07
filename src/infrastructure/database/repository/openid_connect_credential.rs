@@ -90,8 +90,10 @@ pub(crate) fn serialize_data(credential: OpenIdConnectCredentialData) -> Seriali
     }
 }
 
+/// The last four characters identify a secret; the presentation adds the
+/// mask. A secret too short to reveal part of it gets an empty hint.
 fn masked_client_secret_hint(secret: &str) -> String {
-    let suffix = if secret.chars().count() > 4 {
+    if secret.chars().count() > 4 {
         secret
             .chars()
             .rev()
@@ -102,8 +104,7 @@ fn masked_client_secret_hint(secret: &str) -> String {
             .collect()
     } else {
         String::new()
-    };
-    format!("••••{suffix}")
+    }
 }
 
 fn deserialize_data(
@@ -249,12 +250,12 @@ mod tests {
             secret: "long-secret-value".to_owned(),
         });
 
-        assert_eq!(serialized.hint, "••••alue");
+        assert_eq!(serialized.hint, "alue");
         assert_eq!(serialized.data, json!({"secret": "long-secret-value"}));
 
         let short = serialize_data(OpenIdConnectCredentialData::ClientSecret {
             secret: "tiny".to_owned(),
         });
-        assert_eq!(short.hint, "••••");
+        assert_eq!(short.hint, "");
     }
 }

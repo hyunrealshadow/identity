@@ -3,14 +3,16 @@
 //! `rbac`.
 
 pub mod model;
+pub mod public_key;
 pub mod repository;
 pub mod service;
 
 pub use model::*;
 pub use repository::{
-    ClientEntityKind, ClientManagementRepository, ClientManagementRepositoryError, ClientPageData,
-    ClientPageEntry, ClientQuery, ClientStateTransaction, CreateClientSecretTransaction,
-    CreateClientTransaction, NewClientSecret, RevokeClientCredentialTransaction,
-    SharedClientManagementRepository, UpdateClientTransaction,
+    AddClientCredentialTransaction, ClientEntityKind, ClientManagementRepository,
+    ClientManagementRepositoryError, ClientPageData, ClientPageEntry, ClientQuery,
+    ClientStateTransaction, CreateClientSecretTransaction, CreateClientTransaction,
+    NewClientSecret, RevokeClientCredentialTransaction, SharedClientManagementRepository,
+    UpdateClientTransaction,
 };
 pub use service::ClientManagementService;

@@ -120,8 +120,8 @@ impl From<ClientGrantType> for GrantType {
     }
 }
 
-/// Token endpoint client authentication. Key-based `PRIVATE_KEY_JWT` is shown
-/// for existing registrations only.
+/// Token endpoint client authentication. Derived from the client's active
+/// credentials and its public flow switch; it is never set directly.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]
 pub(crate) enum ClientAuthMethod {
     ClientSecretBasic,
@@ -139,18 +139,6 @@ impl From<TokenEndpointAuthMethod> for ClientAuthMethod {
             TokenEndpointAuthMethod::ClientSecretJwt => Self::ClientSecretJwt,
             TokenEndpointAuthMethod::PrivateKeyJwt => Self::PrivateKeyJwt,
             TokenEndpointAuthMethod::None => Self::None,
-        }
-    }
-}
-
-impl From<ClientAuthMethod> for TokenEndpointAuthMethod {
-    fn from(value: ClientAuthMethod) -> Self {
-        match value {
-            ClientAuthMethod::ClientSecretBasic => Self::ClientSecretBasic,
-            ClientAuthMethod::ClientSecretPost => Self::ClientSecretPost,
-            ClientAuthMethod::ClientSecretJwt => Self::ClientSecretJwt,
-            ClientAuthMethod::PrivateKeyJwt => Self::PrivateKeyJwt,
-            ClientAuthMethod::None => Self::None,
         }
     }
 }
@@ -279,12 +267,15 @@ impl ClientCredentialNode {
         (&self.record.kind).into()
     }
 
-    /// Masked identification, such as the last characters of a secret.
+    /// Identifies the credential without revealing it: the last four
+    /// characters of a secret, a key's thumbprint or `kid`, or the JWKS URI.
+    /// Masking a secret hint is left to the presentation.
     async fn hint(&self) -> &str {
         &self.record.hint
     }
 
-    async fn expires_at(&self) -> DateTime<Utc> {
+    /// `null` for a JWKS URI, whose keys refresh from the URI.
+    async fn expires_at(&self) -> Option<DateTime<Utc>> {
         self.record.expires_at
     }
 
@@ -294,7 +285,11 @@ impl ClientCredentialNode {
 
     /// Neither revoked nor expired.
     async fn active(&self) -> bool {
-        self.record.revoked_at.is_none() && self.record.expires_at > Utc::now()
+        self.record.revoked_at.is_none()
+            && self
+                .record
+                .expires_at
+                .is_none_or(|expires_at| expires_at > Utc::now())
     }
 
     async fn created_at(&self) -> DateTime<Utc> {
@@ -447,6 +442,7 @@ impl ClientNode {
         guard = "ManagementGuard::new(ManagementScope::ClientCredentialsRead, ManagementTarget::instance())",
         directive = access::apply(ManagementGuard::policy(ManagementScope::ClientCredentialsRead))
     )]
+    /// Credentials not revoked, expired ones included, newest first.
     async fn credentials(&self, ctx: &Context<'_>) -> GraphqlResult<Vec<ClientCredentialNode>> {
         let records = integration::list_credentials(request_context(ctx)?, self.record.oid)
             .await
@@ -498,8 +494,8 @@ pub(crate) struct ClientSettingsInput {
     pub post_logout_redirect_uris: Vec<String>,
     #[graphql(validator(min_items = 1, max_items = 4))]
     pub grant_types: Vec<ClientGrantType>,
-    #[graphql(validator(min_items = 1, max_items = 4))]
-    pub token_endpoint_auth_methods: Vec<ClientAuthMethod>,
+    /// Lets the client authenticate without a credential (PKCE public client
+    /// flow); this also lists `NONE` among its token endpoint methods.
     #[graphql(default)]
     pub allow_public_client_flow: bool,
     #[graphql(default)]
@@ -530,11 +526,7 @@ impl From<ClientSettingsInput> for ClientProtocolSettings {
                 .collect(),
             post_logout_redirect_uris: input.post_logout_redirect_uris,
             grant_types: input.grant_types.into_iter().map(Into::into).collect(),
-            token_endpoint_auth_methods: input
-                .token_endpoint_auth_methods
-                .into_iter()
-                .map(Into::into)
-                .collect(),
+            token_endpoint_auth_methods: Vec::new(),
             allow_public_client_flow: input.allow_public_client_flow,
             require_pushed_authorization_requests: input.require_pushed_authorization_requests,
             skip_consent: input.skip_consent,
@@ -599,6 +591,35 @@ pub(crate) struct CreateClientSecretInput {
     pub expected_version: Uuid,
     #[graphql(default = 365, validator(minimum = 1, maximum = 3650))]
     pub lifetime_days: u32,
+    #[graphql(default, validator(chars_max_length = 1000))]
+    pub reason: String,
+    #[graphql(validator(chars_max_length = 255))]
+    pub client_mutation_id: Option<String>,
+}
+
+/// Register a public key for `private_key_jwt`.
+#[derive(Clone, InputObject)]
+pub(crate) struct AddClientPublicKeyInput {
+    pub client_id: ID,
+    pub expected_version: Uuid,
+    /// A PEM public key, a PEM certificate or a single public JWK.
+    #[graphql(validator(chars_max_length = 16384))]
+    pub key: String,
+    /// Required unless `key` is a certificate, whose own expiry is used.
+    pub expires_at: Option<DateTime<Utc>>,
+    #[graphql(default, validator(chars_max_length = 1000))]
+    pub reason: String,
+    #[graphql(validator(chars_max_length = 255))]
+    pub client_mutation_id: Option<String>,
+}
+
+/// Register a JWKS URI for `private_key_jwt`. Its keys refresh from the URI.
+#[derive(Clone, InputObject)]
+pub(crate) struct AddClientJwksUriInput {
+    pub client_id: ID,
+    pub expected_version: Uuid,
+    #[graphql(validator(chars_max_length = 2048))]
+    pub jwks_uri: String,
     #[graphql(default, validator(chars_max_length = 1000))]
     pub reason: String,
     #[graphql(validator(chars_max_length = 255))]

@@ -5,14 +5,16 @@
 //! passes the immutable request authority to the repository, which re-checks
 //! live authority inside the mutation transaction.
 
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration as TimeDuration};
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use chrono::{Duration, Utc};
 use identity_domain::{
     client::model::ClientOid,
+    key::PublicJwk,
     openid_connect::{
         GrantType, OpenIdConnectClientPlatformType, OpenIdConnectCredentialData,
-        OpenIdConnectCredentialOid, TokenEndpointAuthMethod,
+        OpenIdConnectCredentialOid,
     },
     rbac::{LocalizedMetadata, LocalizedTextError},
 };
@@ -22,19 +24,22 @@ use uuid::Uuid;
 
 use super::{
     model::{
-        ClientCredentialRecord, ClientCredentialRevokeResult, ClientFilter, ClientPage,
+        AddClientJwksUriCommand, AddClientPublicKeyCommand, ClientCredentialRecord,
+        ClientCredentialResult, ClientCredentialRevokeResult, ClientFilter, ClientPage,
         ClientPageItem, ClientPageRequest, ClientPlatform, ClientProtocolSettings, ClientRecord,
         ClientSecretResult, ClientStateCommand, CreateClientCommand, CreateClientSecretCommand,
-        MANAGEABLE_AUTH_METHODS, MANAGEABLE_GRANT_TYPES, MAX_CLIENT_DESCRIPTION_LENGTH,
-        MAX_CLIENT_MUTATION_ID_LENGTH, MAX_CLIENT_NAME_LENGTH, MAX_QUERY_FILTER_LENGTH,
+        MANAGEABLE_GRANT_TYPES, MAX_CLIENT_DESCRIPTION_LENGTH, MAX_CLIENT_MUTATION_ID_LENGTH,
+        MAX_CLIENT_NAME_LENGTH, MAX_PUBLIC_KEY_LIFETIME_DAYS, MAX_QUERY_FILTER_LENGTH,
         MAX_REASON_LENGTH, MAX_REDIRECT_URIS, MAX_SECRET_LIFETIME_DAYS, MAX_URI_LENGTH,
-        MIN_SECRET_LIFETIME_DAYS, RevokeClientCredentialCommand, UpdateClientCommand,
-        uses_client_secret,
+        MIN_PUBLIC_KEY_LIFETIME_DAYS, MIN_SECRET_LIFETIME_DAYS, RevokeClientCredentialCommand,
+        UpdateClientCommand,
     },
+    public_key::{ClientPublicKeyReader, PublicKeyError, PublicKeyMaterial},
     repository::{
-        ClientEntityKind, ClientManagementRepository, ClientManagementRepositoryError, ClientQuery,
-        ClientStateTransaction, CreateClientSecretTransaction, CreateClientTransaction,
-        NewClientSecret, RevokeClientCredentialTransaction, UpdateClientTransaction,
+        AddClientCredentialTransaction, ClientEntityKind, ClientManagementRepository,
+        ClientManagementRepositoryError, ClientQuery, ClientStateTransaction,
+        CreateClientSecretTransaction, CreateClientTransaction, NewClientSecret,
+        RevokeClientCredentialTransaction, UpdateClientTransaction,
     },
 };
 use crate::{
@@ -44,6 +49,10 @@ use crate::{
         codes::{authorization::AuthorizationErrorCode, client::ClientErrorCode},
     },
     observability::{BusinessEvent, EventSink, EventValue, NoopEventSink, error_outcome},
+    openid_connect::remote::{
+        DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchPolicy, conformance_allows_invalid_certs,
+        fetch_https_public_document, remote_http_client, validate_https_public_url,
+    },
     rbac::{
         RbacManagementAuthority,
         cursor::{CURSOR_KIND_CLIENT, PageArguments, encode_cursor, prepare_page},
@@ -55,6 +64,7 @@ const SECRET_BYTES: usize = 32;
 pub struct ClientManagementService {
     repository: Arc<dyn ClientManagementRepository>,
     data_protector: Arc<dyn DataProtector>,
+    public_keys: Arc<dyn ClientPublicKeyReader>,
     events: Arc<dyn EventSink>,
 }
 
@@ -63,10 +73,12 @@ impl ClientManagementService {
     pub fn new(
         repository: Arc<dyn ClientManagementRepository>,
         data_protector: Arc<dyn DataProtector>,
+        public_keys: Arc<dyn ClientPublicKeyReader>,
     ) -> Self {
         Self {
             repository,
             data_protector,
+            public_keys,
             events: Arc::new(NoopEventSink),
         }
     }
@@ -324,15 +336,8 @@ impl ClientManagementService {
             let reason = validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
             validate_secret_lifetime(command.lifetime_days)?;
-            let client = self
-                .repository
-                .find_client(command.client_oid)
-                .await
-                .map_err(map_repository_error)?
-                .ok_or_else(|| AppError::from_code(ClientErrorCode::ClientNotFound))?;
-            if !uses_client_secret(&client.settings.token_endpoint_auth_methods) {
-                return Err(AppError::from_code(ClientErrorCode::SecretNotUsed));
-            }
+            // Issuing a secret is what enables the secret methods; the
+            // repository derives them from the credentials it stores.
             self.repository
                 .create_client_secret(CreateClientSecretTransaction {
                     client_oid: command.client_oid,
@@ -347,6 +352,96 @@ impl ClientManagementService {
         }
         .await;
         self.emit_result(action, &result);
+        result
+    }
+
+    /// Register a public key for `private_key_jwt`. Existing credentials stay
+    /// valid.
+    #[tracing::instrument(skip_all, name = "client.public_key.create")]
+    pub async fn add_client_public_key(
+        &self,
+        authority: &RbacManagementAuthority,
+        command: AddClientPublicKeyCommand,
+    ) -> Result<ClientCredentialResult, AppError> {
+        let result = async {
+            let reason = validate_reason(&command.reason)?;
+            validate_client_mutation_id(command.client_mutation_id.as_deref())?;
+            let parsed = self
+                .public_keys
+                .read(&command.key)
+                .map_err(map_public_key_error)?;
+            // A certificate states its own validity; a bare key needs one.
+            let expires_at = match parsed.certificate_expiry {
+                Some(expiry) => expiry,
+                None => {
+                    let expires_at = command.expires_at.ok_or_else(|| {
+                        AppError::from_code(ClientErrorCode::PublicKeyExpiryRequired)
+                            .with_field("expiresAt")
+                    })?;
+                    validate_key_expiry(expires_at)?;
+                    expires_at
+                }
+            };
+            self.repository
+                .add_client_credential(AddClientCredentialTransaction {
+                    client_oid: command.client_oid,
+                    expected_version: command.expected_version,
+                    credential_oid: Uuid::new_v4(),
+                    data: key_credential(parsed.material),
+                    hint: Some(parsed.hint),
+                    expires_at: Some(expires_at),
+                    action: "client.public_key.create",
+                    reason,
+                    authority: authority.clone(),
+                })
+                .await
+                .map_err(map_repository_error)
+        }
+        .await;
+        self.emit_result("client.public_key.create", &result);
+        result
+    }
+
+    /// Register a JWKS URI for `private_key_jwt`. The key set is fetched now to
+    /// prove it is reachable and usable; verification refreshes it later.
+    #[tracing::instrument(skip_all, name = "client.jwks_uri.create")]
+    pub async fn add_client_jwks_uri(
+        &self,
+        authority: &RbacManagementAuthority,
+        command: AddClientJwksUriCommand,
+    ) -> Result<ClientCredentialResult, AppError> {
+        let result = async {
+            let reason = validate_reason(&command.reason)?;
+            validate_client_mutation_id(command.client_mutation_id.as_deref())?;
+            let jwks_uri = parse_jwks_uri(&command.jwks_uri)?;
+            let keys = fetch_client_jwks(self.public_keys.as_ref(), &jwks_uri).await?;
+            let now = Utc::now();
+            self.repository
+                .add_client_credential(AddClientCredentialTransaction {
+                    client_oid: command.client_oid,
+                    expected_version: command.expected_version,
+                    credential_oid: Uuid::new_v4(),
+                    data: OpenIdConnectCredentialData::ClientJsonWebKeySet {
+                        jwks_uri,
+                        last_updated: now,
+                        expires_at: now + Duration::hours(1),
+                        public_keys: keys
+                            .iter()
+                            .map(|jwk| serde_json::to_string(jwk).unwrap_or_default())
+                            .collect(),
+                        jwks: keys,
+                    },
+                    hint: None,
+                    expires_at: None,
+                    action: "client.jwks_uri.create",
+                    reason,
+                    authority: authority.clone(),
+                })
+                .await
+                .map_err(map_repository_error)
+        }
+        .await;
+        self.emit_result("client.jwks_uri.create", &result);
         result
     }
 
@@ -576,28 +671,6 @@ pub(crate) fn validate_settings(
         }
     }
 
-    let mut methods: Vec<TokenEndpointAuthMethod> = Vec::new();
-    for method in settings.token_endpoint_auth_methods {
-        if !MANAGEABLE_AUTH_METHODS.contains(&method) {
-            return Err(AppError::from_code(ClientErrorCode::UnsupportedAuthMethod)
-                .with_param("method", method.to_string())
-                .with_field("tokenEndpointAuthMethods"));
-        }
-        if !methods.contains(&method) {
-            methods.push(method);
-        }
-    }
-    if methods.is_empty() {
-        return Err(AppError::from_code(ClientErrorCode::ValidationFailed)
-            .with_param("field", "tokenEndpointAuthMethods")
-            .with_field("tokenEndpointAuthMethods"));
-    }
-    methods.sort_by_key(|method| {
-        MANAGEABLE_AUTH_METHODS
-            .iter()
-            .position(|candidate| candidate == method)
-    });
-
     let mut grant_types = Vec::new();
     for grant in settings.grant_types {
         if !MANAGEABLE_GRANT_TYPES.contains(&grant) {
@@ -623,15 +696,6 @@ pub(crate) fn validate_settings(
                 .with_field("grantTypes"),
         );
     }
-    // `none` coexists with secret methods (the public client flow is a
-    // separate switch), but client credentials always needs a real secret.
-    if grant_types.contains(&GrantType::ClientCredentials) && !uses_client_secret(&methods) {
-        return Err(
-            AppError::from_code(ClientErrorCode::PublicClientGrantNotAllowed)
-                .with_param("grant_type", GrantType::ClientCredentials.as_str())
-                .with_field("grantTypes"),
-        );
-    }
     if grant_types.contains(&GrantType::AuthorizationCode) && platforms.is_empty() {
         return Err(AppError::from_code(ClientErrorCode::RedirectUriRequired)
             .with_field("platforms.redirectUris"));
@@ -647,7 +711,8 @@ pub(crate) fn validate_settings(
         platforms,
         post_logout_redirect_uris,
         grant_types,
-        token_endpoint_auth_methods: methods,
+        // Derived from the credentials by the repository; never taken from input.
+        token_endpoint_auth_methods: Vec::new(),
         allow_public_client_flow: settings.allow_public_client_flow,
         require_pushed_authorization_requests: settings.require_pushed_authorization_requests,
         skip_consent: settings.skip_consent,
@@ -658,9 +723,101 @@ pub(crate) fn validate_settings(
     })
 }
 
+fn validate_key_expiry(expires_at: chrono::DateTime<Utc>) -> Result<(), AppError> {
+    let now = Utc::now();
+    let earliest = now + Duration::days(MIN_PUBLIC_KEY_LIFETIME_DAYS) - Duration::minutes(5);
+    let latest = now + Duration::days(MAX_PUBLIC_KEY_LIFETIME_DAYS) + Duration::days(1);
+    if expires_at < earliest || expires_at > latest {
+        return Err(
+            AppError::from_code(ClientErrorCode::InvalidCredentialExpiry)
+                .with_param("min", MIN_PUBLIC_KEY_LIFETIME_DAYS.to_string())
+                .with_param("max", MAX_PUBLIC_KEY_LIFETIME_DAYS.to_string())
+                .with_field("expiresAt"),
+        );
+    }
+    Ok(())
+}
+
+fn parse_jwks_uri(raw: &str) -> Result<Url, AppError> {
+    let invalid = || AppError::from_code(ClientErrorCode::InvalidJwksUri).with_field("jwksUri");
+    let raw = raw.trim();
+    if raw.is_empty() || raw.len() > MAX_URI_LENGTH {
+        return Err(invalid());
+    }
+    let url = Url::parse(raw).map_err(|_| invalid())?;
+    if url.fragment().is_some() || !url.username().is_empty() || url.password().is_some() {
+        return Err(invalid());
+    }
+    validate_https_public_url(&url).map_err(|_| invalid())?;
+    Ok(url)
+}
+
+#[derive(serde::Deserialize)]
+struct RemoteJwks {
+    keys: Vec<serde_json::Value>,
+}
+
+/// Store a read key in the form client assertion verification reads it. A JWK
+/// is also kept as its JSON text, matching keys registered dynamically.
+fn key_credential(material: PublicKeyMaterial) -> OpenIdConnectCredentialData {
+    match material {
+        PublicKeyMaterial::Pem(public_key) => OpenIdConnectCredentialData::ClientPublicKey {
+            public_key,
+            jwk: None,
+        },
+        PublicKeyMaterial::Jwk(jwk) => OpenIdConnectCredentialData::ClientPublicKey {
+            public_key: serde_json::to_string(&jwk).unwrap_or_default(),
+            jwk: Some(jwk),
+        },
+    }
+}
+
+/// Fetch the key set once and keep the keys that are usable public keys.
+async fn fetch_client_jwks(
+    reader: &dyn ClientPublicKeyReader,
+    jwks_uri: &Url,
+) -> Result<Vec<PublicJwk>, AppError> {
+    let unavailable =
+        || AppError::from_code(ClientErrorCode::JwksUnavailable).with_field("jwksUri");
+    let client = remote_http_client(RemoteFetchPolicy::new(
+        DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
+        TimeDuration::from_secs(5),
+        conformance_allows_invalid_certs(),
+    ))
+    .map_err(|error| unavailable().with_source(error))?;
+    let body = fetch_https_public_document(&client, jwks_uri, DEFAULT_REMOTE_DOCUMENT_MAX_BYTES)
+        .await
+        .map_err(|error| unavailable().with_source(error))?;
+    let document: RemoteJwks = serde_json::from_slice(&body).map_err(|_| unavailable())?;
+    let keys: Vec<PublicJwk> = document
+        .keys
+        .into_iter()
+        .filter_map(|key| match reader.read(&key.to_string()) {
+            Ok(read) => match read.material {
+                PublicKeyMaterial::Jwk(jwk) => Some(jwk),
+                PublicKeyMaterial::Pem(_) => None,
+            },
+            Err(_) => None,
+        })
+        .collect();
+    if keys.is_empty() {
+        return Err(unavailable());
+    }
+    Ok(keys)
+}
+
 // ----------------------------------------------------------------------
 // Error mapping
 // ----------------------------------------------------------------------
+
+fn map_public_key_error(error: PublicKeyError) -> AppError {
+    let code = match error {
+        PublicKeyError::Length | PublicKeyError::Unusable => ClientErrorCode::InvalidPublicKey,
+        PublicKeyError::Private => ClientErrorCode::PrivateKeyNotAccepted,
+        PublicKeyError::CertificateExpired => ClientErrorCode::CertificateExpired,
+    };
+    AppError::from_code(code).with_field("key")
+}
 
 fn map_localized_error(error: LocalizedTextError) -> AppError {
     use LocalizedTextError as Error;
@@ -713,6 +870,10 @@ fn map_repository_error(error: ClientManagementRepositoryError) -> AppError {
         Error::BuiltInProtected => AppError::from_code(ClientErrorCode::BuiltInProtected),
         Error::CredentialNotSecret => AppError::from_code(ClientErrorCode::CredentialNotSecret),
         Error::CredentialRevoked => AppError::from_code(ClientErrorCode::CredentialRevoked),
+        Error::CredentialLimitReached { max } => {
+            AppError::from_code(ClientErrorCode::CredentialLimitReached)
+                .with_param("max", max.to_string())
+        }
     }
 }
 

@@ -19,7 +19,6 @@ fragment ConsoleClientFields on Client {
   }
   postLogoutRedirectUris
   grantTypes
-  tokenEndpointAuthMethods
   allowPublicClientFlow
   requirePushedAuthorizationRequests
   skipConsent
@@ -85,13 +84,11 @@ query ConsoleClientCredentials($id: ID!) {
   client(id: $id) {
     id
     version
-    tokenEndpointAuthMethods
     credentials {
       id
       type
       hint
       expiresAt
-      revokedAt
       active
       createdAt
     }
@@ -229,6 +226,20 @@ mutation ConsoleRotateClientSecret($input: RotateClientSecretInput!) {
       hint
       expiresAt
     }
+  }
+}
+
+mutation ConsoleAddClientPublicKey($input: AddClientPublicKeyInput!) {
+  addClientPublicKey(input: $input) {
+    clientId
+    version
+  }
+}
+
+mutation ConsoleAddClientJwksUri($input: AddClientJwksUriInput!) {
+  addClientJwksUri(input: $input) {
+    clientId
+    version
   }
 }
 

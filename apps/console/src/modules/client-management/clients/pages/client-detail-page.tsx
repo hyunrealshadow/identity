@@ -1,7 +1,6 @@
 import {
   Alert,
   Button,
-  Card,
   Spinner,
   toast,
   useOverlayState,
@@ -12,7 +11,11 @@ import { useEffect, useMemo, useState } from 'react'
 
 import { ConfirmationDialog } from '#/components/confirmation-dialog'
 import { LocalizedTextField } from '#/components/localized-text-field'
-import { SettingsGroup, SettingsRow } from '#/components/settings-section'
+import {
+  SettingsGroup,
+  SettingsGroupSkeleton,
+  SettingsRow,
+} from '#/components/settings-section'
 import type { UpdateClientInput } from '#/generated/graphql'
 import { formatDateTime } from '#/lib/format'
 import { useLocale, useTranslator, type MessageKey } from '#/lib/i18n'
@@ -79,18 +82,18 @@ export function ClientDetailPage() {
   return <ClientOverview key={formSeed(client)} client={client} />
 }
 
+/** Matches the settings groups below, in order, so loading keeps the layout. */
 function ClientDetailSkeleton() {
   return (
-    <div className="space-y-4" aria-busy="true">
-      {[0, 1].map((index) => (
-        <Card key={index} className="console-card border border-border">
-          <Card.Content className="space-y-3 p-5">
-            <div className="h-4 w-40 animate-pulse rounded-field bg-surface-secondary" />
-            <div className="h-10 w-full animate-pulse rounded-field bg-surface-secondary" />
-            <div className="h-10 w-full animate-pulse rounded-field bg-surface-secondary" />
-          </Card.Content>
-        </Card>
-      ))}
+    <div className="space-y-6" aria-busy="true">
+      <SettingsGroupSkeleton rows={['localized', 'localizedTextarea', 'value', 'value']} />
+      <SettingsGroupSkeleton rows={['textarea', 'textarea', 'textarea']} />
+      <SettingsGroupSkeleton rows={['switch']} />
+      <SettingsGroupSkeleton rows={['switch', 'switch', 'switch', 'switch']} />
+      <SettingsGroupSkeleton rows={['switch']} description />
+      <SettingsGroupSkeleton rows={['switch']} />
+      <SettingsGroupSkeleton rows={['control']} description />
+      <SettingsGroupSkeleton rows={['switch', 'switch']} />
     </div>
   )
 }
@@ -179,7 +182,7 @@ function ClientOverview({ client }: { client: ConsoleClient }) {
   return (
     <div className="space-y-8">
       {client.builtIn ? (
-        <Alert status="default">
+        <Alert status="default" className="console-card border border-border">
           <Alert.Indicator />
           <Alert.Content>
             <Alert.Title>{t('clientsBuiltInTitle')}</Alert.Title>
@@ -188,7 +191,7 @@ function ClientOverview({ client }: { client: ConsoleClient }) {
         </Alert>
       ) : null}
       {!client.enabled ? (
-        <Alert status="warning">
+        <Alert status="warning" className="console-card border border-border">
           <Alert.Indicator />
           <Alert.Content>
             <Alert.Title>{t('clientsDisabledTitle')}</Alert.Title>

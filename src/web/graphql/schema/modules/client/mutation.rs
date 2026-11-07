@@ -3,8 +3,9 @@ use async_graphql::{Context, Object, Result};
 use identity_application::{
     authorization::ManagementTarget,
     client::{
-        ClientStateCommand, CreateClientCommand, CreateClientSecretCommand,
-        RevokeClientCredentialCommand, UpdateClientCommand,
+        AddClientJwksUriCommand, AddClientPublicKeyCommand, ClientStateCommand,
+        CreateClientCommand, CreateClientSecretCommand, RevokeClientCredentialCommand,
+        UpdateClientCommand,
     },
 };
 use identity_domain::authorization::ManagementScope;
@@ -12,10 +13,10 @@ use identity_domain::authorization::ManagementScope;
 use super::{
     integration,
     types::{
-        ClientCredentialPayload, ClientPayload, ClientSecretPayload, ClientStateInput,
-        CreateClientInput, CreateClientSecretInput, DeleteClientPayload,
-        RevokeClientCredentialInput, RotateClientSecretInput, UpdateClientInput, decode_client_oid,
-        decode_credential_oid,
+        AddClientJwksUriInput, AddClientPublicKeyInput, ClientCredentialPayload, ClientPayload,
+        ClientSecretPayload, ClientStateInput, CreateClientInput, CreateClientSecretInput,
+        DeleteClientPayload, RevokeClientCredentialInput, RotateClientSecretInput,
+        UpdateClientInput, decode_client_oid, decode_credential_oid,
     },
 };
 use crate::graphql::schema::{
@@ -187,6 +188,73 @@ impl ClientMutation {
             },
         )
         .await
+    }
+
+    /// Register a public key the client signs `private_key_jwt` assertions
+    /// with. Existing credentials stay valid.
+    #[graphql(
+        guard = "ManagementGuard::new(ManagementScope::ClientCredentialsCreate, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::ClientCredentialsCreate))
+    )]
+    async fn add_client_public_key(
+        &self,
+        ctx: &Context<'_>,
+        input: AddClientPublicKeyInput,
+    ) -> Result<ClientCredentialPayload> {
+        let client_oid = decode_client_oid(ctx, &input.client_id)?;
+        let client_mutation_id = input.client_mutation_id.clone();
+        let result = integration::add_client_public_key(
+            request_context(ctx)?,
+            AddClientPublicKeyCommand {
+                client_oid,
+                expected_version: input.expected_version,
+                key: input.key,
+                expires_at: input.expires_at,
+                reason: input.reason,
+                client_mutation_id: input.client_mutation_id,
+            },
+        )
+        .await
+        .map_err(|error| app_error(ctx, error))?;
+        Ok(ClientCredentialPayload {
+            client_oid,
+            version: result.client.version,
+            credential: result.credential,
+            client_mutation_id,
+        })
+    }
+
+    /// Register a JWKS URI the client publishes its signing keys at. The key
+    /// set is fetched once to validate it and refreshed from the URI later.
+    #[graphql(
+        guard = "ManagementGuard::new(ManagementScope::ClientCredentialsCreate, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::ClientCredentialsCreate))
+    )]
+    async fn add_client_jwks_uri(
+        &self,
+        ctx: &Context<'_>,
+        input: AddClientJwksUriInput,
+    ) -> Result<ClientCredentialPayload> {
+        let client_oid = decode_client_oid(ctx, &input.client_id)?;
+        let client_mutation_id = input.client_mutation_id.clone();
+        let result = integration::add_client_jwks_uri(
+            request_context(ctx)?,
+            AddClientJwksUriCommand {
+                client_oid,
+                expected_version: input.expected_version,
+                jwks_uri: input.jwks_uri,
+                reason: input.reason,
+                client_mutation_id: input.client_mutation_id,
+            },
+        )
+        .await
+        .map_err(|error| app_error(ctx, error))?;
+        Ok(ClientCredentialPayload {
+            client_oid,
+            version: result.client.version,
+            credential: result.credential,
+            client_mutation_id,
+        })
     }
 
     /// Revoke a credential, permanently withdrawing what the client was issued.

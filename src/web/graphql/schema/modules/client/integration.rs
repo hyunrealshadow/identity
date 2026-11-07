@@ -6,7 +6,8 @@
 
 use identity_application::{
     client::{
-        ClientCredentialRecord, ClientCredentialRevokeResult, ClientFilter, ClientOrder,
+        AddClientJwksUriCommand, AddClientPublicKeyCommand, ClientCredentialRecord,
+        ClientCredentialResult, ClientCredentialRevokeResult, ClientFilter, ClientOrder,
         ClientPage, ClientPageRequest, ClientRecord, ClientSecretResult, ClientStateCommand,
         CreateClientCommand, CreateClientSecretCommand, RevokeClientCredentialCommand,
         UpdateClientCommand,
@@ -151,5 +152,31 @@ pub(crate) async fn revoke_client_credential(
         .services()
         .client_management()
         .revoke_client_credential(&authority, command)
+        .await
+}
+
+pub(crate) async fn add_client_public_key(
+    request: &RequestContext,
+    command: AddClientPublicKeyCommand,
+) -> Result<ClientCredentialResult, AppError> {
+    let authority = request_authority(request).await?;
+    request
+        .state
+        .services()
+        .client_management()
+        .add_client_public_key(&authority, command)
+        .await
+}
+
+pub(crate) async fn add_client_jwks_uri(
+    request: &RequestContext,
+    command: AddClientJwksUriCommand,
+) -> Result<ClientCredentialResult, AppError> {
+    let authority = request_authority(request).await?;
+    request
+        .state
+        .services()
+        .client_management()
+        .add_client_jwks_uri(&authority, command)
         .await
 }

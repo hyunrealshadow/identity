@@ -2,10 +2,11 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  keyExpiryInstant,
+  maskedSecretHint,
   settingsDraftFromClient,
   settingsForKind,
   settingsInput,
-  toggleAuthMethod,
   validateSettings,
 } from './client-form'
 
@@ -36,7 +37,6 @@ describe('client settings draft', () => {
       ],
       postLogoutRedirectUris: [],
       grantTypes: ['AUTHORIZATION_CODE' as const],
-      tokenEndpointAuthMethods: ['NONE' as const],
       allowPublicClientFlow: true,
       requirePushedAuthorizationRequests: true,
       skipConsent: false,
@@ -53,12 +53,6 @@ describe('client settings draft', () => {
     })
     expect(validateSettings(settingsForKind('machine'))).toEqual({})
     expect(
-      validateSettings({
-        ...settingsForKind('machine'),
-        tokenEndpointAuthMethods: ['NONE'],
-      }).grantTypes,
-    ).toBe('clientsGrantPublicMachine')
-    expect(
       validateSettings({ ...settingsForKind('machine'), grantTypes: ['REFRESH_TOKEN'] })
         .grantTypes,
     ).toBe('clientsGrantRefreshNeedsInteractive')
@@ -69,28 +63,20 @@ describe('client settings draft', () => {
   })
 })
 
-describe('token endpoint authentication methods', () => {
-  it('lets any methods combine, including none with secret methods', () => {
-    expect(toggleAuthMethod(['CLIENT_SECRET_BASIC'], 'NONE', true)).toEqual([
-      'CLIENT_SECRET_BASIC',
-      'NONE',
-    ])
-    expect(toggleAuthMethod(['CLIENT_SECRET_BASIC', 'NONE'], 'NONE', false)).toEqual([
-      'CLIENT_SECRET_BASIC',
-    ])
+describe('credentials', () => {
+  it('masks a secret hint without the server storing a mask', () => {
+    expect(maskedSecretHint('D9wk')).toBe('••••••••D9wk')
+    expect(maskedSecretHint('')).toBe('••••••••')
   })
 
-  it('requires a method and a secret method for client credentials', () => {
-    const machine = settingsForKind('machine')
-    expect(validateSettings({ ...machine, tokenEndpointAuthMethods: [] }).tokenEndpointAuthMethods).toBe(
-      'clientsAuthMethodRequired',
-    )
-    expect(validateSettings({ ...machine, tokenEndpointAuthMethods: ['NONE'] }).grantTypes).toBe(
-      'clientsGrantPublicMachine',
-    )
-    expect(
-      validateSettings({ ...machine, tokenEndpointAuthMethods: ['NONE', 'CLIENT_SECRET_BASIC'] })
-        .grantTypes,
-    ).toBeUndefined()
+  it('keeps a key valid through the chosen day in the viewer\'s time zone', () => {
+    expect(keyExpiryInstant('2027-03-01', 'Asia/Shanghai')).toBe('2027-03-01T16:00:00.000Z')
+    expect(keyExpiryInstant('2027-03-01', 'UTC')).toBe('2027-03-02T00:00:00.000Z')
+    expect(keyExpiryInstant('not a day', 'UTC')).toBeNull()
+  })
+
+  it('no longer sends token endpoint methods with the settings', () => {
+    expect(settingsInput(settingsForKind('spa'))).not.toHaveProperty('tokenEndpointAuthMethods')
+    expect(settingsInput(settingsForKind('spa')).allowPublicClientFlow).toBe(true)
   })
 })

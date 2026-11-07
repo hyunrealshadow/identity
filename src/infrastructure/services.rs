@@ -48,6 +48,7 @@ use crate::{
     config::WorkloadsConfig,
     crypto::{
         certificate_generator::CertificateGeneratorImpl,
+        client_public_key::ClientPublicKeyReaderImpl,
         data_protection::XChaCha20DataProtectionCipher, key::AsymmetricKeyGeneratorImpl,
         key_jwk::KeyJwkGeneratorImpl, key_rotation::KeyRotationMaterialGeneratorImpl,
         signing_algorithm::SigningAlgorithmDetectorImpl,
@@ -281,6 +282,7 @@ impl AppServices {
             client_management: ClientManagementService::new(
                 Arc::new(ClientManagementRepositoryImpl::new(db.clone())),
                 data_protector.clone(),
+                Arc::new(ClientPublicKeyReaderImpl),
             )
             .with_events(Arc::clone(&events)),
             oidc: OpenIdProviderService::new(settings.store())

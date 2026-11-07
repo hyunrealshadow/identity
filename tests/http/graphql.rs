@@ -331,8 +331,7 @@ async fn graphql_http_denies_client_management_without_management_authority() {
         (
             "createClient",
             r#"mutation { createClient(input: { name: "Orders", settings: {
-                platforms: [], grantTypes: [CLIENT_CREDENTIALS],
-                tokenEndpointAuthMethods: [CLIENT_SECRET_BASIC] } }) { clientId } }"#
+                platforms: [], grantTypes: [CLIENT_CREDENTIALS] } }) { clientId } }"#
                 .to_owned(),
         ),
         (

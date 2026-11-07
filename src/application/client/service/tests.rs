@@ -2,9 +2,9 @@ use identity_domain::openid_connect::{
     GrantType, OpenIdConnectClientPlatformType, TokenEndpointAuthMethod,
 };
 
-use super::{new_secret, validate_settings};
+use super::{new_secret, parse_jwks_uri, validate_settings};
 use crate::{
-    client::model::{ClientPlatform, ClientProtocolSettings},
+    client::model::{ClientPlatform, ClientProtocolSettings, derived_auth_methods},
     error::{code::AppErrorCode, codes::client::ClientErrorCode},
 };
 
@@ -23,6 +23,7 @@ fn settings(
             .collect(),
         post_logout_redirect_uris: Vec::new(),
         grant_types: grant_types.to_vec(),
+        // Submitted methods are ignored; only the public flow switch counts.
         token_endpoint_auth_methods: vec![method],
         allow_public_client_flow: method == TokenEndpointAuthMethod::None,
         require_pushed_authorization_requests: false,
@@ -132,18 +133,6 @@ fn grant_and_authentication_combinations_are_enforced() {
             ClientErrorCode::RefreshTokenRequiresInteractiveGrant,
         ),
         (
-            web(),
-            vec![GrantType::ClientCredentials],
-            TokenEndpointAuthMethod::None,
-            ClientErrorCode::PublicClientGrantNotAllowed,
-        ),
-        (
-            web(),
-            vec![GrantType::AuthorizationCode],
-            TokenEndpointAuthMethod::PrivateKeyJwt,
-            ClientErrorCode::UnsupportedAuthMethod,
-        ),
-        (
             Vec::new(),
             vec![GrantType::AuthorizationCode],
             TokenEndpointAuthMethod::ClientSecretBasic,
@@ -183,64 +172,54 @@ fn grant_and_authentication_combinations_are_enforced() {
 }
 
 #[test]
-fn auth_methods_combine_and_client_credentials_needs_a_secret() {
-    let web = || {
-        vec![(
-            OpenIdConnectClientPlatformType::Web,
-            &["https://app.example.com/cb"][..],
-        )]
+fn auth_methods_follow_credentials_and_the_public_flow() {
+    use TokenEndpointAuthMethod::{
+        ClientSecretBasic, ClientSecretPost, None as NoAuth, PrivateKeyJwt,
     };
-    let mut combined = settings(
-        web(),
-        &[GrantType::AuthorizationCode],
-        TokenEndpointAuthMethod::ClientSecretPost,
-    );
-    combined.token_endpoint_auth_methods = vec![
-        TokenEndpointAuthMethod::None,
-        TokenEndpointAuthMethod::ClientSecretPost,
-        TokenEndpointAuthMethod::ClientSecretBasic,
-        TokenEndpointAuthMethod::ClientSecretPost,
-    ];
+    assert!(derived_auth_methods(false, false, false).is_empty());
     assert_eq!(
-        validate_settings(combined)
-            .unwrap()
-            .token_endpoint_auth_methods,
-        [
-            TokenEndpointAuthMethod::ClientSecretBasic,
-            TokenEndpointAuthMethod::ClientSecretPost,
-            TokenEndpointAuthMethod::None,
-        ]
+        derived_auth_methods(true, false, false),
+        [ClientSecretBasic, ClientSecretPost]
     );
+    assert_eq!(derived_auth_methods(false, true, false), [PrivateKeyJwt]);
+    assert_eq!(
+        derived_auth_methods(true, true, true),
+        [ClientSecretBasic, ClientSecretPost, PrivateKeyJwt, NoAuth]
+    );
+}
 
-    // A client with the public flow may keep a secret for client credentials.
-    let mut machine = settings(
+#[test]
+fn submitted_auth_methods_are_ignored() {
+    // Client credentials no longer depends on a declared method: the client
+    // simply cannot authenticate until it has a credential.
+    let validated = validate_settings(settings(
         Vec::new(),
         &[GrantType::ClientCredentials],
-        TokenEndpointAuthMethod::None,
-    );
-    machine.token_endpoint_auth_methods = vec![
-        TokenEndpointAuthMethod::None,
-        TokenEndpointAuthMethod::ClientSecretBasic,
-    ];
-    assert!(validate_settings(machine).is_ok());
+        TokenEndpointAuthMethod::PrivateKeyJwt,
+    ))
+    .unwrap();
+    assert!(validated.token_endpoint_auth_methods.is_empty());
+    assert!(!validated.allow_public_client_flow);
+}
 
-    let public_only = settings(
-        Vec::new(),
-        &[GrantType::ClientCredentials],
-        TokenEndpointAuthMethod::None,
-    );
-    assert_eq!(
-        rejected(public_only),
-        ClientErrorCode::PublicClientGrantNotAllowed.code()
-    );
-
-    let mut empty = settings(
-        web(),
-        &[GrantType::AuthorizationCode],
-        TokenEndpointAuthMethod::None,
-    );
-    empty.token_endpoint_auth_methods = Vec::new();
-    assert_eq!(rejected(empty), ClientErrorCode::ValidationFailed.code());
+#[test]
+fn jwks_uris_must_be_public_https() {
+    assert!(parse_jwks_uri(" https://client.example.com/.well-known/jwks.json ").is_ok());
+    for uri in [
+        "",
+        "http://client.example.com/jwks",
+        "https://localhost/jwks",
+        "https://10.0.0.1/jwks",
+        "https://user:pass@client.example.com/jwks",
+        "https://client.example.com/jwks#keys",
+        "not a url",
+    ] {
+        assert_eq!(
+            parse_jwks_uri(uri).unwrap_err().code(),
+            ClientErrorCode::InvalidJwksUri.code(),
+            "{uri}"
+        );
+    }
 }
 
 #[test]

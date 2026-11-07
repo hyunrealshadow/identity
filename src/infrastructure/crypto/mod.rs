@@ -1,5 +1,6 @@
 pub mod certificate;
 pub mod certificate_generator;
+pub mod client_public_key;
 pub mod data_protection;
 pub mod encryption;
 pub mod encryption_algorithm;

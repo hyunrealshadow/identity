@@ -35,6 +35,7 @@ use crate::database::{
         rbac_management::support::{
             Binds, CursorComparison, escape_like, keyset_condition, order_is_descending, page_flags,
         },
+        shared::decode_nonnullable_expiry,
     },
 };
 
@@ -92,10 +93,8 @@ pub(super) async fn load_records<C: ConnectionTrait>(
         .map(|model| {
             let row = metadata.remove(&model.id).ok_or_else(corrupt)?;
             let metadata = to_metadata(row).map_err(|_| corrupt())?;
+            // Empty while the client has no usable credential and no public flow.
             let methods = metadata.effective_token_endpoint_auth_methods().to_vec();
-            if methods.is_empty() {
-                return Err(corrupt());
-            }
             Ok(ClientRecord {
                 oid: model.oid,
                 name: model.name,
@@ -168,8 +167,10 @@ pub(super) fn credential_record(
             .r#type
             .parse::<OpenIdConnectCredentialType>()
             .map_err(|_| corrupt())?,
-        hint: model.hint,
-        expires_at: model.expires_at.with_timezone(&Utc),
+        // Older secret hints were stored with a mask prefix; the presentation
+        // masks now, so only the identifying characters are returned.
+        hint: model.hint.trim_start_matches('•').to_owned(),
+        expires_at: decode_nonnullable_expiry(model.expires_at),
         revoked_at: model.revoked_at.map(|value| value.with_timezone(&Utc)),
         created_at: model.created_at.with_timezone(&Utc),
     })
@@ -181,6 +182,7 @@ pub(super) async fn list_credentials<C: ConnectionTrait>(
 ) -> Result<Vec<ClientCredentialRecord>, ClientManagementRepositoryError> {
     CredentialEntity::find()
         .filter(CredentialColumn::ClientId.eq(client_id))
+        .filter(CredentialColumn::RevokedAt.is_null())
         .order_by_desc(CredentialColumn::CreatedAt)
         .order_by_desc(CredentialColumn::Id)
         .all(db)

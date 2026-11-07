@@ -257,7 +257,7 @@ export function ClientScopesPage() {
 
   return (
     <div className="space-y-4">
-      <Alert status="default">
+      <Alert status="default" className="console-card border border-border">
         <Alert.Indicator />
         <Alert.Content>
           <Alert.Title>{t('clientsScopesExplainTitle')}</Alert.Title>
@@ -265,7 +265,7 @@ export function ClientScopesPage() {
         </Alert.Content>
       </Alert>
       {client && !complete ? (
-        <Alert status="warning">
+        <Alert status="warning" className="console-card border border-border">
           <Alert.Indicator />
           <Alert.Content>
             <Alert.Description>
@@ -362,6 +362,8 @@ export function ClientScopesPage() {
           loading={loading || query.refreshing}
           loadingLabel={t('tableLoading')}
           minWidth={640}
+          density="compact"
+          maxHeight="clamp(12rem, calc(100dvh - 26rem), 32rem)"
           columns={[
             { id: 'scope', label: t('clientsScopeColumn'), primary: true },
             { id: 'granted', label: t('clientsScopeClientGranted'), primary: false },

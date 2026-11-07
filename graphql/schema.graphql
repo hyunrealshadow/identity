@@ -28,6 +28,35 @@ type AccountSecurity {
 	recoveryCodesRemaining: Int!
 }
 
+"""
+Register a JWKS URI for `private_key_jwt`. Its keys refresh from the URI.
+"""
+input AddClientJwksUriInput {
+	clientId: ID!
+	expectedVersion: UUID!
+	jwksUri: String!
+	reason: String! = ""
+	clientMutationId: String
+}
+
+"""
+Register a public key for `private_key_jwt`.
+"""
+input AddClientPublicKeyInput {
+	clientId: ID!
+	expectedVersion: UUID!
+	"""
+	A PEM public key, a PEM certificate or a single public JWK.
+	"""
+	key: String!
+	"""
+	Required unless `key` is a certificate, whose own expiry is used.
+	"""
+	expiresAt: DateTime
+	reason: String! = ""
+	clientMutationId: String
+}
+
 input AddGroupMemberInput {
 	groupId: ID!
 	userId: ID!
@@ -135,6 +164,7 @@ type Client implements Node {
 	updatedAt: DateTime
 	"""
 	Credential metadata, newest first.
+	Credentials not revoked, expired ones included, newest first.
 	"""
 	credentials: [ClientCredential!]! @access(policy: {scopes: ["management.client_credential.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	"""
@@ -144,8 +174,8 @@ type Client implements Node {
 }
 
 """
-Token endpoint client authentication. Key-based `PRIVATE_KEY_JWT` is shown
-for existing registrations only.
+Token endpoint client authentication. Derived from the client's active
+credentials and its public flow switch; it is never set directly.
 """
 enum ClientAuthMethod {
 	CLIENT_SECRET_BASIC
@@ -178,10 +208,15 @@ type ClientCredential {
 	id: ID!
 	type: ClientCredentialKind!
 	"""
-	Masked identification, such as the last characters of a secret.
+	Identifies the credential without revealing it: the last four
+	characters of a secret, a key's thumbprint or `kid`, or the JWKS URI.
+	Masking a secret hint is left to the presentation.
 	"""
 	hint: String!
-	expiresAt: DateTime!
+	"""
+	`null` for a JWKS URI, whose keys refresh from the URI.
+	"""
+	expiresAt: DateTime
 	revokedAt: DateTime
 	"""
 	Neither revoked nor expired.
@@ -349,7 +384,10 @@ input ClientSettingsInput {
 	platforms: [ClientPlatformInput!]!
 	postLogoutRedirectUris: [String!]! = []
 	grantTypes: [ClientGrantType!]!
-	tokenEndpointAuthMethods: [ClientAuthMethod!]!
+	"""
+	Lets the client authenticate without a credential (PKCE public client
+	flow); this also lists `NONE` among its token endpoint methods.
+	"""
 	allowPublicClientFlow: Boolean! = false
 	requirePushedAuthorizationRequests: Boolean! = false
 	skipConsent: Boolean! = false
@@ -883,6 +921,16 @@ type MutationRoot {
 	what the client was already issued.
 	"""
 	rotateClientSecret(input: RotateClientSecretInput!): ClientSecretPayload! @access(policy: {scopes: ["management.client_credential.rotate"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	"""
+	Register a public key the client signs `private_key_jwt` assertions
+	with. Existing credentials stay valid.
+	"""
+	addClientPublicKey(input: AddClientPublicKeyInput!): ClientCredentialPayload! @access(policy: {scopes: ["management.client_credential.create"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	"""
+	Register a JWKS URI the client publishes its signing keys at. The key
+	set is fetched once to validate it and refreshed from the URI later.
+	"""
+	addClientJwksUri(input: AddClientJwksUriInput!): ClientCredentialPayload! @access(policy: {scopes: ["management.client_credential.create"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
 	"""
 	Revoke a credential, permanently withdrawing what the client was issued.
 	"""

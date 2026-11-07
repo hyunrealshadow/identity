@@ -10,10 +10,12 @@
 use chrono::{Duration, Utc};
 use identity_application::{
     client::{
-        ClientCredentialRecord, ClientCredentialRevokeResult, ClientEntityKind,
-        ClientManagementRepositoryError, ClientProtocolSettings, ClientRecord, ClientSecretResult,
-        ClientStateTransaction, CreateClientSecretTransaction, CreateClientTransaction,
-        IssuedClientSecret, RevokeClientCredentialTransaction, UpdateClientTransaction,
+        AddClientCredentialTransaction, ClientCredentialRecord, ClientCredentialResult,
+        ClientCredentialRevokeResult, ClientEntityKind, ClientManagementRepositoryError,
+        ClientProtocolSettings, ClientRecord, ClientSecretResult, ClientStateTransaction,
+        CreateClientSecretTransaction, CreateClientTransaction, IssuedClientSecret,
+        RevokeClientCredentialTransaction, UpdateClientTransaction, derived_auth_methods,
+        max_active_credentials,
     },
     rbac::RbacManagementAuthority,
 };
@@ -22,12 +24,12 @@ use identity_domain::{
     client::model::ClientOid,
     openid_connect::{
         GrantType, OpenIdConnectClientPlatform, OpenIdConnectClientSettings,
-        OpenIdConnectCredentialOid, OpenIdConnectCredentialType,
+        OpenIdConnectCredentialData, OpenIdConnectCredentialOid, OpenIdConnectCredentialType,
     },
 };
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, DatabaseTransaction, EntityTrait,
-    ModelTrait, QueryFilter, QuerySelect, Set, TransactionTrait,
+    ModelTrait, PaginatorTrait, QueryFilter, QuerySelect, Set, TransactionTrait,
 };
 use serde_json::{Value, from_value, json, to_value};
 use uuid::Uuid;
@@ -61,6 +63,7 @@ use crate::database::{
         openid_connect::registration::cors_origins_for_client,
         openid_connect_credential::serialize_data,
         rbac_management::{audit::append_semantic_audit, authority::recheck_authority},
+        shared::encode_nonnullable_expiry,
     },
 };
 
@@ -186,19 +189,11 @@ async fn write_protocol(
         json!([])
     };
     let post_logout = json!(settings.post_logout_redirect_uris);
-    let methods = json!(
-        settings
-            .token_endpoint_auth_methods
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>()
-    );
     match existing {
         Some(row) => {
             let mut active: client_openid_connect::ActiveModel = row.into();
             active.grant_types = Set(Some(grant_types_json(&settings.grant_types)));
             active.response_types = Set(Some(response_types));
-            active.token_endpoint_auth_methods = Set(Some(methods));
             active.post_logout_redirect_uris = Set(Some(post_logout));
             active.settings = Set(stored_json);
             active.updated_at = Set(Some(now.into()));
@@ -209,7 +204,7 @@ async fn write_protocol(
                 client_id: Set(client_id),
                 grant_types: Set(Some(grant_types_json(&settings.grant_types))),
                 response_types: Set(Some(response_types)),
-                token_endpoint_auth_methods: Set(Some(methods)),
+                token_endpoint_auth_methods: Set(Some(json!([]))),
                 post_logout_redirect_uris: Set(Some(post_logout)),
                 settings: Set(stored_json),
                 created_at: Set(now.into()),
@@ -260,6 +255,72 @@ async fn write_protocol(
         .await
         .map_err(storage)?;
     }
+    sync_auth_methods(txn, client_id).await
+}
+
+/// Refuse a new credential when the client already holds the maximum number of
+/// usable ones of that kind. Runs after the client row is locked, so
+/// concurrent additions are serialized.
+async fn ensure_credential_capacity(
+    txn: &DatabaseTransaction,
+    client_id: i64,
+    kind: &OpenIdConnectCredentialType,
+) -> Result<(), ClientManagementRepositoryError> {
+    let active = CredentialEntity::find()
+        .filter(CredentialColumn::ClientId.eq(client_id))
+        .filter(CredentialColumn::Type.eq(kind.to_string()))
+        .filter(CredentialColumn::RevokedAt.is_null())
+        .filter(CredentialColumn::ExpiresAt.gt(Utc::now()))
+        .count(txn)
+        .await
+        .map_err(storage)?;
+    let max = max_active_credentials(kind);
+    if usize::try_from(active).unwrap_or(usize::MAX) >= max {
+        return Err(ClientManagementRepositoryError::CredentialLimitReached { max });
+    }
+    Ok(())
+}
+
+/// Re-derive the token endpoint methods from the client's usable credentials
+/// and its public flow switch. Called inside every write that changes either,
+/// so the stored methods never drift from what the client can actually prove.
+async fn sync_auth_methods(
+    txn: &DatabaseTransaction,
+    client_id: i64,
+) -> Result<(), ClientManagementRepositoryError> {
+    let row = OpenIdConnectEntity::find()
+        .filter(OpenIdConnectColumn::ClientId.eq(client_id))
+        .one(txn)
+        .await
+        .map_err(storage)?
+        .ok_or_else(corrupt)?;
+    let settings =
+        from_value::<OpenIdConnectClientSettings>(row.settings.clone()).map_err(|_| corrupt())?;
+    let usable: Vec<String> = CredentialEntity::find()
+        .filter(CredentialColumn::ClientId.eq(client_id))
+        .filter(CredentialColumn::RevokedAt.is_null())
+        .filter(CredentialColumn::ExpiresAt.gt(Utc::now()))
+        .select_only()
+        .column(CredentialColumn::Type)
+        .into_tuple()
+        .all(txn)
+        .await
+        .map_err(storage)?;
+    let has = |kind: OpenIdConnectCredentialType| usable.iter().any(|row| *row == kind.to_string());
+    let methods = derived_auth_methods(
+        has(OpenIdConnectCredentialType::ClientSecret),
+        has(OpenIdConnectCredentialType::ClientPublicKey)
+            || has(OpenIdConnectCredentialType::ClientJsonWebKeySet),
+        settings.allow_public_client_flow,
+    );
+    let methods = json!(methods.iter().map(ToString::to_string).collect::<Vec<_>>());
+    if row.token_endpoint_auth_methods.as_ref() == Some(&methods) {
+        return Ok(());
+    }
+    let mut active: client_openid_connect::ActiveModel = row.into();
+    active.token_endpoint_auth_methods = Set(Some(methods));
+    active.updated_at = Set(Some(Utc::now().into()));
+    active.update(txn).await.map_err(storage)?;
     Ok(())
 }
 
@@ -496,6 +557,7 @@ pub(super) async fn create_secret(
         }
         None => None,
     };
+    ensure_credential_capacity(&txn, model.id, &OpenIdConnectCredentialType::ClientSecret).await?;
     let now = Utc::now();
     let serialized = serialize_data(command.secret.data.clone());
     let credential = client_openid_connect_credential::ActiveModel {
@@ -514,6 +576,7 @@ pub(super) async fn create_secret(
     .await
     .map_err(storage)?;
     let credential = credential_record(credential)?;
+    sync_auth_methods(&txn, model.id).await?;
     // An additional secret only widens how the client may authenticate.
     // Rotation also revokes the old secret, which withdraws what it obtained.
     finish(
@@ -552,6 +615,7 @@ pub(super) async fn revoke_credential(
     let model = lock_client(&txn, command.client_oid, command.expected_version).await?;
     let credential = lock_credential(&txn, model.id, command.credential_oid).await?;
     let credential = revoke(&txn, credential).await?;
+    sync_auth_methods(&txn, model.id).await?;
     finish(
         txn,
         model,
@@ -562,6 +626,64 @@ pub(super) async fn revoke_credential(
     )
     .await?;
     Ok(ClientCredentialRevokeResult {
+        client: reload(db, command.client_oid).await?,
+        credential,
+    })
+}
+
+pub(super) async fn add_credential(
+    db: &DatabaseConnection,
+    command: AddClientCredentialTransaction,
+) -> Result<ClientCredentialResult, ClientManagementRepositoryError> {
+    let txn = begin(
+        db,
+        &command.authority,
+        ManagementScope::ClientCredentialsCreate,
+    )
+    .await?;
+    let model = lock_client(&txn, command.client_oid, command.expected_version).await?;
+    let kind = match &command.data {
+        OpenIdConnectCredentialData::ClientSecret { .. } => {
+            OpenIdConnectCredentialType::ClientSecret
+        }
+        OpenIdConnectCredentialData::ClientPublicKey { .. } => {
+            OpenIdConnectCredentialType::ClientPublicKey
+        }
+        OpenIdConnectCredentialData::ClientJsonWebKeySet { .. } => {
+            OpenIdConnectCredentialType::ClientJsonWebKeySet
+        }
+    };
+    ensure_credential_capacity(&txn, model.id, &kind).await?;
+    let now = Utc::now();
+    let serialized = serialize_data(command.data);
+    let credential = client_openid_connect_credential::ActiveModel {
+        oid: Set(command.credential_oid),
+        client_id: Set(model.id),
+        r#type: Set(serialized.type_),
+        data: Set(serialized.data),
+        hint: Set(command.hint.unwrap_or(serialized.hint)),
+        expires_at: Set(encode_nonnullable_expiry(command.expires_at)),
+        revoked_at: Set(None),
+        created_at: Set(now.into()),
+        updated_at: Set(None),
+        ..Default::default()
+    }
+    .insert(&txn)
+    .await
+    .map_err(storage)?;
+    let credential = credential_record(credential)?;
+    sync_auth_methods(&txn, model.id).await?;
+    // An additional key only widens how the client may authenticate.
+    finish(
+        txn,
+        model,
+        false,
+        command.action,
+        &command.authority,
+        &command.reason,
+    )
+    .await?;
+    Ok(ClientCredentialResult {
         client: reload(db, command.client_oid).await?,
         credential,
     })

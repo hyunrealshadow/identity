@@ -1,5 +1,6 @@
+import { parseDate } from '@internationalized/date'
+
 import type {
-  ClientAuthMethod,
   ClientGrantType,
   ClientOAuthVersion,
   ClientSettingsInput,
@@ -14,14 +15,6 @@ export const SELECTABLE_GRANT_TYPES: readonly ClientGrantType[] = [
   'DEVICE_CODE',
 ]
 
-/** Methods an administrator can select; key-based methods are display-only. */
-export const SELECTABLE_AUTH_METHODS: readonly ClientAuthMethod[] = [
-  'CLIENT_SECRET_BASIC',
-  'CLIENT_SECRET_POST',
-  'CLIENT_SECRET_JWT',
-  'NONE',
-]
-
 export type ClientKind = 'web' | 'spa' | 'native' | 'machine'
 
 /** Protocol settings as edited: URI lists are one entry per line. */
@@ -30,7 +23,6 @@ export interface ClientSettingsDraft {
   nativeRedirectUris: string
   postLogoutRedirectUris: string
   grantTypes: ClientGrantType[]
-  tokenEndpointAuthMethods: ClientAuthMethod[]
   allowPublicClientFlow: boolean
   requirePushedAuthorizationRequests: boolean
   skipConsent: boolean
@@ -46,13 +38,11 @@ export type ClientSettingsField =
   | 'nativeRedirectUris'
   | 'postLogoutRedirectUris'
   | 'grantTypes'
-  | 'tokenEndpointAuthMethods'
 
 interface ClientSettingsSource {
   platforms: ReadonlyArray<{ platform: string; redirectUris: readonly string[] }>
   postLogoutRedirectUris: readonly string[]
   grantTypes: readonly ClientGrantType[]
-  tokenEndpointAuthMethods: readonly ClientAuthMethod[]
   allowPublicClientFlow: boolean
   requirePushedAuthorizationRequests: boolean
   skipConsent: boolean
@@ -69,7 +59,6 @@ export function settingsForKind(kind: ClientKind): ClientSettingsDraft {
     nativeRedirectUris: '',
     postLogoutRedirectUris: '',
     grantTypes: ['AUTHORIZATION_CODE', 'REFRESH_TOKEN'],
-    tokenEndpointAuthMethods: ['CLIENT_SECRET_BASIC'],
     allowPublicClientFlow: false,
     requirePushedAuthorizationRequests: false,
     skipConsent: false,
@@ -82,14 +71,9 @@ export function settingsForKind(kind: ClientKind): ClientSettingsDraft {
     case 'web':
       return base
     case 'spa':
-      return {
-        ...base,
-        tokenEndpointAuthMethods: ['NONE'],
-        allowPublicClientFlow: true,
-        corsEnabled: true,
-      }
+      return { ...base, allowPublicClientFlow: true, corsEnabled: true }
     case 'native':
-      return { ...base, tokenEndpointAuthMethods: ['NONE'], allowPublicClientFlow: true }
+      return { ...base, allowPublicClientFlow: true }
     case 'machine':
       return { ...base, grantTypes: ['CLIENT_CREDENTIALS'] }
   }
@@ -108,7 +92,6 @@ export function settingsDraftFromClient(
     nativeRedirectUris: uris('NATIVE'),
     postLogoutRedirectUris: client.postLogoutRedirectUris.join('\n'),
     grantTypes: [...client.grantTypes],
-    tokenEndpointAuthMethods: [...client.tokenEndpointAuthMethods],
     allowPublicClientFlow: client.allowPublicClientFlow,
     requirePushedAuthorizationRequests:
       client.requirePushedAuthorizationRequests,
@@ -144,15 +127,6 @@ export function settingsInput(draft: ClientSettingsDraft): ClientSettingsInput {
     grantTypes: SELECTABLE_GRANT_TYPES.filter((grant) =>
       draft.grantTypes.includes(grant),
     ),
-    // Stable order so an unchanged selection compares equal to the stored one.
-    tokenEndpointAuthMethods: [
-      ...SELECTABLE_AUTH_METHODS.filter((method) =>
-        draft.tokenEndpointAuthMethods.includes(method),
-      ),
-      ...draft.tokenEndpointAuthMethods.filter(
-        (method) => !SELECTABLE_AUTH_METHODS.includes(method),
-      ),
-    ],
     allowPublicClientFlow: draft.allowPublicClientFlow,
     requirePushedAuthorizationRequests: draft.requirePushedAuthorizationRequests,
     skipConsent: draft.skipConsent,
@@ -163,27 +137,9 @@ export function settingsInput(draft: ClientSettingsDraft): ClientSettingsInput {
   }
 }
 
-export function isSecretMethod(method: ClientAuthMethod): boolean {
-  return (
-    method === 'CLIENT_SECRET_BASIC' ||
-    method === 'CLIENT_SECRET_POST' ||
-    method === 'CLIENT_SECRET_JWT'
-  )
-}
-
-/** Whether any configured method authenticates with a client secret. */
-export function usesClientSecret(methods: readonly ClientAuthMethod[]): boolean {
-  return methods.some(isSecretMethod)
-}
-
-/** Turn one method on or off; any combination is allowed. */
-export function toggleAuthMethod(
-  methods: readonly ClientAuthMethod[],
-  method: ClientAuthMethod,
-  on: boolean,
-): ClientAuthMethod[] {
-  const rest = methods.filter((value) => value !== method)
-  return on ? [...rest, method] : rest
+/** Whether a kind of client keeps a secret, so creating one leads to issuing it. */
+export function kindUsesSecret(kind: ClientKind): boolean {
+  return kind === 'web' || kind === 'machine'
 }
 
 /**
@@ -208,17 +164,6 @@ export function validateSettings(
     !grants.includes('DEVICE_CODE')
   ) {
     errors.grantTypes = 'clientsGrantRefreshNeedsInteractive'
-  } else if (
-    grants.includes('CLIENT_CREDENTIALS') &&
-    !usesClientSecret(draft.tokenEndpointAuthMethods)
-  ) {
-    errors.grantTypes = 'clientsGrantPublicMachine'
-  }
-  const methods = draft.tokenEndpointAuthMethods
-  if (methods.length === 0) {
-    errors.tokenEndpointAuthMethods = 'clientsAuthMethodRequired'
-  } else if (methods.some((method) => !SELECTABLE_AUTH_METHODS.includes(method))) {
-    errors.tokenEndpointAuthMethods = 'clientsAuthMethodUnsupported'
   }
   if (
     grants.includes('AUTHORIZATION_CODE') &&
@@ -235,7 +180,6 @@ export function settingsFieldFor(path: string): ClientSettingsField | undefined 
   if (path.startsWith('platforms')) return 'webRedirectUris'
   if (path.startsWith('postLogoutRedirectUris')) return 'postLogoutRedirectUris'
   if (path.startsWith('grantTypes')) return 'grantTypes'
-  if (path.startsWith('tokenEndpointAuthMethods')) return 'tokenEndpointAuthMethods'
   return undefined
 }
 
@@ -277,4 +221,42 @@ export function clientFieldErrors(
  */
 export function formSeed(client: { version: string; updatedAt?: string | null }): string {
   return `${client.version}:${client.updatedAt ?? ''}`
+}
+
+/** Usable credentials a client may hold at once, per kind (mirrors the server). */
+export const MAX_ACTIVE_CREDENTIALS = {
+  CLIENT_SECRET: 5,
+  PUBLIC_KEY: 5,
+  JWKS_URI: 1,
+} as const
+
+/** Bullets shown before a secret's last characters; the server stores no mask. */
+const SECRET_MASK = '••••••••'
+
+/** A secret hint as shown: a fixed mask followed by the stored last characters. */
+export function maskedSecretHint(hint: string): string {
+  return `${SECRET_MASK}${hint}`
+}
+
+/** A long identifier (a key thumbprint) shortened for a table cell. */
+export function shortHint(hint: string, keep = 12): string {
+  return hint.length > keep ? `${hint.slice(0, keep)}…` : hint
+}
+
+/**
+ * The instant a key chosen to expire "on" a calendar day stops working: the
+ * start of the following day in the viewer's time zone, so the whole chosen
+ * day stays valid.
+ */
+export function keyExpiryInstant(day: string, timeZone: string): string | null {
+  try {
+    return parseDate(day).add({ days: 1 }).toDate(timeZone).toISOString()
+  } catch {
+    return null
+  }
+}
+
+/** Whether pasted key text is a certificate, which brings its own expiry. */
+export function isCertificatePem(value: string): boolean {
+  return value.includes('-----BEGIN CERTIFICATE-----')
 }
