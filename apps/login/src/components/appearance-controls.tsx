@@ -9,7 +9,7 @@ import {
 import { Separator } from '@identity/ui/components/separator'
 import { useRouterState } from '@tanstack/react-router'
 import { Check, ChevronDown, Monitor, Moon, Sun } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 import {
   applyTheme,
@@ -35,6 +35,9 @@ export function AppearanceControls({ locale }: { locale: Locale }) {
     },
   })
   const currentHref = useRouterState({ select: (state) => state.location.href })
+  // Menus open below the whole control, not below the inner button: the pill's
+  // padding would otherwise let the popup start inside its border.
+  const controlsRef = useRef<HTMLDivElement>(null)
   const [theme, setTheme] = useState<ThemePreference>(pageTheme)
   const t = (key: Parameters<typeof translate>[1]) => translate(locale, key)
   const languagePreference = new URL(currentHref, 'https://identity.invalid')
@@ -84,7 +87,7 @@ export function AppearanceControls({ locale }: { locale: Locale }) {
 
   return (
     <div className="flex shrink-0 items-center justify-end gap-1">
-      <div className="js-only flex items-center gap-1 rounded-lg border bg-card/90 p-1 shadow-xs backdrop-blur">
+      <div ref={controlsRef} className="js-only flex items-center gap-1 rounded-lg border bg-card/90 p-1 shadow-xs backdrop-blur">
         <DropdownMenu>
           <DropdownMenuTrigger
             render={(
@@ -99,7 +102,7 @@ export function AppearanceControls({ locale }: { locale: Locale }) {
             {languageLabel}
             <ChevronDown className="size-3.5 text-muted-foreground" aria-hidden="true" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-36">
+          <DropdownMenuContent align="end" anchor={() => controlsRef.current} className="min-w-36">
             <DropdownMenuRadioGroup
               aria-label={t('language')}
               value={followsBrowser ? BROWSER_LOCALE_VALUE : locale}
@@ -126,7 +129,7 @@ export function AppearanceControls({ locale }: { locale: Locale }) {
           >
             <ThemeIcon className="text-muted-foreground" aria-hidden="true" />
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="min-w-40">
+          <DropdownMenuContent align="end" anchor={() => controlsRef.current} className="min-w-36">
             <DropdownMenuRadioGroup
               aria-label={t('accountTheme')}
               value={theme}
@@ -145,40 +148,41 @@ export function AppearanceControls({ locale }: { locale: Locale }) {
         </DropdownMenu>
       </div>
 
-      <div className="no-js-only flex items-start gap-1">
-        <details name="appearance-preference" className="relative rounded-md border border-border bg-card/95 shadow-sm">
-          <summary className="flex h-10 cursor-pointer list-none items-center gap-1 px-3 text-xs font-medium [&::-webkit-details-marker]:hidden">
+      <div className="no-js-only relative flex items-center gap-1 rounded-lg border bg-card/90 p-1 shadow-xs">
+        <details name="appearance-preference">
+          <summary className="flex h-8 cursor-pointer list-none items-center gap-1 rounded-md px-2 text-xs font-medium hover:bg-muted [&::-webkit-details-marker]:hidden">
             {languageLabel}
-            <span aria-hidden="true">▾</span>
+            <ChevronDown className="size-3.5 text-muted-foreground" aria-hidden="true" />
           </summary>
-          <div className="absolute right-0 mt-1 grid min-w-32 gap-1 rounded-md border border-border bg-card p-1 shadow-lg">
-            <a className="flex items-center gap-2 rounded-md px-3 py-2 text-xs hover:bg-muted" href={hrefWithLocale(BROWSER_LOCALE_VALUE)}>
+          <div className="appearance-menu absolute -inset-x-px top-full z-50 mt-1 grid rounded-md bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10">
+            <a className="relative flex cursor-pointer items-center gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm hover:bg-accent hover:text-accent-foreground" href={hrefWithLocale(BROWSER_LOCALE_VALUE)}>
               <span>{t('accountLocaleBrowser')}</span>
-              {followsBrowser ? <Check className="ms-auto size-4" aria-hidden="true" /> : null}
+              {followsBrowser ? <Check className="pointer-events-none absolute right-2 size-4" aria-hidden="true" /> : null}
             </a>
-            <a className="flex items-center gap-2 rounded-md px-3 py-2 text-xs hover:bg-muted" href={hrefWithLocale('en-US')}>
+            <a className="relative flex cursor-pointer items-center gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm hover:bg-accent hover:text-accent-foreground" href={hrefWithLocale('en-US')}>
               <span>English</span>
-              {!followsBrowser && locale === 'en-US' ? <Check className="ms-auto size-4" aria-hidden="true" /> : null}
+              {!followsBrowser && locale === 'en-US' ? <Check className="pointer-events-none absolute right-2 size-4" aria-hidden="true" /> : null}
             </a>
-            <a className="flex items-center gap-2 rounded-md px-3 py-2 text-xs hover:bg-muted" href={hrefWithLocale('zh-CN')}>
+            <a className="relative flex cursor-pointer items-center gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm hover:bg-accent hover:text-accent-foreground" href={hrefWithLocale('zh-CN')}>
               <span>简体中文</span>
-              {!followsBrowser && locale === 'zh-CN' ? <Check className="ms-auto size-4" aria-hidden="true" /> : null}
+              {!followsBrowser && locale === 'zh-CN' ? <Check className="pointer-events-none absolute right-2 size-4" aria-hidden="true" /> : null}
             </a>
           </div>
         </details>
-        <details name="appearance-preference" className="relative rounded-md border border-border bg-card/95 shadow-sm">
-          <summary className="flex size-10 cursor-pointer list-none items-center justify-center [&::-webkit-details-marker]:hidden" aria-label={t('accountTheme')}>
+        <Separator orientation="vertical" className="data-vertical:h-4 data-vertical:self-center" />
+        <details name="appearance-preference">
+          <summary className="flex size-8 cursor-pointer list-none items-center justify-center rounded-md hover:bg-muted [&::-webkit-details-marker]:hidden" aria-label={t('accountTheme')}>
             <ThemeIcon className="size-4 text-muted-foreground" aria-hidden="true" />
           </summary>
-          <div className="absolute right-0 mt-1 grid min-w-40 gap-1 rounded-md border border-border bg-card p-1 shadow-lg">
+          <div className="appearance-menu absolute -inset-x-px top-full z-50 mt-1 grid rounded-md bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10">
             {themeOptions.map(({ id, label, icon: Icon }) => (
               <form key={id} action="/appearance" method="post">
                 <input type="hidden" name="theme" value={id} />
                 <input type="hidden" name="return_to" value={currentHref} />
-                <button type="submit" className="flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-xs hover:bg-muted">
+                <button type="submit" className="relative flex w-full cursor-pointer items-center gap-2 rounded-sm py-1.5 pr-8 pl-2 text-left text-sm hover:bg-accent hover:text-accent-foreground">
                   <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
                   <span>{label}</span>
-                  {theme === id ? <Check className="ms-auto size-4" aria-hidden="true" /> : null}
+                  {theme === id ? <Check className="pointer-events-none absolute right-2 size-4" aria-hidden="true" /> : null}
                 </button>
               </form>
             ))}

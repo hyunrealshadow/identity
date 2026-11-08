@@ -37,10 +37,10 @@ it('keeps both preference variants inside one normal-flow wrapper', () => {
   const noJsVariant = wrapper.querySelector('.no-js-only')
   expect(jsVariant?.className).not.toContain('absolute')
   expect(noJsVariant?.className).not.toContain('absolute')
+  expect(noJsVariant?.className).toContain('relative')
   expect(screen.getByRole('button', { name: '语言: 跟随浏览器' })).toBeTruthy()
 
   const noJsTrigger = noJsVariant?.querySelector('details')
-  expect(noJsTrigger?.className).toContain('relative')
   expect(noJsTrigger?.querySelector('div')?.className).toContain('absolute')
 })
 

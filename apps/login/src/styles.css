@@ -94,6 +94,26 @@ body {
   display: none !important;
 }
 
+/* The `<details>` appearance menus are the no-JavaScript twin of the scripted
+   popup: same entry motion. Closing stays instant because a closed <details>
+   removes its content from the box tree, so there is nothing to animate. */
+@keyframes appearance-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(0.95);
+  }
+}
+
+details[open] > .appearance-menu {
+  animation: appearance-menu-in 100ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  details[open] > .appearance-menu {
+    animation: none;
+  }
+}
+
 /* The segmented code display is a JS enhancement. Without hydration, expose
    its native input so entered OTP/recovery-code characters remain visible.
    Select the input through its parent: Bitwarden treats an OTP-named data
