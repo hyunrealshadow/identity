@@ -1,3 +1,5 @@
+import { buttonVariants } from '@identity/ui/components/button'
+import { TooltipProvider } from '@identity/ui/components/tooltip'
 import { resolveLocale, translate } from '#/lib/i18n'
 import {
   HeadContent,
@@ -98,12 +100,12 @@ function RootNotFound() {
   const locale = useRootLocale()
   return (
     <main className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
-      <section className="w-full max-w-md rounded-field border border-border bg-surface p-6 shadow-sm">
+      <section className="w-full max-w-md rounded-xl bg-card p-6 text-card-foreground shadow-xs ring-1 ring-foreground/10">
         <h1 className="text-lg font-semibold">{translate(locale, 'pageNotFoundTitle')}</h1>
-        <p className="mt-2 text-sm text-muted">
+        <p className="mt-2 text-sm text-muted-foreground">
           {translate(locale, 'pageNotFoundDescription')}
         </p>
-        <a className="mt-5 inline-flex min-h-10 items-center rounded-field bg-accent px-4 py-2 text-sm font-medium text-accent-foreground" href="/">
+        <a className={buttonVariants({ className: 'mt-5' })} href="/">
           {translate(locale, 'pageNotFoundReturn')}
         </a>
       </section>
@@ -117,12 +119,12 @@ function RootError(_props: ErrorComponentProps) {
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
-      <div className="w-full max-w-md rounded-field border border-border bg-surface p-6 shadow-sm">
+      <div className="w-full max-w-md rounded-xl bg-card p-6 text-card-foreground shadow-xs ring-1 ring-foreground/10">
         <h1 className="text-lg font-semibold">{translate(locale, 'unableToContinue')}</h1>
-        <p className="mt-2 text-sm text-muted">
+        <p className="mt-2 text-sm text-muted-foreground">
           {translate(locale, 'temporaryError')}
         </p>
-        <a className="mt-5 inline-flex rounded-field bg-accent px-4 py-2 text-sm font-medium text-accent-foreground" href={retryHref}>
+        <a className={buttonVariants({ className: 'mt-5' })} href={retryHref}>
           {translate(locale, 'tryAgain')}
         </a>
       </div>
@@ -171,7 +173,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        {children}
+        <TooltipProvider>{children}</TooltipProvider>
         <Scripts />
       </body>
     </html>

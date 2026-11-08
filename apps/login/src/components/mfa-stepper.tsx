@@ -15,17 +15,17 @@ export function MfaStepper({ currentStep, label, steps }: { currentStep: number;
           >
             {index < steps.length - 1 ? (
               <span
-                className={`absolute left-1/2 top-3.5 h-0.5 w-full ${status === 'complete' ? 'bg-success' : 'bg-separator'}`}
+                className={`absolute left-1/2 top-3.5 h-0.5 w-full ${status === 'complete' ? 'bg-success' : 'bg-border'}`}
                 aria-hidden="true"
               />
             ) : null}
             <span
-              className={`relative z-10 flex size-7 items-center justify-center rounded-full border text-xs font-semibold ${status === 'complete' ? 'border-success bg-success text-white' : status === 'active' ? 'border-foreground bg-foreground text-background' : 'border-separator bg-background text-muted'}`}
+              className={`relative z-10 flex size-7 items-center justify-center rounded-full border text-xs font-semibold ${status === 'complete' ? 'border-success bg-success text-white' : status === 'active' ? 'border-foreground bg-foreground text-background' : 'border-border bg-background text-muted-foreground'}`}
               aria-hidden="true"
             >
               {status === 'complete' ? <Check className="size-4" strokeWidth={2.5} /> : number}
             </span>
-            <span className={`mt-2 max-w-32 text-xs leading-4 ${status === 'active' ? 'font-semibold text-foreground' : status === 'complete' ? 'font-medium text-success' : 'text-muted'}`}>
+            <span className={`mt-2 max-w-32 text-xs leading-4 ${status === 'active' ? 'font-semibold text-foreground' : status === 'complete' ? 'font-medium text-success' : 'text-muted-foreground'}`}>
               {stepTitle(title)}
             </span>
           </li>

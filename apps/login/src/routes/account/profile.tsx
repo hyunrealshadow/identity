@@ -1,5 +1,13 @@
-import { Button, Label, ListBox, Select } from '@heroui/react'
-import { DatePickerField } from '@identity/ui/date-picker-field'
+import { Button } from '@identity/ui/components/button'
+import { DatePickerField } from '@identity/ui/components/date-picker'
+import { Field, FieldLabel } from '@identity/ui/components/field'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@identity/ui/components/select'
 import { useAccountTimeZone } from '#/lib/time-zone'
 import { createFileRoute } from '@tanstack/react-router'
 
@@ -110,10 +118,42 @@ function ProfileDatePicker({
       label={t('accountBirthdate')}
       defaultValue={account.birthdate}
       error={error}
+      placeholder={t('accountDatePlaceholder')}
       clearLabel={t('accountDateClear')}
       timeZone={timeZone}
       locale={locale}
     />
+  )
+}
+
+function PreferenceSelect({
+  name,
+  label,
+  defaultValue,
+  options,
+}: {
+  name: string
+  label: string
+  defaultValue: string
+  options: Array<{ value: string; label: string }>
+}) {
+  const id = `profile-${name}`
+  return (
+    <Field>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <Select name={name} defaultValue={defaultValue} items={options}>
+        <SelectTrigger id={id} className="w-full">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </Field>
   )
 }
 
@@ -125,37 +165,16 @@ function ProfileLocaleSelect({
   t: Translator
 }) {
   return (
-    <Select
-      fullWidth
+    <PreferenceSelect
       name="locale"
+      label={t('accountLocale')}
       defaultValue={account.locale ?? BROWSER_LOCALE_VALUE}
-      placeholder={t('accountLocaleBrowser')}
-    >
-      <Label>{t('accountLocale')}</Label>
-      <Select.Trigger>
-        <Select.Value />
-        <Select.Indicator />
-      </Select.Trigger>
-      <Select.Popover>
-        <ListBox>
-          <ListBox.Item
-            id={BROWSER_LOCALE_VALUE}
-            textValue={t('accountLocaleBrowser')}
-          >
-            {t('accountLocaleBrowser')}
-            <ListBox.ItemIndicator />
-          </ListBox.Item>
-          <ListBox.Item id="en-US" textValue="English (United States)">
-            English (United States)
-            <ListBox.ItemIndicator />
-          </ListBox.Item>
-          <ListBox.Item id="zh-CN" textValue="中文（简体）">
-            中文（简体）
-            <ListBox.ItemIndicator />
-          </ListBox.Item>
-        </ListBox>
-      </Select.Popover>
-    </Select>
+      options={[
+        { value: BROWSER_LOCALE_VALUE, label: t('accountLocaleBrowser') },
+        { value: 'en-US', label: 'English (United States)' },
+        { value: 'zh-CN', label: '中文（简体）' },
+      ]}
+    />
   )
 }
 
@@ -171,28 +190,15 @@ function ProfileThemeSelect({
       ? account.theme
       : 'system'
   return (
-    <Select fullWidth name="theme" defaultValue={preference}>
-      <Label>{t('accountTheme')}</Label>
-      <Select.Trigger>
-        <Select.Value />
-        <Select.Indicator />
-      </Select.Trigger>
-      <Select.Popover>
-        <ListBox>
-          <ListBox.Item id="system" textValue={t('accountThemeSystem')}>
-            {t('accountThemeSystem')}
-            <ListBox.ItemIndicator />
-          </ListBox.Item>
-          <ListBox.Item id="light" textValue={t('accountThemeLight')}>
-            {t('accountThemeLight')}
-            <ListBox.ItemIndicator />
-          </ListBox.Item>
-          <ListBox.Item id="dark" textValue={t('accountThemeDark')}>
-            {t('accountThemeDark')}
-            <ListBox.ItemIndicator />
-          </ListBox.Item>
-        </ListBox>
-      </Select.Popover>
-    </Select>
+    <PreferenceSelect
+      name="theme"
+      label={t('accountTheme')}
+      defaultValue={preference}
+      options={[
+        { value: 'system', label: t('accountThemeSystem') },
+        { value: 'light', label: t('accountThemeLight') },
+        { value: 'dark', label: t('accountThemeDark') },
+      ]}
+    />
   )
 }

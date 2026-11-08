@@ -1,5 +1,6 @@
 import { withUiLocales } from '#/lib/ui-locale'
-import { Button } from '@heroui/react'
+import { Button } from '@identity/ui/components/button'
+import { Spinner } from '@identity/ui/components/spinner'
 import { createServerFn } from '@tanstack/react-start'
 import { Fingerprint } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -90,11 +91,11 @@ export function PasskeyLogin({ loginId, csrfToken, locale, uiLocales, primary = 
   }, [primary, signIn])
 
   return <div className="space-y-2">
-    <Button fullWidth variant={primary ? 'primary' : 'secondary'} isDisabled={!supported || busy} isPending={busy} onPress={() => void signIn()}>
-      <Fingerprint className="size-4" aria-hidden="true" />{t('usePasskey')}
+    <Button className="w-full" variant={primary ? 'default' : 'outline'} disabled={!supported || busy} aria-busy={busy || undefined} onClick={() => void signIn()}>
+      {busy ? <Spinner aria-hidden="true" role="presentation" /> : <Fingerprint aria-hidden="true" />}{t('usePasskey')}
     </Button>
-    <p className="no-js-only text-xs text-muted">{t('passkeyRequiresJavascript')}</p>
-    {!supported ? <p className="js-only text-xs text-muted">{t('passkeyUnsupported')}</p> : null}
-    {error ? <p role="alert" className="text-sm text-danger">{error}</p> : null}
+    <p className="no-js-only text-xs text-muted-foreground">{t('passkeyRequiresJavascript')}</p>
+    {!supported ? <p className="js-only text-xs text-muted-foreground">{t('passkeyUnsupported')}</p> : null}
+    {error ? <p role="alert" className="text-sm text-destructive">{error}</p> : null}
   </div>
 }

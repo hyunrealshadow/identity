@@ -1,18 +1,9 @@
-@import "tailwindcss";
-@import "@heroui/styles";
-@import "@identity/ui/styles.css";
-
-:root {
-  --radius: 0.25rem;
-  --field-radius: 0.25rem;
-  --field-border-width: 1px;
-  --field-border-focus: transparent;
-}
+@import "@identity/ui/globals.css";
 
 @layer components {
   .consent-permissions-list {
     scrollbar-width: thin;
-    scrollbar-color: var(--scrollbar) transparent;
+    scrollbar-color: var(--border) transparent;
   }
 
   .consent-permissions-list::-webkit-scrollbar {
@@ -21,103 +12,16 @@
 
   .consent-permissions-list::-webkit-scrollbar-thumb {
     border-radius: 9999px;
-    background-color: var(--scrollbar);
-  }
-
-  .button {
-    border-radius: var(--field-radius);
-  }
-
-  .input--secondary,
-  .input-group--secondary {
-    --field-border: transparent;
-    --field-border-hover: transparent;
-    --field-border-focus: transparent;
-
-    border-width: 0;
+    background-color: var(--border);
   }
 }
 
-:root,
-.light,
-.default,
-[data-theme="light"],
-[data-theme="default"] {
-  /* Theme Colors (Light Mode) */
-  --accent: oklch(0 0 0);
-  --accent-foreground: oklch(99.11% 0 0);
-  --background: oklch(98.4% 0 0);
-  --border: oklch(90.00% 0.0000 0.00);
-  --danger: oklch(0.573 0.2249 21.97);
-  --danger-foreground: oklch(98% 0.0200 21.97);
-  --default: oklch(94.00% 0.0000 0.00);
-  --default-foreground: oklch(21.03% 0.0059 0.00);
-  --field-background: oklch(100.00% 0.0000 0.00);
-  --field-border: var(--border);
-  --field-foreground: oklch(21.03% 0.0000 0.00);
-  --field-placeholder: oklch(55.17% 0.0000 0.00);
-  --focus: oklch(0 0 0);
-  --foreground: oklch(21.03% 0.0000 0.00);
-  --muted: oklch(55.17% 0.0000 0.00);
-  --overlay: oklch(100.00% 0.0000 0.00);
-  --overlay-foreground: oklch(21.03% 0.0000 0.00);
-  --scrollbar: oklch(87.10% 0.0000 0.00);
-  --segment: oklch(100.00% 0.0000 0.00);
-  --segment-foreground: oklch(21.03% 0.0000 0.00);
-  --separator: oklch(92.00% 0.0000 0.00);
-  --success: oklch(0.6277 0.1604 153.06);
-  --success-foreground: oklch(98% 0.0160 153.06);
-  --surface: oklch(100.00% 0.0000 0.00);
-  --surface-foreground: oklch(21.03% 0.0000 0.00);
-  --surface-secondary: oklch(95.24% 0.0000 0.00);
-  --surface-secondary-foreground: oklch(21.03% 0.0000 0.00);
-  --surface-tertiary: oklch(93.73% 0.0000 0.00);
-  --surface-tertiary-foreground: oklch(21.03% 0.0000 0.00);
-  --warning: oklch(0.8446 0.1525 80.6);
-  --warning-foreground: oklch(15% 0.0457 80.60);
-  --accent-soft-foreground: oklch(0 0 0);
+:root {
+  color-scheme: light;
 }
 
-.dark,
-[data-theme="dark"] {
+.dark {
   color-scheme: dark;
-  /* Theme Colors (Dark Mode) */
-  --accent: oklch(0.9848 0 0);
-  --accent-foreground: oklch(15% 0.0000 0.00);
-  --background: oklch(14.5% 0 0);
-  --border: oklch(28.00% 0.0000 0.00);
-  --danger: oklch(0.7044 0.1872 23.19);
-  --danger-foreground: oklch(15% 0.0500 23.19);
-  --default: oklch(27.40% 0.0000 0.00);
-  --default-foreground: oklch(99.11% 0 0);
-  --field-background: oklch(21.03% 0.0000 0.00);
-  --field-border: var(--border);
-  --field-foreground: oklch(99.11% 0.0000 0.00);
-  --field-placeholder: oklch(70.50% 0.0000 0.00);
-  --focus: oklch(0.9848 0 0);
-  --foreground: oklch(99.11% 0.0000 0.00);
-  --muted: oklch(70.50% 0.0000 0.00);
-  --overlay: oklch(21.03% 0.0000 0.00);
-  --overlay-foreground: oklch(99.11% 0.0000 0.00);
-  --scrollbar: oklch(70.50% 0.0000 0.00);
-  --segment: oklch(39.64% 0.0000 0.00);
-  --segment-foreground: oklch(99.11% 0.0000 0.00);
-  --separator: oklch(25.00% 0.0000 0.00);
-  --success: oklch(0.6514 0.1321 156.22);
-  --success-foreground: oklch(15% 0.0396 156.22);
-  --surface: oklch(21.03% 0.0000 0.00);
-  --surface-foreground: oklch(99.11% 0.0000 0.00);
-  --surface-secondary: oklch(25.70% 0.0000 0.00);
-  --surface-secondary-foreground: oklch(99.11% 0.0000 0.00);
-  --surface-tertiary: oklch(27.21% 0.0000 0.00);
-  --surface-tertiary-foreground: oklch(99.11% 0.0000 0.00);
-  --warning: oklch(0.8803 0.1348 86.06);
-  --warning-foreground: oklch(15% 0.0404 86.06);
-  --accent-soft-foreground: oklch(0.9848 0 0);
-}
-
-* {
-  box-sizing: border-box;
 }
 
 html,
@@ -132,11 +36,7 @@ html {
 
 body {
   margin: 0;
-  color: var(--foreground);
-  background: var(--background);
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -146,11 +46,12 @@ body {
   top: 0;
   z-index: 20;
   backdrop-filter: blur(12px);
-  background: color-mix(in oklab, var(--surface) 92%, transparent);
+  background: color-mix(in oklab, var(--background) 92%, transparent);
 }
 
 .account-card {
   box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--foreground) 10%, transparent),
     0 1px 2px rgb(0 0 0 / 0.03),
     0 8px 24px -20px rgb(0 0 0 / 0.22);
 }
@@ -176,7 +77,7 @@ body {
 }
 
 .account-nav-link:focus-visible {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 
@@ -216,16 +117,20 @@ body {
   padding: 0 0.75rem;
   color: var(--foreground);
   caret-color: auto;
-  background: var(--surface);
-  border: var(--field-border-width) solid var(--field-border);
-  border-radius: var(--field-radius);
-  box-shadow: var(--field-shadow);
+  background: transparent;
+  border: 1px solid var(--input);
+  border-radius: var(--radius-md);
+  box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
 }
 
 .no-js [data-slot="input-otp"] > input:focus {
-  border-color: var(--field-border-focus);
-  outline: 2px solid var(--focus);
-  outline-offset: 1px;
+  border-color: var(--ring);
+  outline: 3px solid color-mix(in oklab, var(--ring) 50%, transparent);
+  outline-offset: 0;
+}
+
+.no-js [data-slot="input-otp"][data-invalid="true"] > input {
+  border-color: var(--destructive);
 }
 
 /* ---------------------------------------------------------------
@@ -236,7 +141,7 @@ body {
   block-size: 168px;
   padding: 12px;
   background: white;
-  border: 1px solid var(--separator);
+  border: 1px solid var(--border);
   border-radius: var(--radius);
   box-shadow: 0 1px 2px rgb(0 0 0 / 0.04);
 }
@@ -278,8 +183,8 @@ body {
 }
 
 ::selection {
-  color: var(--accent-foreground);
-  background: var(--accent);
+  color: var(--primary-foreground);
+  background: var(--primary);
 }
 
 /* ---------------------------------------------------------------
@@ -338,6 +243,7 @@ body {
 .auth-card {
   animation: auth-card-in 0.18s ease-out both;
   box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--foreground) 10%, transparent),
     0 1px 2px rgb(0 0 0 / 0.04),
     0 12px 32px -16px rgb(0 0 0 / 0.14),
     0 40px 80px -48px rgb(0 0 0 / 0.18);
@@ -385,30 +291,6 @@ body {
 /* Defined after the stagger rules so the shake wins for alert children. */
 .auth-alert {
   animation: auth-alert-in 0.5s cubic-bezier(0.36, 0.07, 0.19, 0.97) 0.15s both;
-  background: var(--surface);
-  border: 0;
-  /* The original stays visible through elevation alone on the gray docs
-     background; on the white auth card it needs a hairline ring plus a
-     deeper lift to read as a raised surface. */
-  box-shadow:
-    0 0 0 1px rgb(0 0 0 / 0.05),
-    var(--surface-shadow),
-    0 12px 28px -12px rgb(0 0 0 / 0.15);
-}
-
-:is(.dark, [data-theme="dark"]) .auth-alert {
-  box-shadow:
-    0 0 0 1px color-mix(in oklab, var(--foreground) 16%, transparent),
-    var(--surface-shadow),
-    0 12px 28px -12px rgb(0 0 0 / 0.5);
-}
-
-:is(.dark, [data-theme="dark"]) .auth-alert.alert--danger :is(.alert__indicator, .alert__title) {
-  color: var(--danger);
-}
-
-:is(.dark, [data-theme="dark"]) .auth-alert .alert__description {
-  color: var(--foreground);
 }
 
 /* ---------------------------------------------------------------
@@ -419,11 +301,6 @@ body {
     color, background-color, border-color, box-shadow, opacity, scale, translate;
   transition-duration: 180ms;
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-[data-slot="button"]:active,
-[data-slot="button"][data-pressed="true"] {
-  scale: 0.98;
 }
 
 [data-slot="button"][data-pending] {
@@ -483,7 +360,7 @@ body {
 
 .auth-background a:focus-visible {
   border-radius: 3px;
-  outline: 2px solid color-mix(in oklab, var(--focus) 55%, transparent);
+  outline: 2px solid color-mix(in oklab, var(--ring) 55%, transparent);
   outline-offset: 3px;
 }
 

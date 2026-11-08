@@ -1,8 +1,8 @@
-import { Alert } from '@heroui/react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { useState, type FormEvent, type ReactNode } from 'react'
 
+import { ErrorAlert } from '#/components/form-alert'
 import { useAccountReauth } from '#/components/reauthentication-popup'
 import { ACCOUNT_QUERY_KEY } from '#/lib/account-query'
 
@@ -77,12 +77,7 @@ export function AccountActionForm({
         {children}
       </fieldset>
       {requestError ? (
-        <Alert status="danger" className="mt-3">
-          <Alert.Indicator />
-          <Alert.Content>
-            <Alert.Description>{requestError}</Alert.Description>
-          </Alert.Content>
-        </Alert>
+        <ErrorAlert className="mt-3" animated={false} message={requestError} />
       ) : null}
     </form>
   )

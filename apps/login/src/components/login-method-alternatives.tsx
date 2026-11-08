@@ -31,14 +31,14 @@ export function LoginMethodAlternatives({ currentMethod, status, loginId, uiLoca
 
   return (
     <details className="auth-methods group mt-6 border-t border-border">
-      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between pt-4 text-xs font-medium text-muted transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
+      <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between pt-4 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
         {translate(locale, 'otherVerificationMethods')}
         <ChevronDown className="size-4 transition-transform group-open:rotate-180" aria-hidden="true" />
       </summary>
       <div className="auth-method-options mt-1 grid gap-1 pb-1">
         {alternatives.map(({ type, label }) => (
           <a key={type} href={loginChallengeDestination(loginId, type, uiLocales)}
-            className="flex min-h-9 items-center justify-between rounded-lg bg-surface-secondary px-3 text-sm font-medium text-foreground transition-colors hover:bg-surface-tertiary">
+            className="flex min-h-9 items-center justify-between rounded-md bg-muted px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted/70">
             {translate(locale, label)}
           </a>
         ))}

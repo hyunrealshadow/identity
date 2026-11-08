@@ -1,11 +1,12 @@
-import { Alert, Description, FieldError, Input, Label, TextField } from '@heroui/react'
 import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { getRequest } from '@tanstack/react-start/server'
 
 import { AuthShell } from '#/components/auth-shell'
+import { ErrorAlert } from '#/components/form-alert'
 import { ProgressiveForm } from '#/components/progressive-form'
 import { SubmitButton } from '#/components/submit-button'
+import { TextField } from '#/components/text-field'
 import {
   errorMessage,
   IdentityApiError,
@@ -172,18 +173,7 @@ function InstallPage() {
       title={t('installTitle')}
       description={t('installDescription')}
     >
-      {error ? (
-        <Alert
-          status="danger"
-          className="auth-alert mb-5"
-        >
-          <Alert.Indicator />
-          <Alert.Content>
-            <Alert.Title>{t('installFailed')}</Alert.Title>
-            <Alert.Description>{error}</Alert.Description>
-          </Alert.Content>
-        </Alert>
-      ) : null}
+      {error ? <ErrorAlert className="mb-5" title={t('installFailed')} message={error} /> : null}
 
       <ProgressiveForm
         action="/install"
@@ -192,99 +182,62 @@ function InstallPage() {
         validationErrors={fieldErrors}
       >
         <TextField
-          isRequired
-          fullWidth
+          required
           name="domain"
+          label={t('installIdentityUrl')}
           defaultValue={formValues.domain ?? search.domain ?? defaults.domain}
-        >
-          <Label>{t('installIdentityUrl')}</Label>
-          <Input
-            autoFocus
-            inputMode="url"
-            placeholder="https://id.example.com"
-          />
-          <FieldError />
-        </TextField>
-
+          autoFocus
+          inputMode="url"
+          placeholder="https://id.example.com"
+        />
         <TextField
-          isRequired
-          fullWidth
+          required
           name="application_url"
+          label={t('installApplicationUrl')}
           defaultValue={formValues.application_url ?? search.application_url ?? defaults.application_url}
-        >
-          <Label>{t('installApplicationUrl')}</Label>
-          <Input
-            inputMode="url"
-            placeholder="https://login.example.com"
-          />
-          <FieldError />
-        </TextField>
-
+          inputMode="url"
+          placeholder="https://login.example.com"
+        />
         <TextField
-          isRequired
-          fullWidth
+          required
           name="console_url"
+          label={t('installConsoleUrl')}
+          description={t('installConsoleOriginDescription')}
           defaultValue={formValues.console_url ?? search.console_url ?? defaults.console_url}
-        >
-          <Label>{t('installConsoleUrl')}</Label>
-          <Input
-            inputMode="url"
-            placeholder="https://login.example.com"
-          />
-          <Description>{t('installConsoleOriginDescription')}</Description>
-          <FieldError />
-        </TextField>
-
+          inputMode="url"
+          placeholder="https://login.example.com"
+        />
         <TextField
-          isRequired
-          fullWidth
+          required
           name="username"
+          label={t('installAdminUsername')}
           defaultValue={formValues.username ?? search.username}
-        >
-          <Label>{t('installAdminUsername')}</Label>
-          <Input
-            autoComplete="username"
-            placeholder="admin"
-          />
-          <FieldError />
-        </TextField>
-
+          autoComplete="username"
+          placeholder="admin"
+        />
         <TextField
-          isRequired
-          fullWidth
+          required
           name="email"
+          label={t('installAdminEmail')}
           defaultValue={formValues.email ?? search.email}
-        >
-          <Label>{t('installAdminEmail')}</Label>
-          <Input
-            autoComplete="email"
-            inputMode="email"
-            placeholder="admin@example.com"
-          />
-          <FieldError />
-        </TextField>
-
+          autoComplete="email"
+          inputMode="email"
+          placeholder="admin@example.com"
+        />
         <TextField
-          isRequired
-          fullWidth
+          required
           name="password"
           type="password"
-        >
-          <Label>{t('installPassword')}</Label>
-          <Input autoComplete="new-password" type="password" />
-          <FieldError />
-        </TextField>
-
+          label={t('installPassword')}
+          autoComplete="new-password"
+        />
         <TextField
-          isRequired
-          fullWidth
+          required
           name="confirm_password"
           type="password"
-        >
-          <Label>{t('installConfirmPassword')}</Label>
-          <Input autoComplete="new-password" type="password" />
-          <FieldError />
-        </TextField>
+          label={t('installConfirmPassword')}
+          autoComplete="new-password"
+        />
 
         <input type="hidden" name="key_algorithm" value="ecdsa-p256" />
 

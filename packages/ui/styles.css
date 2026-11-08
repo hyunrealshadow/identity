@@ -1,4 +1,6 @@
-@source "./src";
+/* HeroUI adapters used by Console; shadcn components use src/styles/globals.css. */
+@source "./src/date-picker-field.tsx";
+@source "./src/data-table.tsx";
 
 @layer utilities {
   /* Keep cursor hit testing without restoring hover or press feedback. Native

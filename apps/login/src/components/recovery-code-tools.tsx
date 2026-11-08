@@ -1,4 +1,10 @@
-import { Button, InputGroup } from '@heroui/react'
+import { Button } from '@identity/ui/components/button'
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@identity/ui/components/input-group'
 import { Check, Copy, Download, Printer } from 'lucide-react'
 import { useState } from 'react'
 
@@ -34,25 +40,22 @@ export function RecoveryCodeList({ codes, copyLabel, copiedLabel }: RecoveryCode
       {codes.map((code, index) => {
         const copied = copiedIndex === index
         return (
-          <InputGroup key={`${code}-${index}`} variant="secondary" fullWidth>
-            <InputGroup.Input
+          <InputGroup key={`${code}-${index}`} className="bg-muted/50">
+            <InputGroupInput
               readOnly
               value={code}
               aria-label={`${copyLabel} ${index + 1}`}
               className="font-mono"
             />
-            <InputGroup.Suffix className="pe-0">
-              <Button
-                type="button"
-                isIconOnly
-                size="sm"
-                variant="ghost"
+            <InputGroupAddon align="inline-end">
+              <InputGroupButton
+                size="icon-xs"
                 aria-label={copied ? copiedLabel : copyLabel}
-                onPress={() => void copyCode(code, index)}
+                onClick={() => void copyCode(code, index)}
               >
-                {copied ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}
-              </Button>
-            </InputGroup.Suffix>
+                {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+              </InputGroupButton>
+            </InputGroupAddon>
           </InputGroup>
         )
       })}
@@ -93,16 +96,16 @@ export function RecoveryCodeTools({ codes, copyLabel, copiedLabel, printLabel, d
 
   return (
     <>
-      <Button type="button" size="sm" variant="secondary" onPress={() => void copyAll()}>
-        {copied ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}
+      <Button type="button" size="sm" variant="outline" onClick={() => void copyAll()}>
+        {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
         {copied ? copiedLabel : copyLabel}
       </Button>
-      <Button type="button" size="sm" variant="secondary" onPress={() => window.print()}>
-        <Printer className="size-4" aria-hidden="true" />
+      <Button type="button" size="sm" variant="outline" onClick={() => window.print()}>
+        <Printer aria-hidden="true" />
         {printLabel}
       </Button>
-      <Button type="button" size="sm" variant="secondary" onPress={download}>
-        <Download className="size-4" aria-hidden="true" />
+      <Button type="button" size="sm" variant="outline" onClick={download}>
+        <Download aria-hidden="true" />
         {downloadLabel}
       </Button>
     </>

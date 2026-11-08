@@ -1,13 +1,16 @@
+import { Button } from '@identity/ui/components/button'
 import {
-  Autocomplete,
-  FieldError,
-  Label,
-  ListBox,
-  ListLayout,
-  SearchField,
-  Virtualizer,
-} from '@heroui/react'
-import { useEffect, useMemo, useState } from 'react'
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxTrigger,
+  ComboboxValue,
+} from '@identity/ui/components/combobox'
+import { Field, FieldError, FieldLabel } from '@identity/ui/components/field'
+import { useEffect, useId, useMemo, useState } from 'react'
 
 import type { Locale } from '#/lib/i18n'
 import { translate } from '#/lib/i18n'
@@ -27,27 +30,6 @@ import {
 
 type Translator = (key: Parameters<typeof translate>[1]) => string
 type SelectOption = TimeZoneOption & { detail: string }
-const TIME_ZONE_LAYOUT = { rowHeight: 56 }
-
-function renderTimeZone(option: SelectOption) {
-  return (
-    <ListBox.Item
-      id={option.id}
-      textValue={option.searchText}
-      className="h-14 min-h-0 pe-8"
-    >
-      <div className="min-w-0 flex-1">
-        <div className="truncate font-medium">{option.name}</div>
-        <div className="truncate text-xs text-muted">{option.detail}</div>
-      </div>
-      <span className="shrink-0 font-mono text-xs text-muted">
-        {option.offset}
-      </span>
-      <ListBox.ItemIndicator />
-    </ListBox.Item>
-  )
-}
-
 export function TimeZoneSelect({
   value,
   error,
@@ -72,7 +54,8 @@ export function TimeZoneSelect({
   )
   const [localZone, setLocalZone] = useState<string>()
   const [open, setOpen] = useState(false)
-  const [query, setQuery] = useState('')
+  const triggerId = useId()
+  const errorId = `${triggerId}-error`
 
   useEffect(() => {
     setSelection(initial)
@@ -129,75 +112,59 @@ export function TimeZoneSelect({
   const selected = options.find((option) => option.id === selection)
 
   return (
-    <Autocomplete
-      fullWidth
-      name="zone_info"
-      value={selection}
-      isInvalid={Boolean(error)}
-      onChange={(key) => {
-        if (typeof key === 'string') setSelection(key)
-      }}
-      onOpenChange={(isOpen) => {
-        setOpen(isOpen)
-        setQuery('')
-      }}
-    >
-      <Label>{t('accountTimeZone')}</Label>
-      <Autocomplete.Trigger>
-        <Autocomplete.Value>
-          {() => (
-            <span
-              className="flex min-w-0 items-center gap-2"
-              title={selected?.name}
-            >
-              <span className="truncate">{selected?.name}</span>
-              {selection !== BROWSER_TIME_ZONE_VALUE ? (
-                <span className="shrink-0 text-xs text-muted">
-                  {selected?.offset}
-                </span>
-              ) : null}
-            </span>
-          )}
-        </Autocomplete.Value>
-        <Autocomplete.Indicator />
-      </Autocomplete.Trigger>
-      <Autocomplete.Popover aria-label={t('accountTimeZone')}>
-        <Autocomplete.Filter
-          filter={matchesTimeZone}
-          inputValue={query}
-          onInputChange={setQuery}
+    <Field data-invalid={error ? true : undefined}>
+      <FieldLabel htmlFor={triggerId}>{t('accountTimeZone')}</FieldLabel>
+      <Combobox
+        name="zone_info"
+        items={options}
+        value={selected ?? null}
+        itemToStringLabel={(option: SelectOption) => option.name}
+        itemToStringValue={(option: SelectOption) => option.id}
+        isItemEqualToValue={(option: SelectOption, current: SelectOption) => option.id === current.id}
+        filter={(option: SelectOption, query) => matchesTimeZone(option.searchText, query)}
+        onValueChange={(option: SelectOption | null) => {
+          if (option) setSelection(option.id)
+        }}
+        onOpenChange={setOpen}
+      >
+        <ComboboxTrigger
+          id={triggerId}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errorId : undefined}
+          render={<Button variant="outline" className="w-full justify-between font-normal" />}
         >
-          <SearchField
-            autoFocus
+          <ComboboxValue>
+            {() => (
+              <span className="flex min-w-0 items-center gap-2" title={selected?.name}>
+                <span className="truncate">{selected?.name}</span>
+                {selection !== BROWSER_TIME_ZONE_VALUE ? (
+                  <span className="shrink-0 text-xs text-muted-foreground">{selected?.offset}</span>
+                ) : null}
+              </span>
+            )}
+          </ComboboxValue>
+        </ComboboxTrigger>
+        <ComboboxContent aria-label={t('accountTimeZone')}>
+          <ComboboxInput
+            showTrigger={false}
             aria-label={t('accountTimeZoneSearch')}
-            value={query}
-            onChange={setQuery}
-            variant="secondary"
-          >
-            <SearchField.Group>
-              <SearchField.SearchIcon />
-              <SearchField.Input placeholder={t('accountTimeZoneSearch')} />
-              <SearchField.ClearButton
-                aria-label={t('accountTimeZoneClearSearch')}
-              />
-            </SearchField.Group>
-          </SearchField>
-          <Virtualizer layout={ListLayout} layoutOptions={TIME_ZONE_LAYOUT}>
-            <ListBox
-              className="max-h-72 overflow-y-auto"
-              items={options}
-              renderEmptyState={() => (
-                <p className="p-4 text-sm text-muted">
-                  {t('accountTimeZoneEmpty')}
-                </p>
-              )}
-            >
-              {renderTimeZone}
-            </ListBox>
-          </Virtualizer>
-        </Autocomplete.Filter>
-      </Autocomplete.Popover>
-      <FieldError>{error}</FieldError>
-    </Autocomplete>
+            placeholder={t('accountTimeZoneSearch')}
+          />
+          <ComboboxEmpty>{t('accountTimeZoneEmpty')}</ComboboxEmpty>
+          <ComboboxList>
+            {(option: SelectOption) => (
+              <ComboboxItem key={option.id} value={option} className="items-center">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-medium">{option.name}</div>
+                  <div className="truncate text-xs text-muted-foreground">{option.detail}</div>
+                </div>
+                <span className="shrink-0 font-mono text-xs text-muted-foreground">{option.offset}</span>
+              </ComboboxItem>
+            )}
+          </ComboboxList>
+        </ComboboxContent>
+      </Combobox>
+      {error ? <FieldError id={errorId}>{error}</FieldError> : null}
+    </Field>
   )
 }

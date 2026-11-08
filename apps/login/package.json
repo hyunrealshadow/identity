@@ -15,8 +15,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@heroui/react": "^3.2.6",
-    "@heroui/styles": "^3.2.6",
     "@identity/graphql-access": "workspace:*",
     "@identity/ui": "workspace:*",
     "@internationalized/date": "^3.12.4",

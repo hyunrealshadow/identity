@@ -1,4 +1,12 @@
-import { Button, Dropdown, Label } from '@heroui/react'
+import { Button } from '@identity/ui/components/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from '@identity/ui/components/dropdown-menu'
+import { Separator } from '@identity/ui/components/separator'
 import { useRouterState } from '@tanstack/react-router'
 import { Check, ChevronDown, Monitor, Moon, Sun } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -76,99 +84,99 @@ export function AppearanceControls({ locale }: { locale: Locale }) {
 
   return (
     <div className="flex shrink-0 items-center justify-end gap-1">
-      <div className="js-only flex items-center gap-1 rounded-field border border-border bg-surface/90 p-1 shadow-sm backdrop-blur">
-        <Dropdown>
-          <Button
-            variant="ghost"
-            aria-label={`${t('language')}: ${languageLabel}`}
-            className="h-8 min-h-8 gap-1 px-2 text-xs font-medium"
+      <div className="js-only flex items-center gap-1 rounded-lg border bg-card/90 p-1 shadow-xs backdrop-blur">
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={(
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label={`${t('language')}: ${languageLabel}`}
+                className="gap-1 px-2 text-xs"
+              />
+            )}
           >
             {languageLabel}
-            <ChevronDown className="size-3.5 text-muted" aria-hidden="true" />
-          </Button>
-          <Dropdown.Popover placement="bottom end" className="min-w-32">
-            <Dropdown.Menu
+            <ChevronDown className="size-3.5 text-muted-foreground" aria-hidden="true" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-36">
+            <DropdownMenuRadioGroup
               aria-label={t('language')}
-              onAction={(key) => {
+              value={followsBrowser ? BROWSER_LOCALE_VALUE : locale}
+              onValueChange={(key) => {
                 if (key === BROWSER_LOCALE_VALUE || key === 'en-US' || key === 'zh-CN') changeLocale(key)
               }}
             >
-              <Dropdown.Item id={BROWSER_LOCALE_VALUE} textValue={t('accountLocaleBrowser')}>
-                <Label>{t('accountLocaleBrowser')}</Label>
-                {followsBrowser ? <Check className="ms-auto size-4" aria-hidden="true" /> : null}
-              </Dropdown.Item>
-              <Dropdown.Item id="en-US" textValue="English">
-                <Label>English</Label>
-                {!followsBrowser && locale === 'en-US' ? <Check className="ms-auto size-4" aria-hidden="true" /> : null}
-              </Dropdown.Item>
-              <Dropdown.Item id="zh-CN" textValue="简体中文">
-                <Label>简体中文</Label>
-                {!followsBrowser && locale === 'zh-CN' ? <Check className="ms-auto size-4" aria-hidden="true" /> : null}
-              </Dropdown.Item>
-            </Dropdown.Menu>
-          </Dropdown.Popover>
-        </Dropdown>
-        <span className="h-4 w-px bg-separator" aria-hidden="true" />
-        <Dropdown>
-          <Button
-            isIconOnly
-            variant="ghost"
-            aria-label={`${t('accountTheme')}: ${themeOptions.find((option) => option.id === theme)?.label}`}
-            className="size-8 min-w-8"
+              <DropdownMenuRadioItem value={BROWSER_LOCALE_VALUE}>{t('accountLocaleBrowser')}</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="en-US">English</DropdownMenuRadioItem>
+              <DropdownMenuRadioItem value="zh-CN">简体中文</DropdownMenuRadioItem>
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
+        <Separator orientation="vertical" className="data-vertical:h-4 data-vertical:self-center" />
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={(
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`${t('accountTheme')}: ${themeOptions.find((option) => option.id === theme)?.label}`}
+              />
+            )}
           >
-            <ThemeIcon className="size-4 shrink-0 text-muted" aria-hidden="true" />
-          </Button>
-          <Dropdown.Popover placement="bottom end" className="min-w-40">
-            <Dropdown.Menu
+            <ThemeIcon className="text-muted-foreground" aria-hidden="true" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="min-w-40">
+            <DropdownMenuRadioGroup
               aria-label={t('accountTheme')}
-              onAction={(key) => {
+              value={theme}
+              onValueChange={(key) => {
                 if (typeof key === 'string' && isThemePreference(key)) changeTheme(key)
               }}
             >
               {themeOptions.map(({ id, label, icon: Icon }) => (
-                <Dropdown.Item key={id} id={id} textValue={label}>
-                  <Icon className="size-4 shrink-0 text-muted" aria-hidden="true" />
-                  <Label>{label}</Label>
-                  {theme === id ? <Check className="ms-auto size-4" aria-hidden="true" /> : null}
-                </Dropdown.Item>
+                <DropdownMenuRadioItem key={id} value={id}>
+                  <Icon className="text-muted-foreground" aria-hidden="true" />
+                  {label}
+                </DropdownMenuRadioItem>
               ))}
-            </Dropdown.Menu>
-          </Dropdown.Popover>
-        </Dropdown>
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       <div className="no-js-only flex items-start gap-1">
-        <details name="appearance-preference" className="relative rounded-field border border-border bg-surface/95 shadow-sm">
+        <details name="appearance-preference" className="relative rounded-md border border-border bg-card/95 shadow-sm">
           <summary className="flex h-10 cursor-pointer list-none items-center gap-1 px-3 text-xs font-medium [&::-webkit-details-marker]:hidden">
             {languageLabel}
             <span aria-hidden="true">▾</span>
           </summary>
-          <div className="absolute right-0 mt-1 grid min-w-32 gap-1 rounded-field border border-border bg-surface p-1 shadow-lg">
-            <a className="flex items-center gap-2 rounded-field px-3 py-2 text-xs hover:bg-surface-secondary" href={hrefWithLocale(BROWSER_LOCALE_VALUE)}>
+          <div className="absolute right-0 mt-1 grid min-w-32 gap-1 rounded-md border border-border bg-card p-1 shadow-lg">
+            <a className="flex items-center gap-2 rounded-md px-3 py-2 text-xs hover:bg-muted" href={hrefWithLocale(BROWSER_LOCALE_VALUE)}>
               <span>{t('accountLocaleBrowser')}</span>
               {followsBrowser ? <Check className="ms-auto size-4" aria-hidden="true" /> : null}
             </a>
-            <a className="flex items-center gap-2 rounded-field px-3 py-2 text-xs hover:bg-surface-secondary" href={hrefWithLocale('en-US')}>
+            <a className="flex items-center gap-2 rounded-md px-3 py-2 text-xs hover:bg-muted" href={hrefWithLocale('en-US')}>
               <span>English</span>
               {!followsBrowser && locale === 'en-US' ? <Check className="ms-auto size-4" aria-hidden="true" /> : null}
             </a>
-            <a className="flex items-center gap-2 rounded-field px-3 py-2 text-xs hover:bg-surface-secondary" href={hrefWithLocale('zh-CN')}>
+            <a className="flex items-center gap-2 rounded-md px-3 py-2 text-xs hover:bg-muted" href={hrefWithLocale('zh-CN')}>
               <span>简体中文</span>
               {!followsBrowser && locale === 'zh-CN' ? <Check className="ms-auto size-4" aria-hidden="true" /> : null}
             </a>
           </div>
         </details>
-        <details name="appearance-preference" className="relative rounded-field border border-border bg-surface/95 shadow-sm">
+        <details name="appearance-preference" className="relative rounded-md border border-border bg-card/95 shadow-sm">
           <summary className="flex size-10 cursor-pointer list-none items-center justify-center [&::-webkit-details-marker]:hidden" aria-label={t('accountTheme')}>
-            <ThemeIcon className="size-4 text-muted" aria-hidden="true" />
+            <ThemeIcon className="size-4 text-muted-foreground" aria-hidden="true" />
           </summary>
-          <div className="absolute right-0 mt-1 grid min-w-40 gap-1 rounded-field border border-border bg-surface p-1 shadow-lg">
+          <div className="absolute right-0 mt-1 grid min-w-40 gap-1 rounded-md border border-border bg-card p-1 shadow-lg">
             {themeOptions.map(({ id, label, icon: Icon }) => (
               <form key={id} action="/appearance" method="post">
                 <input type="hidden" name="theme" value={id} />
                 <input type="hidden" name="return_to" value={currentHref} />
-                <button type="submit" className="flex w-full cursor-pointer items-center gap-2 rounded-field px-3 py-2 text-left text-xs hover:bg-surface-secondary">
-                  <Icon className="size-4 text-muted" aria-hidden="true" />
+                <button type="submit" className="flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-left text-xs hover:bg-muted">
+                  <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
                   <span>{label}</span>
                   {theme === id ? <Check className="ms-auto size-4" aria-hidden="true" /> : null}
                 </button>

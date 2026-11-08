@@ -45,7 +45,7 @@ it('disables authenticator preference until TOTP has been enabled', async () => 
   renderWithQuery(<MfaPriority locale="en-US" preference="passkey" totpEnabled={false} />)
   fireEvent.click(screen.getByRole('button', { name: 'Change' }))
   const dialog = await screen.findByRole('dialog')
-  expect((within(dialog).getByRole('radio', { name: 'Password and authenticator app first' }) as HTMLInputElement).disabled).toBe(true)
+  expect(within(dialog).getByRole('radio', { name: 'Password and authenticator app first' }).getAttribute('aria-disabled')).toBe('true')
 })
 
 it('keeps the preference dialog open when saving fails', async () => {

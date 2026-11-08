@@ -1,4 +1,11 @@
-import { Dropdown, Label } from '@heroui/react'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@identity/ui/components/dropdown-menu'
 import { useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { ArrowLeftRight, LogOut } from 'lucide-react'
@@ -38,7 +45,7 @@ export function UserMenu({
   const [isPending, setIsPending] = useState(false)
   const [requestError, setRequestError] = useState<string>()
 
-  async function onAction(key: React.Key) {
+  async function onAction(key: 'signout' | 'switch-account') {
     const action = key === 'signout' ? 'logout' : key === 'switch-account' ? 'switch-account' : undefined
     if (!action || isPending) return
     setIsPending(true)
@@ -60,27 +67,28 @@ export function UserMenu({
   }
 
   return (
-    <Dropdown>
-      <Dropdown.Trigger aria-label={menuLabel} className="cursor-pointer rounded-full">
+    <DropdownMenu>
+      <DropdownMenuTrigger aria-label={menuLabel} className="cursor-pointer rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
         <AccountAvatar name={user.name} picture={user.picture} />
-      </Dropdown.Trigger>
-      <Dropdown.Popover className="min-w-[220px]" placement="bottom end">
-        <div className="border-b border-separator px-3 pb-2.5 pt-3">
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-[220px]">
+        <div className="px-2 pb-2 pt-1.5">
           <p className="truncate text-sm font-medium">{user.name}</p>
-          <p className="truncate text-xs text-muted">{user.email}</p>
+          <p className="truncate text-xs text-muted-foreground">{user.email}</p>
         </div>
-        <Dropdown.Menu onAction={(key) => void onAction(key)}>
-          <Dropdown.Item id="switch-account" textValue={switchAccountLabel}>
-            <ArrowLeftRight className="size-4 shrink-0 text-muted" aria-hidden="true" />
-            <Label>{switchAccountLabel}</Label>
-          </Dropdown.Item>
-          <Dropdown.Item id="signout" textValue={signOutLabel} variant="danger">
-            <LogOut className="size-4 shrink-0 text-danger" aria-hidden="true" />
-            <Label>{signOutLabel}</Label>
-          </Dropdown.Item>
-        </Dropdown.Menu>
-        {requestError ? <p className="px-3 pb-3 text-xs text-danger">{requestError}</p> : null}
-      </Dropdown.Popover>
-    </Dropdown>
+        <DropdownMenuSeparator />
+        <DropdownMenuGroup>
+          <DropdownMenuItem onClick={() => void onAction('switch-account')}>
+            <ArrowLeftRight className="text-muted-foreground" aria-hidden="true" />
+            {switchAccountLabel}
+          </DropdownMenuItem>
+          <DropdownMenuItem variant="destructive" onClick={() => void onAction('signout')}>
+            <LogOut aria-hidden="true" />
+            {signOutLabel}
+          </DropdownMenuItem>
+        </DropdownMenuGroup>
+        {requestError ? <p role="alert" className="px-2 pb-2 pt-1 text-xs text-destructive">{requestError}</p> : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }

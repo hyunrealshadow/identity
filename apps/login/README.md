@@ -1,7 +1,7 @@
 # Identity Login
 
 TanStack Start application for interactive login and OAuth consent. The UI is
-built with HeroUI v3 and Tailwind CSS v4.
+built with shadcn components (Base UI) from `packages/ui` and Tailwind CSS v4.
 
 ## Development
 

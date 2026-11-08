@@ -1,23 +1,18 @@
-import {
-  Alert,
-  Button,
-  FieldError,
-  Input,
-  Label,
-  TextField,
-} from '@heroui/react'
+import { Field, FieldError, FieldLabel } from '@identity/ui/components/field'
 import { createFileRoute, notFound, redirect } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
-import { ArrowLeft, CircleAlert, Eye, EyeOff } from 'lucide-react'
+import { ArrowLeft, CircleAlert } from 'lucide-react'
 import { useState } from 'react'
 
 import { LoginMethodAlternatives } from '#/components/login-method-alternatives'
 import { PasskeyLogin } from '#/components/passkey-login'
 import { AccountAvatar } from '#/components/account-avatar'
 import { AuthShell } from '#/components/auth-shell'
+import { ErrorAlert } from '#/components/form-alert'
 import { LoginClient } from '#/components/login-client'
 import { ProgressiveForm } from '#/components/progressive-form'
 import { SubmitButton } from '#/components/submit-button'
+import { TextField } from '#/components/text-field'
 import { GroupedCodeInput, TotpInput } from '#/components/totp-input'
 import {
   errorMessage,
@@ -193,7 +188,6 @@ export const Route = createFileRoute('/login/$method')({
 function ChallengePage() {
   const search = Route.useSearch()
   const data = Route.useLoaderData()
-  const [showPassword, setShowPassword] = useState(false)
   const [credentialError, setCredentialError] = useState(data.fieldError)
   const loginId = data.loginId
   const credentialType = loginCredentialType(Route.useParams().method)!
@@ -246,28 +240,17 @@ function ChallengePage() {
     >
       <LoginClient client={data.status?.client} locale={data.locale} />
       {user ? (
-        <div className="mb-6 flex items-center gap-3 rounded-xl border border-border bg-surface-secondary p-3">
+        <div className="mb-6 flex items-center gap-3 rounded-xl border bg-muted/50 p-3">
           <AccountAvatar name={user.name} picture={user.picture} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-semibold">{user.name}</p>
-            <p className="truncate text-xs text-muted">{user.email}</p>
+            <p className="truncate text-xs text-muted-foreground">{user.email}</p>
           </div>
         </div>
       ) : null}
 
       {visibleError && !restartRequired ? (
-        <Alert
-          status="danger"
-          className="auth-alert mb-5"
-        >
-          <Alert.Indicator />
-          <Alert.Content>
-            <Alert.Title>
-              {t('verificationFailed')}
-            </Alert.Title>
-            <Alert.Description>{visibleError}</Alert.Description>
-          </Alert.Content>
-        </Alert>
+        <ErrorAlert className="mb-5" title={t('verificationFailed')} message={visibleError} />
       ) : null}
 
       {restartRequired && !restartUnavailable ? (
@@ -298,37 +281,32 @@ function ChallengePage() {
         <input type="hidden" name="ui_locales" value={data.uiLocales} />
 
         {isOtp ? (
-          <div className="grid gap-2">
-            <Label>{t('otp')}</Label>
+          <Field data-invalid={credentialError ? true : undefined}>
+            <FieldLabel htmlFor="login-otp">{t('otp')}</FieldLabel>
             <TotpInput
+              id="login-otp"
               name="totp"
               type="text"
               required
               autoFocus
-              className="w-full"
-              groupClassName="w-full justify-between"
-              slotClassName="flex-none"
               isInvalid={Boolean(credentialError)}
               aria-invalid={Boolean(credentialError)}
               aria-describedby={credentialError ? 'login-otp-error' : undefined}
               onChange={() => setCredentialError(undefined)}
             />
             {credentialError ? (
-              <p id="login-otp-error" className="text-xs text-danger">
-                {credentialError}
-              </p>
+              <FieldError id="login-otp-error">{credentialError}</FieldError>
             ) : null}
-          </div>
+          </Field>
         ) : isRecoveryCode ? (
-          <div className="grid gap-2">
-            <Label>{t('recoveryCode')}</Label>
+          <Field data-invalid={credentialError ? true : undefined}>
+            <FieldLabel htmlFor="login-recovery-code">{t('recoveryCode')}</FieldLabel>
             <GroupedCodeInput
+              id="login-recovery-code"
               name="credential"
               type="text"
               required
               autoFocus
-              className="w-full min-w-0"
-              groupClassName="w-full justify-between"
               isInvalid={Boolean(credentialError)}
               aria-invalid={Boolean(credentialError)}
               aria-describedby={
@@ -337,39 +315,21 @@ function ChallengePage() {
               onChange={() => setCredentialError(undefined)}
             />
             {credentialError ? (
-              <p id="login-recovery-code-error" className="text-xs text-danger">
-                {credentialError}
-              </p>
+              <FieldError id="login-recovery-code-error">{credentialError}</FieldError>
             ) : null}
-          </div>
+          </Field>
         ) : (
-          <TextField isRequired fullWidth name="credential" isInvalid={!!credentialError}>
-            <Label>{t('password')}</Label>
-            <div className="relative">
-              <Input
-                autoFocus
-                type={showPassword ? 'text' : 'password'}
-                autoComplete="current-password"
-                className="pr-12"
-                onChange={() => setCredentialError(undefined)}
-              />
-              <Button
-                type="button"
-                isIconOnly
-                variant="ghost"
-                aria-label={showPassword ? t('hidePassword') : t('showPassword')}
-                className="absolute right-1 top-1/2 -translate-y-1/2"
-                onPress={() => setShowPassword((value) => !value)}
-              >
-                {showPassword ? (
-                  <EyeOff className="size-4" aria-hidden="true" />
-                ) : (
-                  <Eye className="size-4" aria-hidden="true" />
-                )}
-              </Button>
-            </div>
-            <FieldError>{credentialError}</FieldError>
-          </TextField>
+          <TextField
+            required
+            name="credential"
+            label={t('password')}
+            error={credentialError}
+            autoFocus
+            type="password"
+            autoComplete="current-password"
+            reveal={{ show: t('showPassword'), hide: t('hidePassword') }}
+            onChange={() => setCredentialError(undefined)}
+          />
         )}
 
         <SubmitButton fullWidth>
@@ -397,8 +357,8 @@ function ChallengePage() {
           <SubmitButton
             name="intent"
             value="switch"
-            variant="ghost"
-            className="auth-link mx-auto flex w-fit items-center justify-center gap-1.5 text-sm font-semibold text-accent"
+            variant="link"
+            className="mx-auto flex w-fit font-semibold"
           >
             <ArrowLeft className="size-4" aria-hidden="true" />
             {t('switchAccount')}

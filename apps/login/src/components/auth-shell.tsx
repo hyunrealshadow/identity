@@ -1,4 +1,5 @@
-import { Card } from '@heroui/react'
+import { Card, CardContent, CardDescription, CardHeader } from '@identity/ui/components/card'
+import { cn } from '@identity/ui/lib/utils'
 import type { ReactNode } from 'react'
 
 import { AppearanceControls } from '#/components/appearance-controls'
@@ -31,6 +32,7 @@ export function AuthShell({
   headerAlign = 'center',
   tone = 'default',
 }: AuthShellProps) {
+  const danger = tone === 'danger'
   return (
     <main
       lang={lang}
@@ -38,24 +40,30 @@ export function AuthShell({
     >
       {showPreferences && locale ? <AppearanceControls locale={locale} /> : null}
       <div className="flex flex-1 items-center justify-center py-4">
-        <Card className={`auth-card relative w-full overflow-hidden border border-border bg-surface/90 backdrop-blur-xl ${wide ? 'max-w-[520px]' : 'max-w-[460px]'}`}>
-          <Card.Header className={`relative flex flex-col px-7 pt-9 min-[480px]:px-10 ${headerAlign === 'left' ? 'items-start text-left' : 'items-center text-center'} ${compact ? 'pb-9' : 'pb-2'}`}>
+        <Card className={cn('auth-card relative w-full gap-0 py-0', wide ? 'max-w-[520px]' : 'max-w-[460px]')}>
+          <CardHeader
+            className={cn(
+              'flex flex-col px-7 pt-9 min-[480px]:px-10',
+              headerAlign === 'left' ? 'items-start text-left' : 'items-center text-center',
+              compact ? 'pb-9' : 'pb-2',
+            )}
+          >
             {titleIcon ? (
-              <div className={`auth-item mb-4 flex size-12 items-center justify-center rounded-full ${tone === 'danger' ? 'bg-danger/10 text-danger' : 'bg-surface-secondary text-foreground'}`}>
+              <div className={cn('auth-item mb-4 flex size-12 items-center justify-center rounded-full', danger ? 'bg-destructive/10 text-destructive' : 'bg-muted text-foreground')}>
                 {titleIcon}
               </div>
             ) : null}
-            <Card.Title className={`auth-item auth-delay-1 text-[1.55rem] font-semibold tracking-tight ${tone === 'danger' ? 'text-danger' : 'text-foreground'}`}>
+            <h1 data-slot="card-title" className={cn('auth-item auth-delay-1 text-[1.55rem] font-semibold tracking-tight', danger ? 'text-destructive' : 'text-foreground')}>
               {title}
-            </Card.Title>
-            <Card.Description className={`auth-item auth-delay-2 mt-2 text-sm leading-6 ${tone === 'danger' ? 'text-foreground' : 'text-muted'} ${headerAlign === 'center' ? 'max-w-sm' : 'w-full'}`}>
+            </h1>
+            <CardDescription className={cn('auth-item auth-delay-2 mt-2 text-sm leading-6', danger ? 'text-foreground' : 'text-muted-foreground', headerAlign === 'center' ? 'max-w-sm' : 'w-full')}>
               {description}
-            </Card.Description>
-          </Card.Header>
+            </CardDescription>
+          </CardHeader>
           {children ? (
-            <Card.Content className="auth-stagger relative px-7 pb-9 pt-6 min-[480px]:px-10">
+            <CardContent className="auth-stagger relative px-7 pb-9 pt-6 min-[480px]:px-10">
               {children}
-            </Card.Content>
+            </CardContent>
           ) : null}
         </Card>
       </div>

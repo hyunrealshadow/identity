@@ -1,9 +1,19 @@
-import { Alert, Form } from '@heroui/react'
-import { useEffect, useMemo, useState, type ComponentProps, type FormEvent, type ReactNode } from 'react'
+import { createContext, useContext, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 
+import { ErrorAlert } from '#/components/form-alert'
 import { FormPendingContext } from '#/components/submit-button'
 
 import type { EnhancedNavigationResponse } from '#/lib/identity-types'
+
+type ValidationErrors = Record<string, string>
+
+/** Server field errors of the enclosing ProgressiveForm, cleared per edited field */
+export const FormValidationContext = createContext<ValidationErrors | undefined>(undefined)
+
+export function useFieldValidationError(name: string | undefined) {
+  const errors = useContext(FormValidationContext)
+  return name ? errors?.[name] : undefined
+}
 
 interface ProgressiveFormProps {
   action: string
@@ -11,9 +21,14 @@ interface ProgressiveFormProps {
   className?: string
   enhancementErrorMessage: string
   noValidate?: boolean
-  validationErrors?: ComponentProps<typeof Form>['validationErrors']
+  validationErrors?: ValidationErrors
 }
 
+/**
+ * A native POST form that keeps working without JavaScript. After hydration it
+ * submits through `fetch` so the clicked button can show progress, then follows
+ * the server-selected navigation.
+ */
 export function ProgressiveForm({
   action,
   children,
@@ -41,7 +56,6 @@ export function ProgressiveForm({
   function clearEditedFieldError(event: FormEvent<HTMLFormElement>) {
     const name = (event.target as { name?: string }).name
     if (!name || !validationErrors || !(name in validationErrors)) return
-    // Let the field update its value before removing its previous server error.
     setEditedValidation((current) => ({
       source: validationErrors,
       fields: new Set([
@@ -84,33 +98,27 @@ export function ProgressiveForm({
   const isPending = pendingSubmitter !== undefined
 
   return (
-    <Form
+    <form
       action={action}
       method="post"
       className={className}
       aria-busy={isPending}
       data-enhanced={enhanced ? 'true' : 'false'}
-      validationBehavior={noValidate ? 'aria' : 'native'}
-      validationErrors={currentValidationErrors}
-      render={(props) => <form {...props} onChange={clearEditedFieldError} />}
+      noValidate={noValidate}
+      onInput={clearEditedFieldError}
+      onChange={clearEditedFieldError}
       onSubmit={enhance}
     >
-      <FormPendingContext
-        value={{ isPending, submitter: pendingSubmitter ?? null }}
-      >
-        {children}
-      </FormPendingContext>
-      {enhancementError ? (
-        <Alert
-          status="danger"
-          className="auth-alert mt-4"
+      <FormValidationContext value={currentValidationErrors}>
+        <FormPendingContext
+          value={{ isPending, submitter: pendingSubmitter ?? null }}
         >
-          <Alert.Indicator />
-          <Alert.Content>
-            <Alert.Description>{enhancementError}</Alert.Description>
-          </Alert.Content>
-        </Alert>
+          {children}
+        </FormPendingContext>
+      </FormValidationContext>
+      {enhancementError ? (
+        <ErrorAlert message={enhancementError} className="mt-4" />
       ) : null}
-    </Form>
+    </form>
   )
 }

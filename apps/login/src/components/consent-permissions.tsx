@@ -28,17 +28,17 @@ export function ConsentPermissions({ scopes, locale }: { scopes: ScopeDisplay[];
 
   return (
     <details open className="group">
-      <summary className="flex cursor-pointer list-none items-center gap-3 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent [&::-webkit-details-marker]:hidden">
+      <summary className="flex cursor-pointer list-none items-center gap-3 rounded-sm focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
         <span className="flex-1 text-sm font-medium">{translate(locale, 'permissions')}</span>
-        <span className="text-xs text-muted">
+        <span className="text-xs text-muted-foreground">
           {translate(locale, 'permissionCount', { count: scopes.length })}
         </span>
-        <ChevronDown className="size-4 shrink-0 -rotate-90 text-muted transition-transform group-open:rotate-0" aria-hidden="true" />
+        <ChevronDown className="size-4 shrink-0 -rotate-90 text-muted-foreground transition-transform group-open:rotate-0" aria-hidden="true" />
       </summary>
       <ul
         aria-label={translate(locale, 'permissions')}
         tabIndex={0}
-        className="consent-permissions-list mt-3 max-h-[min(20rem,40dvh)] space-y-5 overflow-y-auto overscroll-contain rounded-sm pr-2 outline-none [scrollbar-gutter:stable] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent"
+        className="consent-permissions-list mt-3 max-h-[min(20rem,40dvh)] space-y-5 overflow-y-auto overscroll-contain rounded-sm pr-2 outline-none [scrollbar-gutter:stable] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ring"
       >
         {scopes.map((scope) => {
           const Icon = scopeIcons.get(scope.code)
@@ -46,7 +46,7 @@ export function ConsentPermissions({ scopes, locale }: { scopes: ScopeDisplay[];
           return (
             <li key={scope.code} className={hasScopeIcons ? 'grid grid-cols-[2.25rem_minmax(0,1fr)] items-start gap-3' : undefined}>
               {Icon ? (
-                <span className="flex size-9 items-center justify-center rounded-lg bg-surface-secondary text-foreground">
+                <span className="flex size-9 items-center justify-center rounded-lg bg-muted text-foreground">
                   <Icon className="size-4" aria-hidden="true" />
                 </span>
               ) : null}
@@ -58,7 +58,7 @@ export function ConsentPermissions({ scopes, locale }: { scopes: ScopeDisplay[];
                   </p>
                   <ScopeConsentStatus granted={scope.previously_granted} locale={locale} />
                 </div>
-                <p className="mt-0.5 text-xs leading-5 text-muted [overflow-wrap:anywhere]">
+                <p className="mt-0.5 text-xs leading-5 text-muted-foreground [overflow-wrap:anywhere]">
                   {localizedText(scope.descriptions, locale, scope.description)}
                 </p>
               </div>

@@ -1,11 +1,4 @@
 import {
-  Alert,
-  FieldError,
-  Input,
-  Label,
-  TextField,
-} from '@heroui/react'
-import {
   Outlet,
   createFileRoute,
   redirect,
@@ -15,11 +8,15 @@ import { createServerFn } from '@tanstack/react-start'
 import { ChevronRight, Plus } from 'lucide-react'
 import { useState } from 'react'
 
+import { buttonVariants } from '@identity/ui/components/button'
+
 import { AccountAvatar } from '#/components/account-avatar'
 import { AuthShell } from '#/components/auth-shell'
+import { ErrorAlert } from '#/components/form-alert'
 import { LoginClient } from '#/components/login-client'
 import { ProgressiveForm } from '#/components/progressive-form'
 import { SubmitButton } from '#/components/submit-button'
+import { TextField } from '#/components/text-field'
 import { beginAuthorization } from '#/lib/authorization-flow'
 import {
   errorMessage,
@@ -268,7 +265,7 @@ function LoginPage() {
       }
     >
       <LoginClient client={data.client} locale={data.locale} />
-      {visibleError ? <ErrorAlert message={visibleError} title={t('unableToContinue')} /> : null}
+      {visibleError ? <ErrorAlert className="mb-5" message={visibleError} title={t('unableToContinue')} /> : null}
 
       {showAccounts ? (
         <div className="auth-stagger-fast space-y-3">
@@ -289,21 +286,21 @@ function LoginPage() {
                 value={data.csrfToken}
               />
               <SubmitButton
-                variant="secondary"
+                variant="outline"
                 fullWidth
-                className="group h-auto justify-start gap-3 px-4 py-3 text-left hover:-translate-y-0.5 hover:shadow-[0_14px_30px_-14px_rgba(0,0,0,0.3)]"
+                className="group h-auto justify-start gap-3 px-4 py-3 text-left whitespace-normal hover:-translate-y-0.5 hover:shadow-[0_14px_30px_-14px_rgba(0,0,0,0.3)]"
               >
                 <AccountAvatar name={account.name} picture={account.picture} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-sm font-semibold">
                     {account.name}
                   </span>
-                  <span className="block truncate text-xs text-muted">
+                  <span className="block truncate text-xs text-muted-foreground">
                     {account.email}
                   </span>
                 </span>
                 <ChevronRight
-                  className="size-4 text-muted transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-foreground"
+                  className="size-4 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-foreground"
                   aria-hidden="true"
                 />
               </SubmitButton>
@@ -311,7 +308,7 @@ function LoginPage() {
           ))}
           <a
             href={`/login?login_id=${encodeURIComponent(loginId)}&no_accounts=1${data.uiLocales ? `&ui_locales=${encodeURIComponent(data.uiLocales)}` : ''}`}
-            className="flex min-h-11 items-center justify-center gap-2 rounded-xl text-sm font-semibold text-accent transition-colors duration-200 hover:bg-accent/5 active:scale-[0.98]"
+            className={buttonVariants({ variant: 'ghost', className: 'h-11 w-full font-semibold' })}
           >
             <Plus className="size-4" aria-hidden="true" />
               {t('useAnotherAccount')}
@@ -323,26 +320,26 @@ function LoginPage() {
           <input type="hidden" name="login_id" value={loginId} />
           <input type="hidden" name="csrf_token" value={data.csrfToken} />
           <input type="hidden" name="ui_locales" value={data.uiLocales} />
-          <TextField isRequired fullWidth name="identifier" isInvalid={!!identifierError}>
-            <Label>{t('identifier')}</Label>
-            <Input
-              autoFocus
-              defaultValue={
-                data.formValues.identifier ?? search.identifier ?? data.loginHint
-              }
-              autoComplete="username"
-              placeholder="name@example.com"
-              onChange={() => setIdentifierError(undefined)}
-            />
-            <FieldError>{identifierError}</FieldError>
-          </TextField>
+          <TextField
+            required
+            name="identifier"
+            label={t('identifier')}
+            error={identifierError}
+            autoFocus
+            defaultValue={
+              data.formValues.identifier ?? search.identifier ?? data.loginHint
+            }
+            autoComplete="username"
+            placeholder="name@example.com"
+            onChange={() => setIdentifierError(undefined)}
+          />
           <SubmitButton fullWidth>
             {t('next')}
           </SubmitButton>
           {data.accounts.length > 0 ? (
             <a
               href={`/login?login_id=${encodeURIComponent(loginId)}${data.uiLocales ? `&ui_locales=${encodeURIComponent(data.uiLocales)}` : ''}`}
-              className="auth-link mx-auto flex w-fit justify-center text-sm font-semibold text-accent"
+              className="auth-link mx-auto flex w-fit justify-center text-sm font-semibold text-primary"
             >
               {t('backToAccounts')}
             </a>
@@ -353,17 +350,3 @@ function LoginPage() {
   )
 }
 
-function ErrorAlert({ message, title }: { message: string; title: string }) {
-  return (
-    <Alert
-      status="danger"
-      className="auth-alert mb-5"
-    >
-      <Alert.Indicator />
-      <Alert.Content>
-        <Alert.Title>{title}</Alert.Title>
-        <Alert.Description>{message}</Alert.Description>
-      </Alert.Content>
-    </Alert>
-  )
-}

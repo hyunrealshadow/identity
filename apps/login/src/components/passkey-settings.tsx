@@ -1,9 +1,14 @@
-import { Button, Input, Label, Modal, TextField, Tooltip } from '@heroui/react'
+import { Button } from '@identity/ui/components/button'
+import { Field, FieldLabel } from '@identity/ui/components/field'
+import { Input } from '@identity/ui/components/input'
+import { Spinner } from '@identity/ui/components/spinner'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@identity/ui/components/tooltip'
 import { useRouter } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { KeyRound, Trash2 } from 'lucide-react'
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 
+import { AccountDialog } from './account-dialog'
 import { SettingsRow } from './account-settings'
 import { MfaRecoverySetup } from './mfa-recovery-setup'
 import { MfaStepper } from './mfa-stepper'
@@ -174,48 +179,46 @@ export function PasskeySettings({ locale, keys, loginHint, openRequested, totpEn
         title={t('passkeys')}
         description={t('passkeysDescription')}
         detail={t('passkeyCount', { count: keys.length, limit: MAX_PASSKEYS_PER_ACCOUNT })}
-        action={<Button variant="secondary" onPress={() => void prepare()} isDisabled={busy || pending} isPending={pending}>{t('passkeyManage')}</Button>}
+        action={<Button variant="outline" onClick={() => void prepare()} disabled={busy || pending}>{pending ? <Spinner aria-hidden="true" role="presentation" /> : null}{t('passkeyManage')}</Button>}
       />
-      <Modal state={modal}>
-        <Modal.Backdrop isDismissable={false} isKeyboardDismissDisabled={busy}>
-          <Modal.Container size="lg" scroll="outside">
-            <Modal.Dialog>
-              {({ close }) => (
-                <>
-                  <Modal.CloseTrigger aria-label={t('close')} isDisabled={busy} />
-                  <Modal.Header>
-                    <Modal.Heading>{t(view === 'enroll' ? 'passkeyAdd' : 'passkeyManage')}</Modal.Heading>
-                    {view === 'manage' ? <p className="mt-1 text-sm text-muted">{t('passkeyCount', { count: keys.length, limit: MAX_PASSKEYS_PER_ACCOUNT })}</p> : null}
-                  </Modal.Header>
-                  <Modal.Body>
+      <AccountDialog
+        state={modal}
+        busy={busy}
+        closeLabel={t('close')}
+        title={t(view === 'enroll' ? 'passkeyAdd' : 'passkeyManage')}
+        description={view === 'manage' ? t('passkeyCount', { count: keys.length, limit: MAX_PASSKEYS_PER_ACCOUNT }) : undefined}
+      >
+        <div>
                     {view === 'manage' ? <>
-                      {keys.length ? <ul aria-label={t('passkeys')} className="divide-y divide-separator">
+                      {keys.length ? <ul aria-label={t('passkeys')} className="divide-y divide-border">
                         {keys.map((key) => <li key={key.id} className="py-2 first:pt-0 last:pb-0">
                           <div className="flex min-w-0 items-start gap-3">
-                            <KeyRound className="mt-1.5 size-5 shrink-0 text-muted" aria-hidden="true" />
+                            <KeyRound className="mt-1.5 size-5 shrink-0 text-muted-foreground" aria-hidden="true" />
                             <p className="min-w-0 flex-1 py-1.5 text-sm font-medium leading-5 text-foreground [overflow-wrap:anywhere]">{key.name}</p>
                             <Tooltip>
-                              <Button size="sm" variant="ghost" isIconOnly className="shrink-0 text-danger" isDisabled={busy} aria-label={t('passkeyDelete') + ' ' + key.name} onPress={() => { setDeleting(key.id); setError('') }}>
-                                <Trash2 className="size-4" aria-hidden="true" />
-                              </Button>
-                              <Tooltip.Content>{t('passkeyDelete')}</Tooltip.Content>
+                              <TooltipTrigger
+                                render={<Button size="icon-sm" variant="ghost" className="shrink-0 text-destructive hover:text-destructive" disabled={busy} aria-label={t('passkeyDelete') + ' ' + key.name} onClick={() => { setDeleting(key.id); setError('') }} />}
+                              >
+                                <Trash2 aria-hidden="true" />
+                              </TooltipTrigger>
+                              <TooltipContent>{t('passkeyDelete')}</TooltipContent>
                             </Tooltip>
                           </div>
-                          {deleting === key.id ? <div className="mt-3 space-y-3 border-t border-separator pt-3">
+                          {deleting === key.id ? <div className="mt-3 space-y-3 border-t border-border pt-3">
                             <p className="text-sm">{t('passkeyDeleteConfirm')}</p>
-                            {keys.length === 1 && !totpEnabled ? <p className="text-sm text-danger">{t('mfaLastMethodRecoveryWarning')}</p> : null}
+                            {keys.length === 1 && !totpEnabled ? <p className="text-sm text-destructive">{t('mfaLastMethodRecoveryWarning')}</p> : null}
                             <div className="flex justify-end gap-2">
-                              <Button variant="secondary" onPress={() => setDeleting(null)} isDisabled={busy}>{t('cancel')}</Button>
-                              <Button variant="danger" onPress={() => void remove(key.id)} isDisabled={busy} isPending={busy}>{t('passkeyConfirmDelete')}</Button>
+                              <Button variant="outline" onClick={() => setDeleting(null)} disabled={busy}>{t('cancel')}</Button>
+                              <Button variant="destructive" onClick={() => void remove(key.id)} disabled={busy}>{busy ? <Spinner aria-hidden="true" role="presentation" /> : null}{t('passkeyConfirmDelete')}</Button>
                             </div>
                           </div> : null}
                         </li>)}
-                      </ul> : <p className="text-sm text-muted">{t('passkeyEmpty')}</p>}
-                      {error ? <p role="alert" className="mt-3 text-sm text-danger">{error}</p> : null}
-                      {atLimit ? <p className="mt-4 text-xs text-muted">{t('passkeyLimitReached', { limit: MAX_PASSKEYS_PER_ACCOUNT })}</p> : null}
+                      </ul> : <p className="text-sm text-muted-foreground">{t('passkeyEmpty')}</p>}
+                      {error ? <p role="alert" className="mt-3 text-sm text-destructive">{error}</p> : null}
+                      {atLimit ? <p className="mt-4 text-xs text-muted-foreground">{t('passkeyLimitReached', { limit: MAX_PASSKEYS_PER_ACCOUNT })}</p> : null}
                       <div className="mt-5 flex justify-end gap-2">
-                        <Button type="button" variant="secondary" onPress={close} isDisabled={busy}>{t('close')}</Button>
-                        <Button onPress={() => { setName(''); setView('enroll') }} isDisabled={busy || atLimit}>{t('passkeyAdd')}</Button>
+                        <Button type="button" variant="outline" onClick={modal.close} disabled={busy}>{t('close')}</Button>
+                        <Button onClick={() => { setName(''); setView('enroll') }} disabled={busy || atLimit}>{t('passkeyAdd')}</Button>
                       </div>
                     </> : <div className="text-foreground">
                       {hasRecoveryStep ? <MfaStepper currentStep={needsRecoveryStep ? 1 : 2} label={t('passkeyAdd')} steps={[t('accountRecoveryCodesTitle'), t('passkeyAdd')]} /> : null}
@@ -224,28 +227,23 @@ export function PasskeySettings({ locale, keys, loginHint, openRequested, totpEn
                           {hasRecoveryStep ? <h2 className="text-sm font-semibold">{t('passkeyAdd')}</h2> : null}
                           <p className={`${hasRecoveryStep ? 'mt-1 ' : ''}text-sm leading-5`}>{t('passkeySetupDescription')}</p>
                         </div>
-                        <TextField name="passkey_name" value={name} onChange={setName} maxLength={100} isRequired isDisabled={!supported || busy || atLimit || !recoveryReady} fullWidth>
-                          <Label>{t('passkeyName')}</Label>
-                          <Input autoComplete="off" placeholder={t('passkeyNamePlaceholder')} />
-                        </TextField>
-                        {atLimit ? <p className="text-xs text-muted">{t('passkeyLimitReached', { limit: MAX_PASSKEYS_PER_ACCOUNT })}</p> : null}
-                        {!supported ? <p className="text-xs text-muted">{t('passkeyUnsupported')}</p> : null}
+                        <Field data-disabled={!supported || busy || atLimit || !recoveryReady ? true : undefined}>
+                          <FieldLabel htmlFor="passkey-name">{t('passkeyName')}</FieldLabel>
+                          <Input id="passkey-name" name="passkey_name" value={name} onChange={(event) => setName(event.target.value)} maxLength={100} required disabled={!supported || busy || atLimit || !recoveryReady} autoComplete="off" placeholder={t('passkeyNamePlaceholder')} />
+                        </Field>
+                        {atLimit ? <p className="text-xs text-muted-foreground">{t('passkeyLimitReached', { limit: MAX_PASSKEYS_PER_ACCOUNT })}</p> : null}
+                        {!supported ? <p className="text-xs text-muted-foreground">{t('passkeyUnsupported')}</p> : null}
                         <div className="flex items-center justify-between gap-2">
-                          {hasRecoveryStep || keys.length ? <Button type="button" variant="ghost" onPress={() => hasRecoveryStep ? setRecoverySaved(false) : setView('manage')} isDisabled={busy}>{t('accountMfaBack')}</Button> : <span />}
-                          <Button type="submit" isDisabled={!supported || busy || atLimit || !name.trim() || !recoveryReady} isPending={busy}>{t('passkeyAdd')}</Button>
+                          {hasRecoveryStep || keys.length ? <Button type="button" variant="ghost" onClick={() => hasRecoveryStep ? setRecoverySaved(false) : setView('manage')} disabled={busy}>{t('accountMfaBack')}</Button> : <span />}
+                          <Button type="submit" disabled={!supported || busy || atLimit || !name.trim() || !recoveryReady}>{busy ? <Spinner aria-hidden="true" role="presentation" /> : null}{t('passkeyAdd')}</Button>
                         </div>
                       </form>}
                     </div>}
-                    {registrationError ? <p role="alert" className="text-sm text-danger">{registrationError}</p> : null}
-                  </Modal.Body>
-                </>
-              )}
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
-      <p className="no-js-only mt-3 text-xs text-muted">{t('passkeyRequiresJavascript')}</p>
-      {preparationError ? <p role="alert" className="mt-3 text-sm text-danger">{preparationError}</p> : null}
+                    {registrationError ? <p role="alert" className="text-sm text-destructive">{registrationError}</p> : null}
+        </div>
+      </AccountDialog>
+      <p className="no-js-only mt-3 text-xs text-muted-foreground">{t('passkeyRequiresJavascript')}</p>
+      {preparationError ? <p role="alert" className="mt-3 text-sm text-destructive">{preparationError}</p> : null}
     </section>
   )
 }

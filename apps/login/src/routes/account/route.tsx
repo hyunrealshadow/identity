@@ -1,8 +1,9 @@
-import { Alert } from '@heroui/react'
+import { Alert, AlertAction, AlertDescription, AlertTitle } from '@identity/ui/components/alert'
+import { Button } from '@identity/ui/components/button'
 import { queryOptions, useSuspenseQuery } from '@tanstack/react-query'
 import { Link, Outlet, createFileRoute, redirect } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
-import { AtSign, KeyRound, Laptop, UserRound, X } from 'lucide-react'
+import { AtSign, CircleAlert, CircleCheck, KeyRound, Laptop, UserRound, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { AccountAvatar } from '#/components/account-avatar'
@@ -144,7 +145,7 @@ function AccountLayout() {
   }, [flash])
 
   if (!current.data) {
-    return <main className="flex min-h-screen items-center justify-center p-6"><Alert status="danger" className="max-w-lg"><Alert.Indicator /><Alert.Content><Alert.Title>{translate(current.locale, 'unableToContinue')}</Alert.Title><Alert.Description>{current.error}</Alert.Description></Alert.Content></Alert></main>
+    return <main className="flex min-h-screen items-center justify-center p-6"><Alert variant="destructive" className="max-w-lg"><CircleAlert aria-hidden="true" /><AlertTitle>{translate(current.locale, 'unableToContinue')}</AlertTitle><AlertDescription>{current.error}</AlertDescription></Alert></main>
   }
 
   const account = current.data.account
@@ -159,7 +160,7 @@ function AccountLayout() {
 
   return (
     <main lang={current.locale} className="min-h-screen bg-background">
-        <header className="account-topbar border-b border-separator">
+        <header className="account-topbar border-b border-border">
           <div className="mx-auto flex h-14 max-w-5xl items-center justify-between px-5">
             <Link to="/account/profile" preload={false} className="text-sm font-semibold tracking-tight">Identity</Link>
             <div className="flex items-center">
@@ -179,19 +180,19 @@ function AccountLayout() {
           <aside>
             <div className="mb-5 flex items-center gap-3 px-2">
               <AccountAvatar name={displayName} picture={account.picture} size="md" className="shrink-0" />
-              <div className="min-w-0"><p className="truncate text-sm font-medium">{displayName}</p><p className="truncate text-xs text-muted">{account.email}</p></div>
+              <div className="min-w-0"><p className="truncate text-sm font-medium">{displayName}</p><p className="truncate text-xs text-muted-foreground">{account.email}</p></div>
             </div>
             <nav className="account-nav grid grid-cols-2 gap-1 md:flex md:flex-col" aria-label={t('accountSettings')}>
               {navItems.map(({ to, label, icon: Icon }) => {
-                return <Link key={to} to={to} preload={false} activeOptions={{ exact: true }} activeProps={{ className: 'font-medium' }} inactiveProps={{ className: 'text-muted' }} className="account-nav-link flex min-w-fit items-center gap-2.5 rounded-field px-3 py-2 text-sm"><Icon className="size-4" aria-hidden="true" />{label}</Link>
+                return <Link key={to} to={to} preload={false} activeOptions={{ exact: true }} activeProps={{ className: 'font-medium' }} inactiveProps={{ className: 'text-muted-foreground' }} className="account-nav-link flex min-w-fit items-center gap-2.5 rounded-md px-3 py-2 text-sm"><Icon className="size-4" aria-hidden="true" />{label}</Link>
               })}
             </nav>
           </aside>
           <section className="min-w-0">
             <AccountReauthProvider locale={current.locale} access={current.access}>
             <div className="mb-5 space-y-3">
-              {visibleMessage ? <Alert status="success"><Alert.Indicator /><Alert.Content><Alert.Title>{visibleMessage === 'reauthenticated' ? t('accountReauthenticated') : t('accountSaved')}</Alert.Title></Alert.Content><button type="button" className="ml-auto cursor-pointer rounded-sm p-1 text-muted hover:bg-surface-secondary hover:text-foreground" aria-label={t('close')} onClick={() => setVisibleMessage(undefined)}><X className="size-4" aria-hidden="true" /></button></Alert> : null}
-              {visibleError ? <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Title>{t('accountRequestFailed')}</Alert.Title><Alert.Description>{visibleError}</Alert.Description></Alert.Content><button type="button" className="ml-auto cursor-pointer rounded-sm p-1 text-muted hover:bg-surface-secondary hover:text-foreground" aria-label={t('close')} onClick={() => setVisibleError(undefined)}><X className="size-4" aria-hidden="true" /></button></Alert> : null}
+              {visibleMessage ? <Alert className="text-success"><CircleCheck aria-hidden="true" /><AlertTitle>{visibleMessage === 'reauthenticated' ? t('accountReauthenticated') : t('accountSaved')}</AlertTitle><AlertAction><Button variant="ghost" size="icon-xs" aria-label={t('close')} onClick={() => setVisibleMessage(undefined)}><X aria-hidden="true" /></Button></AlertAction></Alert> : null}
+              {visibleError ? <Alert variant="destructive"><CircleAlert aria-hidden="true" /><AlertTitle>{t('accountRequestFailed')}</AlertTitle><AlertDescription>{visibleError}</AlertDescription><AlertAction><Button variant="ghost" size="icon-xs" aria-label={t('close')} onClick={() => setVisibleError(undefined)}><X aria-hidden="true" /></Button></AlertAction></Alert> : null}
             </div>
             <Outlet />
             </AccountReauthProvider>

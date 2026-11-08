@@ -1,9 +1,19 @@
-import { Alert, Button, InputGroup, Label, Link, Modal, TextField, useOverlayState } from '@heroui/react'
+import { Alert, AlertDescription, AlertTitle } from '@identity/ui/components/alert'
+import { Button, buttonVariants } from '@identity/ui/components/button'
+import { Field, FieldLabel } from '@identity/ui/components/field'
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+} from '@identity/ui/components/input-group'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { Check, Copy } from 'lucide-react'
+import { Check, Copy, ExternalLink, TriangleAlert } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { AccountActionForm } from '#/components/account-action-form'
+import { AccountDialog } from '#/components/account-dialog'
+import { useDialogState } from '#/components/use-dialog-state'
 import { PageHeading, PasswordField, SettingsCard, SettingsRow } from '#/components/account-settings'
 import { RecoveryCodeList, RecoveryCodeTools } from '#/components/recovery-code-tools'
 import { TotpQrCode } from '#/components/totp-qr-code'
@@ -48,7 +58,7 @@ function SecurityPage() {
           <SettingsRow title="••••••••" action={<PasswordModal flash={flash} loginHint={loginHint} openForm={search.confirm === 'change-password'} t={t} />} />
         </SettingsCard>
         <SettingsCard title={t('accountMfaRowTitle')} description={t('accountMfaDescription')}>
-          <div className="divide-y divide-separator">
+          <div className="divide-y divide-border">
             {(data.passkeys?.length ?? 0) > 0 ? <div className="pb-5"><MfaPriority locale={locale} preference={security.preferredMfaMethod} totpEnabled={security.totpEnabled} /></div> : null}
             <div className={(data.passkeys?.length ?? 0) > 0 ? 'py-5' : 'pb-5'}><PasskeySettings totpEnabled={security.totpEnabled} loginHint={loginHint} openRequested={search.confirm === 'passkeys'} locale={locale} keys={data.passkeys ?? []} /></div>
             <div className={security.totpEnabled ? 'py-5' : 'pt-5'}>
@@ -82,7 +92,7 @@ type Mfa = ReturnType<typeof useAccount>['mfa']
 type Translator = (key: Parameters<typeof translate>[1], values?: Parameters<typeof translate>[2]) => string
 
 function PasswordModal({ flash, loginHint, openForm, t }: { flash: Flash; loginHint: string; openForm: boolean; t: Translator }) {
-  const modal = useOverlayState()
+  const modal = useDialogState()
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -91,12 +101,25 @@ function PasswordModal({ flash, loginHint, openForm, t }: { flash: Flash; loginH
     void navigate({ to: '/account/security', replace: true })
   }, [openForm])
 
-  return <><AccountActionForm action="prepare-change-password" requestFailedMessage={t('accountRequestFailed')} onSuccess={() => modal.open()}><input type="hidden" name="login_hint" value={loginHint} /><Button type="submit" variant="secondary">{t('accountChangePassword')}</Button></AccountActionForm><Modal state={modal}><Modal.Backdrop isDismissable={false}><Modal.Container size="lg"><Modal.Dialog>{({ close }) => <><Modal.CloseTrigger aria-label={t('close')} /><Modal.Header><Modal.Heading>{t('accountChangePassword')}</Modal.Heading></Modal.Header><Modal.Body><AccountActionForm action="change-password" requestFailedMessage={t('accountRequestFailed')} onSuccess={close} className="grid gap-4"><input type="hidden" name="login_hint" value={loginHint} /><PasswordField name="new_password" label={t('accountNewPassword')} error={flash.fields?.new_password} /><PasswordField name="confirm_password" label={t('accountConfirmPassword')} error={flash.fields?.confirm_password} /><div className="flex justify-end"><Button type="submit">{t('accountChangePassword')}</Button></div></AccountActionForm></Modal.Body></>}</Modal.Dialog></Modal.Container></Modal.Backdrop></Modal></>
+  return <>
+    <AccountActionForm action="prepare-change-password" requestFailedMessage={t('accountRequestFailed')} onSuccess={() => modal.open()}>
+      <input type="hidden" name="login_hint" value={loginHint} />
+      <Button type="submit" variant="outline">{t('accountChangePassword')}</Button>
+    </AccountActionForm>
+    <AccountDialog state={modal} title={t('accountChangePassword')} closeLabel={t('close')}>
+      <AccountActionForm action="change-password" requestFailedMessage={t('accountRequestFailed')} onSuccess={modal.close} className="grid gap-4">
+        <input type="hidden" name="login_hint" value={loginHint} />
+        <PasswordField name="new_password" label={t('accountNewPassword')} error={flash.fields?.new_password} />
+        <PasswordField name="confirm_password" label={t('accountConfirmPassword')} error={flash.fields?.confirm_password} />
+        <div className="flex justify-end"><Button type="submit">{t('accountChangePassword')}</Button></div>
+      </AccountActionForm>
+    </AccountDialog>
+  </>
 }
 
 function MfaSetupAction({ flash, mfa, loginHint, openSetup, initialStep, t }: { flash: Flash; mfa: Mfa; loginHint: string; openSetup: boolean; initialStep?: 3; t: Translator }) {
   const hasModalContent = Boolean(mfa.enrollment)
-  const modal = useOverlayState()
+  const modal = useDialogState()
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -109,37 +132,26 @@ function MfaSetupAction({ flash, mfa, loginHint, openSetup, initialStep, t }: { 
     <>
       {!hasModalContent ? (
         <AccountActionForm action="begin-totp" requestFailedMessage={t('accountRequestFailed')} onSuccess={() => modal.open()}>
-          <Button type="submit" variant="secondary">{t('accountMfaEnable')}</Button>
+          <Button type="submit" variant="outline">{t('accountMfaEnable')}</Button>
         </AccountActionForm>
+      ) : (
+        <Button variant="outline" onClick={modal.open}>{t('accountMfaEnable')}</Button>
+      )}
+      {hasModalContent ? (
+        <AccountDialog state={modal} title={t('accountMfa')} closeLabel={t('close')}>
+          {mfa.enrollment ? (
+            <MfaEnrollmentWizard enrollment={mfa.enrollment} loginHint={loginHint} initialStep={initialStep} codeError={flash.fields?.code} validationRevision={flash.fields} close={modal.close} t={t} />
+          ) : (
+            <p className="text-sm text-muted-foreground">{t('accountMfaRecommendation')}</p>
+          )}
+        </AccountDialog>
       ) : null}
-      {hasModalContent ? <Modal state={modal}>
-        <Button variant="secondary">{t('accountMfaEnable')}</Button>
-        <Modal.Backdrop isDismissable={false}>
-          <Modal.Container size="lg" scroll="outside">
-            <Modal.Dialog>
-              {({ close }) => <>
-                <Modal.CloseTrigger aria-label={t('close')} />
-                <Modal.Header><Modal.Heading>{t('accountMfa')}</Modal.Heading></Modal.Header>
-                <Modal.Body>
-                <div className="space-y-5">
-            {mfa.enrollment ? (
-              <MfaEnrollmentWizard enrollment={mfa.enrollment} loginHint={loginHint} initialStep={initialStep} codeError={flash.fields?.code} validationRevision={flash.fields} close={close} t={t} />
-            ) : (
-              <p className="text-sm text-muted">{t('accountMfaRecommendation')}</p>
-            )}
-                </div>
-                </Modal.Body>
-              </>}
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal> : null}
     </>
   )
 }
 
 function DeleteMfaModal({ loginHint, openConfirm, t, lastMethod }: { lastMethod: boolean; loginHint: string; openConfirm: boolean; t: Translator }) {
-  const modal = useOverlayState()
+  const modal = useDialogState()
   const navigate = useNavigate()
 
   useEffect(() => {
@@ -156,41 +168,24 @@ function DeleteMfaModal({ loginHint, openConfirm, t, lastMethod }: { lastMethod:
         onSuccess={() => modal.open()}
       >
         <input type="hidden" name="login_hint" value={loginHint} />
-        <Button type="submit" variant="danger-soft">{t('accountMfaDelete')}</Button>
+        <Button type="submit" variant="destructive">{t('accountMfaDelete')}</Button>
       </AccountActionForm>
-      <Modal state={modal}>
-      <Modal.Backdrop isDismissable={false}>
-        <Modal.Container size="md">
-          <Modal.Dialog>
-            {({ close }) => (
-              <>
-                <Modal.CloseTrigger aria-label={t('close')} />
-                <Modal.Header>
-                  <Modal.Heading>{t('accountMfaDeleteTitle')}</Modal.Heading>
-                </Modal.Header>
-                <Modal.Body>
-                  <p className="text-sm text-muted">{t('accountMfaDeleteDescription')}</p>
-                  {lastMethod ? <p className="mt-3 text-sm text-danger">{t('mfaLastMethodRecoveryWarning')}</p> : null}
-                  <div className="mt-5 flex justify-end gap-2">
-                    <Button type="button" variant="secondary" onPress={close}>{t('cancel')}</Button>
-                    <AccountActionForm action="disable-totp" requestFailedMessage={t('accountRequestFailed')} onSuccess={close}>
-                      <input type="hidden" name="login_hint" value={loginHint} />
-                      <Button type="submit" variant="danger">{t('accountMfaDelete')}</Button>
-                    </AccountActionForm>
-                  </div>
-                </Modal.Body>
-              </>
-            )}
-          </Modal.Dialog>
-        </Modal.Container>
-      </Modal.Backdrop>
-      </Modal>
+      <AccountDialog state={modal} title={t('accountMfaDeleteTitle')} description={t('accountMfaDeleteDescription')} closeLabel={t('close')} className="sm:max-w-md">
+        {lastMethod ? <p className="text-sm text-destructive">{t('mfaLastMethodRecoveryWarning')}</p> : null}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={modal.close}>{t('cancel')}</Button>
+          <AccountActionForm action="disable-totp" requestFailedMessage={t('accountRequestFailed')} onSuccess={modal.close}>
+            <input type="hidden" name="login_hint" value={loginHint} />
+            <Button type="submit" variant="destructive">{t('accountMfaDelete')}</Button>
+          </AccountActionForm>
+        </div>
+      </AccountDialog>
     </>
   )
 }
 
 function RecoveryCodesModal({ mfa, remaining, loginHint, openManage, t }: { mfa: Mfa; remaining: number; loginHint: string; openManage: boolean; t: Translator }) {
-  const modal = useOverlayState()
+  const modal = useDialogState()
   const navigate = useNavigate()
   const codes = mfa.recoveryCodes
 
@@ -201,49 +196,36 @@ function RecoveryCodesModal({ mfa, remaining, loginHint, openManage, t }: { mfa:
   }, [openManage])
 
   return (
-    <Modal state={modal}>
-      <Button variant="secondary">{t('accountRecoveryCodesManage')}</Button>
-      <Modal.Backdrop isDismissable={false}>
-        <Modal.Container size="lg" scroll="outside">
-          <Modal.Dialog>
-            {({ close }) => (
-              <>
-                <Modal.CloseTrigger aria-label={t('close')} />
-                <Modal.Header><Modal.Heading>{codes ? t('accountRecoveryCodesNewTitle') : t('accountRecoveryCodes')}</Modal.Heading></Modal.Header>
-                <Modal.Body>
-                  {codes ? (
-                    <>
-                      <p className="text-sm leading-5">{t('accountRecoveryCodesRegeneratedDescription')}</p>
-                      <div className="mt-4">
-                        <RecoveryCodeList codes={codes} copyLabel={t('accountRecoveryCodeCopy')} copiedLabel={t('accountRecoveryCodeCopied')} />
-                      </div>
-                      <div className="mt-4 flex flex-wrap items-center gap-2">
-                        <RecoveryCodeTools codes={codes} copyLabel={t('accountRecoveryCodesCopy')} copiedLabel={t('accountRecoveryCodesCopied')} printLabel={t('accountRecoveryCodesPrint')} downloadLabel={t('accountRecoveryCodesDownload')} />
-                        <Button type="button" className="ms-auto" onPress={close}>{t('done')}</Button>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <p className="text-sm leading-5">{t('accountRecoveryCodesManageSummary', { count: remaining })}</p>
-                      <p className="mt-3 text-sm leading-5 text-danger">{t('accountRecoveryCodesRegenerateWarning')}</p>
-                      <div className="mt-5 flex justify-end">
-                        <AccountActionForm action="regenerate-recovery-codes" requestFailedMessage={t('accountRequestFailed')} onSuccess={() => modal.open()}>
-                          <input type="hidden" name="login_hint" value={loginHint} />
-                          <Button type="submit" variant="danger">{t('accountRecoveryCodesRegenerate')}</Button>
-                        </AccountActionForm>
-                      </div>
-                    </>
-                  )}
-                </Modal.Body>
-              </>
-            )}
-          </Modal.Dialog>
-        </Modal.Container>
-      </Modal.Backdrop>
-    </Modal>
+    <>
+      <Button variant="outline" onClick={modal.open}>{t('accountRecoveryCodesManage')}</Button>
+      <AccountDialog state={modal} title={codes ? t('accountRecoveryCodesNewTitle') : t('accountRecoveryCodes')} closeLabel={t('close')}>
+        {codes ? (
+          <div>
+            <p className="text-sm leading-5 text-muted-foreground">{t('accountRecoveryCodesRegeneratedDescription')}</p>
+            <div className="mt-4">
+              <RecoveryCodeList codes={codes} copyLabel={t('accountRecoveryCodeCopy')} copiedLabel={t('accountRecoveryCodeCopied')} />
+            </div>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <RecoveryCodeTools codes={codes} copyLabel={t('accountRecoveryCodesCopy')} copiedLabel={t('accountRecoveryCodesCopied')} printLabel={t('accountRecoveryCodesPrint')} downloadLabel={t('accountRecoveryCodesDownload')} />
+              <Button type="button" className="ms-auto" onClick={modal.close}>{t('done')}</Button>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <p className="text-sm leading-5 text-muted-foreground">{t('accountRecoveryCodesManageSummary', { count: remaining })}</p>
+            <p className="mt-3 text-sm leading-5 text-destructive">{t('accountRecoveryCodesRegenerateWarning')}</p>
+            <div className="mt-5 flex justify-end">
+              <AccountActionForm action="regenerate-recovery-codes" requestFailedMessage={t('accountRequestFailed')} onSuccess={() => modal.open()}>
+                <input type="hidden" name="login_hint" value={loginHint} />
+                <Button type="submit" variant="destructive">{t('accountRecoveryCodesRegenerate')}</Button>
+              </AccountActionForm>
+            </div>
+          </div>
+        )}
+      </AccountDialog>
+    </>
   )
 }
-
 function MfaEnrollmentWizard({ enrollment, loginHint, initialStep, codeError, validationRevision, close, t }: { enrollment: NonNullable<Mfa['enrollment']>; loginHint: string; initialStep?: 3; codeError?: string; validationRevision?: Flash['fields']; close: () => void; t: Translator }) {
   const hasRecoveryStep = enrollment.recovery_codes.length > 0
   const [step, setStep] = useState<1 | 2 | 3>(initialStep ?? (codeError ? 3 : hasRecoveryStep ? 1 : 2))
@@ -305,55 +287,52 @@ function MfaEnrollmentWizard({ enrollment, loginHint, initialStep, codeError, va
       {step === 2 ? (
         <div>
           <h2 className="text-sm font-semibold">{stepTitle(t('accountMfaStepScan'))}</h2>
-          <p className="mt-1 text-sm leading-5">{t('accountMfaStepScanDescription')}</p>
+          <p className="mt-1 text-sm leading-5 text-muted-foreground">{t('accountMfaStepScanDescription')}</p>
           <div className="mt-4 flex gap-2">
-            <Button type="button" size="sm" variant={method === 'qr' ? 'primary' : 'secondary'} onPress={() => setMethod('qr')}>{t('accountMfaUseQrCode')}</Button>
-            <Button type="button" size="sm" variant={method === 'manual' ? 'primary' : 'secondary'} onPress={() => setMethod('manual')}>{t('accountMfaUseSetupKey')}</Button>
+            <Button type="button" size="sm" variant={method === 'qr' ? 'default' : 'outline'} aria-pressed={method === 'qr'} onClick={() => setMethod('qr')}>{t('accountMfaUseQrCode')}</Button>
+            <Button type="button" size="sm" variant={method === 'manual' ? 'default' : 'outline'} aria-pressed={method === 'manual'} onClick={() => setMethod('manual')}>{t('accountMfaUseSetupKey')}</Button>
           </div>
           <div className="mt-4 min-h-48">
             {method === 'qr' ? (
               <TotpQrCode uri={enrollment.otp_auth_uri} label={t('accountMfaUseQrCode')} />
             ) : (
               <div className="max-w-lg">
-                <TextField fullWidth name="totp-setup-key" value={enrollment.secret}>
-                  <Label>{t('accountMfaSecret')}</Label>
-                  <InputGroup variant="secondary" fullWidth>
-                    <InputGroup.Input readOnly className="font-mono" />
-                    <InputGroup.Suffix className="pe-0">
-                      <Button
-                        type="button"
-                        isIconOnly
-                        size="sm"
-                        variant="ghost"
+                <Field>
+                  <FieldLabel htmlFor="totp-setup-key">{t('accountMfaSecret')}</FieldLabel>
+                  <InputGroup className="bg-muted/50">
+                    <InputGroupInput id="totp-setup-key" name="totp-setup-key" value={enrollment.secret} readOnly className="font-mono" />
+                    <InputGroupAddon align="inline-end">
+                      <InputGroupButton
+                        size="icon-xs"
                         aria-label={secretCopied ? t('accountMfaSecretCopied') : t('accountMfaSecretCopy')}
-                        onPress={() => void copySecret()}
+                        onClick={() => void copySecret()}
                       >
-                        {secretCopied ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}
-                      </Button>
-                    </InputGroup.Suffix>
+                        {secretCopied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+                      </InputGroupButton>
+                    </InputGroupAddon>
                   </InputGroup>
-                </TextField>
+                </Field>
                 <div className="mt-3 flex items-center gap-2">
-                  <Link href={enrollment.otp_auth_uri}>
+                  <a href={enrollment.otp_auth_uri} className={buttonVariants({ variant: 'link', className: 'h-auto px-0' })}>
                     {t('accountMfaOpenAuthenticator')}
-                  </Link>
+                    <ExternalLink aria-hidden="true" />
+                  </a>
                   <Button
                     type="button"
-                    isIconOnly
-                    size="sm"
+                    size="icon-sm"
                     variant="ghost"
                     aria-label={otpAuthCopied ? t('accountMfaOtpAuthCopied') : t('accountMfaOtpAuthCopy')}
-                    onPress={() => void copyOtpAuthUri()}
+                    onClick={() => void copyOtpAuthUri()}
                   >
-                    {otpAuthCopied ? <Check className="size-4" aria-hidden="true" /> : <Copy className="size-4" aria-hidden="true" />}
+                    {otpAuthCopied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
                   </Button>
                 </div>
               </div>
             )}
           </div>
           <div className="mt-4 flex items-center justify-between gap-2">
-            {hasRecoveryStep ? <Button type="button" variant="ghost" onPress={() => setStep(1)}>{t('accountMfaBack')}</Button> : <span />}
-            <Button type="button" onPress={() => setStep(3)}>{t('accountMfaContinue')}</Button>
+            {hasRecoveryStep ? <Button type="button" variant="ghost" onClick={() => setStep(1)}>{t('accountMfaBack')}</Button> : <span />}
+            <Button type="button" onClick={() => setStep(3)}>{t('accountMfaContinue')}</Button>
           </div>
         </div>
       ) : null}
@@ -361,12 +340,13 @@ function MfaEnrollmentWizard({ enrollment, loginHint, initialStep, codeError, va
       {step === 3 ? (
         <div>
           <h2 className="text-sm font-semibold">{stepTitle(t('accountMfaStepVerify'))}</h2>
-          <p className="mt-1 text-sm leading-5">{t('accountMfaStepVerifyDescription')}</p>
+          <p className="mt-1 text-sm leading-5 text-muted-foreground">{t('accountMfaStepVerifyDescription')}</p>
           <AccountActionForm action="confirm-totp" requestFailedMessage={t('accountRequestFailed')} onSuccess={close} className="mt-4 grid gap-3">
             <input type="hidden" name="login_hint" value={loginHint} />
             <div className="grid gap-2">
-              <Label>{t('otp')}</Label>
+              <FieldLabel htmlFor="mfa-code">{t('otp')}</FieldLabel>
               <TotpInput
+                id="mfa-code"
                 name="code"
                 value={code}
                 onChange={retryVerification}
@@ -374,19 +354,19 @@ function MfaEnrollmentWizard({ enrollment, loginHint, initialStep, codeError, va
                 isInvalid={Boolean(visibleCodeError)}
                 aria-describedby={visibleCodeError ? 'mfa-code-error' : undefined}
               />
-              {visibleCodeError ? <p id="mfa-code-error" className="text-xs text-danger">{visibleCodeError}</p> : null}
+              {visibleCodeError ? <p id="mfa-code-error" className="text-sm text-destructive">{visibleCodeError}</p> : null}
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <Button type="button" variant="ghost" onPress={returnToConfiguration}>{t('accountMfaBack')}</Button>
+              <Button type="button" variant="ghost" onClick={returnToConfiguration}>{t('accountMfaBack')}</Button>
               <Button type="submit" className="ms-auto">{t('accountMfaConfirm')}</Button>
             </div>
           </AccountActionForm>
           {visibleCodeError ? (
-            <Alert status="warning" className="mt-4">
-              <Alert.Indicator />
-              <Alert.Content>
-                <Alert.Title>{t('accountMfaLegacyTitle')}</Alert.Title>
-                <Alert.Description>{t('accountMfaLegacyDescription')}</Alert.Description>
+            <Alert className="mt-4">
+              <TriangleAlert className="text-warning" aria-hidden="true" />
+              <AlertTitle>{t('accountMfaLegacyTitle')}</AlertTitle>
+              <AlertDescription>
+                <p>{t('accountMfaLegacyDescription')}</p>
                 <AccountActionForm
                   action="use-legacy-totp"
                   requestFailedMessage={t('accountRequestFailed')}
@@ -396,9 +376,9 @@ function MfaEnrollmentWizard({ enrollment, loginHint, initialStep, codeError, va
                   }}
                   className="mt-3"
                 >
-                  <Button type="submit" size="sm" variant="secondary">{t('accountMfaUseLegacy')}</Button>
+                  <Button type="submit" size="sm" variant="outline">{t('accountMfaUseLegacy')}</Button>
                 </AccountActionForm>
-              </Alert.Content>
+              </AlertDescription>
             </Alert>
           ) : null}
         </div>

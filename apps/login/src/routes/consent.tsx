@@ -1,9 +1,9 @@
-import { Alert } from '@heroui/react'
 import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 
 import { ConsentAccount } from '#/components/consent-account'
 import { AuthShell } from '#/components/auth-shell'
+import { ErrorAlert } from '#/components/form-alert'
 import { ProgressiveForm } from '#/components/progressive-form'
 import { ConsentPermissions } from '#/components/consent-permissions'
 import { ConsentNotice } from '#/components/consent-notice'
@@ -147,16 +147,7 @@ function ConsentPage() {
       }
     >
       {visibleError ? (
-        <Alert
-          status="danger"
-          className="auth-alert mb-5"
-        >
-          <Alert.Indicator />
-          <Alert.Content>
-            <Alert.Title>{t('consentLoadFailed')}</Alert.Title>
-            <Alert.Description>{visibleError}</Alert.Description>
-          </Alert.Content>
-        </Alert>
+        <ErrorAlert className="mb-5" title={t('consentLoadFailed')} message={visibleError} />
       ) : null}
 
       {consent ? (
@@ -181,7 +172,7 @@ function ConsentPage() {
               value={consent.csrf_token}
             />
             <input type="hidden" name="ui_locales" value={data.uiLocales} />
-            <SubmitButton fullWidth name="decision" value="deny" variant="secondary">
+            <SubmitButton fullWidth name="decision" value="deny" variant="outline">
               {t('deny')}
             </SubmitButton>
             <SubmitButton fullWidth name="decision" value="approve">

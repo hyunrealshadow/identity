@@ -1,4 +1,5 @@
-import { Avatar } from '@heroui/react'
+import { Avatar, AvatarFallback } from '@identity/ui/components/avatar'
+import { cn } from '@identity/ui/lib/utils'
 
 interface AccountAvatarProps {
   name: string
@@ -15,13 +16,13 @@ export function accountInitials(name: string) {
 }
 
 export function AccountAvatar({ name, size = 'sm', className }: AccountAvatarProps) {
-  const fallbackSize = size === 'lg' ? 'text-base' : size === 'md' ? 'text-sm' : 'text-xs'
+  const sizeClass = size === 'lg' ? 'size-12 text-base' : size === 'md' ? 'size-10 text-sm' : 'size-9 text-xs'
 
   return (
-    <Avatar size={size} className={className}>
-      <Avatar.Fallback className={`bg-foreground font-semibold text-background ${fallbackSize}`}>
+    <Avatar className={cn(sizeClass, className)}>
+      <AvatarFallback className="bg-foreground font-semibold text-background">
         {accountInitials(name)}
-      </Avatar.Fallback>
+      </AvatarFallback>
     </Avatar>
   )
 }

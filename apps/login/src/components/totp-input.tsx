@@ -1,6 +1,7 @@
-import { inputOTPVariants } from '@heroui/react'
-import type { InputHTMLAttributes } from 'react'
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { cn } from '@identity/ui/lib/utils'
+import { Minus } from 'lucide-react'
+import { Fragment, type InputHTMLAttributes } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 const useIsomorphicLayoutEffect =
   typeof window === 'undefined' ? useEffect : useLayoutEffect
@@ -10,7 +11,6 @@ type SegmentedCodeInputProps = Omit<
   | 'autoComplete'
   | 'className'
   | 'defaultValue'
-  | 'id'
   | 'inputMode'
   | 'maxLength'
   | 'onChange'
@@ -26,7 +26,6 @@ type SegmentedCodeInputProps = Omit<
   onChange?: (value: string) => void
   slotClassName?: string
   value?: string
-  variant?: 'primary' | 'secondary'
 }
 
 /**
@@ -81,7 +80,6 @@ export function SegmentedCodeInput({
   separatorAfter,
   slotClassName,
   value,
-  variant = 'primary',
   ...props
 }: SegmentedCodeInputConfig) {
   const [internalValue, setInternalValue] = useState(() => normalize(defaultValue))
@@ -96,16 +94,13 @@ export function SegmentedCodeInput({
   const onChangeRef = useRef(onChange)
   controlledValueRef.current = value
   onChangeRef.current = onChange
-  const slots = useMemo(() => inputOTPVariants({ variant }), [variant])
-  const slotClasses = useMemo(
-    () => slots.slot({ className: slotClassName }),
-    [slotClassName, slots],
+  // Separate square slots spread across the field width, styled like `Input`.
+  const slotClasses = cn(
+    'relative flex size-10 min-w-0 shrink items-center justify-center rounded-md border border-input bg-transparent text-base font-medium text-foreground shadow-xs transition-[color,box-shadow] dark:bg-input/30',
+    'data-[active=true]:z-10 data-[active=true]:border-ring data-[active=true]:ring-3 data-[active=true]:ring-ring/50',
+    'data-[invalid=true]:border-destructive data-[active=true]:data-[invalid=true]:ring-destructive/20 dark:data-[active=true]:data-[invalid=true]:ring-destructive/40',
+    slotClassName,
   )
-  const slotValueClasses = useMemo(
-    () => slots.slotValue(),
-    [slots],
-  )
-  const caretClasses = useMemo(() => slots.caret(), [slots])
 
   const updateValue = useCallback(
     (nextValue: string) => {
@@ -168,6 +163,10 @@ export function SegmentedCodeInput({
   }, [updateValue])
 
   const activeSlot = Math.min(currentValue.length, length - 1)
+  const indexes = Array.from({ length }, (_, index) => index)
+  const segments = separatorAfter && separatorAfter < length
+    ? [indexes.slice(0, separatorAfter), indexes.slice(separatorAfter)]
+    : [indexes]
 
   return (
     <div
@@ -175,51 +174,49 @@ export function SegmentedCodeInput({
       data-disabled={disabled ? 'true' : undefined}
       data-invalid={isInvalid ? 'true' : undefined}
       data-slot="input-otp"
-      className={slots.base({
-        className: ['w-fit max-w-full', className]
-          .filter(Boolean)
-          .join(' '),
-      })}
+      className={cn(
+        'relative flex w-full items-center data-[disabled=true]:opacity-50',
+        className,
+      )}
     >
       <div
         data-slot="input-otp-group"
-        className={slots.group({
-          className: ['pointer-events-none items-center', groupClassName]
-            .filter(Boolean)
-            .join(' '),
-        })}
+        className={cn('pointer-events-none flex w-full min-w-0 items-center justify-between gap-1', groupClassName)}
         aria-hidden="true"
       >
-        {Array.from({ length }, (_, index) => {
-          const char = currentValue[index]
-          const isCurrent = index === activeSlot
-          const isActive = isCurrent && (isFocused || isAutofocusPending)
-          return (
-            <div key={index} className="contents">
-              {separatorAfter === index ? (
-                <span className="px-1 text-muted" aria-hidden="true">-</span>
-              ) : null}
-              <div
-                data-active={isActive ? 'true' : undefined}
-                data-current={isCurrent ? 'true' : undefined}
-                data-disabled={disabled ? 'true' : undefined}
-                data-filled={char ? 'true' : undefined}
-                data-invalid={isInvalid ? 'true' : undefined}
-                data-slot="input-otp-slot"
-                className={slotClasses}
-              >
-                {char ? (
-                  <div data-slot="input-otp-slot-value" className={slotValueClasses}>
-                    {char}
-                  </div>
-                ) : null}
-                {isActive && !char ? (
-                  <div data-slot="input-otp-caret" className={caretClasses} />
-                ) : null}
+        {segments.map((segment, segmentIndex) => (
+          <Fragment key={segment[0]}>
+            {segmentIndex > 0 ? (
+              <div data-slot="input-otp-separator" className="flex shrink-0 items-center text-muted-foreground">
+                <Minus className="size-4" />
               </div>
+            ) : null}
+            <div className="contents">
+              {segment.map((index) => {
+                const char = currentValue[index]
+                const isCurrent = index === activeSlot
+                const isActive = isCurrent && (isFocused || isAutofocusPending)
+                return (
+                  <div
+                    key={index}
+                    data-active={isActive ? 'true' : undefined}
+                    data-current={isCurrent ? 'true' : undefined}
+                    data-disabled={disabled ? 'true' : undefined}
+                    data-filled={char ? 'true' : undefined}
+                    data-invalid={isInvalid ? 'true' : undefined}
+                    data-slot="input-otp-slot"
+                    className={slotClasses}
+                  >
+                    {char ? <div data-slot="input-otp-slot-value">{char}</div> : null}
+                    {isActive && !char ? (
+                      <div data-slot="input-otp-caret" className="h-4 w-px animate-caret-blink bg-foreground duration-1000" />
+                    ) : null}
+                  </div>
+                )
+              })}
             </div>
-          )
-        })}
+          </Fragment>
+        ))}
       </div>
       <input
         {...props}
@@ -234,10 +231,10 @@ export function SegmentedCodeInput({
         autoFocus={autoFocus}
         aria-invalid={isInvalid || undefined}
         // Move password-manager badges beyond the slots without shrinking their layout.
-        className={[
+        className={cn(
           'absolute inset-0 z-10 h-full w-[calc(100%+40px)] cursor-text border-0 bg-transparent text-transparent outline-none shadow-none [caret-color:transparent] [clip-path:inset(0_40px_0_0)]',
           inputClassName,
-        ].filter(Boolean).join(' ')}
+        )}
         onFocus={(event) => {
           setIsFocused(true)
           setIsAutofocusPending(false)
@@ -276,7 +273,7 @@ export function GroupedCodeInput(props: SegmentedCodeInputProps) {
     <SegmentedCodeInput
       {...inputProps}
       className={className}
-      groupClassName={['gap-1', groupClassName].filter(Boolean).join(' ')}
+      groupClassName={groupClassName}
       slotClassName={slotClassName}
       length={8}
       separatorAfter={4}

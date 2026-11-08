@@ -17,6 +17,12 @@ beforeEach(() => {
   )
 })
 
+/** Number of slots before the group separator, or `undefined` without one. */
+function slotsBeforeSeparator(container: HTMLElement) {
+  const separator = container.querySelector('[data-slot="input-otp-separator"]')
+  return separator?.previousElementSibling?.querySelectorAll('[data-slot="input-otp-slot"]').length
+}
+
 describe('GroupedCodeInput', () => {
   it('does not advertise the device code input as an OTP field', () => {
     const { container } = render(<GroupedCodeInput name="user_code" />)
@@ -41,7 +47,7 @@ describe('GroupedCodeInput', () => {
     )
     expect(slots).toEqual(['W', 'D', 'J', 'B', 'M', 'J', 'H', 'T'])
     expect(input.value).toBe('WDJBMJHT')
-    expect(container.textContent).toContain('WDJB-MJHT')
+    expect(slotsBeforeSeparator(container)).toBe(4)
   })
 
   it('does not let repeated separators consume the native input limit', () => {
@@ -65,7 +71,7 @@ describe('GroupedCodeInput', () => {
       input.dispatchEvent(new Event('input', { bubbles: true }))
     })
     expect(input.value).toBe('WDJBMJ')
-    expect(container.textContent).toContain('WDJB-MJ')
+    expect(slotsBeforeSeparator(container)).toBe(4)
   })
 
   it('renders eight slots with a separator for the server-rendered form', () => {
@@ -120,7 +126,7 @@ describe('TotpInput', () => {
       input.dispatchEvent(new Event('input', { bubbles: true }))
     })
     expect(input.value).toBe('794364')
-    expect(container.textContent).toContain('794-364')
+    expect(slotsBeforeSeparator(container)).toBe(3)
   })
 
   it('synchronizes a value inserted through a native password-manager event', () => {
@@ -151,7 +157,7 @@ describe('TotpInput', () => {
     expect(input?.autocomplete).toBe('one-time-code')
     expect(input?.inputMode).toBe('numeric')
     expect(input?.maxLength).toBe(6)
-    expect(container.textContent).toContain('-')
+    expect(slotsBeforeSeparator(container)).toBe(3)
   })
 
   it('focuses the native input after hydration when requested', () => {

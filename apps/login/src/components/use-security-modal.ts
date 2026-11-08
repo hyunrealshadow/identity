@@ -1,4 +1,4 @@
-import { useOverlayState } from '@heroui/react'
+import { useDialogState } from './use-dialog-state'
 import { useNavigate, useRouter } from '@tanstack/react-router'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
@@ -12,7 +12,7 @@ export function useSecurityModal({ action, locale, loginHint, openRequested = fa
   loginHint: string
   openRequested?: boolean
 }) {
-  const modal = useOverlayState()
+  const modal = useDialogState()
   const { requestReauth, executeAction } = useAccountReauth()
   const router = useRouter()
   const navigate = useNavigate()

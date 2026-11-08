@@ -1,8 +1,12 @@
-import { Button, Label, Modal, Radio, RadioGroup, useOverlayState } from '@heroui/react'
+import { Button } from '@identity/ui/components/button'
+import { Field, FieldLabel, FieldLegend, FieldSet } from '@identity/ui/components/field'
+import { RadioGroup, RadioGroupItem } from '@identity/ui/components/radio-group'
 import { useEffect, useState } from 'react'
 
 import { AccountActionForm } from './account-action-form'
+import { AccountDialog } from './account-dialog'
 import { SettingsRow } from './account-settings'
+import { useDialogState } from './use-dialog-state'
 import { translate, type Locale } from '#/lib/i18n'
 
 export function MfaPriority({ locale, preference, totpEnabled }: {
@@ -11,7 +15,7 @@ export function MfaPriority({ locale, preference, totpEnabled }: {
   totpEnabled: boolean
 }) {
   const t = (key: Parameters<typeof translate>[1]) => translate(locale, key)
-  const modal = useOverlayState()
+  const modal = useDialogState()
   const [method, setMethod] = useState<string>(preference)
   useEffect(() => {
     if (modal.isOpen) setMethod(totpEnabled ? preference : 'passkey')
@@ -20,32 +24,28 @@ export function MfaPriority({ locale, preference, totpEnabled }: {
   return <section aria-label={t('mfaPriority')}>
     <SettingsRow title={t('mfaPriority')} description={t('mfaPriorityDescription')}
       detail={t(preference === 'otp' && totpEnabled ? 'mfaPreferOtp' : 'mfaPreferPasskey')}
-      action={<Button variant="secondary" onPress={modal.open}>{t('mfaChangePriority')}</Button>} />
-    <Modal state={modal}>
-      <Modal.Backdrop isDismissable={false}>
-        <Modal.Container size="lg" scroll="outside">
-          <Modal.Dialog>
-            {({ close }) => <>
-              <Modal.CloseTrigger aria-label={t('close')} />
-              <Modal.Header><Modal.Heading>{t('mfaPriority')}</Modal.Heading></Modal.Header>
-              <Modal.Body>
-                <AccountActionForm action="update-mfa-preference" requestFailedMessage={t('accountRequestFailed')} onSuccess={close} className="grid gap-4">
-                  <RadioGroup name="preferred_mfa_method" value={method} onChange={setMethod}>
-                    <Label>{t('mfaPriorityDescription')}</Label>
-                    <Radio value="passkey"><Radio.Content><Radio.Control><Radio.Indicator /></Radio.Control>{t('mfaPreferPasskey')}</Radio.Content></Radio>
-                    <Radio value="otp" isDisabled={!totpEnabled}><Radio.Content><Radio.Control><Radio.Indicator /></Radio.Control>{t('mfaPreferOtp')}</Radio.Content></Radio>
-                  </RadioGroup>
-                  {!totpEnabled ? <p className="text-xs text-muted">{t('mfaPriorityRequiresOtp')}</p> : null}
-                  <div className="flex justify-end gap-2">
-                    <Button type="button" variant="secondary" onPress={close}>{t('cancel')}</Button>
-                    <Button type="submit">{t('mfaSavePriority')}</Button>
-                  </div>
-                </AccountActionForm>
-              </Modal.Body>
-            </>}
-          </Modal.Dialog>
-        </Modal.Container>
-      </Modal.Backdrop>
-    </Modal>
+      action={<Button variant="outline" onClick={modal.open}>{t('mfaChangePriority')}</Button>} />
+    <AccountDialog state={modal} title={t('mfaPriority')} closeLabel={t('close')}>
+      <AccountActionForm action="update-mfa-preference" requestFailedMessage={t('accountRequestFailed')} onSuccess={modal.close} className="grid gap-4">
+        <FieldSet>
+          <FieldLegend variant="label">{t('mfaPriorityDescription')}</FieldLegend>
+          <RadioGroup name="preferred_mfa_method" value={method} onValueChange={(value) => setMethod(String(value))}>
+            <Field orientation="horizontal">
+              <RadioGroupItem value="passkey" id="mfa-prefer-passkey" />
+              <FieldLabel htmlFor="mfa-prefer-passkey" className="font-normal">{t('mfaPreferPasskey')}</FieldLabel>
+            </Field>
+            <Field orientation="horizontal" data-disabled={!totpEnabled ? true : undefined}>
+              <RadioGroupItem value="otp" id="mfa-prefer-otp" disabled={!totpEnabled} />
+              <FieldLabel htmlFor="mfa-prefer-otp" className="font-normal">{t('mfaPreferOtp')}</FieldLabel>
+            </Field>
+          </RadioGroup>
+        </FieldSet>
+        {!totpEnabled ? <p className="text-xs text-muted-foreground">{t('mfaPriorityRequiresOtp')}</p> : null}
+        <div className="flex justify-end gap-2">
+          <Button type="button" variant="outline" onClick={modal.close}>{t('cancel')}</Button>
+          <Button type="submit">{t('mfaSavePriority')}</Button>
+        </div>
+      </AccountActionForm>
+    </AccountDialog>
   </section>
 }

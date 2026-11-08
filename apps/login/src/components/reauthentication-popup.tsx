@@ -1,4 +1,6 @@
-import { Alert, Button } from '@heroui/react'
+import { Alert, AlertDescription } from '@identity/ui/components/alert'
+import { Button } from '@identity/ui/components/button'
+import { CircleAlert, TriangleAlert } from 'lucide-react'
 import { useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
@@ -137,15 +139,16 @@ export function AccountReauthProvider({ locale, access, children }: { locale: Lo
   const value = useMemo(() => ({ requestReauth, executeAction, prepareAction }), [requestReauth, executeAction, prepareAction])
   return <AccountReauthContext.Provider value={value}>
     {children}
-    {notice && request ? <Alert status={notice === 'blocked' ? 'warning' : 'danger'} className="mt-4">
-      <Alert.Indicator />
-      <Alert.Content><Alert.Description>{t(notice === 'blocked' ? 'accountReauthPopupBlocked' : 'accountReauthFailed')}</Alert.Description>
+    {notice && request ? <Alert variant={notice === 'blocked' ? 'default' : 'destructive'} className="mt-4">
+      {notice === 'blocked' ? <TriangleAlert className="text-warning" aria-hidden="true" /> : <CircleAlert aria-hidden="true" />}
+      <AlertDescription>
+        <p>{t(notice === 'blocked' ? 'accountReauthPopupBlocked' : 'accountReauthFailed')}</p>
         <div className="mt-3 flex flex-wrap gap-2">
-          <Button size="sm" onPress={() => void retry()}>{t('accountReauthPopupContinue')}</Button>
-          <Button size="sm" variant="ghost" onPress={() => window.location.assign(request.url)}>{t('accountReauthOpenWindow')}</Button>
-          <Button size="sm" variant="ghost" onPress={cancel}>{t('close')}</Button>
+          <Button size="sm" onClick={() => void retry()}>{t('accountReauthPopupContinue')}</Button>
+          <Button size="sm" variant="ghost" onClick={() => window.location.assign(request.url)}>{t('accountReauthOpenWindow')}</Button>
+          <Button size="sm" variant="ghost" onClick={cancel}>{t('close')}</Button>
         </div>
-      </Alert.Content>
+      </AlertDescription>
     </Alert> : null}
   </AccountReauthContext.Provider>
 }

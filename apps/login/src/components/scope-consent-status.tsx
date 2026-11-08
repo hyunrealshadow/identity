@@ -7,7 +7,7 @@ export function ScopeConsentStatus({ granted, locale }: { granted?: boolean; loc
   if (granted !== true) return null
 
   return (
-    <span className="inline-flex shrink-0 items-center text-muted" title={translate(locale, 'permissionPreviouslyGranted')}>
+    <span className="inline-flex shrink-0 items-center text-muted-foreground" title={translate(locale, 'permissionPreviouslyGranted')}>
       <Check className="size-4" aria-hidden="true" />
       <span className="sr-only">{translate(locale, 'permissionPreviouslyGranted')}</span>
     </span>

@@ -1,4 +1,4 @@
-import { Alert, FieldError, Label, TextField } from '@heroui/react'
+import { Field, FieldError, FieldLabel } from '@identity/ui/components/field'
 import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { Check, Clock, ShieldAlert, X } from 'lucide-react'
@@ -6,6 +6,7 @@ import { useState } from 'react'
 
 import { ConsentAccount } from '#/components/consent-account'
 import { AuthShell } from '#/components/auth-shell'
+import { ErrorAlert } from '#/components/form-alert'
 import { ProgressiveForm } from '#/components/progressive-form'
 import { ConsentPermissions } from '#/components/consent-permissions'
 import { ConsentNotice } from '#/components/consent-notice'
@@ -280,7 +281,7 @@ function DevicePage() {
         {data.uiLocales ? (
           <input type="hidden" name="ui_locales" value={data.uiLocales} />
         ) : null}
-        <SubmitButton fullWidth name="decision" value="deny" variant="secondary">
+        <SubmitButton fullWidth name="decision" value="deny" variant="outline">
           {t('deny')}
         </SubmitButton>
         <SubmitButton fullWidth name="decision" value="approve">
@@ -334,25 +335,21 @@ function CodeEntryPage({
         {uiLocales ? (
           <input type="hidden" name="ui_locales" value={uiLocales} />
         ) : null}
-        <div className="grid gap-2">
-          <TextField isRequired fullWidth className="min-w-0" name="user_code" isInvalid={!!fieldError}>
-            <Label>{t('deviceCodeLabel')}</Label>
+        <Field data-invalid={fieldError ? true : undefined} className="min-w-0">
+            <FieldLabel htmlFor="device-user-code">{t('deviceCodeLabel')}</FieldLabel>
             <GroupedCodeInput
+              id="device-user-code"
               name="user_code"
               type="text"
               required
               autoFocus={!prefilled}
               isInvalid={!!fieldError}
+              aria-describedby={fieldError ? 'device-user-code-error' : undefined}
               defaultValue={userCode}
-              className="w-full"
-              groupClassName="w-full justify-between"
               onChange={() => setFieldError(undefined)}
             />
-            {/* The field error belongs to the field: only inside `TextField`
-                does it receive the validation state it renders from. */}
-            <FieldError>{fieldError}</FieldError>
-          </TextField>
-        </div>
+            {fieldError ? <FieldError id="device-user-code-error">{fieldError}</FieldError> : null}
+        </Field>
         <SubmitButton fullWidth autoFocus={prefilled}>
           {t('deviceSubmit')}
         </SubmitButton>
@@ -362,20 +359,12 @@ function CodeEntryPage({
 }
 
 function DeviceError({ message, title }: { message: string; title: string }) {
-  return (
-    <Alert status="danger" className="auth-alert mb-5">
-      <Alert.Indicator />
-      <Alert.Content>
-        <Alert.Title>{title}</Alert.Title>
-        <Alert.Description>{message}</Alert.Description>
-      </Alert.Content>
-    </Alert>
-  )
+  return <ErrorAlert className="mb-5" title={title} message={message} />
 }
 
 function DeviceCaution({ message }: { message: string }) {
   return (
-    <p className="mt-6 flex items-start gap-2 text-xs leading-5 text-muted">
+    <p className="mt-6 flex items-start gap-2 text-xs leading-5 text-muted-foreground">
       <ShieldAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
       <span>{message}</span>
     </p>

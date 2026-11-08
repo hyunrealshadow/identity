@@ -3,9 +3,9 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { renderToString } from 'react-dom/server'
-import { FieldError, Input, Label, TextField } from '@heroui/react'
 
 import { ProgressiveForm } from './progressive-form'
+import { TextField } from './text-field'
 
 afterEach(() => {
   cleanup()
@@ -22,11 +22,7 @@ describe('ProgressiveForm', () => {
         enhancementErrorMessage="Try again"
         validationErrors={{ email: '邮箱地址格式无效' }}
       >
-        <TextField name="email" defaultValue="old@example.test" isRequired>
-          <Label>Email</Label>
-          <Input />
-          <FieldError />
-        </TextField>
+        <TextField name="email" label="Email" defaultValue="old@example.test" required />
         <button type="submit">Install</button>
       </ProgressiveForm>,
     )
@@ -51,11 +47,7 @@ describe('ProgressiveForm', () => {
         enhancementErrorMessage="Try again"
         validationErrors={{ confirm_password: '两次输入的密码不一致' }}
       >
-        <TextField name="confirm_password" type="password" isRequired>
-          <Label>Confirm password</Label>
-          <Input />
-          <FieldError />
-        </TextField>
+        <TextField name="confirm_password" label="Confirm password" type="password" required />
         <button type="submit">Install</button>
       </ProgressiveForm>,
     )

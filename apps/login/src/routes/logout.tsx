@@ -1,3 +1,4 @@
+import { Button } from '@identity/ui/components/button'
 import { createFileRoute } from '@tanstack/react-router'
 import { useState } from 'react'
 import { createServerFn } from '@tanstack/react-start'
@@ -64,14 +65,14 @@ function SignedOutPage() {
       title={t('signedOutTitle')}
       description={t('signedOutDescription')}
     >
-      <button
+      <Button
         type="button"
         disabled={starting}
         onClick={() => void signInAgain()}
-        className="mt-6 flex min-h-9 w-full items-center justify-center rounded-field bg-accent px-4 text-sm font-semibold text-accent-foreground transition-opacity hover:opacity-90 disabled:opacity-60"
+        className="mt-6 w-full"
       >
         {t('signInAgain')}
-      </button>
+      </Button>
     </AuthShell>
   )
 }
