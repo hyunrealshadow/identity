@@ -353,6 +353,7 @@ function MfaEnrollmentWizard({ enrollment, loginHint, initialStep, codeError, va
                 autoFocus
                 isInvalid={Boolean(visibleCodeError)}
                 aria-describedby={visibleCodeError ? 'mfa-code-error' : undefined}
+                className="w-fit"
               />
               {visibleCodeError ? <p id="mfa-code-error" className="text-sm text-destructive">{visibleCodeError}</p> : null}
             </div>

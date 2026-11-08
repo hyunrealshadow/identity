@@ -34,6 +34,13 @@ html {
   scrollbar-gutter: stable;
 }
 
+/* Auth pages center one card. Mirroring the gutter keeps that card centered
+   when a classic scrollbar is present; account pages keep the single gutter
+   so full-bleed toolbars still reach the left edge. */
+html:has(.auth-background) {
+  scrollbar-gutter: stable both-edges;
+}
+
 body {
   margin: 0;
   font-family: var(--font-sans);
