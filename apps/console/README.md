@@ -27,6 +27,13 @@ curl --fail --silent --show-error \
 Use a trusted internal certificate, or supply its CA with `--cacert`. The fetched
 configuration contains public values only; it does not contain the workload token.
 
+The file is a snapshot: refetch it whenever this repository changes the scopes
+the Console requests, because a stale snapshot silently drops the newer request.
+`scope` must stay `openid profile email account.read management.*`; without
+`account.read` the Console cannot read the operator's account theme and keeps
+the system palette, and development logs
+`[console] account theme is unavailable`.
+
 ## Container
 
 Build from the repository root:

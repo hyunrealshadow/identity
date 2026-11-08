@@ -10,7 +10,7 @@ import { useAuth } from '#/lib/auth/context'
 import { consoleQueryKeys } from '#/lib/graphql/query-keys'
 import { useGraphQL } from '#/lib/graphql/use-graphql'
 import { useLocale } from '#/lib/i18n'
-import { applyTheme, type ThemePreference } from '#/lib/theme'
+import { applyTheme, rememberTheme, type ThemePreference } from '#/lib/theme'
 
 /** The theme an account preference selects; no preference follows the system. */
 export function themeFromAccount(value: string | null | undefined): ThemePreference {
@@ -30,6 +30,9 @@ export function AccountThemeSync() {
   const query = useQuery({
     queryKey: consoleQueryKeys.read(sessionVersion, locale, ConsoleAccountThemeDocument, {}),
     enabled: status === 'authenticated',
+    // The account center is a separate tab: pick up a preference changed there
+    // when the operator returns to this one, without polling.
+    refetchOnWindowFocus: true,
     queryFn: ({ signal }) =>
       request<ConsoleAccountThemeQuery, ConsoleAccountThemeQueryVariables>(
         ConsoleAccountThemeDocument,
@@ -42,8 +45,18 @@ export function AccountThemeSync() {
   const theme = account ? themeFromAccount(account.theme) : null
 
   useEffect(() => {
+    // A runtime configuration older than the `account.read` request is rejected
+    // during preflight. Say so in development instead of silently keeping the
+    // system palette.
+    if (query.error && import.meta.env.DEV && import.meta.env.MODE !== 'test') {
+      console.warn('[console] account theme is unavailable', query.error)
+    }
+  }, [query.error])
+
+  useEffect(() => {
     if (!theme) return
     applyTheme(theme)
+    rememberTheme(theme)
     if (theme !== 'system') return
     const media = window.matchMedia('(prefers-color-scheme: dark)')
     const followSystem = () => applyTheme('system')

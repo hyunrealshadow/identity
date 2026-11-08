@@ -21,3 +21,16 @@ export function applyTheme(preference: ThemePreference) {
   root.dataset.themePreference = preference
   root.style.colorScheme = dark ? 'dark' : 'light'
 }
+
+/**
+ * Cache the applied preference for the next document load. `index.html` reads
+ * it before React runs so the first paint already uses the right palette; the
+ * account preference replaces it as soon as the account read resolves.
+ */
+export function rememberTheme(preference: ThemePreference) {
+  try {
+    window.localStorage.setItem(THEME_STORAGE_KEY, preference)
+  } catch {
+    // The preference still applies to this page when storage is unavailable.
+  }
+}
