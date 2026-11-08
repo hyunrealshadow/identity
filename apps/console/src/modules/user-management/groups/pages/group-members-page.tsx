@@ -5,8 +5,14 @@ import {
 } from '../components/membership-dialogs'
 
 import { DataTable } from '@identity/ui/data-table'
-import { Alert, Chip } from '@heroui/react'
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from '@identity/ui/components/alert'
+import { Badge } from '@identity/ui/components/badge'
 import { Link, useNavigate } from '@tanstack/react-router'
+import { Info, TriangleAlert } from 'lucide-react'
 
 import { useMemo, useState } from 'react'
 
@@ -163,14 +169,10 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
         ) : null}
 
         {readyGroup.builtIn ? (
-          <Alert status="default">
-            <Alert.Indicator />
-            <Alert.Content>
-              <Alert.Title>{t('groupBuiltInReadonlyTitle')}</Alert.Title>
-              <Alert.Description>
-                {t('groupMembersBuiltInNote')}
-              </Alert.Description>
-            </Alert.Content>
+          <Alert>
+            <Info aria-hidden="true" />
+            <AlertTitle>{t('groupBuiltInReadonlyTitle')}</AlertTitle>
+            <AlertDescription>{t('groupMembersBuiltInNote')}</AlertDescription>
           </Alert>
         ) : null}
 
@@ -180,7 +182,7 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
               <h2 className="text-base font-semibold">
                 {t('groupMembersListTitle')}
               </h2>
-              <p className="mt-1 text-sm text-muted">
+              <p className="mt-1 text-sm text-muted-foreground">
                 {t('groupMembersListDescription')}
               </p>
             </div>
@@ -227,7 +229,7 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
             </div>
           </header>
           <div className="p-0">{renderMembers()}</div>
-          <footer className="border-t border-separator pt-4">
+          <footer className="border-t border-border pt-4">
             <RelationPagination
               connection={readyGroup.members}
               variables={variables}
@@ -251,19 +253,17 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
       <>
         {members.partial ? (
           <div className="p-3">
-            <Alert status="warning">
-              <Alert.Indicator />
-              <Alert.Content>
-                <Alert.Title>{t('groupsPartialTitle')}</Alert.Title>
-                <Alert.Description>
-                  {t('groupsPartialDescription')}
-                </Alert.Description>
-                <RequestCorrelation
-                  requestId={members.requestId}
-                  traceId={members.traceId}
-                />
-                <ErrorDetails issues={members.errors} />
-              </Alert.Content>
+            <Alert variant="default" className="text-warning">
+              <TriangleAlert aria-hidden="true" />
+              <AlertTitle>{t('groupsPartialTitle')}</AlertTitle>
+              <AlertDescription>
+                {t('groupsPartialDescription')}
+              </AlertDescription>
+              <RequestCorrelation
+                requestId={members.requestId}
+                traceId={members.traceId}
+              />
+              <ErrorDetails issues={members.errors} />
             </Alert>
           </div>
         ) : null}
@@ -326,13 +326,13 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
               <DataTable.Cell>{renderMemberIdentity(edge)}</DataTable.Cell>
               <DataTable.Cell>
                 {edge.enabled && !edge.revokedAt ? (
-                  <Chip size="sm" variant="soft" color="success">
-                    <Chip.Label>{t('groupMembersStatusActive')}</Chip.Label>
-                  </Chip>
+                  <Badge variant="secondary" className="text-success">
+                    {t('groupMembersStatusActive')}
+                  </Badge>
                 ) : (
-                  <Chip size="sm" variant="soft" color="default">
-                    <Chip.Label>{t('groupMembersStatusRemoved')}</Chip.Label>
-                  </Chip>
+                  <Badge variant="secondary">
+                    {t('groupMembersStatusRemoved')}
+                  </Badge>
                 )}
               </DataTable.Cell>
               <DataTable.Cell>
@@ -340,7 +340,7 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
                   {formatDateTime(edge.createdAt, locale, timeZone)}
                 </span>
                 {edge.revokedAt ? (
-                  <span className="mt-0.5 block whitespace-nowrap text-xs text-muted">
+                  <span className="mt-0.5 block whitespace-nowrap text-xs text-muted-foreground">
                     {formatDateTime(edge.revokedAt, locale, timeZone)}
                   </span>
                 ) : null}
@@ -364,12 +364,12 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
                       reloadPending={members.refreshing}
                     />
                   ) : (
-                    <span className="text-xs text-muted">
+                    <span className="text-xs text-muted-foreground">
                       {t('groupMembersNoWritePermission')}
                     </span>
                   )
                 ) : (
-                  <span className="text-xs text-muted">
+                  <span className="text-xs text-muted-foreground">
                     {t('groupMembersRevokedAt', {
                       date: formatDateTime(edge.revokedAt, locale, timeZone),
                     })}
@@ -390,15 +390,17 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
         <Link
           to="/users/$userId"
           params={{ userId: user.id }}
-          className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+          className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           {user.username}
         </Link>
         {user.email ? (
-          <p className="mt-0.5 break-all text-xs text-muted">{user.email}</p>
+          <p className="mt-0.5 break-all text-xs text-muted-foreground">
+            {user.email}
+          </p>
         ) : null}
         {edge.grantedBy ? (
-          <p className="mt-1 break-all text-[11px] text-muted">
+          <p className="mt-1 break-all text-[11px] text-muted-foreground">
             {t('groupMembersGrantedByLabel')}: {edge.grantedBy.username}
           </p>
         ) : null}

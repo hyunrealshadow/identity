@@ -8,7 +8,6 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { I18nProvider } from 'react-aria'
 import { IntlProvider, createIntl, createIntlCache, useIntl } from 'react-intl'
 
 import enUS from '#/lib/locales/en-US'
@@ -218,7 +217,6 @@ export function LocaleProvider({
 
   return (
     <LocaleContext.Provider value={value}>
-      <I18nProvider locale={state.locale}>
         <IntlProvider
           locale={state.locale}
           timeZone={timeZone}
@@ -227,7 +225,6 @@ export function LocaleProvider({
         >
           {children}
         </IntlProvider>
-      </I18nProvider>
     </LocaleContext.Provider>
   )
 }

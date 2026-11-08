@@ -1,6 +1,10 @@
-import { Chip } from '@heroui/react'
+import { Badge } from '@identity/ui/components/badge'
 
 import { useTranslator } from '#/lib/i18n'
+
+function badgeSizeClass(size: 'sm' | 'md'): string | undefined {
+  return size === 'md' ? 'h-6 px-2.5' : undefined
+}
 
 export function GroupStatusChip({
   enabled,
@@ -11,9 +15,14 @@ export function GroupStatusChip({
 }) {
   const t = useTranslator()
   return (
-    <Chip size={size} variant="soft" color={enabled ? 'success' : 'default'}>
-      <Chip.Label>{t(enabled ? 'groupsEnabled' : 'groupsDisabled')}</Chip.Label>
-    </Chip>
+    <Badge
+      variant="secondary"
+      className={[badgeSizeClass(size), enabled ? 'text-success' : undefined]
+        .filter(Boolean)
+        .join(' ')}
+    >
+      {t(enabled ? 'groupsEnabled' : 'groupsDisabled')}
+    </Badge>
   )
 }
 
@@ -26,12 +35,13 @@ export function GroupKindChip({
 }) {
   const t = useTranslator()
   return (
-    <Chip
-      size={size}
-      variant="soft"
-      color={builtIn ? 'accent' : 'default'}
+    <Badge
+      variant="secondary"
+      className={[badgeSizeClass(size), builtIn ? 'text-primary' : undefined]
+        .filter(Boolean)
+        .join(' ')}
     >
-      <Chip.Label>{t(builtIn ? 'groupsBuiltIn' : 'groupsCustom')}</Chip.Label>
-    </Chip>
+      {t(builtIn ? 'groupsBuiltIn' : 'groupsCustom')}
+    </Badge>
   )
 }

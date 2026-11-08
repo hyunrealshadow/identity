@@ -1,4 +1,5 @@
-import { Pagination } from '@heroui/react'
+import { Button } from '@identity/ui/components/button'
+import { ChevronLeft, ChevronRight, MoreHorizontal } from 'lucide-react'
 import { Fragment } from 'react'
 
 import { useTranslator } from '#/lib/i18n'
@@ -37,60 +38,59 @@ export function CursorPagination({
   )
 
   return (
-    <Pagination aria-label={label}>
-      <Pagination.Summary>
+    <nav
+      data-slot="pagination"
+      aria-label={label}
+      className="mx-auto flex w-full flex-wrap items-center justify-center gap-2 text-sm"
+    >
+      <span className="text-muted-foreground">
         {totalCount === undefined
           ? t('rbacPageCount', { count: pageCount })
           : t('tablePageSummary', { count: pageCount, total: totalCount })}
-      </Pagination.Summary>
-      <Pagination.Content>
-        <Pagination.Item>
-          <Pagination.Previous
-            isDisabled={
-              isDisabled || !pageInfo.hasPreviousPage || !pageInfo.startCursor
-            }
-            onPress={() => {
-              if (pageInfo.startCursor)
-                controller.previous(pageInfo.startCursor)
-            }}
-          >
-            <Pagination.PreviousIcon />
-            {t('previousPage')}
-          </Pagination.Previous>
-        </Pagination.Item>
+      </span>
+      <div data-slot="pagination-content" className="flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={isDisabled || !pageInfo.hasPreviousPage || !pageInfo.startCursor}
+          onClick={() => {
+            if (pageInfo.startCursor) controller.previous(pageInfo.startCursor)
+          }}
+        >
+          <ChevronLeft aria-hidden="true" />
+          {t('previousPage')}
+        </Button>
         {visible.map((number, index) => (
           <Fragment key={number}>
             {index > 0 && number - visible[index - 1] > 1 ? (
-              <Pagination.Item>
-                <Pagination.Ellipsis />
-              </Pagination.Item>
+              <span className="px-1 text-muted-foreground" aria-hidden="true">
+                <MoreHorizontal className="size-4" />
+              </span>
             ) : null}
-            <Pagination.Item>
-              <Pagination.Link
-                isActive={number === currentPage}
-                isDisabled={isDisabled}
-                aria-label={t('tableGoToPage', { page: number })}
-                onPress={() => controller.goTo(number)}
-              >
-                {number}
-              </Pagination.Link>
-            </Pagination.Item>
+            <Button
+              variant={number === currentPage ? 'outline' : 'ghost'}
+              size="icon-sm"
+              disabled={isDisabled}
+              aria-label={t('tableGoToPage', { page: number })}
+              aria-current={number === currentPage ? 'page' : undefined}
+              onClick={() => controller.goTo(number)}
+            >
+              {number}
+            </Button>
           </Fragment>
         ))}
-        <Pagination.Item>
-          <Pagination.Next
-            isDisabled={
-              isDisabled || !pageInfo.hasNextPage || !pageInfo.endCursor
-            }
-            onPress={() => {
-              if (pageInfo.endCursor) controller.next(pageInfo.endCursor)
-            }}
-          >
-            {t('nextPage')}
-            <Pagination.NextIcon />
-          </Pagination.Next>
-        </Pagination.Item>
-      </Pagination.Content>
-    </Pagination>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={isDisabled || !pageInfo.hasNextPage || !pageInfo.endCursor}
+          onClick={() => {
+            if (pageInfo.endCursor) controller.next(pageInfo.endCursor)
+          }}
+        >
+          {t('nextPage')}
+          <ChevronRight aria-hidden="true" />
+        </Button>
+      </div>
+    </nav>
   )
 }

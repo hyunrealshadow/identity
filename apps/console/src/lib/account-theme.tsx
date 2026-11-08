@@ -1,4 +1,3 @@
-import { useTheme } from '@heroui/react'
 import { useQuery } from '@tanstack/react-query'
 import { useEffect } from 'react'
 
@@ -11,9 +10,10 @@ import { useAuth } from '#/lib/auth/context'
 import { consoleQueryKeys } from '#/lib/graphql/query-keys'
 import { useGraphQL } from '#/lib/graphql/use-graphql'
 import { useLocale } from '#/lib/i18n'
+import { applyTheme, type ThemePreference } from '#/lib/theme'
 
 /** The theme an account preference selects; no preference follows the system. */
-export function themeFromAccount(value: string | null | undefined): 'light' | 'dark' | 'system' {
+export function themeFromAccount(value: string | null | undefined): ThemePreference {
   return value === 'light' || value === 'dark' ? value : 'system'
 }
 
@@ -27,7 +27,6 @@ export function AccountThemeSync() {
   const { status, sessionVersion } = useAuth()
   const { locale } = useLocale()
   const request = useGraphQL()
-  const { setTheme } = useTheme()
   const query = useQuery({
     queryKey: consoleQueryKeys.read(sessionVersion, locale, ConsoleAccountThemeDocument, {}),
     enabled: status === 'authenticated',
@@ -43,8 +42,14 @@ export function AccountThemeSync() {
   const theme = account ? themeFromAccount(account.theme) : null
 
   useEffect(() => {
-    if (theme) setTheme(theme)
-  }, [setTheme, theme])
+    if (!theme) return
+    applyTheme(theme)
+    if (theme !== 'system') return
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const followSystem = () => applyTheme('system')
+    media.addEventListener('change', followSystem)
+    return () => media.removeEventListener('change', followSystem)
+  }, [theme])
 
   return null
 }

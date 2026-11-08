@@ -1,16 +1,24 @@
+import { Alert, AlertDescription } from '@identity/ui/components/alert'
+import { Button } from '@identity/ui/components/button'
 import {
-  Alert,
-  Button,
-  Dropdown,
-  Label,
-  Modal,
-  Spinner,
-  toast,
-  useOverlayState,
-} from '@heroui/react'
-import { Ellipsis, LockOpen, Power, PowerOff } from 'lucide-react'
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@identity/ui/components/dialog'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@identity/ui/components/dropdown-menu'
+import { Spinner } from '@identity/ui/components/spinner'
+import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
+import { Ellipsis, LockOpen, Power, PowerOff, TriangleAlert } from 'lucide-react'
 import { useRef, useState } from 'react'
 
+import { toast } from '#/lib/toast'
 import { MutationFeedback } from '#/modules/user-management/users/components/user-feedback'
 import type { ProjectedUser } from '#/modules/user-management/users/lib/user-form'
 import type {
@@ -92,9 +100,6 @@ export function UserStateActions({
   const showDisable = user.enabled === true
   const showUnlock = user.locked === true
   const hasAction = showEnable || showDisable || showUnlock
-  const disabledKeys = versionReady
-    ? undefined
-    : ['enable', 'disable', 'unlock']
 
   const dialogs = (
     <>
@@ -129,52 +134,59 @@ export function UserStateActions({
     return (
       <>
         {hasAction ? (
-          <Dropdown>
-            <Button variant="secondary" aria-label={t('usersMoreActions')}>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  variant="secondary"
+                  aria-label={t('usersMoreActions')}
+                />
+              }
+            >
               <Ellipsis className="size-4" aria-hidden="true" />
               {t('usersMoreActions')}
-            </Button>
-            <Dropdown.Popover placement="bottom end" className="min-w-48">
-              <Dropdown.Menu
-                aria-label={t('usersMoreActions')}
-                disabledKeys={disabledKeys}
-                onAction={(key) => {
-                  if (key === 'enable') enableState.open()
-                  else if (key === 'disable') disableState.open()
-                  else if (key === 'unlock') unlockState.open()
-                }}
-              >
-                {showEnable ? (
-                  <Dropdown.Item
-                    id="enable"
-                    textValue={t('usersEnableAction')}
-                  >
-                    <Power className="size-4 text-muted" aria-hidden="true" />
-                    <Label>{t('usersEnableAction')}</Label>
-                  </Dropdown.Item>
-                ) : null}
-                {showDisable ? (
-                  <Dropdown.Item
-                    id="disable"
-                    textValue={t('usersDisableAction')}
-                    variant="danger"
-                  >
-                    <PowerOff className="size-4" aria-hidden="true" />
-                    <Label>{t('usersDisableAction')}</Label>
-                  </Dropdown.Item>
-                ) : null}
-                {showUnlock ? (
-                  <Dropdown.Item
-                    id="unlock"
-                    textValue={t('usersUnlockAction')}
-                  >
-                    <LockOpen className="size-4 text-muted" aria-hidden="true" />
-                    <Label>{t('usersUnlockAction')}</Label>
-                  </Dropdown.Item>
-                ) : null}
-              </Dropdown.Menu>
-            </Dropdown.Popover>
-          </Dropdown>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent
+              align="end"
+              className="min-w-48"
+              aria-label={t('usersMoreActions')}
+            >
+              {showEnable ? (
+                <DropdownMenuItem
+                  disabled={!versionReady}
+                  onClick={enableState.open}
+                >
+                  <Power
+                    className="size-4 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  {t('usersEnableAction')}
+                </DropdownMenuItem>
+              ) : null}
+              {showDisable ? (
+                <DropdownMenuItem
+                  variant="destructive"
+                  disabled={!versionReady}
+                  onClick={disableState.open}
+                >
+                  <PowerOff className="size-4" aria-hidden="true" />
+                  {t('usersDisableAction')}
+                </DropdownMenuItem>
+              ) : null}
+              {showUnlock ? (
+                <DropdownMenuItem
+                  disabled={!versionReady}
+                  onClick={unlockState.open}
+                >
+                  <LockOpen
+                    className="size-4 text-muted-foreground"
+                    aria-hidden="true"
+                  />
+                  {t('usersUnlockAction')}
+                </DropdownMenuItem>
+              ) : null}
+            </DropdownMenuContent>
+          </DropdownMenu>
         ) : null}
         {dialogs}
       </>
@@ -184,7 +196,7 @@ export function UserStateActions({
   return (
     <div>
       {!versionReady ? (
-        <p className="mb-3 text-xs leading-5 text-danger">
+        <p className="mb-3 text-xs leading-5 text-destructive">
           {t('usersStateVersionUnavailable')}
         </p>
       ) : null}
@@ -193,8 +205,8 @@ export function UserStateActions({
           {showEnable ? (
             <Button
               variant="secondary"
-              isDisabled={!versionReady}
-              onPress={enableState.open}
+              disabled={!versionReady}
+              onClick={enableState.open}
             >
               <Power className="size-4" aria-hidden="true" />
               {t('usersEnableAction')}
@@ -202,9 +214,9 @@ export function UserStateActions({
           ) : null}
           {showDisable ? (
             <Button
-              variant="danger-soft"
-              isDisabled={!versionReady}
-              onPress={disableState.open}
+              variant="destructive"
+              disabled={!versionReady}
+              onClick={disableState.open}
             >
               <PowerOff className="size-4" aria-hidden="true" />
               {t('usersDisableAction')}
@@ -213,8 +225,8 @@ export function UserStateActions({
           {showUnlock ? (
             <Button
               variant="secondary"
-              isDisabled={!versionReady}
-              onPress={unlockState.open}
+              disabled={!versionReady}
+              onClick={unlockState.open}
             >
               <LockOpen className="size-4" aria-hidden="true" />
               {t('usersUnlockAction')}
@@ -222,7 +234,7 @@ export function UserStateActions({
           ) : null}
         </div>
       ) : (
-        <p className="text-sm text-muted">{t('usersStateNoAction')}</p>
+        <p className="text-sm text-muted-foreground">{t('usersStateNoAction')}</p>
       )}
 
       {dialogs}
@@ -351,88 +363,76 @@ function UserStateDialog({
   const busy = pending || reloading
 
   return (
-    <Modal state={state}>
-      <Modal.Backdrop isDismissable={!busy} isKeyboardDismissDisabled={busy}>
-        <Modal.Container size="md">
-          <Modal.Dialog>
-            {({ close }) => (
-              <>
-                <Modal.CloseTrigger
-                  aria-label={t('close')}
-                  isDisabled={busy}
-                />
-                <Modal.Header>
-                  <Modal.Heading>{t(meta.title)}</Modal.Heading>
-                </Modal.Header>
-                <Modal.Body>
-                  <p className="text-sm leading-6 text-muted">
-                    {t(meta.description)}
-                  </p>
+    <Dialog
+      open={state.isOpen}
+      onOpenChange={(open) => {
+        if (!open && busy) return
+        state.setOpen(open)
+      }}
+    >
+      <DialogContent showCloseButton={!busy} closeLabel={t('close')}>
+        <DialogHeader>
+          <DialogTitle>{t(meta.title)}</DialogTitle>
+        </DialogHeader>
+        <div>
+          <p className="text-sm leading-6 text-muted-foreground">
+            {t(meta.description)}
+          </p>
 
-                  {!versionAvailable ? (
-                    <Alert status="warning" className="mt-3">
-                      <Alert.Indicator />
-                      <Alert.Content>
-                        <Alert.Description>
-                          {t('usersStateVersionUnavailable')}
-                        </Alert.Description>
-                      </Alert.Content>
-                    </Alert>
-                  ) : null}
+          {!versionAvailable ? (
+            <Alert variant="default" className="mt-3 text-warning">
+              <TriangleAlert aria-hidden="true" />
+              <AlertDescription>
+                {t('usersStateVersionUnavailable')}
+              </AlertDescription>
+            </Alert>
+          ) : null}
 
-                  <dl className="mt-4 grid gap-3 rounded-field border border-border p-3 text-sm sm:grid-cols-2">
-                    <div>
-                      <dt className="text-xs font-medium text-muted">
-                        {t('usersStateTarget')}
-                      </dt>
-                      <dd className="mt-0.5 break-words">{user.username}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-xs font-medium text-muted">
-                        {t('usersUserIdLabel')}
-                      </dt>
-                      <dd className="mt-0.5 break-all font-mono text-xs">
-                        {user.id}
-                      </dd>
-                    </div>
-                  </dl>
+          <dl className="mt-4 grid gap-3 rounded-lg border border-border p-3 text-sm sm:grid-cols-2">
+            <div>
+              <dt className="text-xs font-medium text-muted-foreground">
+                {t('usersStateTarget')}
+              </dt>
+              <dd className="mt-0.5 break-words">{user.username}</dd>
+            </div>
+            <div>
+              <dt className="text-xs font-medium text-muted-foreground">
+                {t('usersUserIdLabel')}
+              </dt>
+              <dd className="mt-0.5 break-all font-mono text-xs">{user.id}</dd>
+            </div>
+          </dl>
 
-                  {feedback ? (
-                    <div className="mt-4">
-                      <MutationFeedback
-                        feedback={feedback}
-                        onReload={() => void reloadConflict()}
-                        reloadPending={reloading}
-                      />
-                    </div>
-                  ) : null}
-                </Modal.Body>
-                <Modal.Footer>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    isDisabled={busy}
-                    onPress={close}
-                  >
-                    {t('cancel')}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={action === 'disable' ? 'danger' : 'primary'}
-                    isDisabled={busy || !versionAvailable}
-                    onPress={() => void submit()}
-                  >
-                    {pending ? (
-                      <Spinner size="sm" aria-label={t('usersStatePending')} />
-                    ) : null}
-                    {t(meta.confirm)}
-                  </Button>
-                </Modal.Footer>
-              </>
-            )}
-          </Modal.Dialog>
-        </Modal.Container>
-      </Modal.Backdrop>
-    </Modal>
+          {feedback ? (
+            <div className="mt-4">
+              <MutationFeedback
+                feedback={feedback}
+                onReload={() => void reloadConflict()}
+                reloadPending={reloading}
+              />
+            </div>
+          ) : null}
+        </div>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={busy}
+            onClick={() => state.close()}
+          >
+            {t('cancel')}
+          </Button>
+          <Button
+            type="button"
+            variant={action === 'disable' ? 'destructive' : 'default'}
+            disabled={busy || !versionAvailable}
+            onClick={() => void submit()}
+          >
+            {pending ? <Spinner aria-label={t('usersStatePending')} /> : null}
+            {t(meta.confirm)}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

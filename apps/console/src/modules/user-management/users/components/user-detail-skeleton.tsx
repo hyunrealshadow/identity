@@ -1,4 +1,6 @@
-import { Button, Card, Skeleton } from '@heroui/react'
+import { Button } from '@identity/ui/components/button'
+import { Card, CardContent } from '@identity/ui/components/card'
+import { Skeleton } from '@identity/ui/components/skeleton'
 import type { ReactNode } from 'react'
 
 import { UserSelectField } from './user-form-fields'
@@ -12,9 +14,9 @@ export function UserDetailPaginationSkeleton() {
       aria-hidden="true"
     >
       <div className="flex h-5 items-center">
-        <Skeleton className="h-4 w-24 rounded-field" />
+        <Skeleton className="h-4 w-24 rounded-lg" />
       </div>
-      <Skeleton className="h-9 w-40 rounded-field md:h-8" />
+      <Skeleton className="h-9 w-40 rounded-lg md:h-8" />
     </div>
   )
 }
@@ -28,18 +30,18 @@ export function UserDetailTableSkeleton({ label }: { label: string }) {
       aria-busy="true"
     >
       <div aria-hidden="true" className="space-y-3">
-        <Skeleton className="h-9 w-full rounded-field" />
+        <Skeleton className="h-9 w-full rounded-lg" />
         {Array.from({ length: 4 }, (_, index) => (
           <div
             key={index}
-            className="grid grid-cols-3 items-center gap-4 border-b border-separator py-3"
+            className="grid grid-cols-3 items-center gap-4 border-b border-border py-3"
           >
             <div className="space-y-2">
-              <Skeleton className="h-4 w-4/5 rounded-field" />
-              <Skeleton className="h-3 w-3/5 rounded-field" />
+              <Skeleton className="h-4 w-4/5 rounded-lg" />
+              <Skeleton className="h-3 w-3/5 rounded-lg" />
             </div>
-            <Skeleton className="h-4 w-2/3 rounded-field" />
-            <Skeleton className="h-4 w-3/4 rounded-field" />
+            <Skeleton className="h-4 w-2/3 rounded-lg" />
+            <Skeleton className="h-4 w-3/4 rounded-lg" />
           </div>
         ))}
       </div>
@@ -61,7 +63,7 @@ export function UserDetailTabSkeleton({
         aria-hidden="true"
       >
         <div className="space-y-3">
-          <Skeleton className="h-4 w-64 rounded-field" />
+          <Skeleton className="h-4 w-64 rounded-lg" />
           {tab === 'permissions' ? (
             <div className="w-96 max-w-full">
               <UserSelectField
@@ -74,11 +76,11 @@ export function UserDetailTabSkeleton({
               />
             </div>
           ) : (
-            <Skeleton className="h-10 w-48 rounded-field" />
+            <Skeleton className="h-10 w-48 rounded-lg" />
           )}
         </div>
         {tab !== 'permissions' ? (
-          <Skeleton className="h-10 w-32 rounded-field" />
+          <Skeleton className="h-10 w-32 rounded-lg" />
         ) : null}
       </div>
       <UserDetailTableSkeleton label={t('loading')} />
@@ -96,11 +98,11 @@ export function UserDetailActionSkeleton({
 }) {
   return (
     <div className="relative" aria-hidden="true">
-      <Button isDisabled className="invisible">
+      <Button disabled className="invisible">
         {icon}
         {label}
       </Button>
-      <Skeleton className="absolute inset-0 rounded-field" />
+      <Skeleton className="absolute inset-0 rounded-lg" />
     </div>
   )
 }
@@ -118,34 +120,34 @@ export function UserDetailSkeleton() {
         className="console-card border border-border p-0"
         aria-hidden="true"
       >
-        <Card.Content className="block p-5 sm:p-6">
+        <CardContent className="block p-5 sm:p-6">
           <div className="mb-6 flex h-6 items-center justify-between gap-3">
-            <Skeleton className="h-5 w-20 rounded-field" />
+            <Skeleton className="h-5 w-20 rounded-lg" />
           </div>
           <div className="grid gap-x-8 gap-y-7 sm:grid-cols-2 xl:grid-cols-3">
             {Array.from({ length: 4 }, (_, index) => (
               <div key={index} className="min-w-0">
-                <Skeleton className="h-5 w-20 rounded-field" />
+                <Skeleton className="h-5 w-20 rounded-lg" />
                 <div className="mt-2 flex h-6 items-center">
-                  <Skeleton className="h-5 w-40 max-w-full rounded-field" />
+                  <Skeleton className="h-5 w-40 max-w-full rounded-lg" />
                 </div>
               </div>
             ))}
           </div>
-        </Card.Content>
+        </CardContent>
       </Card>
       <Card
         className="console-card border border-border p-0"
         aria-hidden="true"
       >
-        <Card.Content className="block p-5 sm:p-6">
+        <CardContent className="block p-5 sm:p-6">
           <div className="mb-6 flex h-6 items-center justify-between gap-3">
-            <Skeleton className="h-5 w-20 rounded-field" />
+            <Skeleton className="h-5 w-20 rounded-lg" />
           </div>
           <div className="py-4">
-            <Skeleton className="h-5 w-36 rounded-field" />
+            <Skeleton className="h-5 w-36 rounded-lg" />
           </div>
-        </Card.Content>
+        </CardContent>
       </Card>
     </div>
   )

@@ -1,14 +1,17 @@
 import { useRoleDetailContext } from '../components/role-detail-context'
+import { Alert, AlertDescription, AlertTitle } from '@identity/ui/components/alert'
+import { Button } from '@identity/ui/components/button'
 import {
-  Alert,
-  Button,
-  Modal,
-  Spinner,
-  toast,
-  useOverlayState,
-} from '@heroui/react'
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@identity/ui/components/dialog'
+import { Spinner } from '@identity/ui/components/spinner'
+import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
 import { useNavigate } from '@tanstack/react-router'
-import { Save, Power, PowerOff } from 'lucide-react'
+import { Save, Power, PowerOff, TriangleAlert } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
@@ -27,6 +30,7 @@ import {
 } from '#/lib/graphql/presentation'
 import { formatDateTime } from '#/lib/format'
 import { useLocale, useTranslator, type MessageKey } from '#/lib/i18n'
+import { toast } from '#/lib/toast'
 import {
   createLocalizedDraft,
   hasLocalizedDraftChanges,
@@ -331,19 +335,17 @@ export function RoleDetailPage() {
           <RbacNoticeAlert notice={notice} onDismiss={() => setNotice(null)} />
         ) : null}
         {roleQuery.partial ? (
-          <Alert status="warning">
-            <Alert.Indicator />
-            <Alert.Content>
-              <Alert.Title>{t('rolesPartialTitle')}</Alert.Title>
-              <Alert.Description>
-                {t('rolesPartialDescription')}
-              </Alert.Description>
-              <RequestCorrelation
-                requestId={roleQuery.requestId}
-                traceId={roleQuery.traceId}
-              />
-              <ErrorDetails issues={roleQuery.errors} />
-            </Alert.Content>
+          <Alert variant="default" className="text-warning">
+            <TriangleAlert aria-hidden="true" />
+            <AlertTitle>{t('rolesPartialTitle')}</AlertTitle>
+            <AlertDescription>
+              {t('rolesPartialDescription')}
+            </AlertDescription>
+            <RequestCorrelation
+              requestId={roleQuery.requestId}
+              traceId={roleQuery.traceId}
+            />
+            <ErrorDetails issues={roleQuery.errors} />
           </Alert>
         ) : null}
         {!editing && !accessEnded && feedback ? (
@@ -365,7 +367,7 @@ export function RoleDetailPage() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    onPress={() => setEditing(true)}
+                    onClick={() => setEditing(true)}
                   >
                     {t('rbacEntityEdit')}
                   </Button>
@@ -373,13 +375,13 @@ export function RoleDetailPage() {
               </div>
               <dl className="grid gap-x-8 gap-y-6 sm:grid-cols-2">
                 <div>
-                  <dt className="mb-2 text-sm text-muted">
+                  <dt className="mb-2 text-sm text-muted-foreground">
                     {t('rbacEntityName')}
                   </dt>
                   <dd className="text-sm">{displayName}</dd>
                 </div>
                 <div>
-                  <dt className="mb-2 text-sm text-muted">
+                  <dt className="mb-2 text-sm text-muted-foreground">
                     {t('rbacEntityDescription')}
                   </dt>
                   <dd className="whitespace-pre-wrap text-sm">
@@ -387,7 +389,7 @@ export function RoleDetailPage() {
                   </dd>
                 </div>
                 <div>
-                  <dt className="mb-2 text-sm text-muted">
+                  <dt className="mb-2 text-sm text-muted-foreground">
                     {t('rbacEntityCreated')}
                   </dt>
                   <dd className="text-sm">
@@ -395,7 +397,7 @@ export function RoleDetailPage() {
                   </dd>
                 </div>
                 <div>
-                  <dt className="mb-2 text-sm text-muted">
+                  <dt className="mb-2 text-sm text-muted-foreground">
                     {t('rbacEntityUpdated')}
                   </dt>
                   <dd className="text-sm">
@@ -404,8 +406,8 @@ export function RoleDetailPage() {
                 </div>
               </dl>
             </section>
-            <Modal
-              isOpen={editing}
+            <Dialog
+              open={editing}
               onOpenChange={(open) => {
                 if (pending) return
                 if (!open) {
@@ -418,116 +420,108 @@ export function RoleDetailPage() {
                 setEditing(open)
               }}
             >
-              <Modal.Backdrop isDismissable={!pending}>
-                <Modal.Container size="lg">
-                  <Modal.Dialog className="sm:max-w-3xl">
-                    <Modal.CloseTrigger
-                      isDisabled={pending}
-                      aria-label={t('close')}
+              <DialogContent
+                showCloseButton={!pending}
+                closeLabel={t('close')}
+                className="sm:max-w-3xl"
+              >
+                <DialogHeader>
+                  <DialogTitle>{t('rbacEntityEdit')}</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-5">
+                  {feedback ? (
+                    <RbacMutationFeedback
+                      feedback={feedback}
+                      onReload={() => void reloadRole()}
+                      reloadPending={roleQuery.refreshing}
                     />
-                    <Modal.Header>
-                      <Modal.Heading>{t('rbacEntityEdit')}</Modal.Heading>
-                    </Modal.Header>
-                    <Modal.Body>
-                      <div className="space-y-5">
-                        {feedback ? (
-                          <RbacMutationFeedback
-                            feedback={feedback}
-                            onReload={() => void reloadRole()}
-                            reloadPending={roleQuery.refreshing}
-                          />
-                        ) : null}
-                        <LocalizedTextField
-                          name="names"
-                          label={t('localizedName')}
-                          defaultValue={readyDraft.name}
-                          onDefaultValueChange={(value) => {
-                            setDraft((current) =>
-                              current ? { ...current, name: value } : current,
-                            )
-                            setFeedback(null)
-                            setLocalErrors({})
-                            setFieldErrors({})
-                          }}
-                          value={readyDraft.names}
-                          onChange={(value) => change('names', value)}
-                          isRequired
-                          isDisabled={pending}
-                          isReadOnly={builtIn || !scope.rolesWrite}
-                          maxLength={256}
-                          error={
-                            localErrors.metadata
-                              ? t(localErrors.metadata)
-                              : (fieldErrors.name ??
-                                fieldErrors.names ??
-                                fieldErrors.metadata)
-                          }
-                        />
-                        <LocalizedTextField
-                          name="descriptions"
-                          label={t('localizedDescription')}
-                          defaultValue={readyDraft.description}
-                          onDefaultValueChange={(value) => {
-                            setDraft((current) =>
-                              current
-                                ? { ...current, description: value }
-                                : current,
-                            )
-                            setFeedback(null)
-                            setLocalErrors({})
-                            setFieldErrors({})
-                          }}
-                          value={readyDraft.descriptions}
-                          onChange={(value) => change('descriptions', value)}
-                          multiline
-                          isDisabled={pending}
-                          isReadOnly={builtIn || !scope.rolesWrite}
-                          maxLength={1024}
-                          error={
-                            fieldErrors.description ?? fieldErrors.descriptions
-                          }
-                        />
-                      </div>
-                    </Modal.Body>
-                    <Modal.Footer>
-                      <Button
-                        type="button"
-                        isDisabled={
-                          pending ||
-                          !scope.rolesWrite ||
-                          !versionReady ||
-                          !metadataChanged
-                        }
-                        onPress={() => void submit()}
-                      >
-                        {pending ? (
-                          <Spinner size="sm" aria-label={t('saving')} />
-                        ) : (
-                          <Save className="size-4" aria-hidden="true" />
-                        )}
-                        {t('roleSettingsSaveAction')}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        isDisabled={pending || !scope.rolesWrite}
-                        onPress={() => {
-                          initialized.current = undefined
-                          setDraft(draftFromRole(readyRole))
-                          clearDraft(draftKey(readyRole.id))
-                          setLocalErrors({})
-                          setFieldErrors({})
-                          setFeedback(null)
-                          setEditing(false)
-                        }}
-                      >
-                        {t('cancel')}
-                      </Button>
-                    </Modal.Footer>
-                  </Modal.Dialog>
-                </Modal.Container>
-              </Modal.Backdrop>
-            </Modal>
+                  ) : null}
+                  <LocalizedTextField
+                    name="names"
+                    label={t('localizedName')}
+                    defaultValue={readyDraft.name}
+                    onDefaultValueChange={(value) => {
+                      setDraft((current) =>
+                        current ? { ...current, name: value } : current,
+                      )
+                      setFeedback(null)
+                      setLocalErrors({})
+                      setFieldErrors({})
+                    }}
+                    value={readyDraft.names}
+                    onChange={(value) => change('names', value)}
+                    isRequired
+                    isDisabled={pending}
+                    isReadOnly={builtIn || !scope.rolesWrite}
+                    maxLength={256}
+                    error={
+                      localErrors.metadata
+                        ? t(localErrors.metadata)
+                        : (fieldErrors.name ??
+                          fieldErrors.names ??
+                          fieldErrors.metadata)
+                    }
+                  />
+                  <LocalizedTextField
+                    name="descriptions"
+                    label={t('localizedDescription')}
+                    defaultValue={readyDraft.description}
+                    onDefaultValueChange={(value) => {
+                      setDraft((current) =>
+                        current ? { ...current, description: value } : current,
+                      )
+                      setFeedback(null)
+                      setLocalErrors({})
+                      setFieldErrors({})
+                    }}
+                    value={readyDraft.descriptions}
+                    onChange={(value) => change('descriptions', value)}
+                    multiline
+                    isDisabled={pending}
+                    isReadOnly={builtIn || !scope.rolesWrite}
+                    maxLength={1024}
+                    error={
+                      fieldErrors.description ?? fieldErrors.descriptions
+                    }
+                  />
+                </div>
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    disabled={
+                      pending ||
+                      !scope.rolesWrite ||
+                      !versionReady ||
+                      !metadataChanged
+                    }
+                    onClick={() => void submit()}
+                  >
+                    {pending ? (
+                      <Spinner aria-label={t('saving')} />
+                    ) : (
+                      <Save className="size-4" aria-hidden="true" />
+                    )}
+                    {t('roleSettingsSaveAction')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={pending || !scope.rolesWrite}
+                    onClick={() => {
+                      initialized.current = undefined
+                      setDraft(draftFromRole(readyRole))
+                      clearDraft(draftKey(readyRole.id))
+                      setLocalErrors({})
+                      setFieldErrors({})
+                      setFeedback(null)
+                      setEditing(false)
+                    }}
+                  >
+                    {t('cancel')}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
 
           <div className="space-y-4">
@@ -629,9 +623,9 @@ function RoleStateDialog({
   return (
     <>
       <Button
-        variant={action === 'disable' ? 'danger-soft' : 'secondary'}
-        onPress={state.open}
-        isDisabled={!role.version}
+        variant={action === 'disable' ? 'destructive' : 'secondary'}
+        onClick={state.open}
+        disabled={!role.version}
       >
         {action === 'enable' ? (
           <Power className="size-4" aria-hidden="true" />
@@ -640,69 +634,59 @@ function RoleStateDialog({
         )}
         {t(action === 'enable' ? 'rolesEnableAction' : 'rolesDisableAction')}
       </Button>
-      <Modal state={state}>
-        <Modal.Backdrop isDismissable={!pending}>
-          <Modal.Container size="md">
-            <Modal.Dialog>
-              {({ close }) => (
-                <>
-                  <Modal.CloseTrigger
-                    aria-label={t('close')}
-                    isDisabled={pending}
-                  />
-                  <Modal.Header>
-                    <Modal.Heading>
-                      {t(
-                        action === 'enable'
-                          ? 'rolesEnableTitle'
-                          : 'rolesDisableTitle',
-                      )}
-                    </Modal.Heading>
-                  </Modal.Header>
-                  <Modal.Body>
-                    <p className="text-sm leading-6 text-muted">
-                      {t(
-                        action === 'enable'
-                          ? 'rolesEnableDescription'
-                          : 'rolesDisableDescription',
-                      )}
-                    </p>
-                    <p className="mt-3 text-sm font-medium">{displayName}</p>
-                    {feedback ? (
-                      <div className="mt-4">
-                        <RbacMutationFeedback feedback={feedback} />
-                      </div>
-                    ) : null}
-                  </Modal.Body>
-                  <Modal.Footer>
-                    <Button
-                      variant="secondary"
-                      isDisabled={pending}
-                      onPress={close}
-                    >
-                      {t('cancel')}
-                    </Button>
-                    <Button
-                      variant={action === 'disable' ? 'danger' : 'primary'}
-                      isDisabled={pending || !role.version}
-                      onPress={() => void submit()}
-                    >
-                      {pending ? (
-                        <Spinner size="sm" aria-label={t('working')} />
-                      ) : null}
-                      {t(
-                        action === 'enable'
-                          ? 'rolesEnableConfirm'
-                          : 'rolesDisableConfirm',
-                      )}
-                    </Button>
-                  </Modal.Footer>
-                </>
+      <Dialog
+        open={state.isOpen}
+        onOpenChange={(open) => {
+          if (!open && pending) return
+          state.setOpen(open)
+        }}
+      >
+        <DialogContent showCloseButton={!pending} closeLabel={t('close')}>
+          <DialogHeader>
+            <DialogTitle>
+              {t(
+                action === 'enable' ? 'rolesEnableTitle' : 'rolesDisableTitle',
               )}
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
+            </DialogTitle>
+          </DialogHeader>
+          <div>
+            <p className="text-sm leading-6 text-muted-foreground">
+              {t(
+                action === 'enable'
+                  ? 'rolesEnableDescription'
+                  : 'rolesDisableDescription',
+              )}
+            </p>
+            <p className="mt-3 text-sm font-medium">{displayName}</p>
+            {feedback ? (
+              <div className="mt-4">
+                <RbacMutationFeedback feedback={feedback} />
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="secondary"
+              disabled={pending}
+              onClick={() => state.close()}
+            >
+              {t('cancel')}
+            </Button>
+            <Button
+              variant={action === 'disable' ? 'destructive' : 'default'}
+              disabled={pending || !role.version}
+              onClick={() => void submit()}
+            >
+              {pending ? <Spinner aria-label={t('working')} /> : null}
+              {t(
+                action === 'enable'
+                  ? 'rolesEnableConfirm'
+                  : 'rolesDisableConfirm',
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

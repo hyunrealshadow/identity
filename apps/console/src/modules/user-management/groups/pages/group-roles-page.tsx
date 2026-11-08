@@ -2,8 +2,14 @@ import { EditRolesDialog } from '../components/edit-group-roles-dialog'
 import { RelationPagination } from '../../components/relation-picker'
 
 import { DataTable } from '@identity/ui/data-table'
-import { Alert, Chip } from '@heroui/react'
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from '@identity/ui/components/alert'
+import { Badge } from '@identity/ui/components/badge'
 import { Link, useNavigate } from '@tanstack/react-router'
+import { Info, TriangleAlert } from 'lucide-react'
 
 import { useMemo, useState } from 'react'
 
@@ -167,14 +173,12 @@ export function GroupRolesPage({ groupId }: { groupId: string }) {
         ) : null}
 
         {readyGroup.builtIn ? (
-          <Alert status="default">
-            <Alert.Indicator />
-            <Alert.Content>
-              <Alert.Title>{t('groupRolesBuiltInTitle')}</Alert.Title>
-              <Alert.Description>
-                {t('groupRolesBuiltInDescription')}
-              </Alert.Description>
-            </Alert.Content>
+          <Alert>
+            <Info aria-hidden="true" />
+            <AlertTitle>{t('groupRolesBuiltInTitle')}</AlertTitle>
+            <AlertDescription>
+              {t('groupRolesBuiltInDescription')}
+            </AlertDescription>
           </Alert>
         ) : null}
 
@@ -184,7 +188,7 @@ export function GroupRolesPage({ groupId }: { groupId: string }) {
               <h2 className="text-base font-semibold">
                 {t('groupRolesListTitle')}
               </h2>
-              <p className="mt-1 text-sm text-muted">
+              <p className="mt-1 text-sm text-muted-foreground">
                 {t('groupRolesListDescription')}
               </p>
             </div>
@@ -248,19 +252,17 @@ export function GroupRolesPage({ groupId }: { groupId: string }) {
           <div className="p-0">
             {roles.partial ? (
               <div className="p-3">
-                <Alert status="warning">
-                  <Alert.Indicator />
-                  <Alert.Content>
-                    <Alert.Title>{t('groupsPartialTitle')}</Alert.Title>
-                    <Alert.Description>
-                      {t('groupsPartialDescription')}
-                    </Alert.Description>
-                    <RequestCorrelation
-                      requestId={roles.requestId}
-                      traceId={roles.traceId}
-                    />
-                    <ErrorDetails issues={roles.errors} />
-                  </Alert.Content>
+                <Alert variant="default" className="text-warning">
+                  <TriangleAlert aria-hidden="true" />
+                  <AlertTitle>{t('groupsPartialTitle')}</AlertTitle>
+                  <AlertDescription>
+                    {t('groupsPartialDescription')}
+                  </AlertDescription>
+                  <RequestCorrelation
+                    requestId={roles.requestId}
+                    traceId={roles.traceId}
+                  />
+                  <ErrorDetails issues={roles.errors} />
                 </Alert>
               </div>
             ) : null}
@@ -319,22 +321,26 @@ export function GroupRolesPage({ groupId }: { groupId: string }) {
                             <Link
                               to="/roles/$roleId"
                               params={{ roleId: role.id }}
-                              className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                              className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                             >
                               {name}
                             </Link>
                             <div className="mt-1 flex flex-wrap gap-1">
                               {role.builtIn ? (
-                                <Chip size="sm" variant="soft" color="accent">
-                                  <Chip.Label>
-                                    {t('groupRolesBuiltInRoleLabel')}
-                                  </Chip.Label>
-                                </Chip>
+                                <Badge
+                                  variant="secondary"
+                                  className="text-primary"
+                                >
+                                  {t('groupRolesBuiltInRoleLabel')}
+                                </Badge>
                               ) : null}
                               {!role.enabled ? (
-                                <Chip size="sm" variant="soft" color="warning">
-                                  <Chip.Label>{t('rolesDisabled')}</Chip.Label>
-                                </Chip>
+                                <Badge
+                                  variant="secondary"
+                                  className="text-warning"
+                                >
+                                  {t('rolesDisabled')}
+                                </Badge>
                               ) : null}
                             </div>
                           </div>
@@ -353,7 +359,7 @@ export function GroupRolesPage({ groupId }: { groupId: string }) {
               </DataTable>
             )}
           </div>
-          <footer className="border-t border-separator pt-4">
+          <footer className="border-t border-border pt-4">
             <RelationPagination
               connection={readyGroup.roles}
               variables={variables}

@@ -6,7 +6,9 @@ import {
 import { RelationDialog } from '../../components/relation-dialog'
 import { useRelationMutation } from '../../lib/relation-mutation'
 
-import { Button, Chip, toast, useOverlayState } from '@heroui/react'
+import { Badge } from '@identity/ui/components/badge'
+import { Button } from '@identity/ui/components/button'
+import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
 
 import { UserPlus } from 'lucide-react'
 import { useMemo, useState } from 'react'
@@ -22,6 +24,7 @@ import {
 } from '#/generated/graphql'
 
 import { useLocale, useTranslator } from '#/lib/i18n'
+import { toast } from '#/lib/toast'
 import { useGraphQL } from '#/lib/graphql/use-graphql'
 
 import { useRoleMutations } from '#/modules/user-management/roles/hooks/role-mutations'
@@ -157,7 +160,7 @@ export function AssignUserDialog({
 
   return (
     <>
-      <Button onPress={state.open}>
+      <Button onClick={state.open}>
         <UserPlus className="size-4" aria-hidden="true" />
         {t('roleUsersAssignAction')}
       </Button>
@@ -172,7 +175,7 @@ export function AssignUserDialog({
         onReload={onReload}
         reloadPending={reloadPending}
       >
-        <p className="text-sm leading-6 text-muted">
+        <p className="text-sm leading-6 text-muted-foreground">
           {t('roleUsersAssignDescription', { role: roleName })}
         </p>
         <CandidateSearch
@@ -192,10 +195,10 @@ export function AssignUserDialog({
           label={t('roleUsersSearchUsers')}
           empty={t('roleUsersNoCandidates')}
         >
-          <ul className="divide-y divide-separator">
+          <ul className="divide-y divide-border">
             {edges.map(({ node }) => (
               <li key={node.id}>
-                <label className="flex cursor-pointer items-start gap-3 p-3 hover:bg-surface-secondary">
+                <label className="flex cursor-pointer items-start gap-3 p-3 hover:bg-muted">
                   <input
                     type="radio"
                     name="assign-user"
@@ -207,26 +210,23 @@ export function AssignUserDialog({
                     <span className="block text-sm font-medium">
                       {node.username}
                     </span>
-                    <span className="block break-all text-xs text-muted">
+                    <span className="block break-all text-xs text-muted-foreground">
                       {node.email}
                     </span>
                     <span className="mt-1 flex gap-1">
                       {node.enabled === null ||
                       node.enabled === undefined ? null : (
-                        <Chip
-                          size="sm"
-                          variant="soft"
-                          color={node.enabled ? 'success' : 'default'}
+                        <Badge
+                          variant="secondary"
+                          className={node.enabled ? 'text-success' : undefined}
                         >
-                          <Chip.Label>
-                            {t(node.enabled ? 'usersEnabled' : 'usersDisabled')}
-                          </Chip.Label>
-                        </Chip>
+                          {t(node.enabled ? 'usersEnabled' : 'usersDisabled')}
+                        </Badge>
                       )}
                       {node.locked ? (
-                        <Chip size="sm" variant="soft" color="warning">
-                          <Chip.Label>{t('usersLocked')}</Chip.Label>
-                        </Chip>
+                        <Badge variant="secondary" className="text-warning">
+                          {t('usersLocked')}
+                        </Badge>
                       ) : null}
                     </span>
                   </span>

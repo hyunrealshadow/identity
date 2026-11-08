@@ -1,7 +1,19 @@
-import { Alert, Button, Card, Spinner, toast } from '@heroui/react'
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from '@identity/ui/components/alert'
+import { Button } from '@identity/ui/components/button'
+import {
+  Card,
+  CardContent,
+} from '@identity/ui/components/card'
+import { Spinner } from '@identity/ui/components/spinner'
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowLeft, Plus } from 'lucide-react'
+import { ArrowLeft, Plus, TriangleAlert } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+
+import { toast } from '#/lib/toast'
 
 import { LocalizedTextField } from '#/components/localized-text-field'
 import { PageHeader } from '#/components/page-header'
@@ -65,8 +77,8 @@ export function GroupCreatePage() {
       actions={
         <Button
           variant="secondary"
-          isDisabled={pending}
-          onPress={() => void navigate({ to: '/groups' })}
+          disabled={pending}
+          onClick={() => void navigate({ to: '/groups' })}
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
           {t('backToGroups')}
@@ -81,21 +93,21 @@ export function GroupCreatePage() {
         {header}
         <ConsoleWorkspaceGate>
           <Card className="console-card border border-border">
-            <Card.Content className="p-6 sm:p-8">
-              <span className="flex size-10 items-center justify-center rounded-lg bg-surface-secondary text-muted">
+            <CardContent className="p-6 sm:p-8">
+              <span className="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
                 <Plus className="size-5" aria-hidden="true" />
               </span>
               <h2 className="mt-4 text-lg font-semibold tracking-tight">
                 {t('groupsCreateWriteOnlyTitle')}
               </h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
                 {t('groupsCreateWriteOnlyDescription', {
                   groupId: created.groupId,
                 })}
               </p>
               <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
                 <div>
-                  <dt className="text-xs font-medium text-muted">
+                  <dt className="text-xs font-medium text-muted-foreground">
                     {t('groupsIdLabel')}
                   </dt>
                   <dd className="mt-0.5 break-all font-mono text-xs">
@@ -105,7 +117,7 @@ export function GroupCreatePage() {
               </dl>
               <div className="mt-5 flex flex-wrap gap-2">
                 <Button
-                  onPress={() => {
+                  onClick={() => {
                     setCreated(null)
                     setDraft(emptyGroupDraft())
                     clearDraft(DRAFT_KEY)
@@ -116,12 +128,12 @@ export function GroupCreatePage() {
                 </Button>
                 <Button
                   variant="secondary"
-                  onPress={() => void navigate({ to: '/groups' })}
+                  onClick={() => void navigate({ to: '/groups' })}
                 >
                   {t('backToGroups')}
                 </Button>
               </div>
-            </Card.Content>
+            </CardContent>
           </Card>
         </ConsoleWorkspaceGate>
       </>
@@ -310,7 +322,7 @@ function GroupCreateForm({
       >
         <div className="space-y-4">
           <Card className="console-card border border-border">
-            <Card.Content className="space-y-6 p-5">
+            <CardContent className="space-y-6 p-5">
               <LocalizedTextField
                 name="names"
                 label={t('localizedName')}
@@ -347,13 +359,13 @@ function GroupCreateForm({
                 maxLength={1024}
                 error={fieldErrors.description ?? fieldErrors.descriptions}
               />
-            </Card.Content>
+            </CardContent>
           </Card>
 
           <div className="flex flex-wrap gap-2">
-            <Button type="submit" isDisabled={pending || disabled}>
+            <Button type="submit" disabled={pending || disabled}>
               {pending ? (
-                <Spinner size="sm" aria-label={t('groupsCreatePending')} />
+                <Spinner aria-label={t('groupsCreatePending')} />
               ) : (
                 <Plus className="size-4" aria-hidden="true" />
               )}
@@ -362,8 +374,8 @@ function GroupCreateForm({
             <Button
               type="button"
               variant="secondary"
-              isDisabled={pending}
-              onPress={() => void navigate({ to: '/groups' })}
+              disabled={pending}
+              onClick={() => void navigate({ to: '/groups' })}
             >
               {t('cancel')}
             </Button>
@@ -371,14 +383,12 @@ function GroupCreateForm({
         </div>
       </form>
       {showWriteOnlyWarning && !disabled && !pending ? (
-        <Alert status="warning">
-          <Alert.Indicator />
-          <Alert.Content>
-            <Alert.Title>{t('groupsNoReadAfterCreateTitle')}</Alert.Title>
-            <Alert.Description>
-              {t('groupsNoReadAfterCreateDescription')}
-            </Alert.Description>
-          </Alert.Content>
+        <Alert variant="default" className="text-warning">
+          <TriangleAlert aria-hidden="true" />
+          <AlertTitle>{t('groupsNoReadAfterCreateTitle')}</AlertTitle>
+          <AlertDescription>
+            {t('groupsNoReadAfterCreateDescription')}
+          </AlertDescription>
         </Alert>
       ) : null}
     </div>

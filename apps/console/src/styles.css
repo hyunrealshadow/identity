@@ -1,108 +1,9 @@
-@import "tailwindcss";
-@import "@heroui/styles";
-@import "@identity/ui/styles.css";
+@import "@identity/ui/globals.css";
 
 :root {
-  --radius: 0.25rem;
-  --field-radius: 0.25rem;
-  --field-border-width: 1px;
-  --field-border-focus: transparent;
   --sidebar-width: 240px;
   --sidebar-collapsed-width: 72px;
   --content-max-width: 1280px;
-}
-
-@layer components {
-  .button {
-    border-radius: var(--field-radius);
-  }
-
-  .input--secondary,
-  .input-group--secondary {
-    --field-border: transparent;
-    --field-border-hover: transparent;
-    --field-border-focus: transparent;
-
-    border-width: 0;
-  }
-}
-
-:root,
-.light,
-.default,
-[data-theme="light"],
-[data-theme="default"] {
-  /* Theme Colors (Light Mode) */
-  --accent: oklch(0 0 0);
-  --accent-foreground: oklch(99.11% 0 0);
-  --background: oklch(98.4% 0 0);
-  --border: oklch(90.00% 0.0000 0.00);
-  --danger: oklch(0.573 0.2249 21.97);
-  --danger-foreground: oklch(98% 0.0200 21.97);
-  --default: oklch(94.00% 0.0000 0.00);
-  --default-foreground: oklch(21.03% 0.0059 0.00);
-  --field-background: oklch(100.00% 0.0000 0.00);
-  --field-border: var(--border);
-  --field-foreground: oklch(21.03% 0.0000 0.00);
-  --field-placeholder: oklch(55.17% 0.0000 0.00);
-  --focus: oklch(0 0 0);
-  --foreground: oklch(21.03% 0.0000 0.00);
-  --muted: oklch(55.17% 0.0000 0.00);
-  --overlay: oklch(100.00% 0.0000 0.00);
-  --overlay-foreground: oklch(21.03% 0.0000 0.00);
-  --scrollbar: oklch(87.10% 0.0000 0.00);
-  --segment: oklch(100.00% 0.0000 0.00);
-  --segment-foreground: oklch(21.03% 0.0000 0.00);
-  --separator: oklch(92.00% 0.0000 0.00);
-  --success: oklch(0.6277 0.1604 153.06);
-  --success-foreground: oklch(98% 0.0160 153.06);
-  --surface: oklch(100.00% 0.0000 0.00);
-  --surface-foreground: oklch(21.03% 0.0000 0.00);
-  --surface-secondary: oklch(95.24% 0.0000 0.00);
-  --surface-secondary-foreground: oklch(21.03% 0.0000 0.00);
-  --surface-tertiary: oklch(93.73% 0.0000 0.00);
-  --surface-tertiary-foreground: oklch(21.03% 0.0000 0.00);
-  --warning: oklch(0.8446 0.1525 80.6);
-  --warning-foreground: oklch(15% 0.0457 80.60);
-  --accent-soft-foreground: oklch(0 0 0);
-}
-
-.dark,
-[data-theme="dark"] {
-  color-scheme: dark;
-  /* Theme Colors (Dark Mode) */
-  --accent: oklch(0.9848 0 0);
-  --accent-foreground: oklch(15% 0.0000 0.00);
-  --background: oklch(14.5% 0 0);
-  --border: oklch(28.00% 0.0000 0.00);
-  --danger: oklch(0.7044 0.1872 23.19);
-  --danger-foreground: oklch(15% 0.0500 23.19);
-  --default: oklch(27.40% 0.0000 0.00);
-  --default-foreground: oklch(99.11% 0 0);
-  --field-background: oklch(21.03% 0.0000 0.00);
-  --field-border: var(--border);
-  --field-foreground: oklch(99.11% 0.0000 0.00);
-  --field-placeholder: oklch(70.50% 0.0000 0.00);
-  --focus: oklch(0.9848 0 0);
-  --foreground: oklch(99.11% 0.0000 0.00);
-  --muted: oklch(70.50% 0.0000 0.00);
-  --overlay: oklch(21.03% 0.0000 0.00);
-  --overlay-foreground: oklch(99.11% 0.0000 0.00);
-  --scrollbar: oklch(70.50% 0.0000 0.00);
-  --segment: oklch(39.64% 0.0000 0.00);
-  --segment-foreground: oklch(99.11% 0.0000 0.00);
-  --separator: oklch(25.00% 0.0000 0.00);
-  --success: oklch(0.6514 0.1321 156.22);
-  --success-foreground: oklch(15% 0.0396 156.22);
-  --surface: oklch(21.03% 0.0000 0.00);
-  --surface-foreground: oklch(99.11% 0.0000 0.00);
-  --surface-secondary: oklch(25.70% 0.0000 0.00);
-  --surface-secondary-foreground: oklch(99.11% 0.0000 0.00);
-  --surface-tertiary: oklch(27.21% 0.0000 0.00);
-  --surface-tertiary-foreground: oklch(99.11% 0.0000 0.00);
-  --warning: oklch(0.8803 0.1348 86.06);
-  --warning-foreground: oklch(15% 0.0404 86.06);
-  --accent-soft-foreground: oklch(0.9848 0 0);
 }
 
 * {
@@ -123,11 +24,6 @@ body {
   margin: 0;
   /* Avoid a second scroll container when overlays lock the root scroller. */
   overflow-x: clip;
-  color: var(--foreground);
-  background: var(--background);
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -141,41 +37,8 @@ body {
 /* A danger zone uses the card's own shadow, tinted red. */
 .console-card-danger {
   box-shadow:
-    0 1px 2px color-mix(in oklab, var(--danger) 3%, transparent),
-    0 8px 24px -20px color-mix(in oklab, var(--danger) 22%, transparent);
-}
-
-/*
- * Disabled controls keep their not-allowed cursor. The component styles also
- * turn off pointer events, which hides that cursor, so it is restored here;
- * the controls themselves still ignore presses while disabled.
- */
-:root {
-  --cursor-disabled: not-allowed;
-}
-
-/*
- * Restoring pointer events also restores hover feedback, because the component
- * hover rules do not exclude disabled state. Their compiled declarations read
- * the base color tokens directly (`background-color: var(--field-hover)`), so
- * point those tokens at their resting values: a disabled control then shows the
- * cursor but never a hover background, border, or switch track.
- */
-:is(.button, .switch, .input, .textarea, .select__trigger, .radio, .checkbox):is(
-    :disabled,
-    [data-disabled='true'],
-    [aria-disabled='true']
-  ) {
-  pointer-events: auto;
-  --field-hover: var(--field-background, var(--default));
-  --default-hover: var(--default);
-  --accent-hover: var(--accent);
-  --field-border-hover: var(--field-border);
-  --input-bg-hover: var(--input-bg);
-  --textarea-bg-hover: var(--textarea-bg);
-  --select-trigger-bg-hover: var(--select-trigger-bg);
-  --switch-control-bg-hover: var(--switch-control-bg);
-  --switch-control-bg-checked-hover: var(--switch-control-bg-checked);
+    0 1px 2px color-mix(in oklab, var(--destructive) 3%, transparent),
+    0 8px 24px -20px color-mix(in oklab, var(--destructive) 22%, transparent);
 }
 
 .console-nav-link {
@@ -202,7 +65,7 @@ body {
 
 .console-nav-link:focus-visible,
 .console-focus:focus-visible {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--ring);
   outline-offset: 2px;
 }
 
@@ -211,11 +74,11 @@ body {
   padding-block: 0.5rem;
 }
 
-.collection-filters .label {
-  font-size: 0.75rem;
-}
-
-.collection-filter-controls :is(.button, .input, .select__trigger) {
+.collection-filter-controls :is(
+    [data-slot="button"],
+    [data-slot="input"],
+    [data-slot="select-trigger"]
+  ) {
   height: calc(var(--spacing) * 10);
   min-height: calc(var(--spacing) * 10);
 }
@@ -243,18 +106,18 @@ body {
   padding-top: 0.75rem;
 }
 
-.resource-collection-pagination nav {
+.resource-collection-pagination [data-slot="pagination"] {
   flex-wrap: wrap;
   gap: 0.5rem 1rem;
 }
 
-.resource-collection-pagination .pagination__content {
+.resource-collection-pagination [data-slot="pagination-content"] {
   flex-wrap: wrap;
 }
 
 ::selection {
-  color: var(--accent-foreground);
-  background: var(--accent);
+  color: var(--primary-foreground);
+  background: var(--primary);
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,15 +1,12 @@
 import { useRoleDetailContext } from '../components/role-detail-context'
-import {
-  Alert,
-  Button,
-  Chip,
-  Skeleton,
-  Spinner,
-  toast,
-  useOverlayState,
-} from '@heroui/react'
+import { Alert, AlertDescription, AlertTitle } from '@identity/ui/components/alert'
+import { Badge } from '@identity/ui/components/badge'
+import { Button } from '@identity/ui/components/button'
+import { Skeleton } from '@identity/ui/components/skeleton'
+import { Spinner } from '@identity/ui/components/spinner'
+import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
 import { useNavigate } from '@tanstack/react-router'
-import { Check, Save } from 'lucide-react'
+import { Check, CircleCheck, Save, TriangleAlert } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { UserSelectField } from '#/modules/user-management/users/components/user-form-fields'
@@ -23,6 +20,7 @@ import {
   failureTitleKey,
 } from '#/lib/graphql/presentation'
 import { useLocale, useTranslator, type MessageKey } from '#/lib/i18n'
+import { toast } from '#/lib/toast'
 import { useWorkspace } from '#/lib/workspace'
 import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
 import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
@@ -395,12 +393,10 @@ export function RolePermissionsPage({ roleId }: { roleId: string }) {
     <ConsoleWorkspaceGate>
       <div className="space-y-4">
         {notice ? (
-          <Alert status="success">
-            <Alert.Indicator />
-            <Alert.Content>
-              <Alert.Title>{t('rolePermissionsSavedTitle')}</Alert.Title>
-              <Alert.Description>{notice}</Alert.Description>
-            </Alert.Content>
+          <Alert variant="default" className="text-success">
+            <CircleCheck aria-hidden="true" />
+            <AlertTitle>{t('rolePermissionsSavedTitle')}</AlertTitle>
+            <AlertDescription>{notice}</AlertDescription>
           </Alert>
         ) : null}
 
@@ -427,15 +423,13 @@ export function RolePermissionsPage({ roleId }: { roleId: string }) {
           />
         ) : null}
         {membership.status === 'ready' && membership.errors.length > 0 ? (
-          <Alert status="warning">
-            <Alert.Indicator />
-            <Alert.Content>
-              <Alert.Title>{t('rolesPartialTitle')}</Alert.Title>
-              <Alert.Description>
-                {t('rolesPartialDescription')}
-              </Alert.Description>
-              <ErrorDetails issues={membership.errors} />
-            </Alert.Content>
+          <Alert variant="default" className="text-warning">
+            <TriangleAlert aria-hidden="true" />
+            <AlertTitle>{t('rolesPartialTitle')}</AlertTitle>
+            <AlertDescription>
+              {t('rolesPartialDescription')}
+            </AlertDescription>
+            <ErrorDetails issues={membership.errors} />
           </Alert>
         ) : null}
 
@@ -495,7 +489,7 @@ export function RolePermissionsPage({ roleId }: { roleId: string }) {
               >
                 <span className="sr-only">{t('roleMembershipLoading')}</span>
                 {Array.from({ length: 4 }, (_, index) => (
-                  <Skeleton key={index} className="h-14 w-full rounded-field" />
+                  <Skeleton key={index} className="h-14 w-full rounded-lg" />
                 ))}
               </div>
             ) : (
@@ -526,64 +520,56 @@ export function RolePermissionsPage({ roleId }: { roleId: string }) {
                   <p className="text-sm font-semibold">
                     {t('rolePermissionsReplaceTitle')}
                   </p>
-                  <p className="mt-0.5 text-xs leading-5 text-muted">
+                  <p className="mt-0.5 text-xs leading-5 text-muted-foreground">
                     {t('rolePermissionsReplaceDescription')}
                   </p>
                 </div>
                 <div className="flex flex-wrap gap-2">
-                  <Chip size="sm" variant="soft" color="success">
-                    <Chip.Label>
-                      {t('rolePermissionsAddedCount', {
-                        count: diff.added.length,
-                      })}
-                    </Chip.Label>
-                  </Chip>
-                  <Chip size="sm" variant="soft" color="warning">
-                    <Chip.Label>
-                      {t('rolePermissionsRemovedCount', {
-                        count: diff.removed.length,
-                      })}
-                    </Chip.Label>
-                  </Chip>
-                  <Chip size="sm" variant="soft" color="default">
-                    <Chip.Label>
-                      {t('rolePermissionsSelectedCount', {
-                        count: selected.size,
-                      })}
-                    </Chip.Label>
-                  </Chip>
+                  <Badge variant="secondary" className="text-success">
+                    {t('rolePermissionsAddedCount', {
+                      count: diff.added.length,
+                    })}
+                  </Badge>
+                  <Badge variant="secondary" className="text-warning">
+                    {t('rolePermissionsRemovedCount', {
+                      count: diff.removed.length,
+                    })}
+                  </Badge>
+                  <Badge variant="secondary">
+                    {t('rolePermissionsSelectedCount', {
+                      count: selected.size,
+                    })}
+                  </Badge>
                 </div>
               </div>
 
               {membership.status !== 'ready' || membership.hasNextPage ? (
-                <Alert status="warning">
-                  <Alert.Indicator />
-                  <Alert.Content>
-                    <Alert.Description>
-                      {t('rolePermissionsIncompleteWarning')}
-                    </Alert.Description>
-                  </Alert.Content>
+                <Alert variant="default" className="text-warning">
+                  <TriangleAlert aria-hidden="true" />
+                  <AlertDescription>
+                    {t('rolePermissionsIncompleteWarning')}
+                  </AlertDescription>
                 </Alert>
               ) : null}
               {selectedDisabledItems.length > 0 ? (
-                <p className="text-xs leading-5 text-muted">
+                <p className="text-xs leading-5 text-muted-foreground">
                   {t('rolePermissionsDisabledSelectedHint', {
                     count: selectedDisabledItems.length,
                   })}
                 </p>
               ) : null}
 
-              <p className="text-xs leading-5 text-muted">
+              <p className="text-xs leading-5 text-muted-foreground">
                 {t('rolePermissionsAtomicHint')}
               </p>
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   type="button"
-                  isDisabled={!availability.allowed || !canWrite || pending}
-                  onPress={confirmState.open}
+                  disabled={!availability.allowed || !canWrite || pending}
+                  onClick={confirmState.open}
                 >
                   {pending ? (
-                    <Spinner size="sm" aria-label={t('saving')} />
+                    <Spinner aria-label={t('saving')} />
                   ) : (
                     <Save className="size-4" aria-hidden="true" />
                   )}
@@ -592,15 +578,15 @@ export function RolePermissionsPage({ roleId }: { roleId: string }) {
                 <Button
                   type="button"
                   variant="secondary"
-                  isDisabled={pending || !canWrite}
-                  onPress={resetSelection}
+                  disabled={pending || !canWrite}
+                  onClick={resetSelection}
                 >
                   <Check className="size-4" aria-hidden="true" />
                   {t('rolePermissionsResetSelection')}
                 </Button>
               </div>
               {!availability.allowed && membership.status === 'ready' ? (
-                <p className="text-xs text-muted">
+                <p className="text-xs text-muted-foreground">
                   {submitAvailabilityMessage(availability.reason, t)}
                 </p>
               ) : null}
@@ -620,13 +606,13 @@ export function RolePermissionsPage({ roleId }: { roleId: string }) {
       >
         <dl className="grid gap-2 sm:grid-cols-2">
           <div>
-            <dt className="text-xs text-muted">
+            <dt className="text-xs text-muted-foreground">
               {t('rolePermissionsAddedLabel')}
             </dt>
             <dd>{t('rolePermissionsCount', { count: diff.added.length })}</dd>
           </div>
           <div>
-            <dt className="text-xs text-muted">
+            <dt className="text-xs text-muted-foreground">
               {t('rolePermissionsRemovedLabel')}
             </dt>
             <dd>{t('rolePermissionsCount', { count: diff.removed.length })}</dd>

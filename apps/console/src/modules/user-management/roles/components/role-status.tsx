@@ -1,6 +1,10 @@
-import { Chip } from '@heroui/react'
+import { Badge } from '@identity/ui/components/badge'
 
 import { useTranslator, type MessageKey } from '#/lib/i18n'
+
+function badgeSizeClass(size: 'sm' | 'md'): string | undefined {
+  return size === 'md' ? 'h-6 px-2.5' : undefined
+}
 
 function BuiltInChip({
   builtIn,
@@ -14,9 +18,9 @@ function BuiltInChip({
   const t = useTranslator()
   if (!builtIn) return null
   return (
-    <Chip size={size} variant="soft" color="default">
-      <Chip.Label>{t(labelKey)}</Chip.Label>
-    </Chip>
+    <Badge variant="secondary" className={badgeSizeClass(size)}>
+      {t(labelKey)}
+    </Badge>
   )
 }
 
@@ -61,13 +65,14 @@ export function RoleStatusChip({
 }) {
   const t = useTranslator()
   return (
-    <Chip
-      size={size}
-      variant="soft"
-      color={enabled ? 'success' : 'default'}
+    <Badge
+      variant="secondary"
+      className={[badgeSizeClass(size), enabled ? 'text-success' : undefined]
+        .filter(Boolean)
+        .join(' ')}
     >
-      <Chip.Label>{t(enabled ? 'rolesEnabled' : 'rolesDisabled')}</Chip.Label>
-    </Chip>
+      {t(enabled ? 'rolesEnabled' : 'rolesDisabled')}
+    </Badge>
   )
 }
 
@@ -83,21 +88,21 @@ export function AssignmentStatusChip({
   const t = useTranslator()
   if (!enabled || revokedAt) {
     return (
-      <Chip size="sm" variant="soft" color="default">
-        <Chip.Label>{t('assignmentRevoked')}</Chip.Label>
-      </Chip>
+      <Badge variant="secondary">
+        {t('assignmentRevoked')}
+      </Badge>
     )
   }
   if (roleEnabled === false) {
     return (
-      <Chip size="sm" variant="soft" color="warning">
-        <Chip.Label>{t('assignmentActiveRoleDisabled')}</Chip.Label>
-      </Chip>
+      <Badge variant="secondary" className="text-warning">
+        {t('assignmentActiveRoleDisabled')}
+      </Badge>
     )
   }
   return (
-    <Chip size="sm" variant="soft" color="success">
-      <Chip.Label>{t('assignmentActive')}</Chip.Label>
-    </Chip>
+    <Badge variant="secondary" className="text-success">
+      {t('assignmentActive')}
+    </Badge>
   )
 }

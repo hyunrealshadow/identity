@@ -1,4 +1,4 @@
-import { Button } from '@heroui/react'
+import { Button } from '@identity/ui/components/button'
 import { createFileRoute } from '@tanstack/react-router'
 
 import { AuthStatusPage } from '#/components/auth-status-page'
@@ -22,7 +22,7 @@ function SignedOutPage() {
         // The browser may still remember other accounts. Signing in again after
         // an explicit sign-out lets the user choose one instead of silently
         // continuing as whichever account remains.
-        <Button onPress={() => void signIn({ selectAccount: true, returnTo: '/' })}>
+        <Button onClick={() => void signIn({ selectAccount: true, returnTo: '/' })}>
           {t('signInAgain')}
         </Button>
       }

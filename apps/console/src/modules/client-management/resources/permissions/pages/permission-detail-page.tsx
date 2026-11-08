@@ -1,14 +1,27 @@
 import {
   Alert,
-  Button,
-  Chip,
-  Modal,
-  Spinner,
-  toast,
-  useOverlayState,
-} from '@heroui/react'
+  AlertDescription,
+  AlertTitle,
+} from '@identity/ui/components/alert'
+import { Badge } from '@identity/ui/components/badge'
+import { Button } from '@identity/ui/components/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@identity/ui/components/dialog'
+import { Spinner } from '@identity/ui/components/spinner'
+import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowLeft, Power, PowerOff, Save } from 'lucide-react'
+import {
+  ArrowLeft,
+  Power,
+  PowerOff,
+  Save,
+  TriangleAlert,
+} from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
@@ -30,6 +43,7 @@ import {
 } from '#/lib/graphql/presentation'
 import { formatDateTime } from '#/lib/format'
 import { useLocale, useTranslator, type MessageKey } from '#/lib/i18n'
+import { toast } from '#/lib/toast'
 import { localizedMetadata, type LocalizedValues } from '#/lib/localized-values'
 import { useWorkspace } from '#/lib/workspace'
 import {
@@ -82,11 +96,12 @@ function draftFromPermission(
 function PermissionStatusChip({ enabled }: { enabled: boolean }) {
   const t = useTranslator()
   return (
-    <Chip size="sm" variant="soft" color={enabled ? 'success' : 'default'}>
-      <Chip.Label>
-        {t(enabled ? 'permissionsEnabled' : 'permissionsDisabled')}
-      </Chip.Label>
-    </Chip>
+    <Badge
+      variant="secondary"
+      className={enabled ? 'text-success' : undefined}
+    >
+      {t(enabled ? 'permissionsEnabled' : 'permissionsDisabled')}
+    </Badge>
   )
 }
 
@@ -169,8 +184,8 @@ export function PermissionDetailPage({
       actions={
         <Button
           variant="secondary"
-          isDisabled={pending}
-          onPress={() =>
+          disabled={pending}
+          onClick={() =>
             void navigate({
               to: '/resources/$resourceId/permissions',
               params: { resourceId },
@@ -415,19 +430,17 @@ export function PermissionDetailPage({
           <RbacNoticeAlert notice={notice} onDismiss={() => setNotice(null)} />
         ) : null}
         {permissionQuery.partial ? (
-          <Alert status="warning">
-            <Alert.Indicator />
-            <Alert.Content>
-              <Alert.Title>{t('permissionsPartialTitle')}</Alert.Title>
-              <Alert.Description>
-                {t('permissionsPartialDescription')}
-              </Alert.Description>
-              <RequestCorrelation
-                requestId={permissionQuery.requestId}
-                traceId={permissionQuery.traceId}
-              />
-              <ErrorDetails issues={permissionQuery.errors} />
-            </Alert.Content>
+          <Alert className="text-warning">
+            <TriangleAlert aria-hidden="true" />
+            <AlertTitle>{t('permissionsPartialTitle')}</AlertTitle>
+            <AlertDescription>
+              {t('permissionsPartialDescription')}
+            </AlertDescription>
+            <RequestCorrelation
+              requestId={permissionQuery.requestId}
+              traceId={permissionQuery.traceId}
+            />
+            <ErrorDetails issues={permissionQuery.errors} />
           </Alert>
         ) : null}
         {!editing && !accessEnded && feedback ? (
@@ -455,7 +468,7 @@ export function PermissionDetailPage({
                   <Button
                     size="sm"
                     variant="secondary"
-                    onPress={() => setEditing(true)}
+                    onClick={() => setEditing(true)}
                   >
                     {t('rbacEntityEdit')}
                   </Button>
@@ -463,7 +476,7 @@ export function PermissionDetailPage({
               </div>
               <dl className="grid gap-x-8 gap-y-6 sm:grid-cols-2">
                 <div>
-                  <dt className="mb-2 text-sm text-muted">
+                  <dt className="mb-2 text-sm text-muted-foreground">
                     {t('permissionsColumnPermission')}
                   </dt>
                   <dd className="flex items-center gap-1">
@@ -477,13 +490,13 @@ export function PermissionDetailPage({
                   </dd>
                 </div>
                 <div>
-                  <dt className="mb-2 text-sm text-muted">
+                  <dt className="mb-2 text-sm text-muted-foreground">
                     {t('rbacApiResource')}
                   </dt>
                   <dd className="text-sm">{resourceLabel}</dd>
                 </div>
                 <div className="sm:col-span-2">
-                  <dt className="mb-2 text-sm text-muted">
+                  <dt className="mb-2 text-sm text-muted-foreground">
                     {t('rbacEntityDescription')}
                   </dt>
                   <dd className="whitespace-pre-wrap text-sm">
@@ -491,7 +504,7 @@ export function PermissionDetailPage({
                   </dd>
                 </div>
                 <div>
-                  <dt className="mb-2 text-sm text-muted">
+                  <dt className="mb-2 text-sm text-muted-foreground">
                     {t('rbacEntityCreated')}
                   </dt>
                   <dd className="text-sm">
@@ -503,7 +516,7 @@ export function PermissionDetailPage({
                   </dd>
                 </div>
                 <div>
-                  <dt className="mb-2 text-sm text-muted">
+                  <dt className="mb-2 text-sm text-muted-foreground">
                     {t('rbacEntityUpdated')}
                   </dt>
                   <dd className="text-sm">
@@ -516,8 +529,8 @@ export function PermissionDetailPage({
                 </div>
               </dl>
             </section>
-            <Modal
-              isOpen={editing}
+            <Dialog
+              open={editing}
               onOpenChange={(open) => {
                 if (pending) return
                 if (!open) {
@@ -530,115 +543,109 @@ export function PermissionDetailPage({
                 setEditing(open)
               }}
             >
-              <Modal.Backdrop isDismissable={!pending}>
-                <Modal.Container size="lg">
-                  <Modal.Dialog className="sm:max-w-3xl">
-                    <Modal.CloseTrigger
-                      isDisabled={pending}
-                      aria-label={t('close')}
+              <DialogContent
+                showCloseButton={!pending}
+                closeLabel={t('close')}
+                className="sm:max-w-3xl"
+              >
+                <DialogHeader>
+                  <DialogTitle>{t('rbacEntityEdit')}</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-5">
+                  {feedback ? (
+                    <RbacMutationFeedback
+                      feedback={feedback}
+                      onReload={() => void reloadPermission()}
+                      reloadPending={permissionQuery.refreshing}
                     />
-                    <Modal.Header>
-                      <Modal.Heading>{t('rbacEntityEdit')}</Modal.Heading>
-                    </Modal.Header>
-                    <Modal.Body>
-                      <div className="space-y-5">
-                        {feedback ? (
-                          <RbacMutationFeedback
-                            feedback={feedback}
-                            onReload={() => void reloadPermission()}
-                            reloadPending={permissionQuery.refreshing}
-                          />
-                        ) : null}
-                        <LocalizedTextField
-                          name="names"
-                          label={t('localizedName')}
-                          defaultValue={readyDraft.name}
-                          onDefaultValueChange={(value) => {
-                            setDraft((current) =>
-                              current ? { ...current, name: value } : current,
-                            )
-                            setFeedback(null)
-                            setLocalErrors({})
-                            setFieldErrors({})
-                          }}
-                          value={readyDraft.names}
-                          onChange={(value) => changeMetadata('names', value)}
-                          isRequired
-                          isDisabled={pending}
-                          isReadOnly={builtIn || !canWrite}
-                          maxLength={256}
-                          error={
-                            localErrors.metadata
-                              ? t(localErrors.metadata)
-                              : (fieldErrors.name ??
-                                fieldErrors.names ??
-                                fieldErrors.metadata)
-                          }
-                        />
-                        <LocalizedTextField
-                          name="descriptions"
-                          label={t('localizedDescription')}
-                          defaultValue={readyDraft.description}
-                          onDefaultValueChange={(value) => {
-                            setDraft((current) =>
-                              current
-                                ? { ...current, description: value }
-                                : current,
-                            )
-                            setFeedback(null)
-                            setLocalErrors({})
-                            setFieldErrors({})
-                          }}
-                          value={readyDraft.descriptions}
-                          onChange={(value) =>
-                            changeMetadata('descriptions', value)
-                          }
-                          multiline
-                          isDisabled={pending}
-                          isReadOnly={builtIn || !canWrite}
-                          maxLength={1024}
-                          error={
-                            fieldErrors.description ?? fieldErrors.descriptions
-                          }
-                        />
-                      </div>
-                    </Modal.Body>
-                    <Modal.Footer>
-                      <Button
-                        type="button"
-                        isDisabled={
-                          pending || !versionReady || !metadataChanged
-                        }
-                        onPress={() => void submit()}
-                      >
-                        {pending ? (
-                          <Spinner size="sm" aria-label={t('saving')} />
-                        ) : (
-                          <Save className="size-4" aria-hidden="true" />
-                        )}
-                        {t('permissionSettingsSaveAction')}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        isDisabled={pending}
-                        onPress={() => {
-                          initialized.current = undefined
-                          setDraft(draftFromPermission(readyPermission))
-                          clearDraft(draftKey(readyPermission.id))
-                          setLocalErrors({})
-                          setFieldErrors({})
-                          setFeedback(null)
-                          setEditing(false)
-                        }}
-                      >
-                        {t('cancel')}
-                      </Button>
-                    </Modal.Footer>
-                  </Modal.Dialog>
-                </Modal.Container>
-              </Modal.Backdrop>
-            </Modal>
+                  ) : null}
+                  <LocalizedTextField
+                    name="names"
+                    label={t('localizedName')}
+                    defaultValue={readyDraft.name}
+                    onDefaultValueChange={(value) => {
+                      setDraft((current) =>
+                        current ? { ...current, name: value } : current,
+                      )
+                      setFeedback(null)
+                      setLocalErrors({})
+                      setFieldErrors({})
+                    }}
+                    value={readyDraft.names}
+                    onChange={(value) => changeMetadata('names', value)}
+                    isRequired
+                    isDisabled={pending}
+                    isReadOnly={builtIn || !canWrite}
+                    maxLength={256}
+                    error={
+                      localErrors.metadata
+                        ? t(localErrors.metadata)
+                        : (fieldErrors.name ??
+                          fieldErrors.names ??
+                          fieldErrors.metadata)
+                    }
+                  />
+                  <LocalizedTextField
+                    name="descriptions"
+                    label={t('localizedDescription')}
+                    defaultValue={readyDraft.description}
+                    onDefaultValueChange={(value) => {
+                      setDraft((current) =>
+                        current
+                          ? { ...current, description: value }
+                          : current,
+                      )
+                      setFeedback(null)
+                      setLocalErrors({})
+                      setFieldErrors({})
+                    }}
+                    value={readyDraft.descriptions}
+                    onChange={(value) =>
+                      changeMetadata('descriptions', value)
+                    }
+                    multiline
+                    isDisabled={pending}
+                    isReadOnly={builtIn || !canWrite}
+                    maxLength={1024}
+                    error={
+                      fieldErrors.description ?? fieldErrors.descriptions
+                    }
+                  />
+                </div>
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    disabled={
+                      pending || !versionReady || !metadataChanged
+                    }
+                    onClick={() => void submit()}
+                  >
+                    {pending ? (
+                      <Spinner aria-label={t('saving')} />
+                    ) : (
+                      <Save className="size-4" aria-hidden="true" />
+                    )}
+                    {t('permissionSettingsSaveAction')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={pending}
+                    onClick={() => {
+                      initialized.current = undefined
+                      setDraft(draftFromPermission(readyPermission))
+                      clearDraft(draftKey(readyPermission.id))
+                      setLocalErrors({})
+                      setFieldErrors({})
+                      setFeedback(null)
+                      setEditing(false)
+                    }}
+                  >
+                    {t('cancel')}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
 
           <div className="space-y-4">
@@ -811,9 +818,9 @@ export function PermissionStateDialog({
   return (
     <>
       <Button
-        variant={action === 'disable' ? 'danger-soft' : 'secondary'}
-        onPress={openConfirmation}
-        isDisabled={!permission.version}
+        variant={action === 'disable' ? 'destructive' : 'secondary'}
+        onClick={openConfirmation}
+        disabled={!permission.version}
       >
         {action === 'enable' ? (
           <Power className="size-4" aria-hidden="true" />
@@ -826,77 +833,71 @@ export function PermissionStateDialog({
             : 'permissionsDisableAction',
         )}
       </Button>
-      <Modal state={state}>
-        <Modal.Backdrop isDismissable={!pending}>
-          <Modal.Container size="md">
-            <Modal.Dialog>
-              {({ close }) => (
-                <>
-                  <Modal.CloseTrigger
-                    aria-label={t('close')}
-                    isDisabled={pending}
-                  />
-                  <Modal.Header>
-                    <Modal.Heading>
-                      {t(
-                        action === 'enable'
-                          ? 'permissionsEnableTitle'
-                          : 'permissionsDisableTitle',
-                      )}
-                    </Modal.Heading>
-                  </Modal.Header>
-                  <Modal.Body>
-                    <p className="text-sm leading-6 text-muted">
-                      {t(
-                        action === 'enable'
-                          ? 'permissionsEnableDescription'
-                          : 'permissionsDisableDescription',
-                      )}
-                    </p>
-                    <p className="mt-3 text-sm font-medium">{displayName}</p>
-                    {feedback ? (
-                      <div className="mt-4">
-                        <RbacMutationFeedback
-                          feedback={feedback}
-                          onReload={() => {
-                            state.close()
-                            onCommitted()
-                          }}
-                          conflictTitleKey="permissionsConflictTitle"
-                          conflictDescriptionKey="permissionsConflictDescription"
-                        />
-                      </div>
-                    ) : null}
-                  </Modal.Body>
-                  <Modal.Footer>
-                    <Button
-                      variant="secondary"
-                      isDisabled={pending}
-                      onPress={close}
-                    >
-                      {t('cancel')}
-                    </Button>
-                    <Button
-                      variant={action === 'disable' ? 'danger' : 'primary'}
-                      isDisabled={pending || !expectedVersion.current}
-                      onPress={() => void submit()}
-                    >
-                      {pending ? (
-                        <Spinner size="sm" aria-label={t('working')} />
-                      ) : null}
-                      {t(
-                        action === 'enable'
-                          ? 'permissionsEnableConfirm'
-                          : 'permissionsDisableConfirm',
-                      )}
-                    </Button>
-                  </Modal.Footer>
-                </>
+      <Dialog
+        open={state.isOpen}
+        onOpenChange={(open) => {
+          if (!open && pending) return
+          state.setOpen(open)
+        }}
+      >
+        <DialogContent showCloseButton={!pending} closeLabel={t('close')}>
+          <DialogHeader>
+            <DialogTitle>
+              {t(
+                action === 'enable'
+                  ? 'permissionsEnableTitle'
+                  : 'permissionsDisableTitle',
               )}
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
+            </DialogTitle>
+          </DialogHeader>
+          <div>
+            <p className="text-sm leading-6 text-muted-foreground">
+              {t(
+                action === 'enable'
+                  ? 'permissionsEnableDescription'
+                  : 'permissionsDisableDescription',
+              )}
+            </p>
+            <p className="mt-3 text-sm font-medium">{displayName}</p>
+            {feedback ? (
+              <div className="mt-4">
+                <RbacMutationFeedback
+                  feedback={feedback}
+                  onReload={() => {
+                    state.close()
+                    onCommitted()
+                  }}
+                  conflictTitleKey="permissionsConflictTitle"
+                  conflictDescriptionKey="permissionsConflictDescription"
+                />
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="secondary"
+              disabled={pending}
+              onClick={state.close}
+            >
+              {t('cancel')}
+            </Button>
+            <Button
+              variant={action === 'disable' ? 'destructive' : 'default'}
+              disabled={pending || !expectedVersion.current}
+              onClick={() => void submit()}
+            >
+              {pending ? (
+                <Spinner aria-label={t('working')} />
+              ) : null}
+              {t(
+                action === 'enable'
+                  ? 'permissionsEnableConfirm'
+                  : 'permissionsDisableConfirm',
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

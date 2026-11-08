@@ -1,4 +1,12 @@
-import { Button, Card, Skeleton } from '@heroui/react'
+import { Button } from '@identity/ui/components/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@identity/ui/components/card'
+import { Skeleton } from '@identity/ui/components/skeleton'
 import {
   AppWindow,
   Boxes,
@@ -36,11 +44,11 @@ function ModuleNoAccess() {
   const t = useTranslator()
   return (
     <div className="mt-3">
-      <p className="flex items-center gap-1.5 text-sm font-medium text-muted">
+      <p className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
         <Lock className="size-3.5 shrink-0" aria-hidden="true" />
         {t('dashboardModuleNoAccess')}
       </p>
-      <p className="mt-1 text-xs leading-5 text-muted">
+      <p className="mt-1 text-xs leading-5 text-muted-foreground">
         {t('dashboardModuleNoAccessDescription')}
       </p>
     </div>
@@ -57,12 +65,12 @@ function ModuleUnavailable({
   const t = useTranslator()
   return (
     <div className="mt-3">
-      <p className="text-sm font-medium text-muted">{t('dashboardModuleUnavailable')}</p>
-      <p className="mt-1 text-xs leading-5 text-muted">
+      <p className="text-sm font-medium text-muted-foreground">{t('dashboardModuleUnavailable')}</p>
+      <p className="mt-1 text-xs leading-5 text-muted-foreground">
         {t('dashboardModuleUnavailableDescription')}
       </p>
       <ErrorDetails issues={issues.length > 0 ? issues : undefined} />
-      <Button size="sm" variant="ghost" className="mt-2 px-0" onPress={onRetry}>
+      <Button size="sm" variant="ghost" className="mt-2 px-0" onClick={onRetry}>
         {t('retry')}
       </Button>
     </div>
@@ -91,13 +99,13 @@ function KpiCard({
 
   return (
     <Card className="console-card min-h-28 border border-border p-5">
-      <Card.Content className="p-0">
+      <CardContent className="p-0">
         <section aria-labelledby={headingId}>
           <div className="flex items-start justify-between gap-3">
-            <h2 id={headingId} className="text-sm font-medium text-muted">
+            <h2 id={headingId} className="text-sm font-medium text-muted-foreground">
               {title}
             </h2>
-            <Icon className="size-6 shrink-0 text-muted" aria-hidden="true" />
+            <Icon className="size-6 shrink-0 text-muted-foreground" aria-hidden="true" />
           </div>
           {!included ? (
             <ModuleNoAccess />
@@ -112,7 +120,7 @@ function KpiCard({
             </p>
           )}
         </section>
-      </Card.Content>
+      </CardContent>
     </Card>
   )
 }
@@ -142,7 +150,7 @@ export function NewUsersChart({
         <div className="relative h-44 min-w-0" aria-hidden="true">
           <div className="pointer-events-none absolute inset-0 flex flex-col justify-between">
             {Array.from({ length: 5 }, (_, index) => (
-              <span key={index} className="block border-t border-separator" />
+              <span key={index} className="block border-t border-border" />
             ))}
           </div>
           <div className="relative flex h-full min-w-0 items-end gap-0 sm:gap-2">
@@ -156,12 +164,12 @@ export function NewUsersChart({
                   key={bucket.date}
                   className="flex h-full min-w-0 flex-1 flex-col items-center justify-end"
                 >
-                  <span className="mb-1 text-[10px] tabular-nums text-muted">
+                  <span className="mb-1 text-[10px] tabular-nums text-muted-foreground">
                     {formatNumber(bucket.count, locale)}
                   </span>
                   {height > 0 ? (
                     <div
-                      className="w-full max-w-6 rounded-t-[3px] bg-accent"
+                      className="w-full max-w-6 rounded-t-[3px] bg-primary"
                       style={{ height }}
                       title={t('dashboardChartDay', {
                         date: formatCalendarDate(bucket.date, locale),
@@ -178,7 +186,7 @@ export function NewUsersChart({
           {registrations.map((bucket) => (
             <span
               key={bucket.date}
-              className="min-w-0 flex-1 whitespace-normal break-words text-center text-[9px] leading-tight text-muted sm:text-[10px]"
+              className="min-w-0 flex-1 whitespace-normal break-words text-center text-[9px] leading-tight text-muted-foreground sm:text-[10px]"
             >
               {formatCalendarDay(bucket.date, locale)}
             </span>
@@ -222,30 +230,30 @@ function NewUsersCard({
 
   return (
     <Card className="console-card h-full min-w-0 gap-0 border border-border p-5">
-      <Card.Header className="p-0">
-        <Card.Title className="text-base font-semibold">
+      <CardHeader className="p-0">
+        <CardTitle className="text-base font-semibold">
           {t('dashboardNewUsersTitle')}
-        </Card.Title>
-        <Card.Description className="mt-1 text-sm text-muted">
+        </CardTitle>
+        <CardDescription className="mt-1 text-sm text-muted-foreground">
           {t('dashboardNewUsersDescription')}
-        </Card.Description>
-      </Card.Header>
-      <Card.Content className="min-w-0 p-0">
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="min-w-0 p-0">
         {!included ? (
           <ModuleNoAccess />
         ) : !users ? (
           <ModuleUnavailable onRetry={onRetry} issues={sectionIssues} />
         ) : users.registrations.length === 0 ? (
-          <p className="text-sm text-muted">{t('dashboardNewUsersNoData')}</p>
+          <p className="text-sm text-muted-foreground">{t('dashboardNewUsersNoData')}</p>
         ) : (
           <>
-            <p className="text-sm text-muted">
+            <p className="text-sm text-muted-foreground">
               {t('dashboardNewUsersTotal', { count: users.createdLast7Days })}
             </p>
             {users.registrations.every((bucket) => bucket.count === 0) ? (
-              <div className="mt-4 rounded-field border border-dashed border-border px-4 py-6">
+              <div className="mt-4 rounded-lg border border-dashed border-border px-4 py-6">
                 <p className="text-sm font-medium">{t('dashboardNewUsersEmpty')}</p>
-                <p className="mt-1 text-xs leading-5 text-muted">
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
                   {t('dashboardNewUsersEmptyDescription')}
                 </p>
               </div>
@@ -254,7 +262,7 @@ function NewUsersCard({
             )}
           </>
         )}
-      </Card.Content>
+      </CardContent>
     </Card>
   )
 }
@@ -264,20 +272,20 @@ export function NoManagementAccess() {
 
   return (
     <Card className="console-card border border-border p-6 sm:p-8">
-      <Card.Content className="p-0">
-        <span className="flex size-10 items-center justify-center rounded-lg bg-surface-secondary text-muted">
+      <CardContent className="p-0">
+        <span className="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
           <Lock className="size-5" aria-hidden="true" />
         </span>
         <h2 className="mt-4 text-lg font-semibold tracking-tight">
           {t('dashboardNoAccessTitle')}
         </h2>
-        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
           {t('dashboardNoAccessDescription')}
         </p>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-muted">
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
           {t('dashboardNoAccessContact')}
         </p>
-      </Card.Content>
+      </CardContent>
     </Card>
   )
 }
@@ -295,10 +303,10 @@ export function DashboardLoading() {
       <span className="sr-only">{t('dashboardLoading')}</span>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {Array.from({ length: 4 }, (_, index) => (
-          <Skeleton key={index} className="h-28 w-full rounded-field" />
+          <Skeleton key={index} className="h-28 w-full rounded-lg" />
         ))}
       </div>
-      <Skeleton className="h-72 w-full rounded-field" />
+      <Skeleton className="h-72 w-full rounded-lg" />
     </div>
   )
 }

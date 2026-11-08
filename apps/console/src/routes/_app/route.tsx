@@ -1,4 +1,4 @@
-import { Button } from '@heroui/react'
+import { Button } from '@identity/ui/components/button'
 import { createFileRoute } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
 
@@ -79,7 +79,7 @@ function AuthenticatedLayout() {
           title={t('unauthorizedTitle')}
           description={t('unauthorizedDescription')}
           action={
-            <Button onPress={() => void signIn({ returnTo: currentReturnTo() })}>
+            <Button onClick={() => void signIn({ returnTo: currentReturnTo() })}>
               {t('signInAgain')}
             </Button>
           }

@@ -1,4 +1,5 @@
-import { Button, Spinner } from '@heroui/react'
+import { Button } from '@identity/ui/components/button'
+import { Spinner } from '@identity/ui/components/spinner'
 import { RefreshCw } from 'lucide-react'
 import { useMemo } from 'react'
 
@@ -36,7 +37,7 @@ function LastUpdated({
   return (
     <div className="flex flex-wrap items-center justify-end gap-3">
       {exact ? (
-        <p className="text-xs text-muted" aria-live="polite">
+        <p className="text-xs text-muted-foreground" aria-live="polite">
           <span>{t('dashboardLastUpdated')}</span>{' '}
           <time dateTime={exact}>
             {formatDateTime(generatedAt, locale, timeZone)}
@@ -47,11 +48,11 @@ function LastUpdated({
         size="sm"
         variant="secondary"
         aria-label={t('dashboardRefreshLabel')}
-        isDisabled={refreshing}
-        onPress={onRefresh}
+        disabled={refreshing}
+        onClick={onRefresh}
       >
         {refreshing ? (
-          <Spinner size="sm" aria-label={t('dashboardRefreshing')} />
+          <Spinner aria-label={t('dashboardRefreshing')} />
         ) : (
           <RefreshCw className="size-4" aria-hidden="true" />
         )}

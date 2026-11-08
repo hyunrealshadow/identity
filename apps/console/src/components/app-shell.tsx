@@ -1,10 +1,12 @@
+import { Button } from '@identity/ui/components/button'
 import {
-  Button,
-  Dropdown,
-  Label,
-  Toast,
-  useTheme,
-} from '@heroui/react'
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@identity/ui/components/dropdown-menu'
+import { Toaster } from '@identity/ui/components/sonner'
 import { Outlet, useNavigate } from '@tanstack/react-router'
 import { ArrowLeftRight, ChevronDown, ExternalLink, LogOut } from 'lucide-react'
 import { useEffect, useState } from 'react'
@@ -79,12 +81,16 @@ function AccountMenu({
   const avatarLabel = t('accountAvatarLabel', { name })
 
   return (
-    <Dropdown>
-      <Button
-        variant="ghost"
-        size="sm"
-        aria-label={label}
-        className="h-10 max-w-64 gap-2 px-1.5"
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={label}
+            className="h-10 max-w-64 gap-2 px-1.5"
+          />
+        }
       >
         <AccountAvatar
           name={name}
@@ -94,46 +100,31 @@ function AccountMenu({
         />
         <span className="hidden min-w-0 text-start sm:block">
           <span className="block truncate text-sm font-medium">{name}</span>
-          <span className="block truncate text-xs font-normal text-muted">
+          <span className="block truncate text-xs font-normal text-muted-foreground">
             {email}
           </span>
         </span>
         <ChevronDown
-          className="hidden size-3.5 text-muted sm:block"
+          className="hidden size-3.5 text-muted-foreground sm:block"
           aria-hidden="true"
         />
-      </Button>
-      <Dropdown.Popover placement="bottom end" className="min-w-56">
-        <Dropdown.Menu
-          aria-label={label}
-          onAction={(key) => {
-            if (key === 'switch-account') onSwitchAccount()
-            if (key === 'signout') onSignOut()
-          }}
-        >
-          <Dropdown.Item
-            id="account-center"
-            href={accountUrl}
-            textValue={t('accountCenter')}
-          >
-            <ExternalLink className="size-4 text-muted" aria-hidden="true" />
-            <Label>{t('accountCenter')}</Label>
-          </Dropdown.Item>
-          <Dropdown.Item id="switch-account" textValue={t('switchAccount')}>
-            <ArrowLeftRight className="size-4 text-muted" aria-hidden="true" />
-            <Label>{t('switchAccount')}</Label>
-          </Dropdown.Item>
-          <Dropdown.Item
-            id="signout"
-            textValue={t('signOut')}
-            className="text-danger"
-          >
-            <LogOut className="size-4" aria-hidden="true" />
-            <Label>{t('signOut')}</Label>
-          </Dropdown.Item>
-        </Dropdown.Menu>
-      </Dropdown.Popover>
-    </Dropdown>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="min-w-56">
+        <DropdownMenuItem render={<a href={accountUrl} />}>
+          <ExternalLink className="text-muted-foreground" aria-hidden="true" />
+          {t('accountCenter')}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={onSwitchAccount}>
+          <ArrowLeftRight className="text-muted-foreground" aria-hidden="true" />
+          {t('switchAccount')}
+        </DropdownMenuItem>
+        <DropdownMenuItem variant="destructive" onClick={onSignOut}>
+          <LogOut aria-hidden="true" />
+          {t('signOut')}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
@@ -149,7 +140,6 @@ function AppShellLayout() {
   const t = useTranslator()
   const config = useRuntimeConfig()
   const { claims, signIn, logoutSso } = useAuth()
-  const { theme, setTheme } = useTheme()
   const navigate = useNavigate()
   const [collapsed, setCollapsed] = useState(readCollapsed)
 
@@ -158,11 +148,6 @@ function AppShellLayout() {
   const picture = claims?.picture
   const breadcrumbs = usePageBreadcrumbs()
   const title = breadcrumbs.at(-1)?.label ?? t('pageTitleFallback')
-
-  useEffect(() => {
-    if (theme !== 'light' && theme !== 'dark' && theme !== 'system')
-      setTheme('system')
-  }, [setTheme, theme])
 
   useEffect(() => {
     document.title = `${title} - ${config.displayName}`
@@ -195,31 +180,16 @@ function AppShellLayout() {
 
   return (
     <>
-      <Toast.Provider placement="bottom end" maxVisibleToasts={3}>
-        {({ toast }) => (
-          <Toast toast={toast} variant={toast.content.variant}>
-            <Toast.Indicator variant={toast.content.variant} />
-            <Toast.Content>
-              <Toast.Title>{toast.content.title}</Toast.Title>
-              {toast.content.description ? (
-                <Toast.Description>
-                  {toast.content.description}
-                </Toast.Description>
-              ) : null}
-            </Toast.Content>
-            <Toast.CloseButton aria-label={t('close')} />
-          </Toast>
-        )}
-      </Toast.Provider>
+      <Toaster position="bottom-right" closeButton />
       <div className="flex min-h-screen bg-background text-foreground">
         <aside
           id="console-sidebar"
-          className={`sticky top-0 hidden h-screen shrink-0 flex-col border-r border-border bg-surface transition-[width] duration-200 lg:flex ${
+          className={`sticky top-0 hidden h-screen shrink-0 flex-col border-r border-border bg-card transition-[width] duration-200 lg:flex ${
             collapsed ? 'w-[72px]' : 'w-[240px]'
           }`}
         >
           <div
-            className={`flex h-16 shrink-0 items-center border-b border-separator ${collapsed ? 'justify-center px-2' : 'px-4'}`}
+            className={`flex h-16 shrink-0 items-center border-b border-border ${collapsed ? 'justify-center px-2' : 'px-4'}`}
           >
             <Brand displayName={config.displayName} collapsed={collapsed} />
           </div>
@@ -229,7 +199,7 @@ function AppShellLayout() {
         </aside>
 
         <div className="flex min-w-0 flex-1 flex-col">
-          <header className="sticky top-0 z-20 h-16 shrink-0 border-b border-border bg-surface/90 backdrop-blur-md">
+          <header className="sticky top-0 z-20 h-16 shrink-0 border-b border-border bg-card/90 backdrop-blur-md">
             <div className="flex h-full items-center gap-2 px-4 sm:px-5 lg:px-6">
               <MobileNavigation displayName={config.displayName} />
               <div className="hidden shrink-0 lg:flex">

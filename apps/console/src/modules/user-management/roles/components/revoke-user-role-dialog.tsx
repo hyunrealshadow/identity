@@ -1,8 +1,9 @@
-import { toast, useOverlayState } from '@heroui/react'
+import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
 import { XCircle } from 'lucide-react'
 
 import { TableRowActions } from '#/components/table-row-actions'
 import { useTranslator } from '#/lib/i18n'
+import { toast } from '#/lib/toast'
 import { RelationDialog } from '../../components/relation-dialog'
 import { useRelationMutation } from '../../lib/relation-mutation'
 import { useRoleMutations } from '../hooks/role-mutations'
@@ -100,7 +101,7 @@ function RevokeAssignmentDialog({
           }, 'revoke_user_roles_request_failed')
         }
       >
-        <p className="text-sm leading-6 text-muted">
+        <p className="text-sm leading-6 text-muted-foreground">
           {fromUser
             ? t('userRolesRevokeDescription', { role: label })
             : t('roleUsersRevokeDescription', { user: label })}

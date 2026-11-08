@@ -1,6 +1,13 @@
-import { Alert, Button, Card, Spinner, toast } from '@heroui/react'
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from '@identity/ui/components/alert'
+import { Button } from '@identity/ui/components/button'
+import { Card, CardContent } from '@identity/ui/components/card'
+import { Spinner } from '@identity/ui/components/spinner'
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowLeft, ChevronDown, Plus } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Plus, TriangleAlert } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
@@ -27,6 +34,7 @@ import {
   type UserProfileField,
 } from '#/modules/user-management/users/lib/user-form'
 import { clearDraft, readDraft, writeDraft } from '#/lib/draft-storage'
+import { toast } from '#/lib/toast'
 import { useUserMutations } from '#/modules/user-management/users/hooks/user-mutations'
 import { userManagementScope } from '#/modules/user-management/users/lib/user-scope'
 import { BEFORE_AUTH_REDIRECT_EVENT } from '#/lib/auth/events'
@@ -125,8 +133,8 @@ export function UserCreatePage() {
       actions={
         <Button
           variant="secondary"
-          isDisabled={pending}
-          onPress={() => {
+          disabled={pending}
+          onClick={() => {
             leaveCreate()
             void navigate({ to: '/users' })
           }}
@@ -217,21 +225,21 @@ export function UserCreatePage() {
       <>
         {header}
         <Card className="console-card border border-border">
-          <Card.Content className="p-6 sm:p-8">
-            <span className="flex size-10 items-center justify-center rounded-lg bg-surface-secondary text-muted">
+          <CardContent className="p-6 sm:p-8">
+            <span className="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
               <Plus className="size-5" aria-hidden="true" />
             </span>
             <h2 className="mt-4 text-lg font-semibold tracking-tight">
               {t('usersCreateCannotReadTitle')}
             </h2>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
               {t('usersCreateCannotReadDescription', {
                 userId: created.userId,
               })}
             </p>
             <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
               <div>
-                <dt className="text-xs font-medium text-muted">
+                <dt className="text-xs font-medium text-muted-foreground">
                   {t('usersUserIdLabel')}
                 </dt>
                 <dd className="mt-0.5 break-all font-mono text-xs">
@@ -239,7 +247,7 @@ export function UserCreatePage() {
                 </dd>
               </div>
               <div>
-                <dt className="text-xs font-medium text-muted">
+                <dt className="text-xs font-medium text-muted-foreground">
                   {t('usersVersionLabel')}
                 </dt>
                 <dd className="mt-0.5 font-mono text-xs">{created.version}</dd>
@@ -247,7 +255,7 @@ export function UserCreatePage() {
             </dl>
             <div className="mt-5 flex flex-wrap gap-2">
               <Button
-                onPress={() => {
+                onClick={() => {
                   setCreated(null)
                   resetCreate()
                 }}
@@ -257,12 +265,12 @@ export function UserCreatePage() {
               </Button>
               <Button
                 variant="secondary"
-                onPress={() => void navigate({ to: '/' })}
+                onClick={() => void navigate({ to: '/' })}
               >
                 {t('goHome')}
               </Button>
             </div>
-          </Card.Content>
+          </CardContent>
         </Card>
       </>
     )
@@ -416,12 +424,10 @@ export function UserCreatePage() {
       {header}
 
       {!scope.read ? (
-        <Alert status="warning" className="mb-4">
-          <Alert.Indicator />
-          <Alert.Content>
-            <Alert.Title>{t('usersCreateOnlyAccessTitle')}</Alert.Title>
-            <Alert.Description>{t('usersCreateReadWarning')}</Alert.Description>
-          </Alert.Content>
+        <Alert variant="default" className="mb-4 text-warning">
+          <TriangleAlert aria-hidden="true" />
+          <AlertTitle>{t('usersCreateOnlyAccessTitle')}</AlertTitle>
+          <AlertDescription>{t('usersCreateReadWarning')}</AlertDescription>
         </Alert>
       ) : null}
 
@@ -486,7 +492,7 @@ export function UserCreatePage() {
             </div>
           </section>
 
-          <section className="space-y-4 border-t border-separator pt-6">
+          <section className="space-y-4 border-t border-border pt-6">
             <h2 className="text-base font-semibold tracking-tight">
               {t('usersSectionProfile')}
             </h2>
@@ -509,7 +515,7 @@ export function UserCreatePage() {
                 setShowAdditionalProfile(event.currentTarget.open)
               }
             >
-              <summary className="console-focus flex w-fit cursor-pointer list-none items-center gap-2 py-2 text-sm text-muted hover:text-foreground [&::-webkit-details-marker]:hidden">
+              <summary className="console-focus flex w-fit cursor-pointer list-none items-center gap-2 py-2 text-sm text-muted-foreground hover:text-foreground [&::-webkit-details-marker]:hidden">
                 {t('usersAdditionalProfile')}
                 <ChevronDown
                   className="size-4 transition-transform group-open:rotate-180"
@@ -528,10 +534,10 @@ export function UserCreatePage() {
             </details>
           </section>
 
-          <div className="flex flex-wrap items-center gap-2 border-t border-separator pt-6">
-            <Button type="submit" isDisabled={pending}>
+          <div className="flex flex-wrap items-center gap-2 border-t border-border pt-6">
+            <Button type="submit" disabled={pending}>
               {pending ? (
-                <Spinner size="sm" aria-label={t('usersCreatePending')} />
+                <Spinner aria-label={t('usersCreatePending')} />
               ) : (
                 <Plus className="size-4" aria-hidden="true" />
               )}
@@ -540,8 +546,8 @@ export function UserCreatePage() {
             <Button
               type="button"
               variant="secondary"
-              isDisabled={pending}
-              onPress={() => {
+              disabled={pending}
+              onClick={() => {
                 leaveCreate()
                 void navigate({ to: '/users' })
               }}

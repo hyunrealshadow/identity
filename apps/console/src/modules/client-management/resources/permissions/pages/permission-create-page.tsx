@@ -1,4 +1,12 @@
-import { Button, Card, Spinner, toast } from '@heroui/react'
+import { Button } from '@identity/ui/components/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@identity/ui/components/card'
+import { Spinner } from '@identity/ui/components/spinner'
 import { useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, Plus } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -8,6 +16,7 @@ import { PageHeader } from '#/components/page-header'
 
 import { type CreateScopeInput } from '#/generated/graphql'
 import { useTranslator, type MessageKey } from '#/lib/i18n'
+import { toast } from '#/lib/toast'
 import { localizedMetadata, type LocalizedValues } from '#/lib/localized-values'
 import { useWorkspace } from '#/lib/workspace'
 import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
@@ -77,8 +86,8 @@ export function PermissionCreatePage({ resourceId }: { resourceId: string }) {
       actions={
         <Button
           variant="secondary"
-          isDisabled={pending}
-          onPress={() =>
+          disabled={pending}
+          onClick={() =>
             void navigate({
               to: '/resources/$resourceId/permissions',
               params: { resourceId },
@@ -98,21 +107,21 @@ export function PermissionCreatePage({ resourceId }: { resourceId: string }) {
         {header}
         <ConsoleWorkspaceGate>
           <Card className="console-card border border-border">
-            <Card.Content className="p-6 sm:p-8">
-              <span className="flex size-10 items-center justify-center rounded-lg bg-surface-secondary text-muted">
+            <CardContent className="p-6 sm:p-8">
+              <span className="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
                 <Plus className="size-5" aria-hidden="true" />
               </span>
               <h2 className="mt-4 text-lg font-semibold tracking-tight">
                 {t('permissionsCreateWriteOnlyTitle')}
               </h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
                 {t('permissionsCreateWriteOnlyDescription', {
                   permissionId: created.permissionId,
                 })}
               </p>
               <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
                 <div>
-                  <dt className="text-xs font-medium text-muted">
+                  <dt className="text-xs font-medium text-muted-foreground">
                     {t('permissionsIdLabel')}
                   </dt>
                   <dd className="mt-0.5 break-all font-mono text-xs">
@@ -122,7 +131,7 @@ export function PermissionCreatePage({ resourceId }: { resourceId: string }) {
               </dl>
               <div className="mt-5 flex flex-wrap gap-2">
                 <Button
-                  onPress={() => {
+                  onClick={() => {
                     setCreated(null)
                     setDraft({ ...emptyPermissionCreateDraft(), resourceId })
                     clearDraft(DRAFT_KEY)
@@ -133,7 +142,7 @@ export function PermissionCreatePage({ resourceId }: { resourceId: string }) {
                 </Button>
                 <Button
                   variant="secondary"
-                  onPress={() =>
+                  onClick={() =>
                     void navigate({
                       to: '/resources/$resourceId/permissions',
                       params: { resourceId },
@@ -143,7 +152,7 @@ export function PermissionCreatePage({ resourceId }: { resourceId: string }) {
                   {t('backToPermissions')}
                 </Button>
               </div>
-            </Card.Content>
+            </CardContent>
           </Card>
         </ConsoleWorkspaceGate>
       </>
@@ -353,15 +362,15 @@ function PermissionCreateForm({
       >
         <div className="space-y-4">
           <Card className="console-card border border-border">
-            <Card.Header className="border-b border-separator px-5 py-4">
-              <Card.Title className="text-base font-semibold">
+            <CardHeader className="border-b border-border px-5 py-4">
+              <CardTitle className="text-base font-semibold">
                 {t('permissionsSectionIdentity')}
-              </Card.Title>
-              <Card.Description className="mt-1 text-sm text-muted">
+              </CardTitle>
+              <CardDescription className="mt-1 text-sm text-muted-foreground">
                 {t('permissionsSectionIdentityDescription')}
-              </Card.Description>
-            </Card.Header>
-            <Card.Content className="p-5">
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-5">
               <div className="grid gap-4 sm:grid-cols-2">
                 <UserTextField
                   name="code"
@@ -379,19 +388,19 @@ function PermissionCreateForm({
                   autoComplete="off"
                 />
               </div>
-            </Card.Content>
+            </CardContent>
           </Card>
 
           <Card className="console-card border border-border">
-            <Card.Header className="border-b border-separator px-5 py-4">
-              <Card.Title className="text-base font-semibold">
+            <CardHeader className="border-b border-border px-5 py-4">
+              <CardTitle className="text-base font-semibold">
                 {t('permissionsMetadataSectionTitle')}
-              </Card.Title>
-              <Card.Description className="mt-1 text-sm text-muted">
+              </CardTitle>
+              <CardDescription className="mt-1 text-sm text-muted-foreground">
                 {t('permissionsMetadataSectionDescription')}
-              </Card.Description>
-            </Card.Header>
-            <Card.Content className="p-5">
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="p-5">
               <div className="space-y-4">
                 <LocalizedTextField
                   name="names"
@@ -434,13 +443,13 @@ function PermissionCreateForm({
                   error={fieldErrors.description ?? fieldErrors.descriptions}
                 />
               </div>
-            </Card.Content>
+            </CardContent>
           </Card>
 
           <div className="flex flex-wrap gap-2">
-            <Button type="submit" isDisabled={pending || !canSubmit}>
+            <Button type="submit" disabled={pending || !canSubmit}>
               {pending ? (
-                <Spinner size="sm" aria-label={t('permissionsCreatePending')} />
+                <Spinner aria-label={t('permissionsCreatePending')} />
               ) : (
                 <Plus className="size-4" aria-hidden="true" />
               )}
@@ -449,8 +458,8 @@ function PermissionCreateForm({
             <Button
               type="button"
               variant="secondary"
-              isDisabled={pending}
-              onPress={() =>
+              disabled={pending}
+              onClick={() =>
                 void navigate({
                   to: '/resources/$resourceId/permissions',
                   params: { resourceId },

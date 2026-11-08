@@ -11,7 +11,7 @@ export function RequestCorrelation({
   if (!requestId && !traceId) return null
 
   return (
-    <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted">
+    <dl className="mt-3 flex flex-wrap gap-x-5 gap-y-1 text-xs text-muted-foreground">
       {requestId ? (
         <div className="flex min-w-0 items-center gap-1.5">
           <dt className="shrink-0">{t('requestId')}</dt>

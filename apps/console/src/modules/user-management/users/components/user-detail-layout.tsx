@@ -1,6 +1,19 @@
-import { Alert, Button, Skeleton } from '@heroui/react'
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from '@identity/ui/components/alert'
+import { Button } from '@identity/ui/components/button'
+import { Skeleton } from '@identity/ui/components/skeleton'
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowLeft, Check, Copy, Ellipsis, Pencil } from 'lucide-react'
+import {
+  ArrowLeft,
+  Check,
+  Copy,
+  Ellipsis,
+  Pencil,
+  TriangleAlert,
+} from 'lucide-react'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 
 import { AccountAvatar } from '#/components/account-avatar'
@@ -219,7 +232,7 @@ export function UserDetailLayout({
         <Button
           variant="ghost"
           className="mb-5 -ml-3"
-          onPress={() => void navigate({ to: '/users' })}
+          onClick={() => void navigate({ to: '/users' })}
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
           {t('backToUsers')}
@@ -237,7 +250,7 @@ export function UserDetailLayout({
                 className="size-16 shrink-0 text-lg"
               />
             ) : (
-              <Skeleton className="size-16 shrink-0 rounded-field" />
+              <Skeleton className="size-16 shrink-0 rounded-lg" />
             )}
             <div className="min-w-0 space-y-1.5">
               <div className="flex flex-wrap items-center gap-3">
@@ -249,29 +262,28 @@ export function UserDetailLayout({
                     <UserStatusBadges user={user} />
                   </>
                 ) : (
-                  <Skeleton className="h-8 w-44 max-w-full rounded-field" />
+                  <Skeleton className="h-8 w-44 max-w-full rounded-lg" />
                 )}
               </div>
               {user ? (
-                <p className="break-all text-sm text-muted">{user.email}</p>
+                <p className="break-all text-sm text-muted-foreground">{user.email}</p>
               ) : (
-                <Skeleton className="h-5 w-52 max-w-full rounded-field" />
+                <Skeleton className="h-5 w-52 max-w-full rounded-lg" />
               )}
               {user ? (
-                <div className="flex min-w-0 items-center gap-2 text-xs text-muted">
+                <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
                   <span className="shrink-0">{t('usersUserIdLabel')}</span>
                   <code
-                    className="min-w-0 truncate rounded-field bg-default px-2 py-1"
+                    className="min-w-0 truncate rounded-lg bg-secondary px-2 py-1"
                     title={user.id}
                   >
                     {user.id}
                   </code>
                   <Button
-                    isIconOnly
-                    size="sm"
+                    size="icon-sm"
                     variant="ghost"
                     aria-label={t(copied ? 'usersIdCopied' : 'usersCopyId')}
-                    onPress={() => void copyId()}
+                    onClick={() => void copyId()}
                   >
                     {copied ? (
                       <Check className="size-3.5" />
@@ -288,14 +300,14 @@ export function UserDetailLayout({
                   </span>
                 </div>
               ) : (
-                <Skeleton className="h-9 w-64 max-w-full rounded-field md:h-8" />
+                <Skeleton className="h-9 w-64 max-w-full rounded-lg md:h-8" />
               )}
             </div>
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             {scope.update && user && !accessEnded ? (
               <Button
-                onPress={() =>
+                onClick={() =>
                   void navigate({
                     to: '/users/$userId/edit',
                     params: { userId },
@@ -333,19 +345,15 @@ export function UserDetailLayout({
           <UserNoticeAlert notice={notice} onDismiss={() => setNotice(null)} />
         ) : null}
         {detail.partial ? (
-          <Alert status="warning">
-            <Alert.Indicator />
-            <Alert.Content>
-              <Alert.Title>{t('usersPartialTitle')}</Alert.Title>
-              <Alert.Description>
-                {t('usersPartialDescription')}
-              </Alert.Description>
-              <RequestCorrelation
-                requestId={detail.requestId}
-                traceId={detail.traceId}
-              />
-              <ErrorDetails issues={detail.errors} />
-            </Alert.Content>
+          <Alert variant="default" className="text-warning">
+            <TriangleAlert aria-hidden="true" />
+            <AlertTitle>{t('usersPartialTitle')}</AlertTitle>
+            <AlertDescription>{t('usersPartialDescription')}</AlertDescription>
+            <RequestCorrelation
+              requestId={detail.requestId}
+              traceId={detail.traceId}
+            />
+            <ErrorDetails issues={detail.errors} />
           </Alert>
         ) : null}
         {failure || children}

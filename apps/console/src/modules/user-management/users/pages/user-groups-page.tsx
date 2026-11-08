@@ -5,9 +5,14 @@ import {
 } from '../../groups/components/membership-dialogs'
 
 import { DataTable } from '@identity/ui/data-table'
-import { Alert, Button } from '@heroui/react'
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from '@identity/ui/components/alert'
+import { Button } from '@identity/ui/components/button'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { Search, UserPlus } from 'lucide-react'
+import { Search, TriangleAlert, UserPlus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
@@ -232,7 +237,7 @@ export function UserGroupsPage({ userId }: { userId: string }) {
                 <h2 className="text-base font-semibold">
                   {t('userGroupsListTitle')}
                 </h2>
-                <p className="mt-1 text-sm text-muted">
+                <p className="mt-1 text-sm text-muted-foreground">
                   {t('userGroupsListDescription')}
                 </p>
               </div>
@@ -285,7 +290,7 @@ export function UserGroupsPage({ userId }: { userId: string }) {
               </div>
             </header>
             <div className="min-w-0">{renderMemberships()}</div>
-            <footer className="border-t border-separator pt-4">
+            <footer className="border-t border-border pt-4">
               {connection && memberships.status === 'ready' ? (
                 <RelationPagination
                   connection={connection}
@@ -375,19 +380,15 @@ export function UserGroupsPage({ userId }: { userId: string }) {
       <div>
         {memberships.partial ? (
           <div className="p-3">
-            <Alert status="warning">
-              <Alert.Indicator />
-              <Alert.Content>
-                <Alert.Title>{t('groupsPartialTitle')}</Alert.Title>
-                <Alert.Description>
-                  {t('groupsPartialDescription')}
-                </Alert.Description>
-                <RequestCorrelation
-                  requestId={memberships.requestId}
-                  traceId={memberships.traceId}
-                />
-                <ErrorDetails issues={memberships.errors} />
-              </Alert.Content>
+            <Alert variant="default" className="text-warning">
+              <TriangleAlert aria-hidden="true" />
+              <AlertTitle>{t('groupsPartialTitle')}</AlertTitle>
+              <AlertDescription>{t('groupsPartialDescription')}</AlertDescription>
+              <RequestCorrelation
+                requestId={memberships.requestId}
+                traceId={memberships.traceId}
+              />
+              <ErrorDetails issues={memberships.errors} />
             </Alert>
           </div>
         ) : null}
@@ -447,7 +448,7 @@ export function UserGroupsPage({ userId }: { userId: string }) {
                       reloadPending={memberships.refreshing}
                     />
                   ) : (
-                    <span className="text-xs text-muted">
+                    <span className="text-xs text-muted-foreground">
                       {t('userGroupsNoWritePermission')}
                     </span>
                   )}
@@ -470,12 +471,12 @@ export function UserGroupsPage({ userId }: { userId: string }) {
         <Link
           to="/groups/$groupId"
           params={{ groupId: node.id }}
-          className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+          className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
           {name}
         </Link>
         {description ? (
-          <p className="mt-1 max-w-md text-xs leading-5 text-muted">
+          <p className="mt-1 max-w-md text-xs leading-5 text-muted-foreground">
             {description}
           </p>
         ) : null}

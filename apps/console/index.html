@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en-US" class="light">
+<html lang="en-US">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -9,16 +9,14 @@
     <script>
       ;(() => {
         try {
-          const preference = localStorage.getItem('heroui-theme') || 'system'
+          const preference = localStorage.getItem('identity-theme') || 'system'
           const dark =
             preference === 'dark' ||
             (preference !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-          document.documentElement.classList.remove('light', 'dark')
-          document.documentElement.classList.add(dark ? 'dark' : 'light')
-          document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+          document.documentElement.classList.toggle('dark', dark)
+          document.documentElement.dataset.themePreference = preference
         } catch {
-          document.documentElement.classList.add('light')
-          document.documentElement.dataset.theme = 'light'
+          document.documentElement.classList.remove('dark')
         }
       })()
     </script>

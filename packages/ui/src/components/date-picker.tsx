@@ -120,6 +120,7 @@ function DatePickerField({
                 aria-invalid={error ? true : undefined}
                 aria-required={required || undefined}
                 aria-describedby={error ? `${id}-error` : undefined}
+                aria-label={`${label}: ${label_}`}
                 className={cn(
                   "min-w-0 flex-1 justify-start font-normal",
                   !selected && "text-muted-foreground"

@@ -1,6 +1,15 @@
-import { Alert, Button, Card, Spinner, toast } from '@heroui/react'
+import { Alert, AlertDescription, AlertTitle } from '@identity/ui/components/alert'
+import { Button } from '@identity/ui/components/button'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@identity/ui/components/card'
+import { Spinner } from '@identity/ui/components/spinner'
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowLeft, Plus } from 'lucide-react'
+import { ArrowLeft, Plus, TriangleAlert } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { LocalizedTextField } from '#/components/localized-text-field'
@@ -8,6 +17,7 @@ import { PageHeader } from '#/components/page-header'
 
 import type { CreateRoleInput } from '#/generated/graphql'
 import { useTranslator, type MessageKey } from '#/lib/i18n'
+import { toast } from '#/lib/toast'
 import {
   createLocalizedDraft,
   localizedMetadata,
@@ -68,8 +78,8 @@ export function RoleCreatePage() {
       actions={
         <Button
           variant="secondary"
-          isDisabled={pending}
-          onPress={() => void navigate({ to: '/roles' })}
+          disabled={pending}
+          onClick={() => void navigate({ to: '/roles' })}
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
           {t('backToRoles')}
@@ -84,21 +94,21 @@ export function RoleCreatePage() {
         {header}
         <ConsoleWorkspaceGate>
           <Card className="console-card border border-border">
-            <Card.Content className="p-6 sm:p-8">
-              <span className="flex size-10 items-center justify-center rounded-lg bg-surface-secondary text-muted">
+            <CardContent className="block p-6 sm:p-8">
+              <span className="flex size-10 items-center justify-center rounded-lg bg-muted text-muted-foreground">
                 <Plus className="size-5" aria-hidden="true" />
               </span>
               <h2 className="mt-4 text-lg font-semibold tracking-tight">
                 {t('rolesCreateWriteOnlyTitle')}
               </h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
+              <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
                 {t('rolesCreateWriteOnlyDescription', {
                   roleId: created.roleId,
                 })}
               </p>
               <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-2">
                 <div>
-                  <dt className="text-xs font-medium text-muted">
+                  <dt className="text-xs font-medium text-muted-foreground">
                     {t('rolesIdLabel')}
                   </dt>
                   <dd className="mt-0.5 break-all font-mono text-xs">
@@ -106,7 +116,7 @@ export function RoleCreatePage() {
                   </dd>
                 </div>
                 <div>
-                  <dt className="text-xs font-medium text-muted">
+                  <dt className="text-xs font-medium text-muted-foreground">
                     {t('rolesVersionLabel')}
                   </dt>
                   <dd className="mt-0.5 font-mono text-xs">
@@ -116,7 +126,7 @@ export function RoleCreatePage() {
               </dl>
               <div className="mt-5 flex flex-wrap gap-2">
                 <Button
-                  onPress={() => {
+                  onClick={() => {
                     setCreated(null)
                     setDraft(createLocalizedDraft())
                     clearDraft(DRAFT_KEY)
@@ -127,12 +137,12 @@ export function RoleCreatePage() {
                 </Button>
                 <Button
                   variant="secondary"
-                  onPress={() => void navigate({ to: '/roles' })}
+                  onClick={() => void navigate({ to: '/roles' })}
                 >
                   {t('backToRoles')}
                 </Button>
               </div>
-            </Card.Content>
+            </CardContent>
           </Card>
         </ConsoleWorkspaceGate>
       </>
@@ -307,15 +317,15 @@ function RoleCreateForm({
       >
         <div className="space-y-4">
           <Card className="console-card border border-border">
-            <Card.Header className="border-b border-separator px-5 py-4">
-              <Card.Title className="text-base font-semibold">
+            <CardHeader className="border-b border-border px-5 py-4">
+              <CardTitle className="text-base font-semibold">
                 {t('rolesMetadataSectionTitle')}
-              </Card.Title>
-              <Card.Description className="mt-1 text-sm text-muted">
+              </CardTitle>
+              <CardDescription className="mt-1 text-sm text-muted-foreground">
                 {t('rolesMetadataSectionDescription')}
-              </Card.Description>
-            </Card.Header>
-            <Card.Content className="p-5">
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="block p-5">
               <div className="space-y-4">
                 <LocalizedTextField
                   name="names"
@@ -358,13 +368,13 @@ function RoleCreateForm({
                   error={fieldErrors.description ?? fieldErrors.descriptions}
                 />
               </div>
-            </Card.Content>
+            </CardContent>
           </Card>
 
           <div className="flex flex-wrap gap-2">
-            <Button type="submit" isDisabled={pending || disabled}>
+            <Button type="submit" disabled={pending || disabled}>
               {pending ? (
-                <Spinner size="sm" aria-label={t('rolesCreatePending')} />
+                <Spinner aria-label={t('rolesCreatePending')} />
               ) : (
                 <Plus className="size-4" aria-hidden="true" />
               )}
@@ -373,8 +383,8 @@ function RoleCreateForm({
             <Button
               type="button"
               variant="secondary"
-              isDisabled={pending}
-              onPress={() => void navigate({ to: '/roles' })}
+              disabled={pending}
+              onClick={() => void navigate({ to: '/roles' })}
             >
               {t('cancel')}
             </Button>
@@ -382,14 +392,12 @@ function RoleCreateForm({
         </div>
       </form>
       {showWriteOnlyWarning && !disabled && !pending ? (
-        <Alert status="warning">
-          <Alert.Indicator />
-          <Alert.Content>
-            <Alert.Title>{t('rolesNoReadAfterCreateTitle')}</Alert.Title>
-            <Alert.Description>
-              {t('rolesNoReadAfterCreateDescription')}
-            </Alert.Description>
-          </Alert.Content>
+        <Alert variant="default" className="text-warning">
+          <TriangleAlert aria-hidden="true" />
+          <AlertTitle>{t('rolesNoReadAfterCreateTitle')}</AlertTitle>
+          <AlertDescription>
+            {t('rolesNoReadAfterCreateDescription')}
+          </AlertDescription>
         </Alert>
       ) : null}
     </div>

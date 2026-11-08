@@ -7,17 +7,19 @@ import { useRelationMutation } from '../../lib/relation-mutation'
 
 import {
   Alert,
-  Button,
-  Checkbox,
-  Chip,
-  Skeleton,
-  Spinner,
-  toast,
-  useOverlayState,
-} from '@heroui/react'
-
-import { Pencil } from 'lucide-react'
+  AlertDescription,
+  AlertTitle,
+} from '@identity/ui/components/alert'
+import { Badge } from '@identity/ui/components/badge'
+import { Button } from '@identity/ui/components/button'
+import { Checkbox } from '@identity/ui/components/checkbox'
+import { Skeleton } from '@identity/ui/components/skeleton'
+import { Spinner } from '@identity/ui/components/spinner'
+import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
+import { Pencil, TriangleAlert } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+
+import { toast } from '#/lib/toast'
 import { AsyncState } from '#/components/async-state'
 import { ErrorDetails } from '#/components/error-details'
 import { RequestCorrelation } from '#/components/request-correlation'
@@ -297,7 +299,7 @@ export function EditRolesDialog({
 
   return (
     <>
-      <Button onPress={state.open} isDisabled={!groupVersion}>
+      <Button onClick={state.open} disabled={!groupVersion}>
         <Pencil className="size-4" aria-hidden="true" />
         {t('groupRolesEditAction')}
       </Button>
@@ -315,21 +317,21 @@ export function EditRolesDialog({
         }}
         reloadPending={reloadPending}
         bodyClassName="flex min-h-0 flex-col gap-3 overflow-hidden"
-        dialogClassName="w-full max-w-3xl"
+        dialogClassName="w-full sm:max-w-3xl"
       >
-        <p className="text-sm leading-5 text-muted">
+        <p className="text-sm leading-5 text-muted-foreground">
           {t('groupRolesEditDescription', { group: groupName })}
         </p>
-        <p className="text-xs leading-5 text-muted">
+        <p className="text-xs leading-5 text-muted-foreground">
           {t('groupRolesEditHint')}
         </p>
 
         {snapshotStatus === 'loading' ? (
           <div
-            className="flex items-center gap-2 rounded-field border border-border p-3 text-sm"
+            className="flex items-center gap-2 rounded-lg border border-border p-3 text-sm"
             role="status"
           >
-            <Spinner size="sm" aria-label={t('loading')} />
+            <Spinner aria-label={t('loading')} />
             {t('groupRolesCurrentLoading')}
           </div>
         ) : null}
@@ -343,7 +345,7 @@ export function EditRolesDialog({
             <Button
               size="sm"
               variant="secondary"
-              onPress={() => void reloadSnapshot()}
+              onClick={() => void reloadSnapshot()}
             >
               {t('groupRolesCurrentReload')}
             </Button>
@@ -362,7 +364,7 @@ export function EditRolesDialog({
         />
 
         <div
-          className="min-h-40 flex-1 overflow-y-auto rounded-field border border-border"
+          className="min-h-40 flex-1 overflow-y-auto rounded-lg border border-border"
           role="region"
           aria-label={t('groupRolesCatalogLabel')}
         >
@@ -389,7 +391,7 @@ export function EditRolesDialog({
             >
               <span className="sr-only">{t('groupRolesCatalogLoading')}</span>
               {Array.from({ length: 4 }, (_, index) => (
-                <Skeleton key={index} className="h-14 w-full rounded-field" />
+                <Skeleton key={index} className="h-14 w-full rounded-lg" />
               ))}
             </div>
           ) : roleEdges.length === 0 ? (
@@ -402,7 +404,7 @@ export function EditRolesDialog({
               />
             </div>
           ) : (
-            <ul className="divide-y divide-separator">
+            <ul className="divide-y divide-border">
               {roleEdges.map(({ node }) => {
                 const name =
                   resolveLocalizedText(node.names, locale) ??
@@ -411,34 +413,29 @@ export function EditRolesDialog({
                   node.id
                 return (
                   <li key={node.id}>
-                    <Checkbox
-                      className="w-full"
-                      isSelected={selected.has(node.id)}
-                      onChange={(isSelected) => toggleRole(node.id, isSelected)}
-                    >
-                      <Checkbox.Content className="min-h-14 w-full items-center gap-3 px-3 py-2 text-start">
-                        <Checkbox.Control>
-                          <Checkbox.Indicator />
-                        </Checkbox.Control>
-                        <span className="min-w-0 flex-1">
-                          <span className="flex flex-wrap items-center gap-2">
-                            <span className="text-sm font-medium">{name}</span>
-                            {node.builtIn ? (
-                              <Chip size="sm" variant="soft" color="accent">
-                                <Chip.Label>
-                                  {t('groupRolesBuiltInRoleLabel')}
-                                </Chip.Label>
-                              </Chip>
-                            ) : null}
-                            {!node.enabled ? (
-                              <Chip size="sm" variant="soft" color="warning">
-                                <Chip.Label>{t('rolesDisabled')}</Chip.Label>
-                              </Chip>
-                            ) : null}
-                          </span>
+                    <label className="flex min-h-14 w-full cursor-pointer items-center gap-3 px-3 py-2 text-start">
+                      <Checkbox
+                        checked={selected.has(node.id)}
+                        onCheckedChange={(checked) =>
+                          toggleRole(node.id, checked === true)
+                        }
+                      />
+                      <span className="min-w-0 flex-1">
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-medium">{name}</span>
+                          {node.builtIn ? (
+                            <Badge variant="secondary" className="text-primary">
+                              {t('groupRolesBuiltInRoleLabel')}
+                            </Badge>
+                          ) : null}
+                          {!node.enabled ? (
+                            <Badge variant="secondary" className="text-warning">
+                              {t('rolesDisabled')}
+                            </Badge>
+                          ) : null}
                         </span>
-                      </Checkbox.Content>
-                    </Checkbox>
+                      </span>
+                    </label>
                   </li>
                 )
               })}
@@ -448,7 +445,7 @@ export function EditRolesDialog({
 
         {connection ? (
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-muted">
+            <span className="text-xs text-muted-foreground">
               {t('groupRolesSelectedCount', {
                 count: selected.size,
               })}
@@ -471,24 +468,22 @@ export function EditRolesDialog({
         ) : null}
 
         {catalog.partial ? (
-          <Alert status="warning">
-            <Alert.Indicator />
-            <Alert.Content>
-              <Alert.Title>{t('rolesPartialTitle')}</Alert.Title>
-              <Alert.Description>
-                {t('rolesPartialDescription')}
-              </Alert.Description>
-              <RequestCorrelation
-                requestId={catalog.requestId}
-                traceId={catalog.traceId}
-              />
-              <ErrorDetails issues={catalog.errors} />
-            </Alert.Content>
+          <Alert variant="default" className="text-warning">
+            <TriangleAlert aria-hidden="true" />
+            <AlertTitle>{t('rolesPartialTitle')}</AlertTitle>
+            <AlertDescription>{t('rolesPartialDescription')}</AlertDescription>
+            <RequestCorrelation
+              requestId={catalog.requestId}
+              traceId={catalog.traceId}
+            />
+            <ErrorDetails issues={catalog.errors} />
           </Alert>
         ) : null}
 
         {snapshotStatus === 'ready' && !changes ? (
-          <p className="text-xs text-muted">{t('groupRolesNoChanges')}</p>
+          <p className="text-xs text-muted-foreground">
+            {t('groupRolesNoChanges')}
+          </p>
         ) : null}
       </RelationDialog>
     </>

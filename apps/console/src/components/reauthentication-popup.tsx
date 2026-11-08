@@ -1,4 +1,4 @@
-import { Button } from '@heroui/react'
+import { Button } from '@identity/ui/components/button'
 
 import type { PopupReauthenticationPrompt } from '#/lib/auth/popup-reauthentication'
 import { authErrorKey } from '#/lib/auth/messages'
@@ -27,18 +27,18 @@ export function ReauthenticationPopup({
   return (
     <aside
       aria-live="polite"
-      className="fixed bottom-4 right-4 z-50 w-[min(22rem,calc(100vw-2rem))] rounded-field border border-border bg-surface p-4 text-foreground shadow-lg"
+      className="fixed bottom-4 right-4 z-50 w-[min(22rem,calc(100vw-2rem))] rounded-lg border border-border bg-card p-4 text-foreground shadow-lg"
     >
       <p className="text-sm font-medium">
         {t(blocked ? 'authPopupBlockedTitle' : 'authPopupFailedTitle')}
       </p>
-      <p className="mt-1 text-xs leading-5 text-muted">
+      <p className="mt-1 text-xs leading-5 text-muted-foreground">
         {t(
           blocked ? 'authPopupBlockedDescription' : 'authPopupFailedDescription',
         )}
       </p>
       {!blocked && prompt.errorCode ? (
-        <p className="mt-1 text-xs leading-5 text-muted">
+        <p className="mt-1 text-xs leading-5 text-muted-foreground">
           {t(authErrorKey(prompt.errorCode))}
         </p>
       ) : null}
@@ -46,8 +46,8 @@ export function ReauthenticationPopup({
         <Button
           type="button"
           size="sm"
-          variant="primary"
-          onPress={onContinue}
+          variant="default"
+          onClick={onContinue}
         >
           {t(blocked ? 'authPopupContinue' : 'retry')}
         </Button>
@@ -55,11 +55,11 @@ export function ReauthenticationPopup({
           type="button"
           size="sm"
           variant="secondary"
-          onPress={onFallback}
+          onClick={onFallback}
         >
           {t('authPopupContinueInTab')}
         </Button>
-        <Button type="button" size="sm" variant="ghost" onPress={onCancel}>
+        <Button type="button" size="sm" variant="ghost" onClick={onCancel}>
           {t('close')}
         </Button>
       </div>

@@ -1,4 +1,4 @@
-import { Button } from '@heroui/react'
+import { Button } from '@identity/ui/components/button'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { Plus } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
@@ -78,7 +78,7 @@ export function ClientsListPage({ search }: { search: ClientsSearch }) {
         description={t('clientsDescription')}
         actions={
           scope.create ? (
-            <Button onPress={() => void navigate({ to: '/clients/new' })}>
+            <Button onClick={() => void navigate({ to: '/clients/new' })}>
               <Plus className="size-4" aria-hidden="true" />
               {t('clientsNew')}
             </Button>
@@ -139,7 +139,7 @@ export function ClientsListPage({ search }: { search: ClientsSearch }) {
               </Button>
               <Button
                 variant="ghost"
-                onPress={() => void navigate({ to: '/clients', search: {} })}
+                onClick={() => void navigate({ to: '/clients', search: {} })}
               >
                 {t('clientsReset')}
               </Button>

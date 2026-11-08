@@ -1,11 +1,14 @@
+import { Button } from '@identity/ui/components/button'
 import {
-  Button,
-  Description,
-  Radio,
+  Field,
+  FieldDescription,
+  FieldLabel,
+} from '@identity/ui/components/field'
+import {
   RadioGroup,
-  Spinner,
-  toast,
-} from '@heroui/react'
+  RadioGroupItem,
+} from '@identity/ui/components/radio-group'
+import { Spinner } from '@identity/ui/components/spinner'
 import { useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, Plus } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -20,6 +23,7 @@ import {
   restoreLocalizedDraft,
   type LocalizedDraft,
 } from '#/lib/localized-values'
+import { toast } from '#/lib/toast'
 import { useWorkspace } from '#/lib/workspace'
 import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
 import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
@@ -101,8 +105,8 @@ export function ClientCreatePage() {
       actions={
         <Button
           variant="secondary"
-          isDisabled={pending}
-          onPress={() => void navigate({ to: '/clients' })}
+          disabled={pending}
+          onClick={() => void navigate({ to: '/clients' })}
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
           {t('clientsBack')}
@@ -233,8 +237,8 @@ export function ClientCreatePage() {
                   name="client-kind"
                   aria-label={t('clientsKind')}
                   value={draft.kind}
-                  isDisabled={pending}
-                  onChange={(value) => {
+                  disabled={pending}
+                  onValueChange={(value: string) => {
                     const kind = value as ClientKind
                     // Keep entered addresses; reset only the kind-specific defaults.
                     const preset = settingsForKind(kind)
@@ -251,15 +255,21 @@ export function ClientCreatePage() {
                 >
                   <div className="grid gap-3 sm:grid-cols-2">
                     {KINDS.map((kind) => (
-                      <Radio key={kind.id} value={kind.id}>
-                        <Radio.Content>
-                          <Radio.Control>
-                            <Radio.Indicator />
-                          </Radio.Control>
-                          {t(kind.label)}
-                        </Radio.Content>
-                        <Description>{t(kind.hint)}</Description>
-                      </Radio>
+                      <Field key={kind.id} orientation="horizontal">
+                        <RadioGroupItem
+                          value={kind.id}
+                          id={`client-kind-${kind.id}`}
+                        />
+                        <div className="min-w-0">
+                          <FieldLabel
+                            htmlFor={`client-kind-${kind.id}`}
+                            className="font-normal"
+                          >
+                            {t(kind.label)}
+                          </FieldLabel>
+                          <FieldDescription>{t(kind.hint)}</FieldDescription>
+                        </div>
+                      </Field>
                     ))}
                   </div>
                 </RadioGroup>
@@ -322,9 +332,9 @@ export function ClientCreatePage() {
               <ParRow {...fieldProps} />
             </SettingsGroup>
             <div className="flex flex-wrap justify-end gap-2">
-              <Button type="submit" isDisabled={pending}>
+              <Button type="submit" disabled={pending}>
                 {pending ? (
-                  <Spinner size="sm" aria-label={t('clientsCreatePending')} />
+                  <Spinner aria-label={t('clientsCreatePending')} />
                 ) : (
                   <Plus className="size-4" aria-hidden="true" />
                 )}
@@ -333,8 +343,8 @@ export function ClientCreatePage() {
               <Button
                 type="button"
                 variant="secondary"
-                isDisabled={pending}
-                onPress={() => void navigate({ to: '/clients' })}
+                disabled={pending}
+                onClick={() => void navigate({ to: '/clients' })}
               >
                 {t('cancel')}
               </Button>

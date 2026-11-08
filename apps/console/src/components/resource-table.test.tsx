@@ -61,17 +61,18 @@ describe('resource table interactions', () => {
       <Fixture onOrderChange={onOrderChange} onRefresh={onRefresh} />,
     )
     const name = screen.getByRole('columnheader', { name: /Name/ })
+    const nameButton = screen.getByRole('button', { name: /Name/ })
     expect([null, 'none']).toContain(name.getAttribute('aria-sort'))
-    await user.click(name)
+    await user.click(nameButton)
     expect(onOrderChange).toHaveBeenLastCalledWith('NAME_ASC')
     expect(name.getAttribute('aria-sort')).toBe('ascending')
-    await user.click(name)
+    await user.click(nameButton)
     expect(onOrderChange).toHaveBeenLastCalledWith('NAME_DESC')
     expect(name.getAttribute('aria-sort')).toBe('descending')
-    await user.click(name)
+    await user.click(nameButton)
     expect(onOrderChange).toHaveBeenLastCalledWith(undefined)
     expect([null, 'none']).toContain(name.getAttribute('aria-sort'))
-    await user.click(name)
+    await user.click(nameButton)
     expect(onOrderChange).toHaveBeenLastCalledWith('NAME_ASC')
     await user.click(screen.getByRole('button', { name: 'Refresh table' }))
     expect(onRefresh).toHaveBeenCalledOnce()
@@ -84,7 +85,8 @@ describe('resource table interactions', () => {
       <Fixture initialOrder="NAME_DESC" onOrderChange={onOrderChange} />,
     )
     const updated = screen.getByRole('columnheader', { name: /Updated/ })
-    await user.click(updated)
+    const updatedButton = screen.getByRole('button', { name: /Updated/ })
+    await user.click(updatedButton)
     expect(onOrderChange).toHaveBeenLastCalledWith('UPDATED_AT_ASC')
     expect(updated.getAttribute('aria-sort')).toBe('ascending')
     await user.keyboard('{Enter}')
@@ -102,7 +104,7 @@ describe('resource table interactions', () => {
     expect(
       within(dialog)
         .getByRole('checkbox', { name: 'Name' })
-        .hasAttribute('disabled'),
+        .getAttribute('aria-disabled') === 'true',
     ).toBe(true)
     await user.click(within(dialog).getByRole('checkbox', { name: 'Updated' }))
     await user.click(
@@ -132,7 +134,7 @@ describe('resource table interactions', () => {
     expect(screen.getByRole('columnheader', { name: 'Updated' })).toBeTruthy()
     await user.click(screen.getByRole('button', { name: '表格设置' }))
     expect(
-      screen.getByRole('checkbox', { name: 'Updated' }).matches(':checked'),
+      screen.getByRole('checkbox', { name: 'Updated' }).getAttribute('aria-checked') === 'true',
     ).toBe(true)
     expect(screen.getByRole('checkbox', { name: '内容换行' })).toBeTruthy()
   })

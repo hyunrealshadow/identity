@@ -1,5 +1,14 @@
-import { Button, ComboBox, Input, Label, ListBox } from '@heroui/react'
-import { useEffect, useMemo, useState } from 'react'
+import { Button } from '@identity/ui/components/button'
+import {
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from '@identity/ui/components/combobox'
+import { Field, FieldLabel } from '@identity/ui/components/field'
+import { useEffect, useId, useMemo, useState } from 'react'
 
 import {
   ConsoleResourceOptionsDocument,
@@ -22,6 +31,7 @@ export function ApiResourceSelect({
   enabled?: boolean
 }) {
   const t = useTranslator()
+  const inputId = useId()
   const [text, setText] = useState('')
   const [query, setQuery] = useState('')
   const [after, setAfter] = useState<string>()
@@ -75,67 +85,79 @@ export function ApiResourceSelect({
       ? [selected, ...items]
       : items
   return (
-    <ComboBox
-      selectedKey={value || null}
-      inputValue={text}
-      onInputChange={setText}
-      allowsEmptyCollection
-      isDisabled={!enabled}
-      className="w-full max-w-xl"
-      onSelectionChange={(key) => {
-        const node = options.find((item) => item.id === key)
-        if (!node) return
-        setSelected(node)
-        setText(node.name)
-        onChange(node.id)
-      }}
-    >
-      <Label>{t('rbacApiResource')}</Label>
-      <ComboBox.InputGroup>
-        <Input placeholder={t('rbacSearchApi')} />
-        <ComboBox.Trigger />
-      </ComboBox.InputGroup>
-      <ComboBox.Popover className="max-w-[calc(100vw-2rem)]">
-        <ListBox
+    <div className="w-full max-w-xl">
+      <Field>
+        <FieldLabel htmlFor={inputId}>{t('rbacApiResource')}</FieldLabel>
+        <Combobox<Resource>
           items={options}
-          renderEmptyState={() =>
-            resources.status === 'loading' ? t('loading') : t('rbacNoResources')
-          }
+          value={selected ?? null}
+          inputValue={text}
+          onInputValueChange={setText}
+          itemToStringLabel={(node) => node.name}
+          itemToStringValue={(node) => node.id}
+          isItemEqualToValue={(node, current) => node.id === current.id}
+          disabled={!enabled}
+          onValueChange={(node) => {
+            if (!node) return
+            setSelected(node)
+            setText(node.name)
+            onChange(node.id)
+          }}
         >
-          {(node) => (
-            <ListBox.Item id={node.id} textValue={node.name}>
-              <div className="min-w-0">
-                <p className="truncate font-medium">{node.name}</p>
-                <p className="truncate text-xs text-muted">{node.uri}</p>
+          <ComboboxInput
+            id={inputId}
+            placeholder={t('rbacSearchApi')}
+            disabled={!enabled}
+          />
+          <ComboboxContent className="max-w-[calc(100vw-2rem)]">
+            <ComboboxEmpty>
+              {resources.status === 'loading'
+                ? t('loading')
+                : t('rbacNoResources')}
+            </ComboboxEmpty>
+            <ComboboxList>
+              {(node: Resource) => (
+                <ComboboxItem key={node.id} value={node}>
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">{node.name}</p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {node.uri}
+                    </p>
+                  </div>
+                </ComboboxItem>
+              )}
+            </ComboboxList>
+            {resources.data?.resources.pageInfo.hasNextPage ? (
+              <div className="p-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  disabled={resources.status === 'loading'}
+                  onClick={() =>
+                    setAfter(
+                      resources.data?.resources.pageInfo.endCursor ??
+                        undefined,
+                    )
+                  }
+                >
+                  {t('rbacLoadMore')}
+                </Button>
               </div>
-              <ListBox.ItemIndicator />
-            </ListBox.Item>
-          )}
-        </ListBox>
-        {resources.data?.resources.pageInfo.hasNextPage ? (
-          <Button
-            size="sm"
-            variant="ghost"
-            isDisabled={resources.status === 'loading'}
-            onPress={() =>
-              setAfter(
-                resources.data?.resources.pageInfo.endCursor ?? undefined,
-              )
-            }
-          >
-            {t('rbacLoadMore')}
-          </Button>
-        ) : null}
-        {resources.status === 'error' ? (
-          <Button
-            size="sm"
-            variant="ghost"
-            onPress={() => void resources.refresh()}
-          >
-            {t('retry')}
-          </Button>
-        ) : null}
-      </ComboBox.Popover>
-    </ComboBox>
+            ) : null}
+            {resources.status === 'error' ? (
+              <div className="p-1">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => void resources.refresh()}
+                >
+                  {t('retry')}
+                </Button>
+              </div>
+            ) : null}
+          </ComboboxContent>
+        </Combobox>
+      </Field>
+    </div>
   )
 }

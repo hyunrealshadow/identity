@@ -1,4 +1,5 @@
-import { Card, Chip } from '@heroui/react'
+import { Badge } from '@identity/ui/components/badge'
+import { Card, CardContent } from '@identity/ui/components/card'
 import type { ReactNode } from 'react'
 
 import { formatDate, formatDateTime } from '#/lib/format'
@@ -28,7 +29,7 @@ function DetailField({
 }) {
   return (
     <div className="min-w-0">
-      <dt className="text-sm text-muted">{label}</dt>
+      <dt className="text-sm text-muted-foreground">{label}</dt>
       <dd className="mt-2 min-h-6 break-words text-sm font-medium">
         {children}
       </dd>
@@ -52,7 +53,7 @@ export function UserDetailPage() {
         role="region"
         aria-labelledby="user-account-heading"
       >
-        <Card.Content className="block p-5 sm:p-6">
+        <CardContent className="block p-5 sm:p-6">
           <div className="mb-6 flex h-6 items-center justify-between gap-3">
             <h2 id="user-account-heading" className="text-base font-semibold">
               {t('usersAccountTitle')}
@@ -65,19 +66,16 @@ export function UserDetailPage() {
             <DetailField label={t('usersFieldEmail')}>
               <span className="flex flex-wrap items-center gap-2">
                 <span className="break-all">{user.email}</span>
-                <Chip
-                  size="sm"
-                  variant="soft"
-                  color={user.emailVerified ? 'success' : 'default'}
+                <Badge
+                  variant="secondary"
+                  className={user.emailVerified ? 'text-success' : undefined}
                 >
-                  <Chip.Label>
-                    {t(
-                      user.emailVerified
-                        ? 'usersEmailVerified'
-                        : 'usersEmailUnverified',
-                    )}
-                  </Chip.Label>
-                </Chip>
+                  {t(
+                    user.emailVerified
+                      ? 'usersEmailVerified'
+                      : 'usersEmailUnverified',
+                  )}
+                </Badge>
               </span>
             </DetailField>
             <DetailField label={t('usersCreatedAtLabel')}>
@@ -92,14 +90,14 @@ export function UserDetailPage() {
               </DetailField>
             ) : null}
           </dl>
-        </Card.Content>
+        </CardContent>
       </Card>
       <Card
         className="console-card border border-border p-0"
         role="region"
         aria-labelledby="user-profile-heading"
       >
-        <Card.Content className="block p-5 sm:p-6">
+        <CardContent className="block p-5 sm:p-6">
           <div className="mb-6 flex h-6 items-center justify-between gap-3">
             <h2 id="user-profile-heading" className="text-base font-semibold">
               {t('usersProfileTitle')}
@@ -119,9 +117,11 @@ export function UserDetailPage() {
               ))}
             </dl>
           ) : (
-            <p className="py-4 text-sm text-muted">{t('usersProfileEmpty')}</p>
+            <p className="py-4 text-sm text-muted-foreground">
+              {t('usersProfileEmpty')}
+            </p>
           )}
-        </Card.Content>
+        </CardContent>
       </Card>
     </div>
   )

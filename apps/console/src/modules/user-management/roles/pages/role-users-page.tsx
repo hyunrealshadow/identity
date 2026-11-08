@@ -5,8 +5,10 @@ import { RelationPagination } from '../../components/relation-picker'
 import { RevokeRoleFromUserDialog } from '../components/revoke-user-role-dialog'
 
 import { DataTable } from '@identity/ui/data-table'
-import { Alert, Skeleton } from '@heroui/react'
+import { Alert, AlertDescription, AlertTitle } from '@identity/ui/components/alert'
+import { Skeleton } from '@identity/ui/components/skeleton'
 import { Link, useNavigate } from '@tanstack/react-router'
+import { TriangleAlert } from 'lucide-react'
 
 import { useMemo, useState } from 'react'
 
@@ -174,7 +176,7 @@ export function RoleUsersPage({ roleId }: { roleId: string }) {
               <h2 className="text-base font-semibold">
                 {t('roleUsersListTitle')}
               </h2>
-              <p className="mt-1 text-sm text-muted">
+              <p className="mt-1 text-sm text-muted-foreground">
                 {t('roleUsersListDescription')}
               </p>
             </div>
@@ -220,7 +222,7 @@ export function RoleUsersPage({ roleId }: { roleId: string }) {
             </div>
           </header>
           <div className="p-0">{renderAssignments()}</div>
-          <footer className="border-t border-separator pt-4">
+          <footer className="border-t border-border pt-4">
             <RelationPagination
               connection={assignments.data?.role?.users ?? null}
               variables={assignmentsVariables}
@@ -266,7 +268,7 @@ export function RoleUsersPage({ roleId }: { roleId: string }) {
         >
           <span className="sr-only">{t('roleUsersLoading')}</span>
           {Array.from({ length: 4 }, (_, index) => (
-            <Skeleton key={index} className="h-12 w-full rounded-field" />
+            <Skeleton key={index} className="h-12 w-full rounded-lg" />
           ))}
         </div>
       )
@@ -292,19 +294,17 @@ export function RoleUsersPage({ roleId }: { roleId: string }) {
       <div>
         {assignments.partial ? (
           <div className="p-3">
-            <Alert status="warning">
-              <Alert.Indicator />
-              <Alert.Content>
-                <Alert.Title>{t('rolesPartialTitle')}</Alert.Title>
-                <Alert.Description>
-                  {t('rolesPartialDescription')}
-                </Alert.Description>
-                <RequestCorrelation
-                  requestId={assignments.requestId}
-                  traceId={assignments.traceId}
-                />
-                <ErrorDetails issues={assignments.errors} />
-              </Alert.Content>
+            <Alert variant="default" className="text-warning">
+              <TriangleAlert aria-hidden="true" />
+              <AlertTitle>{t('rolesPartialTitle')}</AlertTitle>
+              <AlertDescription>
+                {t('rolesPartialDescription')}
+              </AlertDescription>
+              <RequestCorrelation
+                requestId={assignments.requestId}
+                traceId={assignments.traceId}
+              />
+              <ErrorDetails issues={assignments.errors} />
             </Alert>
           </div>
         ) : null}
@@ -349,7 +349,7 @@ export function RoleUsersPage({ roleId }: { roleId: string }) {
                         {user.username}
                       </Link>
                       {user.email ? (
-                        <p className="mt-0.5 break-all text-xs text-muted">
+                        <p className="mt-0.5 break-all text-xs text-muted-foreground">
                           {user.email}
                         </p>
                       ) : null}
@@ -388,12 +388,12 @@ export function RoleUsersPage({ roleId }: { roleId: string }) {
                           reloadPending={assignments.refreshing}
                         />
                       ) : (
-                        <span className="text-xs text-muted">
+                        <span className="text-xs text-muted-foreground">
                           {t('roleUsersNoWritePermission')}
                         </span>
                       )
                     ) : (
-                      <span className="text-xs text-muted">
+                      <span className="text-xs text-muted-foreground">
                         {formatDateTime(edge.revokedAt, locale, timeZone)}
                       </span>
                     )}

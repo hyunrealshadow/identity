@@ -1,5 +1,5 @@
 import { DataTable } from '@identity/ui/data-table'
-import { Button } from '@heroui/react'
+import { Button } from '@identity/ui/components/button'
 import { Link } from '@tanstack/react-router'
 import { useMemo, useState } from 'react'
 
@@ -56,14 +56,14 @@ export function PermissionRoleReferences({
   const connection = query.data?.permission?.roles
 
   return (
-    <section className="space-y-4 border-t border-separator pt-5">
+    <section className="space-y-4 border-t border-border pt-5">
       <header className="py-2">
         <h2>{t('permissionsRolesTitle')}</h2>
         <p>{t('permissionsRolesDescription')}</p>
       </header>
       <div className="space-y-4">
         {!enabled ? (
-          <p className="text-sm text-muted">
+          <p className="text-sm text-muted-foreground">
             {t('permissionsRolesReadRequired')}
           </p>
         ) : query.stepUp ? (
@@ -137,10 +137,10 @@ export function PermissionRoleReferences({
               <Button
                 size="sm"
                 variant="secondary"
-                isDisabled={
+                disabled={
                   !connection.pageInfo.hasPreviousPage || query.refreshing
                 }
-                onPress={() => {
+                onClick={() => {
                   setBefore(connection.pageInfo.startCursor ?? undefined)
                   setAfter(undefined)
                 }}
@@ -150,10 +150,10 @@ export function PermissionRoleReferences({
               <Button
                 size="sm"
                 variant="secondary"
-                isDisabled={
+                disabled={
                   !connection.pageInfo.hasNextPage || query.refreshing
                 }
-                onPress={() => {
+                onClick={() => {
                   setAfter(connection.pageInfo.endCursor ?? undefined)
                   setBefore(undefined)
                 }}

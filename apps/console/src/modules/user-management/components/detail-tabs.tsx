@@ -36,7 +36,7 @@ function DetailTabNav({
   return (
     <nav
       aria-label={ariaLabel}
-      className="mb-4 overflow-x-auto overflow-y-hidden border-b border-separator"
+      className="mb-4 overflow-x-auto overflow-y-hidden border-b border-border"
     >
       <ul className="flex min-w-max items-center gap-1">
         {tabs.map((tab) => {
@@ -49,10 +49,10 @@ function DetailTabNav({
                 params={params}
                 activeOptions={{ exact: true }}
                 aria-current={active ? 'page' : undefined}
-                className={`-mb-px inline-flex items-center gap-2 border-b-2 px-3 py-2.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus ${
+                className={`-mb-px inline-flex items-center gap-2 border-b-2 px-3 py-2.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ${
                   active
-                    ? 'border-accent font-semibold text-foreground'
-                    : 'border-transparent text-muted hover:border-border hover:text-foreground'
+                    ? 'border-primary font-semibold text-foreground'
+                    : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground'
                 }`}
               >
                 <Icon className="size-4" aria-hidden="true" />

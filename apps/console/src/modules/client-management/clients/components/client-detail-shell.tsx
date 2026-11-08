@@ -1,4 +1,5 @@
-import { Button, Skeleton } from '@heroui/react'
+import { Button } from '@identity/ui/components/button'
+import { Skeleton } from '@identity/ui/components/skeleton'
 import {
   Link,
   Outlet,
@@ -128,7 +129,7 @@ export function ClientDetailShell({ clientId }: { clientId: string }) {
           variant="ghost"
           size="sm"
           className="-ml-2"
-          onPress={() => void navigate({ to: '/clients' })}
+          onClick={() => void navigate({ to: '/clients' })}
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
           {t('clientsBack')}
@@ -138,7 +139,7 @@ export function ClientDetailShell({ clientId }: { clientId: string }) {
             <h1 className="text-2xl font-semibold tracking-tight">
               {name ??
                 (loading ? (
-                  <Skeleton className="h-8 w-56 rounded-field" />
+                  <Skeleton className="h-8 w-56 rounded-lg" />
                 ) : (
                   t('clientsDetailTitle')
                 ))}
@@ -147,17 +148,17 @@ export function ClientDetailShell({ clientId }: { clientId: string }) {
             {client?.builtIn ? <ClientBuiltInChip /> : null}
           </div>
           {client ? (
-            <div className="flex min-w-0 items-center gap-1 text-muted">
+            <div className="flex min-w-0 items-center gap-1 text-muted-foreground">
               <span className="text-xs">{t('clientsClientId')}</span>
               <code className="break-all text-xs">{client.clientId}</code>
               <CopyButton value={client.clientId} label={t('clientsClientId')} />
             </div>
           ) : loading ? (
-            <Skeleton className="h-4 w-80 rounded-field" />
+            <Skeleton className="h-4 w-80 rounded-lg" />
           ) : null}
         </div>
       </header>
-      <nav aria-label={t('clientsTabs')} className="mb-5 border-b border-separator">
+      <nav aria-label={t('clientsTabs')} className="mb-5 border-b border-border">
         <div className="flex gap-1">
           {tabs.map((tab) => {
             const active = tab.match(pathname)
@@ -169,8 +170,8 @@ export function ClientDetailShell({ clientId }: { clientId: string }) {
                 className={
                   'border-b-2 px-3 py-2.5 text-sm ' +
                   (active
-                    ? 'border-accent font-semibold'
-                    : 'border-transparent text-muted')
+                    ? 'border-primary font-semibold'
+                    : 'border-transparent text-muted-foreground')
                 }
                 aria-current={active ? 'page' : undefined}
               >

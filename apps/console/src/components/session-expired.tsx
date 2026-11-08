@@ -1,4 +1,4 @@
-import { Button } from '@heroui/react'
+import { Button } from '@identity/ui/components/button'
 
 import { AsyncState } from '#/components/async-state'
 import { useAuth } from '#/lib/auth/context'
@@ -16,7 +16,7 @@ export function SessionExpired() {
         title={t('sessionExpiredTitle')}
         description={t('sessionExpiredDescription')}
         action={
-          <Button onPress={() => void signIn({ returnTo: currentReturnTo() })}>
+          <Button onClick={() => void signIn({ returnTo: currentReturnTo() })}>
             {t('sessionExpiredAction')}
           </Button>
         }

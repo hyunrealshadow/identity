@@ -1,4 +1,4 @@
-import { Avatar } from '@heroui/react'
+import { Avatar, AvatarFallback, AvatarImage } from '@identity/ui/components/avatar'
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
@@ -9,6 +9,7 @@ function initials(name: string): string {
 
 export function AccountAvatar({
   name,
+  picture,
   label,
   size = 'sm',
   className,
@@ -19,12 +20,17 @@ export function AccountAvatar({
   size?: 'sm' | 'md' | 'lg'
   className?: string
 }) {
-  const fallbackSize = size === 'lg' ? 'text-base' : size === 'md' ? 'text-sm' : 'text-xs'
+  const fallbackSize =
+    size === 'lg' ? 'text-base' : size === 'md' ? 'text-sm' : 'text-xs'
+  const avatarSize = size === 'md' ? 'default' : size
   return (
-    <Avatar size={size} className={className} aria-label={label}>
-      <Avatar.Fallback className={`bg-foreground font-semibold text-background ${fallbackSize}`}>
+    <Avatar size={avatarSize} className={className} aria-label={label}>
+      {picture ? <AvatarImage src={picture} alt="" /> : null}
+      <AvatarFallback
+        className={`bg-foreground font-semibold text-background ${fallbackSize}`}
+      >
         {initials(name)}
-      </Avatar.Fallback>
+      </AvatarFallback>
     </Avatar>
   )
 }

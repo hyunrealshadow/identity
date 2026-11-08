@@ -1,14 +1,14 @@
+import { Button } from '@identity/ui/components/button'
+import { Field, FieldDescription, FieldError, FieldLabel } from '@identity/ui/components/field'
+import { Input } from '@identity/ui/components/input'
 import {
-  Button,
-  Description,
-  FieldError,
-  Input,
-  Label,
-  ListBox,
   Select,
-  TextArea,
-  TextField,
-} from '@heroui/react'
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@identity/ui/components/select'
+import { Textarea } from '@identity/ui/components/textarea'
 import { Plus, Undo2, X } from 'lucide-react'
 import {
   useCallback,
@@ -98,6 +98,8 @@ export function LocalizedTextField({
   const { locale } = useLocale()
   const labelId = useId()
   const addPanelId = useId()
+  const defaultInputId = `${labelId}-default`
+  const translationInputId = `${labelId}-translation`
 
   const canonicalUiLocale = useMemo(
     () => canonicalTranslationLocale(locale),
@@ -232,30 +234,45 @@ export function LocalizedTextField({
         {label}
       </span>
       <div className="grid min-w-0 gap-4 md:grid-cols-2">
-        <TextField
-          name={name === 'names' ? 'name' : 'description'}
-          value={defaultValue}
-          onChange={(next) => {
-            setTouched(true)
-            onDefaultValueChange(next)
-          }}
-          isRequired={isRequired}
-          isDisabled={isDisabled}
-          isReadOnly={isReadOnly}
-          isInvalid={invalid}
-          fullWidth
-        >
-          <Label className="flex h-10 items-center">
+        <Field data-invalid={invalid || undefined}>
+          <FieldLabel htmlFor={defaultInputId} className="flex h-10 items-center">
             {t('localizedDefault')}
-          </Label>
+          </FieldLabel>
           {multiline ? (
-            <TextArea rows={4} maxLength={maxLength} fullWidth />
+            <Textarea
+              id={defaultInputId}
+              name={name === 'names' ? 'name' : 'description'}
+              rows={4}
+              maxLength={maxLength}
+              value={defaultValue}
+              required={isRequired}
+              disabled={isDisabled}
+              readOnly={isReadOnly}
+              aria-invalid={invalid || undefined}
+              onChange={(event) => {
+                setTouched(true)
+                onDefaultValueChange(event.target.value)
+              }}
+            />
           ) : (
-            <Input maxLength={maxLength} />
+            <Input
+              id={defaultInputId}
+              name={name === 'names' ? 'name' : 'description'}
+              maxLength={maxLength}
+              value={defaultValue}
+              required={isRequired}
+              disabled={isDisabled}
+              readOnly={isReadOnly}
+              aria-invalid={invalid || undefined}
+              onChange={(event) => {
+                setTouched(true)
+                onDefaultValueChange(event.target.value)
+              }}
+            />
           )}
           {shownError ? <FieldError>{shownError}</FieldError> : null}
-          {description ? <Description>{description}</Description> : null}
-        </TextField>
+          {description ? <FieldDescription>{description}</FieldDescription> : null}
+        </Field>
         <div className="flex min-w-0 flex-col gap-1">
           <div className="flex min-h-10 min-w-0 flex-wrap items-center gap-2 sm:h-10 sm:flex-nowrap">
             <span className="shrink-0 text-sm font-medium">
@@ -268,78 +285,76 @@ export function LocalizedTextField({
               >
                 <Select
                   value={activeLocale}
-                  onChange={(key) => {
-                    if (typeof key === 'string' || typeof key === 'number') {
-                      setActiveLocale(String(key))
-                    }
-                  }}
-                  isDisabled={isDisabled}
-                  fullWidth
+                  onValueChange={(next) => { if (next) setActiveLocale(next) }}
+                  disabled={isDisabled}
                 >
-                  <Label className="sr-only">{t('localizedLanguage')}</Label>
-                  <Select.Trigger type="button" className="min-w-0">
-                    <Select.Value className="truncate" />
-                    <Select.Indicator />
-                  </Select.Trigger>
-                  <Select.Popover>
-                    <ListBox>
-                      {locales.map((tag) => {
-                        const optionLabel = translationLocaleLabel(tag, locale)
-                        return (
-                          <ListBox.Item
-                            key={tag}
-                            id={tag}
-                            textValue={optionLabel}
-                          >
-                            {optionLabel}
-                          </ListBox.Item>
-                        )
-                      })}
-                    </ListBox>
-                  </Select.Popover>
+                  <SelectTrigger
+                    type="button"
+                    aria-label={t('localizedLanguage')}
+                    className="w-full min-w-0"
+                  >
+                    <SelectValue className="truncate" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {locales.map((tag) => (
+                      <SelectItem key={tag} value={tag}>
+                        {translationLocaleLabel(tag, locale)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
                 </Select>
               </div>
             </div>
           </div>
 
-          <TextField
-            name={`${name}.${activeLocale}`}
-            value={activeValue}
-            onChange={(next) => {
-              setTouched(true)
-              onChange({ ...value, [activeLocale]: next })
-            }}
-            isDisabled={isDisabled}
-            isReadOnly={isReadOnly}
-            fullWidth
-          >
-            <Label className="sr-only">
+          <Field>
+            <FieldLabel className="sr-only" htmlFor={translationInputId}>
               {t('localizedTranslationInLocale', {
                 label,
                 locale: activeLocale,
               })}
-            </Label>
+            </FieldLabel>
             {multiline ? (
-              <TextArea
+              <Textarea
+                id={translationInputId}
                 ref={textAreaRef}
+                name={`${name}.${activeLocale}`}
                 rows={4}
                 maxLength={maxLength}
-                fullWidth
+                value={activeValue}
+                disabled={isDisabled}
+                readOnly={isReadOnly}
+                onChange={(event) => {
+                  setTouched(true)
+                  onChange({ ...value, [activeLocale]: event.target.value })
+                }}
               />
             ) : (
-              <Input ref={inputRef} maxLength={maxLength} />
+              <Input
+                id={translationInputId}
+                ref={inputRef}
+                name={`${name}.${activeLocale}`}
+                maxLength={maxLength}
+                value={activeValue}
+                disabled={isDisabled}
+                readOnly={isReadOnly}
+                onChange={(event) => {
+                  setTouched(true)
+                  onChange({ ...value, [activeLocale]: event.target.value })
+                }}
+              />
             )}
-          </TextField>
+          </Field>
 
           {atMax && !isReadOnly ? (
-            <p className="text-xs text-muted">
+            <p className="text-xs text-muted-foreground">
               {t('localizedMaxTranslations', { max: MAX_TRANSLATIONS })}
             </p>
           ) : null}
 
           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
             <span
-              className="shrink-0 text-xs tabular-nums text-muted"
+              className="shrink-0 text-xs tabular-nums text-muted-foreground"
               title={t('localizedTranslationsFilled', {
                 filled,
                 total: locales.length,
@@ -360,7 +375,7 @@ export function LocalizedTextField({
                 size="sm"
                 variant="ghost"
                 className="h-8 shrink-0 gap-1 px-2"
-                isDisabled={isDisabled || atMax}
+                disabled={isDisabled || atMax}
                 aria-label={
                   atMax
                     ? t('localizedMaxTranslations', { max: MAX_TRANSLATIONS })
@@ -368,7 +383,7 @@ export function LocalizedTextField({
                 }
                 aria-expanded={addOpen}
                 aria-controls={addPanelId}
-                onPress={openTranslationChooser}
+                onClick={openTranslationChooser}
               >
                 <Plus className="size-4" aria-hidden="true" />
                 <span className="hidden sm:inline">
@@ -383,12 +398,12 @@ export function LocalizedTextField({
                   type="button"
                   size="sm"
                   variant="ghost"
-                  className="h-7 shrink-0 gap-1 px-2 text-danger"
-                  isDisabled={isDisabled || !hasActiveTranslation}
+                  className="h-7 shrink-0 gap-1 px-2 text-destructive"
+                  disabled={isDisabled || !hasActiveTranslation}
                   aria-label={t('localizedRemoveTranslationFor', {
                     locale: activeLocale,
                   })}
-                  onPress={removeActiveTranslation}
+                  onClick={removeActiveTranslation}
                 >
                   <X className="size-3.5" aria-hidden="true" />
                   <span className="hidden sm:inline">
@@ -396,7 +411,7 @@ export function LocalizedTextField({
                   </span>
                 </Button>
                 {removed ? (
-                  <div className="flex min-w-0 flex-wrap items-center gap-1 text-xs text-muted">
+                  <div className="flex min-w-0 flex-wrap items-center gap-1 text-xs text-muted-foreground">
                     <span role="status" className="min-w-0 break-words">
                       {t('localizedTranslationRemoved', {
                         locale: removed.locale,
@@ -407,11 +422,11 @@ export function LocalizedTextField({
                       size="sm"
                       variant="ghost"
                       className="h-7 shrink-0 gap-1 px-2"
-                      isDisabled={
+                      disabled={
                         isDisabled ||
                         (atMax && !hasLocale(value, removed.locale))
                       }
-                      onPress={undoRemoval}
+                      onClick={undoRemoval}
                     >
                       <Undo2 className="size-3.5" aria-hidden="true" />
                       {t('localizedUndoRemove')}
@@ -424,7 +439,7 @@ export function LocalizedTextField({
           {addOpen && !isDisabled && !isReadOnly && !atMax ? (
             <div
               id={addPanelId}
-              className="rounded-field border border-border bg-surface-secondary p-3"
+              className="rounded-lg border border-border bg-muted p-3"
               onKeyDown={(event) => {
                 if (event.key === 'Enter') event.preventDefault()
                 if (event.key === 'Escape' && !event.defaultPrevented) {

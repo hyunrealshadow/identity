@@ -1,14 +1,17 @@
+import { Alert, AlertDescription, AlertTitle } from '@identity/ui/components/alert'
+import { Badge } from '@identity/ui/components/badge'
+import { Button } from '@identity/ui/components/button'
+import { Checkbox } from '@identity/ui/components/checkbox'
 import {
-  Alert,
-  Button,
-  Checkbox,
-  Chip,
-  Modal,
-  Pagination,
-  Skeleton,
-  useOverlayState,
-} from '@heroui/react'
-import { ChevronLeft, ChevronRight, Plus, Search } from 'lucide-react'
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@identity/ui/components/dialog'
+import { Skeleton } from '@identity/ui/components/skeleton'
+import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
+import { ChevronLeft, ChevronRight, Plus, Search, TriangleAlert } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
@@ -314,436 +317,384 @@ export function PermissionPickerDialog({
     }
   }
 
-  function applySelection(close: () => void) {
+  function applySelection() {
     const ids = [...modalSelected].filter((id) => modalMetadata.has(id))
     const metadata = ids
       .map((id) => modalMetadata.get(id))
       .filter((item): item is StagedPermission => Boolean(item))
     onApply(ids, metadata)
-    close()
+    state.close()
   }
 
   return (
     <>
       <Button
-        size={triggerSize}
-        isDisabled={disabled || !permissionRead}
-        onPress={state.open}
+        size={triggerSize === 'md' ? 'default' : 'sm'}
+        disabled={disabled || !permissionRead}
+        onClick={state.open}
       >
         <Plus className="size-4" aria-hidden="true" />
         {t('rolePermissionsAddAction')}
       </Button>
-      <Modal state={state}>
-        <Modal.Backdrop isDismissable>
-          <Modal.Container size="lg" scroll="inside">
-            <Modal.Dialog className="w-full max-w-3xl">
-              {({ close }) => (
-                <>
-                  <Modal.CloseTrigger aria-label={t('close')} />
-                  <Modal.Header>
-                    <Modal.Heading>
-                      {t('rolePermissionsAddTitle')}
-                    </Modal.Heading>
-                  </Modal.Header>
-                  <Modal.Body className="flex min-h-0 flex-col gap-3 overflow-y-auto">
-                    <p className="text-sm leading-5 text-muted">
-                      {t('rolePermissionsPickerDescription', {
-                        role: subjectName,
-                      })}
-                    </p>
-                    <p className="text-xs leading-5 text-muted">
-                      {hint ?? t('rolePermissionsProtectedHint')}
-                    </p>
+      <Dialog open={state.isOpen} onOpenChange={state.setOpen}>
+        <DialogContent
+          closeLabel={t('close')}
+          className="max-h-[calc(100dvh-2rem)] max-w-3xl overflow-hidden sm:max-w-3xl"
+        >
+          <DialogHeader>
+            <DialogTitle>{t('rolePermissionsAddTitle')}</DialogTitle>
+          </DialogHeader>
+          <div className="flex min-h-0 flex-col gap-3 overflow-y-auto">
+            <p className="text-sm leading-5 text-muted-foreground">
+              {t('rolePermissionsPickerDescription', {
+                role: subjectName,
+              })}
+            </p>
+            <p className="text-xs leading-5 text-muted-foreground">
+              {hint ?? t('rolePermissionsProtectedHint')}
+            </p>
 
-                    <form
-                      className="collection-filter-controls flex items-end gap-2"
-                      onSubmit={(event) => {
-                        event.preventDefault()
-                        applyCatalogSearch()
-                      }}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <UserTextField
-                          name="permission-picker-query"
-                          label={t('rolePermissionsCatalogSearchLabel')}
-                          value={query}
-                          onChange={setQuery}
-                          placeholder={t(
-                            'rolePermissionsCatalogSearchPlaceholder',
-                          )}
-                          maxLength={256}
-                        />
-                      </div>
-                      <Button type="submit" size="sm">
-                        <Search className="size-4" aria-hidden="true" />
-                        {t('roleUsersSearchAction')}
-                      </Button>
-                    </form>
+            <form
+              className="collection-filter-controls flex items-end gap-2"
+              onSubmit={(event) => {
+                event.preventDefault()
+                applyCatalogSearch()
+              }}
+            >
+              <div className="min-w-0 flex-1">
+                <UserTextField
+                  name="permission-picker-query"
+                  label={t('rolePermissionsCatalogSearchLabel')}
+                  value={query}
+                  onChange={setQuery}
+                  placeholder={t('rolePermissionsCatalogSearchPlaceholder')}
+                  maxLength={256}
+                />
+              </div>
+              <Button type="submit" size="sm">
+                <Search className="size-4" aria-hidden="true" />
+                {t('roleUsersSearchAction')}
+              </Button>
+            </form>
 
-                    {resourcesRead ? (
-                      <div className="grid shrink-0 gap-2 sm:grid-cols-2 sm:items-end">
-                        <form
-                          className="collection-filter-controls flex items-end gap-2"
-                          onSubmit={(event) => {
-                            event.preventDefault()
-                            applyResourceSearch()
-                          }}
-                        >
-                          <div className="min-w-0 flex-1">
-                            <UserTextField
-                              name="permission-picker-resource-query"
-                              label={t(
-                                'rolePermissionsPickerResourceSearchLabel',
-                              )}
-                              value={resourceQueryDraft}
-                              onChange={setResourceQueryDraft}
-                              placeholder={t(
-                                'rolePermissionsPickerResourceSearchPlaceholder',
-                              )}
-                              maxLength={256}
-                            />
-                          </div>
-                          <Button type="submit" size="sm">
-                            {t('roleUsersSearchAction')}
-                          </Button>
-                        </form>
-                        <div className="collection-filter-controls flex items-end gap-2">
-                          <div className="min-w-0 flex-1">
-                            <UserSelectField
-                              name="permission-picker-resource"
-                              label={t('rolePermissionsPickerResourceLabel')}
-                              value={resourceId || ALL_RESOURCES}
-                              onChange={selectResource}
-                              options={resourceOptions}
-                              isDisabled={resources.status === 'loading'}
-                            />
-                          </div>
-                          <div
-                            className="flex items-end gap-1"
-                            role="group"
-                            aria-label={t(
-                              'rolePermissionsPickerResourceGroupLabel',
-                            )}
-                          >
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              isIconOnly
-                              isDisabled={
-                                resourceHistory.length === 0 ||
-                                resources.status === 'loading'
-                              }
-                              aria-label={t(
-                                'rolePermissionsPickerResourcePrevious',
-                              )}
-                              onPress={previousResourcePage}
-                            >
-                              <ChevronLeft
-                                className="size-4"
-                                aria-hidden="true"
-                              />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              isIconOnly
-                              isDisabled={
-                                !resourceConnection?.pageInfo.hasNextPage ||
-                                resources.status === 'loading'
-                              }
-                              aria-label={t(
-                                'rolePermissionsPickerResourceNext',
-                              )}
-                              onPress={nextResourcePage}
-                            >
-                              <ChevronRight
-                                className="size-4"
-                                aria-hidden="true"
-                              />
-                            </Button>
-                          </div>
-                        </div>
-                        {resources.status === 'loading' ? (
-                          <p className="text-xs text-muted" role="status">
-                            {t('rolePermissionsPickerResourceLoading')}
-                          </p>
-                        ) : null}
-                        {resources.status === 'error' ? (
-                          <AsyncState
-                            kind={resources.forbidden ? 'forbidden' : 'error'}
-                            compact
-                            title={t('rolePermissionsPickerResourceError')}
-                            description={t(
-                              failureDescriptionKey(
-                                resources.failure,
-                                resources.forbidden,
-                              ),
-                            )}
-                            requestId={resources.requestId}
-                            traceId={resources.traceId}
-                            issues={resources.errors}
-                            onRetry={() => void resources.refresh()}
-                          />
-                        ) : null}
-                        {resources.status === 'ready' &&
-                        resourceConnection &&
-                        resourceConnection.edges.length === 0 ? (
-                          <p className="text-xs text-muted">
-                            {t('rolePermissionsPickerResourceEmpty')}
-                          </p>
-                        ) : null}
-                        {resources.partial ? (
-                          <Alert status="warning">
-                            <Alert.Indicator />
-                            <Alert.Content>
-                              <Alert.Title>
-                                {t('rolesPartialTitle')}
-                              </Alert.Title>
-                              <Alert.Description>
-                                {t('rolesPartialDescription')}
-                              </Alert.Description>
-                              <RequestCorrelation
-                                requestId={resources.requestId}
-                                traceId={resources.traceId}
-                              />
-                              <ErrorDetails issues={resources.errors} />
-                            </Alert.Content>
-                          </Alert>
-                        ) : null}
-                      </div>
-                    ) : null}
-
-                    <div
-                      className="min-h-32 max-h-[min(24rem,32dvh)] shrink-0 overflow-y-auto overscroll-contain rounded-field border border-border sm:max-h-[min(24rem,40dvh)]"
-                      role="region"
-                      aria-label={t('rolePermissionsPickerResultsLabel')}
-                    >
-                      {catalog.status === 'error' ? (
-                        <div className="p-3">
-                          <AsyncState
-                            kind={catalog.forbidden ? 'forbidden' : 'error'}
-                            compact
-                            title={t(
-                              failureTitleKey(
-                                catalog.failure,
-                                catalog.forbidden,
-                              ),
-                            )}
-                            description={t(
-                              failureDescriptionKey(
-                                catalog.failure,
-                                catalog.forbidden,
-                              ),
-                            )}
-                            requestId={catalog.requestId}
-                            traceId={catalog.traceId}
-                            issues={catalog.errors}
-                            onRetry={() => void catalog.refresh()}
-                          />
-                        </div>
-                      ) : catalog.status !== 'ready' || !catalog.data ? (
-                        <div
-                          className="space-y-2 p-3"
-                          role="status"
-                          aria-label={t('rolePermissionsCatalogLoading')}
-                        >
-                          <span className="sr-only">
-                            {t('rolePermissionsCatalogLoading')}
-                          </span>
-                          {Array.from({ length: 4 }, (_, index) => (
-                            <Skeleton
-                              key={index}
-                              className="h-14 w-full rounded-field"
-                            />
-                          ))}
-                        </div>
-                      ) : catalogItems.length === 0 ? (
-                        <div className="p-3">
-                          <AsyncState
-                            kind="empty"
-                            compact
-                            title={t('rolePermissionsCatalogEmptyTitle')}
-                            description={t(
-                              'rolePermissionsCatalogEmptyDescription',
-                            )}
-                          />
-                        </div>
-                      ) : (
-                        <ul className="divide-y divide-separator">
-                          {catalogItems.map((item) => {
-                            const display = withPermissionDisplayFields(item)
-                            const alreadyAssigned = assignedIds.has(item.id)
-                            const checked =
-                              alreadyAssigned || modalSelected.has(item.id)
-                            const name = permissionDisplayName(display, locale)
-                            const description = permissionDisplayDescription(
-                              display,
-                              locale,
-                            )
-                            return (
-                              <li key={item.id}>
-                                <Checkbox
-                                  className="w-full"
-                                  isSelected={checked}
-                                  isDisabled={alreadyAssigned}
-                                  onChange={(isSelected) =>
-                                    toggleCatalogItem(item, isSelected)
-                                  }
-                                >
-                                  <Checkbox.Content className="min-h-14 w-full items-center gap-3 px-3 py-2 text-start">
-                                    <Checkbox.Control>
-                                      <Checkbox.Indicator />
-                                    </Checkbox.Control>
-                                    <span className="min-w-0 flex-1">
-                                      <span className="flex flex-wrap items-center gap-2">
-                                        <span className="text-xs font-medium">
-                                          {name}
-                                        </span>
-                                        <span className="break-all font-mono text-[11px] text-muted">
-                                          {item.code}
-                                        </span>
-                                        <PermissionBuiltInChip
-                                          builtIn={permissionIsBuiltIn(display)}
-                                        />
-                                        {alreadyAssigned ? (
-                                          <Chip
-                                            size="sm"
-                                            variant="soft"
-                                            color="default"
-                                          >
-                                            <Chip.Label>
-                                              {t(
-                                                'rolePermissionsPickerAlreadyAssigned',
-                                              )}
-                                            </Chip.Label>
-                                          </Chip>
-                                        ) : null}
-                                        {!item.enabled ? (
-                                          <Chip
-                                            size="sm"
-                                            variant="soft"
-                                            color="warning"
-                                          >
-                                            <Chip.Label>
-                                              {t(
-                                                'rolePermissionsPermissionDisabled',
-                                              )}
-                                            </Chip.Label>
-                                          </Chip>
-                                        ) : null}
-                                        <span className="ms-auto max-w-[55%] truncate text-xs text-muted">
-                                          {item.resource?.name ??
-                                            item.resource?.uri ??
-                                            ''}
-                                        </span>
-                                      </span>
-                                      {description ? (
-                                        <span className="mt-0.5 block truncate text-xs leading-4 text-muted">
-                                          {description}
-                                        </span>
-                                      ) : null}
-                                    </span>
-                                  </Checkbox.Content>
-                                </Checkbox>
-                              </li>
-                            )
-                          })}
-                        </ul>
+            {resourcesRead ? (
+              <div className="grid shrink-0 gap-2 sm:grid-cols-2 sm:items-end">
+                <form
+                  className="collection-filter-controls flex items-end gap-2"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    applyResourceSearch()
+                  }}
+                >
+                  <div className="min-w-0 flex-1">
+                    <UserTextField
+                      name="permission-picker-resource-query"
+                      label={t('rolePermissionsPickerResourceSearchLabel')}
+                      value={resourceQueryDraft}
+                      onChange={setResourceQueryDraft}
+                      placeholder={t(
+                        'rolePermissionsPickerResourceSearchPlaceholder',
                       )}
-                    </div>
-
-                    {catalog.partial ? (
-                      <Alert status="warning">
-                        <Alert.Indicator />
-                        <Alert.Content>
-                          <Alert.Title>{t('rolesPartialTitle')}</Alert.Title>
-                          <Alert.Description>
-                            {t('rolesPartialDescription')}
-                          </Alert.Description>
-                          <RequestCorrelation
-                            requestId={catalog.requestId}
-                            traceId={catalog.traceId}
-                          />
-                          <ErrorDetails issues={catalog.errors} />
-                        </Alert.Content>
-                      </Alert>
-                    ) : null}
-
-                    {catalogConnection ? (
-                      <Pagination
-                        aria-label={t('rolePermissionsCatalogPagination')}
-                      >
-                        <Pagination.Summary>
-                          {t('tablePageSummary', {
-                            count: catalogItems.length,
-                            total: catalogConnection.totalCount,
-                          })}
-                        </Pagination.Summary>
-                        <Pagination.Content>
-                          <Pagination.Item>
-                            <Pagination.Previous
-                              isDisabled={
-                                catalog.status === 'loading' ||
-                                !catalogConnection.pageInfo.hasPreviousPage
-                              }
-                              onPress={() => {
-                                const cursor =
-                                  catalogConnection.pageInfo.startCursor
-                                if (cursor) {
-                                  setCatalogBefore(cursor)
-                                  setCatalogAfter(undefined)
-                                }
-                              }}
-                            >
-                              <Pagination.PreviousIcon />
-                              {t('previousPage')}
-                            </Pagination.Previous>
-                          </Pagination.Item>
-                          <Pagination.Item>
-                            <Pagination.Next
-                              isDisabled={
-                                catalog.status === 'loading' ||
-                                !catalogConnection.pageInfo.hasNextPage
-                              }
-                              onPress={() => {
-                                const cursor =
-                                  catalogConnection.pageInfo.endCursor
-                                if (cursor) {
-                                  setCatalogAfter(cursor)
-                                  setCatalogBefore(undefined)
-                                }
-                              }}
-                            >
-                              {t('nextPage')}
-                              <Pagination.NextIcon />
-                            </Pagination.Next>
-                          </Pagination.Item>
-                        </Pagination.Content>
-                      </Pagination>
-                    ) : null}
-                  </Modal.Body>
-                  <Modal.Footer>
-                    <span className="me-auto text-xs text-muted">
-                      {t('rolePermissionsPickerSelectedCount', {
-                        count: modalSelected.size,
-                      })}
-                    </span>
-                    <Button variant="secondary" onPress={close}>
-                      {t('cancel')}
+                      maxLength={256}
+                    />
+                  </div>
+                  <Button type="submit" size="sm">
+                    {t('roleUsersSearchAction')}
+                  </Button>
+                </form>
+                <div className="collection-filter-controls flex items-end gap-2">
+                  <div className="min-w-0 flex-1">
+                    <UserSelectField
+                      name="permission-picker-resource"
+                      label={t('rolePermissionsPickerResourceLabel')}
+                      value={resourceId || ALL_RESOURCES}
+                      onChange={selectResource}
+                      options={resourceOptions}
+                      isDisabled={resources.status === 'loading'}
+                    />
+                  </div>
+                  <div
+                    className="flex items-end gap-1"
+                    role="group"
+                    aria-label={t('rolePermissionsPickerResourceGroupLabel')}
+                  >
+                    <Button
+                      size="icon-sm"
+                      variant="secondary"
+                      disabled={
+                        resourceHistory.length === 0 ||
+                        resources.status === 'loading'
+                      }
+                      aria-label={t('rolePermissionsPickerResourcePrevious')}
+                      onClick={previousResourcePage}
+                    >
+                      <ChevronLeft className="size-4" aria-hidden="true" />
                     </Button>
                     <Button
-                      isDisabled={modalSelected.size === 0}
-                      onPress={() => applySelection(close)}
+                      size="icon-sm"
+                      variant="secondary"
+                      disabled={
+                        !resourceConnection?.pageInfo.hasNextPage ||
+                        resources.status === 'loading'
+                      }
+                      aria-label={t('rolePermissionsPickerResourceNext')}
+                      onClick={nextResourcePage}
                     >
-                      {t('rolePermissionsPickerAddSelected')}
+                      <ChevronRight className="size-4" aria-hidden="true" />
                     </Button>
-                  </Modal.Footer>
-                </>
+                  </div>
+                </div>
+                {resources.status === 'loading' ? (
+                  <p className="text-xs text-muted-foreground" role="status">
+                    {t('rolePermissionsPickerResourceLoading')}
+                  </p>
+                ) : null}
+                {resources.status === 'error' ? (
+                  <AsyncState
+                    kind={resources.forbidden ? 'forbidden' : 'error'}
+                    compact
+                    title={t('rolePermissionsPickerResourceError')}
+                    description={t(
+                      failureDescriptionKey(
+                        resources.failure,
+                        resources.forbidden,
+                      ),
+                    )}
+                    requestId={resources.requestId}
+                    traceId={resources.traceId}
+                    issues={resources.errors}
+                    onRetry={() => void resources.refresh()}
+                  />
+                ) : null}
+                {resources.status === 'ready' &&
+                resourceConnection &&
+                resourceConnection.edges.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">
+                    {t('rolePermissionsPickerResourceEmpty')}
+                  </p>
+                ) : null}
+                {resources.partial ? (
+                  <Alert variant="default" className="text-warning">
+                    <TriangleAlert aria-hidden="true" />
+                    <AlertTitle>{t('rolesPartialTitle')}</AlertTitle>
+                    <AlertDescription>
+                      {t('rolesPartialDescription')}
+                    </AlertDescription>
+                    <RequestCorrelation
+                      requestId={resources.requestId}
+                      traceId={resources.traceId}
+                    />
+                    <ErrorDetails issues={resources.errors} />
+                  </Alert>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div
+              className="min-h-32 max-h-[min(24rem,32dvh)] shrink-0 overflow-y-auto overscroll-contain rounded-lg border border-border sm:max-h-[min(24rem,40dvh)]"
+              role="region"
+              aria-label={t('rolePermissionsPickerResultsLabel')}
+            >
+              {catalog.status === 'error' ? (
+                <div className="p-3">
+                  <AsyncState
+                    kind={catalog.forbidden ? 'forbidden' : 'error'}
+                    compact
+                    title={t(
+                      failureTitleKey(catalog.failure, catalog.forbidden),
+                    )}
+                    description={t(
+                      failureDescriptionKey(
+                        catalog.failure,
+                        catalog.forbidden,
+                      ),
+                    )}
+                    requestId={catalog.requestId}
+                    traceId={catalog.traceId}
+                    issues={catalog.errors}
+                    onRetry={() => void catalog.refresh()}
+                  />
+                </div>
+              ) : catalog.status !== 'ready' || !catalog.data ? (
+                <div
+                  className="space-y-2 p-3"
+                  role="status"
+                  aria-label={t('rolePermissionsCatalogLoading')}
+                >
+                  <span className="sr-only">
+                    {t('rolePermissionsCatalogLoading')}
+                  </span>
+                  {Array.from({ length: 4 }, (_, index) => (
+                    <Skeleton key={index} className="h-14 w-full rounded-lg" />
+                  ))}
+                </div>
+              ) : catalogItems.length === 0 ? (
+                <div className="p-3">
+                  <AsyncState
+                    kind="empty"
+                    compact
+                    title={t('rolePermissionsCatalogEmptyTitle')}
+                    description={t('rolePermissionsCatalogEmptyDescription')}
+                  />
+                </div>
+              ) : (
+                <ul className="divide-y divide-border">
+                  {catalogItems.map((item) => {
+                    const display = withPermissionDisplayFields(item)
+                    const alreadyAssigned = assignedIds.has(item.id)
+                    const checked = alreadyAssigned || modalSelected.has(item.id)
+                    const name = permissionDisplayName(display, locale)
+                    const description = permissionDisplayDescription(
+                      display,
+                      locale,
+                    )
+                    const checkboxId = `permission-option-${item.id}`
+                    return (
+                      <li key={item.id}>
+                        <label
+                          htmlFor={checkboxId}
+                          className="flex min-h-14 w-full cursor-pointer items-center gap-3 px-3 py-2 text-start"
+                        >
+                          <Checkbox
+                            id={checkboxId}
+                            aria-label={name}
+                            checked={checked}
+                            disabled={alreadyAssigned}
+                            onCheckedChange={(isSelected) =>
+                              toggleCatalogItem(item, isSelected)
+                            }
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="flex flex-wrap items-center gap-2">
+                              <span className="text-xs font-medium">
+                                {name}
+                              </span>
+                              <span className="break-all font-mono text-[11px] text-muted-foreground">
+                                {item.code}
+                              </span>
+                              <PermissionBuiltInChip
+                                builtIn={permissionIsBuiltIn(display)}
+                              />
+                              {alreadyAssigned ? (
+                                <Badge variant="secondary">
+                                  {t(
+                                    'rolePermissionsPickerAlreadyAssigned',
+                                  )}
+                                </Badge>
+                              ) : null}
+                              {!item.enabled ? (
+                                <Badge
+                                  variant="secondary"
+                                  className="text-warning"
+                                >
+                                  {t('rolePermissionsPermissionDisabled')}
+                                </Badge>
+                              ) : null}
+                              <span className="ms-auto max-w-[55%] truncate text-xs text-muted-foreground">
+                                {item.resource?.name ??
+                                  item.resource?.uri ??
+                                  ''}
+                              </span>
+                            </span>
+                            {description ? (
+                              <span className="mt-0.5 block truncate text-xs leading-4 text-muted-foreground">
+                                {description}
+                              </span>
+                            ) : null}
+                          </span>
+                        </label>
+                      </li>
+                    )
+                  })}
+                </ul>
               )}
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
+            </div>
+
+            {catalog.partial ? (
+              <Alert variant="default" className="text-warning">
+                <TriangleAlert aria-hidden="true" />
+                <AlertTitle>{t('rolesPartialTitle')}</AlertTitle>
+                <AlertDescription>
+                  {t('rolesPartialDescription')}
+                </AlertDescription>
+                <RequestCorrelation
+                  requestId={catalog.requestId}
+                  traceId={catalog.traceId}
+                />
+                <ErrorDetails issues={catalog.errors} />
+              </Alert>
+            ) : null}
+
+            {catalogConnection ? (
+              <nav
+                data-slot="pagination"
+                aria-label={t('rolePermissionsCatalogPagination')}
+                className="mx-auto flex w-full flex-wrap items-center justify-center gap-2 text-sm"
+              >
+                <span className="text-muted-foreground">
+                  {t('tablePageSummary', {
+                    count: catalogItems.length,
+                    total: catalogConnection.totalCount,
+                  })}
+                </span>
+                <div data-slot="pagination-content" className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={
+                      catalog.status === 'loading' ||
+                      !catalogConnection.pageInfo.hasPreviousPage
+                    }
+                    onClick={() => {
+                      const cursor = catalogConnection.pageInfo.startCursor
+                      if (cursor) {
+                        setCatalogBefore(cursor)
+                        setCatalogAfter(undefined)
+                      }
+                    }}
+                  >
+                    <ChevronLeft aria-hidden="true" />
+                    {t('previousPage')}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={
+                      catalog.status === 'loading' ||
+                      !catalogConnection.pageInfo.hasNextPage
+                    }
+                    onClick={() => {
+                      const cursor = catalogConnection.pageInfo.endCursor
+                      if (cursor) {
+                        setCatalogAfter(cursor)
+                        setCatalogBefore(undefined)
+                      }
+                    }}
+                  >
+                    {t('nextPage')}
+                    <ChevronRight aria-hidden="true" />
+                  </Button>
+                </div>
+              </nav>            ) : null}
+          </div>
+          <DialogFooter>
+            <span className="me-auto text-xs text-muted-foreground">
+              {t('rolePermissionsPickerSelectedCount', {
+                count: modalSelected.size,
+              })}
+            </span>
+            <Button variant="secondary" onClick={() => state.close()}>
+              {t('cancel')}
+            </Button>
+            <Button
+              disabled={modalSelected.size === 0}
+              onClick={applySelection}
+            >
+              {t('rolePermissionsPickerAddSelected')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

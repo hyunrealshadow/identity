@@ -1,8 +1,9 @@
 import { TableRowActions } from '#/components/table-row-actions'
 import { DataTable } from '@identity/ui/data-table'
-import { Alert, Button, Pagination } from '@heroui/react'
+import { Alert, AlertDescription, AlertTitle } from '@identity/ui/components/alert'
+import { Button } from '@identity/ui/components/button'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { RotateCcw, Search } from 'lucide-react'
+import { ChevronLeft, ChevronRight, RotateCcw, Search, TriangleAlert } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 import { useIntl } from 'react-intl'
 
@@ -285,7 +286,7 @@ export function RoleGroupsPage({ roleId }: { roleId: string }) {
             <h2 className="text-base font-semibold">
               {tr('roleGroupsListTitle')}
             </h2>
-            <p className="mt-1 text-sm text-muted">
+            <p className="mt-1 text-sm text-muted-foreground">
               {tr('roleGroupsListDescription')}
             </p>
           </header>
@@ -364,7 +365,7 @@ export function RoleGroupsPage({ roleId }: { roleId: string }) {
                 <Button
                   type="button"
                   variant="secondary"
-                  onPress={resetFilters}
+                  onClick={resetFilters}
                 >
                   <RotateCcw className="size-4" aria-hidden="true" />
                   {tr('roleGroupsResetFilters')}
@@ -374,19 +375,17 @@ export function RoleGroupsPage({ roleId }: { roleId: string }) {
 
             {groups.partial ? (
               <div className="p-3">
-                <Alert status="warning">
-                  <Alert.Indicator />
-                  <Alert.Content>
-                    <Alert.Title>{tr('roleGroupsPartialTitle')}</Alert.Title>
-                    <Alert.Description>
-                      {tr('roleGroupsPartialDescription')}
-                    </Alert.Description>
-                    <RequestCorrelation
-                      requestId={groups.requestId}
-                      traceId={groups.traceId}
-                    />
-                    <ErrorDetails issues={groups.errors} />
-                  </Alert.Content>
+                <Alert variant="default" className="text-warning">
+                  <TriangleAlert aria-hidden="true" />
+                  <AlertTitle>{tr('roleGroupsPartialTitle')}</AlertTitle>
+                  <AlertDescription>
+                    {tr('roleGroupsPartialDescription')}
+                  </AlertDescription>
+                  <RequestCorrelation
+                    requestId={groups.requestId}
+                    traceId={groups.traceId}
+                  />
+                  <ErrorDetails issues={groups.errors} />
                 </Alert>
               </div>
             ) : null}
@@ -400,7 +399,7 @@ export function RoleGroupsPage({ roleId }: { roleId: string }) {
                     title={tr('roleGroupsNoResultsTitle')}
                     description={tr('roleGroupsNoResultsDescription')}
                     action={
-                      <Button variant="secondary" onPress={resetFilters}>
+                      <Button variant="secondary" onClick={resetFilters}>
                         {tr('roleGroupsClearFilters')}
                       </Button>
                     }
@@ -419,7 +418,7 @@ export function RoleGroupsPage({ roleId }: { roleId: string }) {
             )}
           </div>
           {edges.length > 0 ? (
-            <footer className="border-t border-separator pt-4">
+            <footer className="border-t border-border pt-4">
               <RoleGroupsPagination
                 connection={connection}
                 onNext={goNext}
@@ -482,12 +481,12 @@ function RoleGroupsTable({ edges }: { edges: RoleGroupsConnection['edges'] }) {
                   <Link
                     to="/groups/$groupId"
                     params={{ groupId: node.id }}
-                    className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                    className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                   >
                     {name}
                   </Link>
                   {description ? (
-                    <p className="mt-1 max-w-md text-xs leading-5 text-muted">
+                    <p className="mt-1 max-w-md text-xs leading-5 text-muted-foreground">
                       {description}
                     </p>
                   ) : null}
@@ -541,30 +540,34 @@ function RoleGroupsPagination({
   const tr = useRoleGroupsTranslator()
   const { pageInfo } = connection
   return (
-    <Pagination aria-label={tr('roleGroupsPaginationLabel')}>
-      <Pagination.Summary>
+    <nav
+      data-slot="pagination"
+      aria-label={tr('roleGroupsPaginationLabel')}
+      className="mx-auto flex w-full flex-wrap items-center justify-center gap-2 text-sm"
+    >
+      <span className="text-muted-foreground">
         {tr('roleGroupsPageSummary', { count: connection.edges.length })}
-      </Pagination.Summary>
-      <Pagination.Content>
-        <Pagination.Item>
-          <Pagination.Previous
-            isDisabled={!pageInfo.hasPreviousPage || !pageInfo.startCursor}
-            onPress={() => onPrevious(pageInfo.startCursor)}
-          >
-            <Pagination.PreviousIcon />
-            {tr('roleGroupsPreviousPage')}
-          </Pagination.Previous>
-        </Pagination.Item>
-        <Pagination.Item>
-          <Pagination.Next
-            isDisabled={!pageInfo.hasNextPage || !pageInfo.endCursor}
-            onPress={() => onNext(pageInfo.endCursor)}
-          >
-            {tr('roleGroupsNextPage')}
-            <Pagination.NextIcon />
-          </Pagination.Next>
-        </Pagination.Item>
-      </Pagination.Content>
-    </Pagination>
+      </span>
+      <div data-slot="pagination-content" className="flex items-center gap-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={!pageInfo.hasPreviousPage || !pageInfo.startCursor}
+          onClick={() => onPrevious(pageInfo.startCursor)}
+        >
+          <ChevronLeft aria-hidden="true" />
+          {tr('roleGroupsPreviousPage')}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={!pageInfo.hasNextPage || !pageInfo.endCursor}
+          onClick={() => onNext(pageInfo.endCursor)}
+        >
+          {tr('roleGroupsNextPage')}
+          <ChevronRight aria-hidden="true" />
+        </Button>
+      </div>
+    </nav>
   )
 }

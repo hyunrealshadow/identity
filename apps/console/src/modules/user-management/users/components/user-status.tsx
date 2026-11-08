@@ -1,10 +1,29 @@
-import { Chip } from '@heroui/react'
+import { Badge } from '@identity/ui/components/badge'
 
 import { useTranslator } from '#/lib/i18n'
 
 export interface UserStatusSource {
   enabled: boolean | null
   locked: boolean | null
+}
+
+function badgeSizeClass(size: 'sm' | 'md' | 'lg'): string | undefined {
+  if (size === 'lg') return 'h-7 px-3 text-sm'
+  if (size === 'md') return 'h-6 px-2.5'
+  return undefined
+}
+
+function badgeClassName(
+  size: 'sm' | 'md' | 'lg',
+  tone?: 'success',
+): string {
+  return [
+    'whitespace-nowrap',
+    badgeSizeClass(size),
+    tone === 'success' ? 'text-success' : undefined,
+  ]
+    .filter(Boolean)
+    .join(' ')
 }
 
 export function UserStatusBadges({
@@ -19,20 +38,17 @@ export function UserStatusBadges({
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       {user.enabled === null || user.enabled === undefined ? null : (
-        <Chip
-          size={size}
-          variant="soft"
-          color={user.enabled ? 'success' : 'default'}
+        <Badge
+          variant="secondary"
+          className={badgeClassName(size, user.enabled ? 'success' : undefined)}
         >
-          <Chip.Label className="whitespace-nowrap">
-            {t(user.enabled ? 'usersEnabled' : 'usersDisabled')}
-          </Chip.Label>
-        </Chip>
+          {t(user.enabled ? 'usersEnabled' : 'usersDisabled')}
+        </Badge>
       )}
       {user.locked ? (
-        <Chip size={size} variant="soft" color="danger">
-          <Chip.Label className="whitespace-nowrap">{t('usersLocked')}</Chip.Label>
-        </Chip>
+        <Badge variant="destructive" className={badgeClassName(size)}>
+          {t('usersLocked')}
+        </Badge>
       ) : null}
     </div>
   )

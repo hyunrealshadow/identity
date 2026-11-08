@@ -1,4 +1,5 @@
-import { Button, Skeleton } from '@heroui/react'
+import { Button } from '@identity/ui/components/button'
+import { Skeleton } from '@identity/ui/components/skeleton'
 import { Search } from 'lucide-react'
 import type { ReactNode } from 'react'
 
@@ -124,7 +125,7 @@ export function CandidateResults({
   const t = useTranslator()
   return (
     <div
-      className="mt-4 max-h-72 overflow-y-auto rounded-field border border-border"
+      className="mt-4 max-h-72 overflow-y-auto rounded-lg border border-border"
       role="region"
       aria-label={label}
     >
@@ -149,7 +150,7 @@ export function CandidateResults({
           <Skeleton className="h-12 w-full" />
         </div>
       ) : count === 0 ? (
-        <p className="p-4 text-sm text-muted">{empty}</p>
+        <p className="p-4 text-sm text-muted-foreground">{empty}</p>
       ) : (
         children
       )}

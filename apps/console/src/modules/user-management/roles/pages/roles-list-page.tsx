@@ -5,9 +5,11 @@ import {
   ResourceTable,
   type ResourceTableControls,
 } from '#/components/resource-table'
-import { Alert, Button, Skeleton } from '@heroui/react'
+import { Alert, AlertDescription, AlertTitle } from '@identity/ui/components/alert'
+import { Button } from '@identity/ui/components/button'
+import { Skeleton } from '@identity/ui/components/skeleton'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { Plus, RotateCcw, Search } from 'lucide-react'
+import { Plus, RotateCcw, Search, TriangleAlert } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
@@ -91,14 +93,14 @@ function RolesTable({
                     <Link
                       to="/roles/$roleId"
                       params={{ roleId: node.id }}
-                      className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                      className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                     >
                       {name}
                     </Link>
                     <RoleBuiltInChip builtIn={roleIsBuiltIn(display)} />
                   </div>
                   {description ? (
-                    <p className="mt-1 line-clamp-2 max-w-80 text-xs leading-4 text-muted">
+                    <p className="mt-1 line-clamp-2 max-w-80 text-xs leading-4 text-muted-foreground">
                       {description}
                     </p>
                   ) : null}
@@ -235,7 +237,7 @@ export function RolesListPage({ search }: { search: RolesSearch }) {
       description={t('rolesDescription')}
       actions={
         scope.rolesWrite ? (
-          <Button onPress={() => void navigate({ to: '/roles/new' })}>
+          <Button onClick={() => void navigate({ to: '/roles/new' })}>
             <Plus className="size-4" aria-hidden="true" />
             {t('rolesNewAction')}
           </Button>
@@ -285,15 +287,15 @@ export function RolesListPage({ search }: { search: RolesSearch }) {
     if (roles.status !== 'ready' || !roles.data) {
       return (
         <div
-          className="space-y-3 rounded-field border border-border bg-surface p-4"
+          className="space-y-3 rounded-lg border border-border bg-card p-4"
           role="status"
           aria-live="polite"
           aria-label={t('rolesTableLoading')}
         >
           <span className="sr-only">{t('rolesTableLoading')}</span>
-          <Skeleton className="h-10 w-full rounded-field" />
+          <Skeleton className="h-10 w-full rounded-lg" />
           {Array.from({ length: 5 }, (_, index) => (
-            <Skeleton key={index} className="h-14 w-full rounded-field" />
+            <Skeleton key={index} className="h-14 w-full rounded-lg" />
           ))}
         </div>
       )
@@ -310,7 +312,7 @@ export function RolesListPage({ search }: { search: RolesSearch }) {
               title={t('rolesNoResultsTitle')}
               description={t('rolesNoResultsDescription')}
               action={
-                <Button variant="secondary" onPress={reset}>
+                <Button variant="secondary" onClick={reset}>
                   {t('rolesClearFilters')}
                 </Button>
               }
@@ -324,7 +326,7 @@ export function RolesListPage({ search }: { search: RolesSearch }) {
             description={t('rolesEmptyDescription')}
             action={
               scope.rolesWrite ? (
-                <Button onPress={() => void navigate({ to: '/roles/new' })}>
+                <Button onClick={() => void navigate({ to: '/roles/new' })}>
                   <Plus className="size-4" aria-hidden="true" />
                   {t('rolesNewAction')}
                 </Button>
@@ -340,19 +342,17 @@ export function RolesListPage({ search }: { search: RolesSearch }) {
     return (
       <div className="space-y-4">
         {roles.partial ? (
-          <Alert status="warning">
-            <Alert.Indicator />
-            <Alert.Content>
-              <Alert.Title>{t('rolesPartialTitle')}</Alert.Title>
-              <Alert.Description>
-                {t('rolesPartialDescription')}
-              </Alert.Description>
-              <RequestCorrelation
-                requestId={roles.requestId}
-                traceId={roles.traceId}
-              />
-              <ErrorDetails issues={roles.errors} />
-            </Alert.Content>
+          <Alert variant="default" className="text-warning">
+            <TriangleAlert aria-hidden="true" />
+            <AlertTitle>{t('rolesPartialTitle')}</AlertTitle>
+            <AlertDescription>
+              {t('rolesPartialDescription')}
+            </AlertDescription>
+            <RequestCorrelation
+              requestId={roles.requestId}
+              traceId={roles.traceId}
+            />
+            <ErrorDetails issues={roles.errors} />
           </Alert>
         ) : null}
         <RolesTable
@@ -440,7 +440,7 @@ export function RolesListPage({ search }: { search: RolesSearch }) {
                 <Search className="size-4" aria-hidden="true" />
                 {t('rolesApplyFilters')}
               </Button>
-              <Button type="button" variant="secondary" onPress={reset}>
+              <Button type="button" variant="secondary" onClick={reset}>
                 <RotateCcw className="size-4" aria-hidden="true" />
                 {t('rolesResetFilters')}
               </Button>

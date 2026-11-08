@@ -75,7 +75,7 @@ describe('localized text field', () => {
     expect(translationInput().value).toBe('English name')
     expect(screen.getAllByRole('textbox')).toHaveLength(2)
 
-    await user.click(screen.getByRole('button', { name: /Language/ }))
+    await user.click(screen.getByRole('combobox', { name: /Language/ }))
     const frenchOptions = await screen.findByRole('listbox')
     await user.click(
       within(frenchOptions).getByRole('option', { name: /fr-CA/ }),
@@ -146,7 +146,7 @@ describe('localized text field', () => {
       screen.queryByRole('button', { name: /Remove translation/ }),
     ).toBeNull()
 
-    await user.click(screen.getByRole('button', { name: /Language/ }))
+    await user.click(screen.getByRole('combobox', { name: /Language/ }))
     const chineseOptions = await screen.findByRole('listbox')
     await user.click(
       within(chineseOptions).getByRole('option', { name: /zh-CN/ }),
@@ -171,7 +171,7 @@ describe('localized text field', () => {
     await user.type(translationInput(), '日本語の名前')
     await user.click(screen.getByRole('button', { name: /Remove translation/ }))
     await user.click(screen.getByRole('button', { name: 'Undo' }))
-    await user.click(screen.getByRole('button', { name: /Language/ }))
+    await user.click(screen.getByRole('combobox', { name: /Language/ }))
     const englishOptions = await screen.findByRole('listbox')
     await user.click(
       within(englishOptions).getByRole('option', { name: /en-US/ }),

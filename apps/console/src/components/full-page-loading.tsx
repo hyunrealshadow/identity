@@ -1,4 +1,4 @@
-import { Spinner } from '@heroui/react'
+import { Spinner } from '@identity/ui/components/spinner'
 
 /**
  * Whole-page wait outside the workspace shell: startup, sign-in redirects and
@@ -13,7 +13,7 @@ export function FullPageLoading({ label }: { label: string }) {
       aria-live="polite"
     >
       <Spinner aria-hidden="true" />
-      <p className="text-sm text-muted">{label}</p>
+      <p className="text-sm text-muted-foreground">{label}</p>
     </main>
   )
 }

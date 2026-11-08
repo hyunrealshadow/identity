@@ -22,7 +22,7 @@ function MetadataRows({ entries }: { entries: readonly MetadataEntry[] }) {
             label={t(entry.label)}
             action={<CopyButton value={entry.value} label={t(entry.label)} />}
           >
-            <code className="block break-all rounded-field bg-surface-secondary px-3 py-2 text-xs text-foreground">
+            <code className="block break-all rounded-lg bg-muted px-3 py-2 text-xs text-foreground">
               {entry.value}
             </code>
           </SettingsRow>
@@ -42,7 +42,7 @@ export function ClientMetadataPage() {
 
   return (
     <div className="space-y-6">
-      <p className="max-w-2xl text-sm leading-6 text-muted">
+      <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
         {t('clientsMetadataDescription')}
       </p>
 

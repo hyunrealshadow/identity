@@ -1,10 +1,26 @@
-import { Button, Modal, Spinner, useOverlayState } from '@heroui/react'
+import { Button } from '@identity/ui/components/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@identity/ui/components/dialog'
+import { Spinner } from '@identity/ui/components/spinner'
 import type { ReactNode } from 'react'
 
 import { useTranslator, type MessageKey } from '#/lib/i18n'
 import { rbacConflict } from '../lib/rbac-errors'
 import type { useRelationMutation } from '../lib/relation-mutation'
 import { RbacMutationFeedback } from './rbac-feedback'
+
+type OverlayState = {
+  isOpen: boolean
+  setOpen: (open: boolean) => void
+  open: () => void
+  close: () => void
+  toggle: () => void
+}
 
 export function RelationDialog({
   state,
@@ -24,7 +40,7 @@ export function RelationDialog({
   bodyClassName,
   dialogClassName,
 }: {
-  state: ReturnType<typeof useOverlayState>
+  state: OverlayState
   mutation: ReturnType<typeof useRelationMutation>
   title: string
   confirm: string
@@ -44,63 +60,80 @@ export function RelationDialog({
   const t = useTranslator()
   const { pending, feedback, setFeedback } = mutation
   return (
-    <Modal state={state}>
-      <Modal.Backdrop isDismissable={!pending}>
-        <Modal.Container size={size} scroll="inside">
-          <Modal.Dialog className={dialogClassName}>
-            <Modal.CloseTrigger aria-label={t('close')} isDisabled={pending} />
-            <Modal.Header>
-              <Modal.Heading>{title}</Modal.Heading>
-            </Modal.Header>
-            <Modal.Body className={bodyClassName}>
-              {children}
-              {error ? (
-                <p role="alert" className="mt-3 text-xs text-danger">
-                  {error}
-                </p>
-              ) : null}
-              {feedback ? (
-                <div className="mt-4">
-                  <RbacMutationFeedback
-                    feedback={feedback}
-                    conflictTitleKey={conflictTitleKey}
-                    conflictDescriptionKey={conflictDescriptionKey}
-                    reloadPending={reloadPending}
-                    onReload={() => {
-                      setFeedback(null)
-                      onReload()
-                    }}
-                  />
-                </div>
-              ) : null}
-            </Modal.Body>
-            <Modal.Footer>
-              <Button
-                variant="secondary"
-                isDisabled={pending}
-                onPress={state.close}
-              >
-                {t('cancel')}
-              </Button>
-              <Button
-                variant={danger ? 'danger' : 'primary'}
-                isDisabled={
-                  pending ||
-                  reloadPending ||
-                  disabled ||
-                  Boolean(feedback && rbacConflict(feedback.errors).conflict)
-                }
-                onPress={onSubmit}
-              >
-                {pending ? (
-                  <Spinner size="sm" aria-label={t('working')} />
-                ) : null}
-                {confirm}
-              </Button>
-            </Modal.Footer>
-          </Modal.Dialog>
-        </Modal.Container>
-      </Modal.Backdrop>
-    </Modal>
+    <Dialog
+      open={state.isOpen}
+      onOpenChange={(open) => {
+        if (!open && pending) return
+        state.setOpen(open)
+      }}
+    >
+      <DialogContent
+        showCloseButton={!pending}
+        closeLabel={t('close')}
+        className={[
+          size === 'lg' ? 'sm:max-w-lg' : undefined,
+          dialogClassName,
+        ]
+          .filter(Boolean)
+          .join(' ')}
+      >
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+        <div
+          className={[
+            bodyClassName,
+            'max-h-[calc(100dvh-12rem)] overflow-y-auto',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+        >
+          {children}
+          {error ? (
+            <p role="alert" className="mt-3 text-xs text-destructive">
+              {error}
+            </p>
+          ) : null}
+          {feedback ? (
+            <div className="mt-4">
+              <RbacMutationFeedback
+                feedback={feedback}
+                conflictTitleKey={conflictTitleKey}
+                conflictDescriptionKey={conflictDescriptionKey}
+                reloadPending={reloadPending}
+                onReload={() => {
+                  setFeedback(null)
+                  onReload()
+                }}
+              />
+            </div>
+          ) : null}
+        </div>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={pending}
+            onClick={() => state.close()}
+          >
+            {t('cancel')}
+          </Button>
+          <Button
+            type="button"
+            variant={danger ? 'destructive' : 'default'}
+            disabled={
+              pending ||
+              reloadPending ||
+              disabled ||
+              Boolean(feedback && rbacConflict(feedback.errors).conflict)
+            }
+            onClick={onSubmit}
+          >
+            {pending ? <Spinner aria-label={t('working')} /> : null}
+            {confirm}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

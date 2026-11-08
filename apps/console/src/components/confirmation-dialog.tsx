@@ -1,4 +1,14 @@
-import { Button, Modal, Spinner, useOverlayState } from '@heroui/react'
+import { Button } from '@identity/ui/components/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@identity/ui/components/dialog'
+import { Spinner } from '@identity/ui/components/spinner'
+import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
 import type { ReactNode } from 'react'
 
 import { useTranslator } from '#/lib/i18n'
@@ -29,44 +39,39 @@ export function ConfirmationDialog({
   const t = useTranslator()
 
   return (
-    <Modal state={state}>
-      <Modal.Backdrop isDismissable={!pending}>
-        <Modal.Container size="md">
-          <Modal.Dialog>
-            {({ close }) => (
-              <>
-                <Modal.CloseTrigger aria-label={t('close')} isDisabled={pending} />
-                <Modal.Header>
-                  <Modal.Heading>{title}</Modal.Heading>
-                </Modal.Header>
-                <Modal.Body>
-                  {description ? <p className="text-sm leading-6 text-muted">{description}</p> : null}
-                  {children ? <div className="mt-3 text-sm leading-6">{children}</div> : null}
-                </Modal.Body>
-                <Modal.Footer>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    isDisabled={pending}
-                    onPress={close}
-                  >
-                    {cancelLabel ?? t('cancel')}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant={destructive ? 'danger' : 'primary'}
-                    isDisabled={pending}
-                    onPress={onConfirm}
-                  >
-                    {pending ? <Spinner size="sm" aria-label={t('working')} /> : null}
-                    {confirmLabel ?? t('confirm')}
-                  </Button>
-                </Modal.Footer>
-              </>
-            )}
-          </Modal.Dialog>
-        </Modal.Container>
-      </Modal.Backdrop>
-    </Modal>
+    <Dialog
+      open={state.isOpen}
+      onOpenChange={(open) => {
+        if (!open && pending) return
+        state.setOpen(open)
+      }}
+    >
+      <DialogContent showCloseButton={!pending} closeLabel={t('close')}>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          {description ? <DialogDescription>{description}</DialogDescription> : null}
+        </DialogHeader>
+        {children ? <div className="text-sm leading-6">{children}</div> : null}
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="secondary"
+            disabled={pending}
+            onClick={() => state.close()}
+          >
+            {cancelLabel ?? t('cancel')}
+          </Button>
+          <Button
+            type="button"
+            variant={destructive ? 'destructive' : 'default'}
+            disabled={pending}
+            onClick={onConfirm}
+          >
+            {pending ? <Spinner aria-label={t('working')} /> : null}
+            {confirmLabel ?? t('confirm')}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

@@ -1,5 +1,6 @@
 import { RoleDetailContext } from './role-detail-context'
-import { Button, Skeleton } from '@heroui/react'
+import { Button } from '@identity/ui/components/button'
+import { Skeleton } from '@identity/ui/components/skeleton'
 import { Outlet, useNavigate, useRouterState } from '@tanstack/react-router'
 import { ArrowLeft } from 'lucide-react'
 import { useBreadcrumbLabel } from '#/components/app-breadcrumbs'
@@ -66,7 +67,7 @@ export function RoleDetailShell({ roleId }: { roleId: string }) {
           variant="ghost"
           size="sm"
           className="-ml-2"
-          onPress={() => void navigate({ to: '/roles' })}
+          onClick={() => void navigate({ to: '/roles' })}
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
           {t('backToRoles')}
@@ -76,7 +77,7 @@ export function RoleDetailShell({ roleId }: { roleId: string }) {
             <h1 className="text-2xl font-semibold tracking-tight">
               {name ??
                 (query.status === 'loading' || query.status === 'idle' ? (
-                  <Skeleton className="h-8 w-52 rounded-field" />
+                  <Skeleton className="h-8 w-52 rounded-lg" />
                 ) : (
                   t('roleDetailTitle')
                 ))}
@@ -89,7 +90,7 @@ export function RoleDetailShell({ roleId }: { roleId: string }) {
             ) : null}
           </div>
           {description ? (
-            <p className="max-w-3xl text-sm text-muted">{description}</p>
+            <p className="max-w-3xl text-sm text-muted-foreground">{description}</p>
           ) : null}
         </div>
       </header>

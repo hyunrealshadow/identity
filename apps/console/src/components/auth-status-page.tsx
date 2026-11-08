@@ -1,4 +1,4 @@
-import { Card } from '@heroui/react'
+import { Card, CardContent } from '@identity/ui/components/card'
 import { CircleAlert, LogOut } from 'lucide-react'
 import type { ReactNode } from 'react'
 
@@ -24,7 +24,7 @@ export function AuthStatusPage({
     <main className="flex min-h-screen items-center justify-center bg-background p-4 text-foreground sm:p-6">
       <div className="w-full max-w-md">
         <Card className="console-card border border-border">
-          <Card.Content
+          <CardContent
             className="flex flex-col items-center px-6 py-8 text-center"
             role={tone === 'error' ? 'alert' : 'status'}
             aria-live={tone === 'error' ? 'assertive' : 'polite'}
@@ -32,10 +32,10 @@ export function AuthStatusPage({
             <StatusIcon tone={tone} />
             <h1 className="mt-4 text-lg font-semibold tracking-tight">{title}</h1>
             {description ? (
-              <p className="mt-2 max-w-sm text-sm leading-6 text-muted">{description}</p>
+              <p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">{description}</p>
             ) : null}
             {action ? <div className="mt-6">{action}</div> : null}
-          </Card.Content>
+          </CardContent>
         </Card>
       </div>
     </main>
@@ -47,7 +47,9 @@ function StatusIcon({ tone }: { tone: AuthStatusTone }) {
   return (
     <span
       className={`flex size-11 items-center justify-center rounded-full ${
-        tone === 'error' ? 'bg-danger/10 text-danger' : 'bg-surface-secondary text-muted'
+        tone === 'error'
+          ? 'bg-destructive/10 text-destructive'
+          : 'bg-muted text-muted-foreground'
       }`}
       aria-hidden="true"
     >

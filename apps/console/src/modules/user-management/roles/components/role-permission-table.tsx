@@ -1,7 +1,8 @@
+import { NumberedPagination } from '#/components/numbered-pagination'
 import { TableRowActions } from '#/components/table-row-actions'
 import { CopyButton } from '#/components/copy-button'
 import { DataTable } from '@identity/ui/data-table'
-import { Chip, Pagination } from '@heroui/react'
+import { Badge } from '@identity/ui/components/badge'
 import { Undo2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
@@ -174,7 +175,7 @@ export function RolePermissionTable({
                     <span
                       className={
                         removed
-                          ? 'text-xs font-medium text-muted line-through'
+                          ? 'text-xs font-medium text-muted-foreground line-through'
                           : 'text-xs font-medium'
                       }
                     >
@@ -186,8 +187,8 @@ export function RolePermissionTable({
                     <span
                       className={
                         removed
-                          ? 'mt-0.5 block break-all font-mono text-[11px] text-muted line-through'
-                          : 'mt-0.5 block break-all font-mono text-[11px] text-muted'
+                          ? 'mt-0.5 block break-all font-mono text-[11px] text-muted-foreground line-through'
+                          : 'mt-0.5 block break-all font-mono text-[11px] text-muted-foreground'
                       }
                     >
                       {row.code}
@@ -202,34 +203,31 @@ export function RolePermissionTable({
                   <span
                     className={
                       removed
-                        ? 'line-clamp-2 max-w-[26rem] text-xs leading-4 text-muted line-through'
-                        : 'line-clamp-2 max-w-[26rem] text-xs leading-4 text-muted'
+                        ? 'line-clamp-2 max-w-[26rem] text-xs leading-4 text-muted-foreground line-through'
+                        : 'line-clamp-2 max-w-[26rem] text-xs leading-4 text-muted-foreground'
                     }
                   >
                     {row.description}
                   </span>
                 </DataTable.Cell>
                 <DataTable.Cell className="py-2">
-                  <span className="line-clamp-1 max-w-56 text-xs text-muted">
+                  <span className="line-clamp-1 max-w-56 text-xs text-muted-foreground">
                     {row.resource ?? t('rolePermissionsResourceUnavailable')}
                   </span>
                 </DataTable.Cell>
                 <DataTable.Cell className="py-2">
-                  <Chip
-                    size="sm"
-                    variant="soft"
-                    color={
-                      row.status === 'added'
-                        ? 'success'
-                        : row.status === 'removed'
-                          ? 'warning'
-                          : row.status === 'assigned-disabled'
-                            ? 'default'
-                            : 'success'
+                  <Badge
+                    variant="secondary"
+                    className={
+                      row.status === 'removed'
+                        ? 'text-warning'
+                        : row.status === 'assigned-disabled'
+                          ? undefined
+                          : 'text-success'
                     }
                   >
-                    <Chip.Label>{t(STATUS_LABEL[row.status])}</Chip.Label>
-                  </Chip>
+                    {t(STATUS_LABEL[row.status])}
+                  </Badge>
                 </DataTable.Cell>
                 <DataTable.Cell className="py-2">
                   <TableRowActions
@@ -259,47 +257,18 @@ export function RolePermissionTable({
           })}
         </DataTable.Body>
       </DataTable>
-      <Pagination aria-label={t('rolePermissionsTableLabel')}>
-        <Pagination.Summary>
-          {t('tablePageSummary', {
-            count: pageRows.length,
-            total: visibleRows.length,
-          })}
-        </Pagination.Summary>
-        <Pagination.Content>
-          <Pagination.Item>
-            <Pagination.Previous
-              isDisabled={currentPage === 1}
-              onPress={() => setPage(currentPage - 1)}
-            >
-              <Pagination.PreviousIcon />
-              {t('previousPage')}
-            </Pagination.Previous>
-          </Pagination.Item>
-          {Array.from({ length: pages }, (_, index) => index + 1).map(
-            (number) => (
-              <Pagination.Item key={number}>
-                <Pagination.Link
-                  isActive={number === currentPage}
-                  onPress={() => setPage(number)}
-                  aria-label={t('tableGoToPage', { page: number })}
-                >
-                  {number}
-                </Pagination.Link>
-              </Pagination.Item>
-            ),
-          )}
-          <Pagination.Item>
-            <Pagination.Next
-              isDisabled={currentPage === pages}
-              onPress={() => setPage(currentPage + 1)}
-            >
-              {t('nextPage')}
-              <Pagination.NextIcon />
-            </Pagination.Next>
-          </Pagination.Item>
-        </Pagination.Content>
-      </Pagination>
-    </div>
+      <NumberedPagination
+        label={t('rolePermissionsTableLabel')}
+        summary={t('tablePageSummary', {
+          count: pageRows.length,
+          total: visibleRows.length,
+        })}
+        page={currentPage}
+        pages={Array.from({ length: pages }, (_, index) => index + 1)}
+        onPageChange={setPage}
+        previousLabel={t('previousPage')}
+        nextLabel={t('nextPage')}
+        pageLabel={(number) => t('tableGoToPage', { page: number })}
+      />    </div>
   )
 }

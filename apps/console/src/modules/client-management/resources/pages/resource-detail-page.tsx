@@ -1,4 +1,4 @@
-import { Skeleton } from '@heroui/react'
+import { Skeleton } from '@identity/ui/components/skeleton'
 import { AsyncState } from '#/components/async-state'
 import { CopyButton } from '#/components/copy-button'
 import { useLocale, useTranslator } from '#/lib/i18n'
@@ -17,31 +17,31 @@ export function ResourceDetailPage() {
         aria-label={t('loading')}
       >
         {Array.from({ length: 4 }, (_, i) => (
-          <Skeleton key={i} className="h-14 rounded-field" />
+          <Skeleton key={i} className="h-14 rounded-lg" />
         ))}
       </div>
     )
   return (
     <dl className="grid gap-x-10 gap-y-7 py-3 sm:grid-cols-2">
       <div>
-        <dt className="mb-2 text-sm text-muted">{t('resourcesName')}</dt>
+        <dt className="mb-2 text-sm text-muted-foreground">{t('resourcesName')}</dt>
         <dd className="text-sm">{resource.name}</dd>
       </div>
       <div>
-        <dt className="mb-2 text-sm text-muted">{t('resourcesIdentifier')}</dt>
+        <dt className="mb-2 text-sm text-muted-foreground">{t('resourcesIdentifier')}</dt>
         <dd className="flex items-center gap-1">
           <code className="break-all text-sm">{resource.uri}</code>
           <CopyButton value={resource.uri} label={t('audienceLabel')} />
         </dd>
       </div>
       <div>
-        <dt className="mb-2 text-sm text-muted">{t('rbacEntityCreated')}</dt>
+        <dt className="mb-2 text-sm text-muted-foreground">{t('rbacEntityCreated')}</dt>
         <dd className="text-sm">
           {formatDateTime(resource.createdAt, locale, timeZone)}
         </dd>
       </div>
       <div>
-        <dt className="mb-2 text-sm text-muted">{t('rbacEntityUpdated')}</dt>
+        <dt className="mb-2 text-sm text-muted-foreground">{t('rbacEntityUpdated')}</dt>
         <dd className="text-sm">
           {formatDateTime(resource.updatedAt, locale, timeZone)}
         </dd>

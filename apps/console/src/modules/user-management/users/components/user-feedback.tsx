@@ -1,4 +1,11 @@
-import { Alert, Button, Spinner } from '@heroui/react'
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from '@identity/ui/components/alert'
+import { Button } from '@identity/ui/components/button'
+import { Spinner } from '@identity/ui/components/spinner'
+import { CircleAlert, CircleCheck, TriangleAlert } from 'lucide-react'
 
 import { ErrorDetails } from '#/components/error-details'
 import { RequestCorrelation } from '#/components/request-correlation'
@@ -39,41 +46,37 @@ export function MutationFeedback({
 
   if (conflict.conflict) {
     return (
-      <Alert status="warning">
-        <Alert.Indicator />
-        <Alert.Content>
-          <Alert.Title>{t('usersConflictTitle')}</Alert.Title>
-          <Alert.Description>
-            {t('usersConflictDescription')}
-          </Alert.Description>
-          <p className="mt-2 text-xs text-muted">
-            {conflict.currentVersion
-              ? t('usersConflictCurrentVersion', {
-                  version: conflict.currentVersion,
-                })
-              : t('usersConflictUnknownVersion')}
-          </p>
-          <RequestCorrelation
-            requestId={feedback.requestId}
-            traceId={feedback.traceId}
-          />
-          <ErrorDetails issues={feedback.errors} />
-          {onReload ? (
-            <div className="mt-3">
-              <Button
-                size="sm"
-                variant="secondary"
-                isDisabled={reloadPending}
-                onPress={onReload}
-              >
-                {reloadPending ? (
-                  <Spinner size="sm" aria-label={t('usersReloading')} />
-                ) : null}
-                {t('usersReloadUser')}
-              </Button>
-            </div>
-          ) : null}
-        </Alert.Content>
+      <Alert variant="default" className="text-warning">
+        <TriangleAlert aria-hidden="true" />
+        <AlertTitle>{t('usersConflictTitle')}</AlertTitle>
+        <AlertDescription>{t('usersConflictDescription')}</AlertDescription>
+        <p className="mt-2 text-xs text-muted-foreground">
+          {conflict.currentVersion
+            ? t('usersConflictCurrentVersion', {
+                version: conflict.currentVersion,
+              })
+            : t('usersConflictUnknownVersion')}
+        </p>
+        <RequestCorrelation
+          requestId={feedback.requestId}
+          traceId={feedback.traceId}
+        />
+        <ErrorDetails issues={feedback.errors} />
+        {onReload ? (
+          <div className="mt-3">
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={reloadPending}
+              onClick={onReload}
+            >
+              {reloadPending ? (
+                <Spinner aria-label={t('usersReloading')} />
+              ) : null}
+              {t('usersReloadUser')}
+            </Button>
+          </div>
+        ) : null}
       </Alert>
     )
   }
@@ -84,25 +87,23 @@ export function MutationFeedback({
   )
 
   return (
-    <Alert status="danger">
-      <Alert.Indicator />
-      <Alert.Content>
-        <Alert.Title>
-          {hasFieldErrors
-            ? t('fieldErrorsTitle')
-            : t(failureTitleKey(feedback.failure, feedback.forbidden))}
-        </Alert.Title>
-        <Alert.Description>
-          {hasFieldErrors
-            ? t('usersMutationFailedDescription')
-            : t(failureDescriptionKey(feedback.failure, feedback.forbidden))}
-        </Alert.Description>
-        <RequestCorrelation
-          requestId={feedback.requestId}
-          traceId={feedback.traceId}
-        />
-        <ErrorDetails issues={feedback.errors} />
-      </Alert.Content>
+    <Alert variant="destructive">
+      <CircleAlert aria-hidden="true" />
+      <AlertTitle>
+        {hasFieldErrors
+          ? t('fieldErrorsTitle')
+          : t(failureTitleKey(feedback.failure, feedback.forbidden))}
+      </AlertTitle>
+      <AlertDescription>
+        {hasFieldErrors
+          ? t('usersMutationFailedDescription')
+          : t(failureDescriptionKey(feedback.failure, feedback.forbidden))}
+      </AlertDescription>
+      <RequestCorrelation
+        requestId={feedback.requestId}
+        traceId={feedback.traceId}
+      />
+      <ErrorDetails issues={feedback.errors} />
     </Alert>
   )
 }
@@ -124,27 +125,36 @@ export function UserNoticeAlert({
   onDismiss?: () => void
 }) {
   const t = useTranslator()
+  const warning = notice.kind === 'warning'
 
   return (
-    <Alert status={notice.kind}>
-      <Alert.Indicator />
-      <Alert.Content>
-        <Alert.Title>{notice.title}</Alert.Title>
-        {notice.description ? (
-          <Alert.Description>{notice.description}</Alert.Description>
-        ) : null}
-        {notice.kind === 'warning' ? (
-          <RequestCorrelation requestId={notice.requestId} traceId={notice.traceId} />
-        ) : null}
-        <ErrorDetails issues={notice.issues} />
-        {onDismiss ? (
-          <div className="mt-3">
-            <Button size="sm" variant="ghost" onPress={onDismiss}>
-              {t('dismiss')}
-            </Button>
-          </div>
-        ) : null}
-      </Alert.Content>
+    <Alert
+      variant="default"
+      className={warning ? 'text-warning' : 'text-success'}
+    >
+      {warning ? (
+        <TriangleAlert aria-hidden="true" />
+      ) : (
+        <CircleCheck aria-hidden="true" />
+      )}
+      <AlertTitle>{notice.title}</AlertTitle>
+      {notice.description ? (
+        <AlertDescription>{notice.description}</AlertDescription>
+      ) : null}
+      {warning ? (
+        <RequestCorrelation
+          requestId={notice.requestId}
+          traceId={notice.traceId}
+        />
+      ) : null}
+      <ErrorDetails issues={notice.issues} />
+      {onDismiss ? (
+        <div className="mt-3">
+          <Button size="sm" variant="ghost" onClick={onDismiss}>
+            {t('dismiss')}
+          </Button>
+        </div>
+      ) : null}
     </Alert>
   )
 }

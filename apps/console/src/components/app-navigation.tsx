@@ -1,4 +1,11 @@
-import { Button, Drawer, useOverlayState } from '@heroui/react'
+import { Button } from '@identity/ui/components/button'
+import {
+  Sheet,
+  SheetContent,
+  SheetHeader,
+  SheetTitle,
+} from '@identity/ui/components/sheet'
+import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
 import { Link } from '@tanstack/react-router'
 import {
   AppWindow,
@@ -76,7 +83,7 @@ export function Brand({
     >
       {collapsed ? (
         <span
-          className="flex size-9 shrink-0 items-center justify-center rounded-field bg-surface-secondary text-xs font-semibold tracking-tight text-foreground"
+          className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-xs font-semibold tracking-tight text-foreground"
           title={accessibleName}
         >
           <span aria-hidden="true">{initials}</span>
@@ -87,7 +94,7 @@ export function Brand({
           <span className="block truncate text-sm font-semibold tracking-tight text-foreground">
             {displayName}
           </span>
-          <span className="block truncate text-[11px] font-medium uppercase tracking-wide text-muted">
+          <span className="block truncate text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
             {consoleLabel}
           </span>
         </span>
@@ -117,7 +124,7 @@ export function NavigationLinks({
             aria-label={`${label}. ${t('plannedLater')}`}
             title={t('plannedLater')}
             tabIndex={-1}
-            className={`console-nav-link flex cursor-not-allowed items-center gap-2.5 rounded-field px-2.5 py-2 text-sm text-muted opacity-50 ${collapsed ? 'justify-center' : ''}`}
+            className={`console-nav-link flex cursor-not-allowed items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-muted-foreground opacity-50 ${collapsed ? 'justify-center' : ''}`}
           >
             <Icon className="size-4 shrink-0" aria-hidden="true" />
             <span className={collapsed ? 'sr-only' : 'min-w-0 truncate'}>
@@ -130,7 +137,7 @@ export function NavigationLinks({
     }
 
     const base =
-      'console-nav-link flex items-center gap-2.5 rounded-field px-2.5 py-2 text-sm text-muted'
+      'console-nav-link flex items-center gap-2.5 rounded-lg px-2.5 py-2 text-sm text-muted-foreground'
     return (
       <li key={entry.label}>
         <Link
@@ -162,7 +169,7 @@ export function NavigationLinks({
             className={
               collapsed
                 ? 'sr-only'
-                : 'mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-wider text-muted'
+                : 'mb-1.5 px-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground'
             }
           >
             {t(group.label)}
@@ -189,13 +196,12 @@ export function SidebarCollapseButton({
 
   return (
     <Button
-      isIconOnly
       variant="ghost"
-      size="sm"
+      size="icon-sm"
       aria-label={label}
       aria-expanded={!collapsed}
       aria-controls="console-sidebar"
-      onPress={onToggle}
+      onClick={onToggle}
     >
       <Icon className="size-4" aria-hidden="true" />
     </Button>
@@ -207,34 +213,31 @@ export function MobileNavigation({ displayName }: { displayName: string }) {
   const state = useOverlayState()
 
   return (
-    <Drawer state={state}>
-      <Drawer.Trigger
+    <>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        className="lg:hidden"
         aria-label={t('openNavigation')}
-        className="inline-flex size-9 items-center justify-center rounded-field text-muted hover:bg-surface-secondary hover:text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus lg:hidden"
+        onClick={state.open}
       >
         <Menu className="size-5" aria-hidden="true" />
-        <span className="sr-only">{t('openNavigation')}</span>
-      </Drawer.Trigger>
-      <Drawer.Backdrop>
-        <Drawer.Content placement="left" className="w-[min(84vw,320px)]">
-          <Drawer.Dialog>
-            {({ close }) => (
-              <>
-                <Drawer.Header className="flex items-center justify-between gap-3 border-b border-separator px-4 py-3">
-                  <Drawer.Heading className="sr-only">
-                    {t('navigationLabel')}
-                  </Drawer.Heading>
-                  <Brand displayName={displayName} />
-                  <Drawer.CloseTrigger aria-label={t('closeNavigation')} />
-                </Drawer.Header>
-                <Drawer.Body className="p-3">
-                  <NavigationLinks collapsed={false} onNavigate={close} />
-                </Drawer.Body>
-              </>
-            )}
-          </Drawer.Dialog>
-        </Drawer.Content>
-      </Drawer.Backdrop>
-    </Drawer>
+      </Button>
+      <Sheet open={state.isOpen} onOpenChange={state.setOpen}>
+        <SheetContent
+          side="left"
+          closeLabel={t('closeNavigation')}
+          className="w-[min(84vw,320px)] max-w-[320px] gap-0"
+        >
+          <SheetHeader className="flex flex-row items-center justify-between gap-3 border-b border-border px-4 py-3">
+            <SheetTitle className="sr-only">{t('navigationLabel')}</SheetTitle>
+            <Brand displayName={displayName} />
+          </SheetHeader>
+          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            <NavigationLinks collapsed={false} onNavigate={state.close} />
+          </div>
+        </SheetContent>
+      </Sheet>
+    </>
   )
 }

@@ -4,9 +4,13 @@ import { RelationPagination } from '../../components/relation-picker'
 import { RevokeUserRoleDialog } from '../../roles/components/revoke-user-role-dialog'
 
 import { DataTable } from '@identity/ui/data-table'
-import { Alert } from '@heroui/react'
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from '@identity/ui/components/alert'
 import { useNavigate } from '@tanstack/react-router'
-import { ShieldPlus } from 'lucide-react'
+import { ShieldPlus, TriangleAlert } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
@@ -217,7 +221,7 @@ export function UserRolesPage({ userId }: { userId: string }) {
                 <h2 className="text-base font-semibold">
                   {t('userRolesListTitle')}
                 </h2>
-                <p className="mt-1 text-sm text-muted">
+                <p className="mt-1 text-sm text-muted-foreground">
                   {t('userRolesListDescription')}
                 </p>
               </div>
@@ -272,7 +276,7 @@ export function UserRolesPage({ userId }: { userId: string }) {
               </div>
             </header>
             <div className="min-w-0">{renderAssignments()}</div>
-            <footer className="border-t border-separator pt-4">
+            <footer className="border-t border-border pt-4">
               {connection ? (
                 <RelationPagination
                   connection={connection}
@@ -341,19 +345,15 @@ export function UserRolesPage({ userId }: { userId: string }) {
       <div>
         {assignments.partial ? (
           <div className="p-3">
-            <Alert status="warning">
-              <Alert.Indicator />
-              <Alert.Content>
-                <Alert.Title>{t('rolesPartialTitle')}</Alert.Title>
-                <Alert.Description>
-                  {t('rolesPartialDescription')}
-                </Alert.Description>
-                <RequestCorrelation
-                  requestId={assignments.requestId}
-                  traceId={assignments.traceId}
-                />
-                <ErrorDetails issues={assignments.errors} />
-              </Alert.Content>
+            <Alert variant="default" className="text-warning">
+              <TriangleAlert aria-hidden="true" />
+              <AlertTitle>{t('rolesPartialTitle')}</AlertTitle>
+              <AlertDescription>{t('rolesPartialDescription')}</AlertDescription>
+              <RequestCorrelation
+                requestId={assignments.requestId}
+                traceId={assignments.traceId}
+              />
+              <ErrorDetails issues={assignments.errors} />
             </Alert>
           </div>
         ) : null}
@@ -435,12 +435,12 @@ export function UserRolesPage({ userId }: { userId: string }) {
                           reloadPending={assignments.refreshing}
                         />
                       ) : (
-                        <span className="text-xs text-muted">
+                        <span className="text-xs text-muted-foreground">
                           {t('userRolesNoWritePermission')}
                         </span>
                       )
                     ) : (
-                      <span className="text-xs text-muted">
+                      <span className="text-xs text-muted-foreground">
                         {formatDateTime(edge.revokedAt, locale, timeZone)}
                       </span>
                     )}

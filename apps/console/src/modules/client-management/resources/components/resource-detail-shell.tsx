@@ -1,4 +1,6 @@
-import { Button, Chip, Skeleton } from '@heroui/react'
+import { Badge } from '@identity/ui/components/badge'
+import { Button } from '@identity/ui/components/button'
+import { Skeleton } from '@identity/ui/components/skeleton'
 import {
   Link,
   Outlet,
@@ -68,7 +70,7 @@ export function ResourceDetailShell({ resourceId }: { resourceId: string }) {
           variant="ghost"
           size="sm"
           className="-ml-2"
-          onPress={() => void navigate({ to: '/resources' })}
+          onClick={() => void navigate({ to: '/resources' })}
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
           {t('resourcesBack')}
@@ -79,29 +81,26 @@ export function ResourceDetailShell({ resourceId }: { resourceId: string }) {
               {resource?.name ??
                 (scope.resourcesRead &&
                 (query.status === 'idle' || query.status === 'loading') ? (
-                  <Skeleton className="h-8 w-56 rounded-field" />
+                  <Skeleton className="h-8 w-56 rounded-lg" />
                 ) : (
                   t('resourcesDetailTitle')
                 ))}
             </h1>
             {resource ? (
-              <Chip
-                size="sm"
-                variant="soft"
-                color={resource.enabled ? 'success' : 'default'}
+              <Badge
+                variant="secondary"
+                className={resource.enabled ? 'text-success' : undefined}
               >
-                <Chip.Label>
-                  {t(
-                    resource.enabled
-                      ? 'permissionsEnabled'
-                      : 'permissionsDisabled',
-                  )}
-                </Chip.Label>
-              </Chip>
+                {t(
+                  resource.enabled
+                    ? 'permissionsEnabled'
+                    : 'permissionsDisabled',
+                )}
+              </Badge>
             ) : null}
           </div>
           {resource ? (
-            <div className="flex min-w-0 items-center gap-1 text-muted">
+            <div className="flex min-w-0 items-center gap-1 text-muted-foreground">
               <code className="break-all text-xs">{resource.uri}</code>
               <CopyButton value={resource.uri} label={t('audienceLabel')} />
             </div>
@@ -110,7 +109,7 @@ export function ResourceDetailShell({ resourceId }: { resourceId: string }) {
       </header>
       <nav
         aria-label={t('resourcesTabs')}
-        className="mb-5 border-b border-separator"
+        className="mb-5 border-b border-border"
       >
         <div className="flex gap-1">
           <Link
@@ -119,8 +118,8 @@ export function ResourceDetailShell({ resourceId }: { resourceId: string }) {
             className={
               'border-b-2 px-3 py-2.5 text-sm ' +
               (!permissions
-                ? 'border-accent font-semibold'
-                : 'border-transparent text-muted')
+                ? 'border-primary font-semibold'
+                : 'border-transparent text-muted-foreground')
             }
             aria-current={!permissions ? 'page' : undefined}
           >
@@ -132,8 +131,8 @@ export function ResourceDetailShell({ resourceId }: { resourceId: string }) {
             className={
               'border-b-2 px-3 py-2.5 text-sm ' +
               (permissions
-                ? 'border-accent font-semibold'
-                : 'border-transparent text-muted')
+                ? 'border-primary font-semibold'
+                : 'border-transparent text-muted-foreground')
             }
             aria-current={permissions ? 'page' : undefined}
           >

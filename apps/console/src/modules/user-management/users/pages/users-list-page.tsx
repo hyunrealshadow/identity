@@ -6,9 +6,15 @@ import {
   ResourceTable,
   type ResourceTableControls,
 } from '#/components/resource-table'
-import { Alert, Button, Disclosure, Skeleton } from '@heroui/react'
+import { Button } from '@identity/ui/components/button'
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from '@identity/ui/components/alert'
+import { Skeleton } from '@identity/ui/components/skeleton'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { Plus, RotateCcw, Search } from 'lucide-react'
+import { ChevronDown, Plus, RotateCcw, Search, TriangleAlert } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
@@ -80,12 +86,12 @@ function UsersTable({
                     to="/users/$userId"
                     params={{ userId: user.id }}
                     title={user.username}
-                    className="block truncate font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                    className="block truncate font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                   >
                     {user.username}
                   </Link>
                   <p
-                    className="mt-0.5 truncate text-xs text-muted"
+                    className="mt-0.5 truncate text-xs text-muted-foreground"
                     title={user.email}
                   >
                     {user.email}
@@ -182,15 +188,15 @@ function UsersTableLoading() {
 
   return (
     <div
-      className="space-y-3 rounded-field border border-border bg-surface p-4"
+      className="space-y-3 rounded-lg border border-border bg-card p-4"
       role="status"
       aria-live="polite"
       aria-label={t('usersTableLoading')}
     >
       <span className="sr-only">{t('usersTableLoading')}</span>
-      <Skeleton className="h-10 w-full rounded-field" />
+      <Skeleton className="h-10 w-full rounded-lg" />
       {Array.from({ length: 5 }, (_, index) => (
-        <Skeleton key={index} className="h-14 w-full rounded-field" />
+        <Skeleton key={index} className="h-14 w-full rounded-lg" />
       ))}
     </div>
   )
@@ -290,133 +296,130 @@ function UsersFilters({
                 <Search className="size-4" aria-hidden="true" />
                 {t('usersApplyFilters')}
               </Button>
-              <Button type="button" variant="secondary" onPress={onReset}>
+              <Button type="button" variant="secondary" onClick={onReset}>
                 <RotateCcw className="size-4" aria-hidden="true" />
                 {t('usersResetFilters')}
               </Button>
             </div>
           </div>
         </div>
-        <div className="mt-4 border-t border-separator pt-3">
-          <Disclosure
-            isExpanded={advancedExpanded}
-            onExpandedChange={setAdvancedExpanded}
+        <div className="mt-4 border-t border-border pt-3">
+          <details
+            className="group"
+            open={advancedExpanded}
+            onToggle={(event) =>
+              setAdvancedExpanded(event.currentTarget.open)
+            }
           >
-            <Disclosure.Trigger
-              type="button"
-              aria-expanded={advancedExpanded}
-              aria-controls={USERS_ADVANCED_FILTERS_ID}
-              className="inline-flex w-fit items-center gap-2 rounded-field px-2 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-surface-secondary focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
-            >
+            <summary className="inline-flex w-fit cursor-pointer list-none items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
               <span>
                 {advancedExpanded
                   ? t('usersAdvancedFiltersHide')
                   : t('usersAdvancedFiltersShow')}
               </span>
               {advancedCount > 0 ? (
-                <span className="rounded-full bg-surface-secondary px-2 py-0.5 text-xs font-medium text-muted">
+                <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
                   {t('usersAdvancedFiltersActive', {
                     count: advancedCount,
                   })}
                 </span>
               ) : null}
-              <Disclosure.Indicator className="size-4 shrink-0 text-muted" />
-            </Disclosure.Trigger>
-            <Disclosure.Content id={USERS_ADVANCED_FILTERS_ID} role="region">
-              <Disclosure.Body className="pt-3">
-                <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                  <UserTextField
-                    name="username"
-                    label={t('usersFilterUsernameLabel')}
-                    value={draft.username}
-                    onChange={(value) => onChange('username', value)}
-                    error={
-                      has('username')
-                        ? t('usersFilterUsernameTooLong')
-                        : undefined
-                    }
-                    maxLength={65}
-                  />
-                  <UserTextField
-                    name="email"
-                    label={t('usersFilterEmailLabel')}
-                    value={draft.email}
-                    onChange={(value) => onChange('email', value)}
-                    type="email"
-                    error={
-                      has('email') ? t('usersFilterEmailTooLong') : undefined
-                    }
-                    maxLength={321}
-                  />
-                  <UserSelectField
-                    name="enabled"
-                    label={t('usersFilterEnabledLabel')}
-                    value={draft.enabled}
-                    onChange={(value) => onStatusChange('enabled', value)}
-                    options={[
-                      { id: 'any', label: t('usersFilterAny') },
-                      { id: 'true', label: t('usersFilterEnabledOnly') },
-                      { id: 'false', label: t('usersFilterDisabledOnly') },
-                    ]}
-                  />
-                  <UserSelectField
-                    name="locked"
-                    label={t('usersFilterLockedLabel')}
-                    value={draft.locked}
-                    onChange={(value) => onStatusChange('locked', value)}
-                    options={[
-                      { id: 'any', label: t('usersFilterAny') },
-                      { id: 'true', label: t('usersFilterLockedOnly') },
-                      { id: 'false', label: t('usersFilterUnlockedOnly') },
-                    ]}
-                  />
-                  <DatePickerField
-                    name="createdFrom"
-                    label={t('usersFilterCreatedFromLabel')}
-                    value={draft.createdFrom}
-                    onChange={(value) => onChange('createdFrom', value)}
-                    error={
-                      has('createdFrom')
+              <ChevronDown
+                className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
+                aria-hidden="true"
+              />
+            </summary>
+            <div id={USERS_ADVANCED_FILTERS_ID} role="region" className="pt-3">
+              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                <UserTextField
+                  name="username"
+                  label={t('usersFilterUsernameLabel')}
+                  value={draft.username}
+                  onChange={(value) => onChange('username', value)}
+                  error={
+                    has('username')
+                      ? t('usersFilterUsernameTooLong')
+                      : undefined
+                  }
+                  maxLength={65}
+                />
+                <UserTextField
+                  name="email"
+                  label={t('usersFilterEmailLabel')}
+                  value={draft.email}
+                  onChange={(value) => onChange('email', value)}
+                  type="email"
+                  error={
+                    has('email') ? t('usersFilterEmailTooLong') : undefined
+                  }
+                  maxLength={321}
+                />
+                <UserSelectField
+                  name="enabled"
+                  label={t('usersFilterEnabledLabel')}
+                  value={draft.enabled}
+                  onChange={(value) => onStatusChange('enabled', value)}
+                  options={[
+                    { id: 'any', label: t('usersFilterAny') },
+                    { id: 'true', label: t('usersFilterEnabledOnly') },
+                    { id: 'false', label: t('usersFilterDisabledOnly') },
+                  ]}
+                />
+                <UserSelectField
+                  name="locked"
+                  label={t('usersFilterLockedLabel')}
+                  value={draft.locked}
+                  onChange={(value) => onStatusChange('locked', value)}
+                  options={[
+                    { id: 'any', label: t('usersFilterAny') },
+                    { id: 'true', label: t('usersFilterLockedOnly') },
+                    { id: 'false', label: t('usersFilterUnlockedOnly') },
+                  ]}
+                />
+                <DatePickerField
+                  name="createdFrom"
+                  label={t('usersFilterCreatedFromLabel')}
+                  value={draft.createdFrom}
+                  onChange={(value) => onChange('createdFrom', value)}
+                  error={
+                    has('createdFrom')
+                      ? t('usersFilterDateInvalid')
+                      : undefined
+                  }
+                />
+                <DatePickerField
+                  name="createdBefore"
+                  label={t('usersFilterCreatedBeforeLabel')}
+                  value={draft.createdBefore}
+                  onChange={(value) => onChange('createdBefore', value)}
+                  error={
+                    has('createdRange')
+                      ? t('usersFilterDateRange')
+                      : has('createdBefore')
                         ? t('usersFilterDateInvalid')
                         : undefined
-                    }
-                  />
-                  <DatePickerField
-                    name="createdBefore"
-                    label={t('usersFilterCreatedBeforeLabel')}
-                    value={draft.createdBefore}
-                    onChange={(value) => onChange('createdBefore', value)}
-                    error={
-                      has('createdRange')
-                        ? t('usersFilterDateRange')
-                        : has('createdBefore')
-                          ? t('usersFilterDateInvalid')
-                          : undefined
-                    }
-                  />
-                </div>
-                <p className="mt-3 text-xs leading-5 text-muted">
-                  {t('usersFilterDateHint')}
-                </p>
-              </Disclosure.Body>
-            </Disclosure.Content>
-          </Disclosure>
+                  }
+                />
+              </div>
+              <p className="mt-3 text-xs leading-5 text-muted-foreground">
+                {t('usersFilterDateHint')}
+              </p>
+            </div>
+          </details>
         </div>
         {issues.length > 0 ? (
           <div className="mt-3">
-            <Alert status="warning">
-              <Alert.Indicator />
-              <Alert.Content>
-                <Alert.Title>{t('usersFilterInvalidTitle')}</Alert.Title>
-                <Alert.Description>
-                  {t('usersFilterInvalidDescription')}
-                </Alert.Description>
-                <ul className="mt-2 list-inside list-disc text-xs">
-                  {issues.map((issue) => (
-                    <li key={issue}>{issueMessage(issue, t)}</li>
-                  ))}
-                </ul>
-              </Alert.Content>
+            <Alert variant="default" className="text-warning">
+              <TriangleAlert aria-hidden="true" />
+              <AlertTitle>{t('usersFilterInvalidTitle')}</AlertTitle>
+              <AlertDescription>
+                {t('usersFilterInvalidDescription')}
+              </AlertDescription>
+              <ul className="mt-2 list-inside list-disc text-xs">
+                {issues.map((issue) => (
+                  <li key={issue}>{issueMessage(issue, t)}</li>
+                ))}
+              </ul>
             </Alert>
           </div>
         ) : null}
@@ -467,7 +470,7 @@ export function UsersListPage({ search }: { search: UsersSearch }) {
       description={t('usersDescription')}
       actions={
         scope.create && scope.read ? (
-          <Button onPress={() => void navigate({ to: '/users/new' })}>
+          <Button onClick={() => void navigate({ to: '/users/new' })}>
             <Plus className="size-4" aria-hidden="true" />
             {t('usersNewAction')}
           </Button>
@@ -646,7 +649,7 @@ export function UsersListPage({ search }: { search: UsersSearch }) {
               title={t('usersNoResultsTitle')}
               description={t('usersNoResultsDescription')}
               action={
-                <Button variant="secondary" onPress={resetFilters}>
+                <Button variant="secondary" onClick={resetFilters}>
                   {t('usersClearFilters')}
                 </Button>
               }
@@ -660,7 +663,7 @@ export function UsersListPage({ search }: { search: UsersSearch }) {
             description={t('usersEmptyDescription')}
             action={
               scope.create ? (
-                <Button onPress={() => void navigate({ to: '/users/new' })}>
+                <Button onClick={() => void navigate({ to: '/users/new' })}>
                   <Plus className="size-4" aria-hidden="true" />
                   {t('usersNewAction')}
                 </Button>
@@ -677,19 +680,15 @@ export function UsersListPage({ search }: { search: UsersSearch }) {
     return (
       <div className="space-y-4">
         {users.partial ? (
-          <Alert status="warning">
-            <Alert.Indicator />
-            <Alert.Content>
-              <Alert.Title>{t('usersPartialTitle')}</Alert.Title>
-              <Alert.Description>
-                {t('usersPartialDescription')}
-              </Alert.Description>
-              <RequestCorrelation
-                requestId={users.requestId}
-                traceId={users.traceId}
-              />
-              <ErrorDetails issues={users.errors} />
-            </Alert.Content>
+          <Alert variant="default" className="text-warning">
+            <TriangleAlert aria-hidden="true" />
+            <AlertTitle>{t('usersPartialTitle')}</AlertTitle>
+            <AlertDescription>{t('usersPartialDescription')}</AlertDescription>
+            <RequestCorrelation
+              requestId={users.requestId}
+              traceId={users.traceId}
+            />
+            <ErrorDetails issues={users.errors} />
           </Alert>
         ) : null}
 

@@ -1,4 +1,4 @@
-import { Button } from '@heroui/react'
+import { Button } from '@identity/ui/components/button'
 import { createFileRoute, useNavigate } from '@tanstack/react-router'
 import { useEffect, useRef, useState } from 'react'
 
@@ -73,7 +73,7 @@ function CallbackPage() {
       title={t('authFailedTitle')}
       description={t(authErrorKey(errorCode))}
       action={
-        <Button onPress={() => void signIn({ returnTo: '/' })}>
+        <Button onClick={() => void signIn({ returnTo: '/' })}>
           {t('authRetry')}
         </Button>
       }

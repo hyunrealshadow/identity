@@ -1,5 +1,7 @@
 import { DataTable } from '@identity/ui/data-table'
-import { Button, Checkbox, Label, Popover } from '@heroui/react'
+import { Button } from '@identity/ui/components/button'
+import { Checkbox } from '@identity/ui/components/checkbox'
+import { Popover, PopoverContent, PopoverTrigger } from '@identity/ui/components/popover'
 import { RefreshCw, Settings2 } from 'lucide-react'
 import { useState, type CSSProperties, type ReactNode } from 'react'
 
@@ -114,74 +116,69 @@ export function ResourceTable<T extends { id: string }>({
       <div className="resource-collection-toolbar">
         <div className="flex items-center gap-2">
           <Button
-            isIconOnly
-            variant="tertiary"
-            size="sm"
+            variant="ghost"
+            size="icon-sm"
             aria-label={t('tableRefresh')}
-            isDisabled={refreshing}
-            onPress={onRefresh}
+            disabled={refreshing}
+            onClick={onRefresh}
           >
             <RefreshCw className="size-4" aria-hidden="true" />
           </Button>
           <Popover
-            isOpen={open}
+            open={open}
             onOpenChange={(next) => {
               if (next) setDraft(preferences)
               setOpen(next)
             }}
           >
-            <Button
-              isIconOnly
-              variant="tertiary"
-              size="sm"
-              aria-label={t('tablePreferences')}
+            <PopoverTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={t('tablePreferences')}
+                />
+              }
             >
               <Settings2 className="size-4" aria-hidden="true" />
-            </Button>
-            <Popover.Content
-              placement="bottom end"
+            </PopoverTrigger>
+            <PopoverContent
+              align="end"
+              role="dialog"
+              aria-label={t('tablePreferences')}
               className="w-72 max-w-[calc(100vw-2rem)]"
             >
-              <Popover.Dialog>
-                <Popover.Heading>{t('tablePreferences')}</Popover.Heading>
-                <div className="mt-4 space-y-3">
-                  {density === undefined ? (
+              <h2 className="text-sm font-semibold">{t('tablePreferences')}</h2>
+              <div className="mt-4 space-y-3">
+                {density === undefined ? (
+                  <label className="flex items-center gap-2 text-sm">
                     <Checkbox
-                      isSelected={draft.compact}
-                      onChange={(compact) => setDraft({ ...draft, compact })}
-                    >
-                      <Checkbox.Content>
-                        <Checkbox.Control>
-                          <Checkbox.Indicator />
-                        </Checkbox.Control>
-                        <Label>{t('tableCompact')}</Label>
-                      </Checkbox.Content>
-                    </Checkbox>
-                  ) : null}
+                      checked={draft.compact}
+                      onCheckedChange={(compact) => setDraft({ ...draft, compact })}
+                    />
+                    {t('tableCompact')}
+                  </label>
+                ) : null}
+                <label className="flex items-center gap-2 text-sm">
                   <Checkbox
-                    isSelected={draft.wrap}
-                    onChange={(wrap) => setDraft({ ...draft, wrap })}
-                  >
-                    <Checkbox.Content>
-                      <Checkbox.Control>
-                        <Checkbox.Indicator />
-                      </Checkbox.Control>
-                      <Label>{t('tableWrap')}</Label>
-                    </Checkbox.Content>
-                  </Checkbox>
-                </div>
-                <fieldset className="mt-4 space-y-3 border-t border-separator pt-3">
-                  <legend className="text-sm font-medium">
-                    {t('tableVisibleColumns')}
-                  </legend>
-                  {columns.map((column) => (
+                    checked={draft.wrap}
+                    onCheckedChange={(wrap) => setDraft({ ...draft, wrap })}
+                  />
+                  {t('tableWrap')}
+                </label>
+              </div>
+              <fieldset className="mt-4 space-y-3 border-t border-border pt-3">
+                <legend className="text-sm font-medium">
+                  {t('tableVisibleColumns')}
+                </legend>
+                {columns.map((column) => (
+                  <label key={column.id} className="flex items-center gap-2 text-sm">
                     <Checkbox
-                      key={column.id}
-                      isSelected={Boolean(
+                      checked={Boolean(
                         column.primary || !draft.hidden.includes(column.id),
                       )}
-                      isDisabled={column.primary}
-                      onChange={(selected) =>
+                      disabled={column.primary}
+                      onCheckedChange={(selected) =>
                         setDraft({
                           ...draft,
                           hidden: selected
@@ -189,37 +186,23 @@ export function ResourceTable<T extends { id: string }>({
                             : [...draft.hidden, column.id],
                         })
                       }
-                    >
-                      <Checkbox.Content>
-                        <Checkbox.Control>
-                          <Checkbox.Indicator />
-                        </Checkbox.Control>
-                        <Label>{column.label}</Label>
-                      </Checkbox.Content>
-                    </Checkbox>
-                  ))}
-                </fieldset>
-                <div className="mt-5 flex flex-wrap justify-end gap-2">
-                  <Button
-                    variant="tertiary"
-                    size="sm"
-                    onPress={() => setDraft(defaults)}
-                  >
-                    {t('tableResetPreferences')}
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="sm"
-                    onPress={() => setOpen(false)}
-                  >
-                    {t('tableCancel')}
-                  </Button>
-                  <Button size="sm" onPress={() => save(draft)}>
-                    {t('tableApplyPreferences')}
-                  </Button>
-                </div>
-              </Popover.Dialog>
-            </Popover.Content>
+                    />
+                    {column.label}
+                  </label>
+                ))}
+              </fieldset>
+              <div className="mt-5 flex flex-wrap justify-end gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setDraft(defaults)}>
+                  {t('tableResetPreferences')}
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => setOpen(false)}>
+                  {t('tableCancel')}
+                </Button>
+                <Button size="sm" onClick={() => save(draft)}>
+                  {t('tableApplyPreferences')}
+                </Button>
+              </div>
+            </PopoverContent>
           </Popover>
         </div>
       </div>
@@ -256,10 +239,10 @@ export function ResourceTable<T extends { id: string }>({
             <div className="resource-table-empty">{emptyState}</div>
           )}
         >
-          {(item) => (
-            <DataTable.Row id={item.id} columns={visible}>
-              {(column) => (
-                <DataTable.Cell>{column.render(item)}</DataTable.Cell>
+          {(item: T) => (
+            <DataTable.Row key={item.id} id={item.id} columns={visible}>
+              {(column: ResourceColumn<T>) => (
+                <DataTable.Cell key={column.id}>{column.render(item)}</DataTable.Cell>
               )}
             </DataTable.Row>
           )}

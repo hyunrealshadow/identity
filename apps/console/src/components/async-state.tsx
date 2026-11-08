@@ -1,4 +1,8 @@
-import { Alert, Button, EmptyState, Skeleton, Spinner } from '@heroui/react'
+import { Alert, AlertDescription, AlertTitle } from '@identity/ui/components/alert'
+import { Button } from '@identity/ui/components/button'
+import { Skeleton } from '@identity/ui/components/skeleton'
+import { Spinner } from '@identity/ui/components/spinner'
+import { CircleAlert, TriangleAlert } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 import { ErrorDetails } from '#/components/error-details'
@@ -64,7 +68,7 @@ export function AsyncState({
   if (kind === 'loading') {
     return (
       <div
-        className={`flex flex-col items-center justify-center gap-3 rounded-field border border-border bg-surface text-center ${compact ? 'p-6' : 'p-10'}`}
+        className={`flex flex-col items-center justify-center gap-3 rounded-lg border border-border bg-card text-center ${compact ? 'p-6' : 'p-10'}`}
         role="status"
         aria-live="polite"
         aria-label={resolvedTitle}
@@ -72,7 +76,7 @@ export function AsyncState({
         <Spinner aria-label={t('loading')} />
         <p className="text-sm font-medium">{resolvedTitle}</p>
         {resolvedDescription ? (
-          <p className="max-w-md text-sm text-muted">{resolvedDescription}</p>
+          <p className="max-w-md text-sm text-muted-foreground">{resolvedDescription}</p>
         ) : null}
       </div>
     )
@@ -80,54 +84,47 @@ export function AsyncState({
 
   if (kind === 'empty') {
     return (
-      <EmptyState
+      <div
         className={
           compact
             ? 'py-6 text-center'
-            : 'rounded-field border border-border bg-surface p-8 text-center'
+            : 'rounded-lg border border-border bg-card p-8 text-center'
         }
       >
         <div className="mx-auto max-w-md">
           <p className="text-sm font-semibold">{resolvedTitle}</p>
           {resolvedDescription ? (
-            <p className="mt-1.5 text-sm text-muted">{resolvedDescription}</p>
+            <p className="mt-1.5 text-sm text-muted-foreground">{resolvedDescription}</p>
           ) : null}
           {action ? (
             <div className="mt-4 flex justify-center">{action}</div>
           ) : null}
         </div>
-      </EmptyState>
+      </div>
     )
   }
 
-  const status =
-    kind === 'forbidden' || kind === 'notFound' || kind === 'unauthorized'
-      ? 'danger'
-      : kind === 'partial'
-        ? 'warning'
-        : 'danger'
+  const warning = kind === 'partial'
 
   return (
-    <Alert status={status}>
-      <Alert.Indicator />
-      <Alert.Content>
-        <Alert.Title>{resolvedTitle}</Alert.Title>
-        {resolvedDescription ? (
-          <Alert.Description>{resolvedDescription}</Alert.Description>
-        ) : null}
-        <RequestCorrelation requestId={requestId} traceId={traceId} />
-        <ErrorDetails issues={issues} />
-        {onRetry || action ? (
-          <div className="mt-3 flex flex-wrap gap-2">
-            {onRetry ? (
-              <Button size="sm" variant="secondary" onPress={onRetry}>
-                {t('retry')}
-              </Button>
-            ) : null}
-            {action}
-          </div>
-        ) : null}
-      </Alert.Content>
+    <Alert variant={warning ? 'default' : 'destructive'} className={warning ? 'text-warning' : undefined}>
+      {warning ? <TriangleAlert aria-hidden="true" /> : <CircleAlert aria-hidden="true" />}
+      <AlertTitle>{resolvedTitle}</AlertTitle>
+      {resolvedDescription ? (
+        <AlertDescription>{resolvedDescription}</AlertDescription>
+      ) : null}
+      <RequestCorrelation requestId={requestId} traceId={traceId} />
+      <ErrorDetails issues={issues} />
+      {onRetry || action ? (
+        <div className="col-span-full mt-3 flex flex-wrap gap-2">
+          {onRetry ? (
+            <Button size="sm" variant="secondary" onClick={onRetry}>
+              {t('retry')}
+            </Button>
+          ) : null}
+          {action}
+        </div>
+      ) : null}
     </Alert>
   )
 }
@@ -136,7 +133,7 @@ export function LoadingBlock({ rows = 3 }: { rows?: number }) {
   return (
     <div className="space-y-3" role="status" aria-live="polite">
       {Array.from({ length: rows }, (_, index) => (
-        <Skeleton key={index} className="h-16 w-full rounded-field" />
+        <Skeleton key={index} className="h-16 w-full rounded-lg" />
       ))}
     </div>
   )

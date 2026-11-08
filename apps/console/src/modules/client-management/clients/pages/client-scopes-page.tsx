@@ -1,12 +1,13 @@
 import {
   Alert,
-  Button,
-  Spinner,
-  Switch,
-  toast,
-} from '@heroui/react'
+  AlertDescription,
+  AlertTitle,
+} from '@identity/ui/components/alert'
+import { Button } from '@identity/ui/components/button'
+import { Spinner } from '@identity/ui/components/spinner'
+import { Switch } from '@identity/ui/components/switch'
 import { DataTable } from '@identity/ui/data-table'
-import { Save } from 'lucide-react'
+import { Info, Save, TriangleAlert } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
@@ -25,6 +26,7 @@ import {
   failureTitleKey,
 } from '#/lib/graphql/presentation'
 import { useLocale, useTranslator } from '#/lib/i18n'
+import { toast } from '#/lib/toast'
 import { useWorkspace } from '#/lib/workspace'
 import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
 import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
@@ -257,21 +259,17 @@ export function ClientScopesPage() {
 
   return (
     <div className="space-y-4">
-      <Alert status="default" className="console-card border border-border">
-        <Alert.Indicator />
-        <Alert.Content>
-          <Alert.Title>{t('clientsScopesExplainTitle')}</Alert.Title>
-          <Alert.Description>{t('clientsScopesExplainDescription')}</Alert.Description>
-        </Alert.Content>
+      <Alert className="console-card border border-border">
+        <Info aria-hidden="true" />
+        <AlertTitle>{t('clientsScopesExplainTitle')}</AlertTitle>
+        <AlertDescription>{t('clientsScopesExplainDescription')}</AlertDescription>
       </Alert>
       {client && !complete ? (
-        <Alert status="warning" className="console-card border border-border">
-          <Alert.Indicator />
-          <Alert.Content>
-            <Alert.Description>
-              {t('clientsScopesTooMany', { count: PAGE_SIZE })}
-            </Alert.Description>
-          </Alert.Content>
+        <Alert className="console-card border border-border text-warning">
+          <TriangleAlert aria-hidden="true" />
+          <AlertDescription>
+            {t('clientsScopesTooMany', { count: PAGE_SIZE })}
+          </AlertDescription>
         </Alert>
       ) : null}
       {feedback ? (
@@ -301,12 +299,12 @@ export function ClientScopesPage() {
                 key={option.id}
                 label={
                   <>
-                    {name} <code className="ml-1 text-xs text-muted">{option.code}</code>
+                    {name} <code className="ml-1 text-xs text-muted-foreground">{option.code}</code>
                   </>
                 }
                 description={
                   rejected.has(option.code) ? (
-                    <span className="text-danger">{option.description ?? option.code}</span>
+                    <span className="text-destructive">{option.description ?? option.code}</span>
                   ) : (
                     option.description
                   )
@@ -314,22 +312,16 @@ export function ClientScopesPage() {
                 action={
                   <Switch
                     aria-label={name}
-                    isSelected={selected.includes(option.id)}
-                    isDisabled={!editable || pending}
-                    onChange={(on) =>
+                    checked={selected.includes(option.id)}
+                    disabled={!editable || pending}
+                    onCheckedChange={(on) =>
                       setProtocolScopes(
                         on
                           ? [...selected, option.id]
                           : selected.filter((id) => id !== option.id),
                       )
                     }
-                  >
-                    <Switch.Content>
-                      <Switch.Control>
-                        <Switch.Thumb />
-                      </Switch.Control>
-                    </Switch.Content>
-                  </Switch>
+                  />
                 }
               />
             )
@@ -340,7 +332,7 @@ export function ClientScopesPage() {
         <header className="mb-2 flex flex-col gap-3 px-1 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h2 className="text-sm font-semibold">{t('clientsScopesTitle')}</h2>
-            <p className="mt-0.5 text-xs leading-5 text-muted">{t('clientsScopesDescription')}</p>
+            <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{t('clientsScopesDescription')}</p>
           </div>
           {editable ? (
             <PermissionPickerDialog
@@ -384,18 +376,17 @@ export function ClientScopesPage() {
                       <p className="font-medium">
                         {resolveLocalizedText(row.names, locale) ?? row.name}
                       </p>
-                      <code className="text-xs text-muted">{row.code}</code>
+                      <code className="text-xs text-muted-foreground">{row.code}</code>
                     </div>
                   </DataTable.Cell>
                   <DataTable.Cell>
                     <div className="flex flex-col gap-1">
                       <Switch
-                        size="sm"
                         aria-label={t('clientsScopeClientGrantedFor', { code: row.code })}
-                        isSelected={row.clientGranted}
-                        isInvalid={invalid}
-                        isDisabled={!editable || pending}
-                        onChange={(clientGranted) => {
+                        checked={row.clientGranted}
+                        aria-invalid={invalid || undefined}
+                        disabled={!editable || pending}
+                        onCheckedChange={(clientGranted) => {
                           setFeedback(null)
                           setRows((current) =>
                             current.map((entry) =>
@@ -403,15 +394,9 @@ export function ClientScopesPage() {
                             ),
                           )
                         }}
-                      >
-                        <Switch.Content>
-                          <Switch.Control>
-                            <Switch.Thumb />
-                          </Switch.Control>
-                        </Switch.Content>
-                      </Switch>
+                      />
                       {invalid ? (
-                        <span className="text-xs text-danger">
+                        <span className="text-xs text-destructive">
                           {t('clientsScopeClientGrantRejected')}
                         </span>
                       ) : null}
@@ -446,11 +431,11 @@ export function ClientScopesPage() {
       {editable ? (
         <div className="flex flex-wrap items-center justify-end gap-3">
           {dirty ? (
-            <span className="text-xs text-muted">{t('clientsScopesUnsaved')}</span>
+            <span className="text-xs text-muted-foreground">{t('clientsScopesUnsaved')}</span>
           ) : null}
-          <Button isDisabled={pending || !dirty} onPress={() => void save()}>
+          <Button disabled={pending || !dirty} onClick={() => void save()}>
             {pending ? (
-              <Spinner size="sm" aria-label={t('working')} />
+              <Spinner aria-label={t('working')} />
             ) : (
               <Save className="size-4" aria-hidden="true" />
             )}

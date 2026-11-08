@@ -1,5 +1,10 @@
-import { Alert, Chip } from '@heroui/react'
+import {
+  Alert,
+  AlertDescription,
+} from '@identity/ui/components/alert'
+import { Badge } from '@identity/ui/components/badge'
 import { Link, useNavigate } from '@tanstack/react-router'
+import { TriangleAlert } from 'lucide-react'
 import { useCallback, useMemo, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
@@ -192,7 +197,7 @@ export function UserEffectivePermissionsPage({ userId }: { userId: string }) {
   return (
     <ConsoleWorkspaceGate loading={loadingView}>
       <section className="space-y-5">
-        <p className="text-sm text-muted">{t('rbacUserPermissionsIntro')}</p>
+        <p className="text-sm text-muted-foreground">{t('rbacUserPermissionsIntro')}</p>
         <ApiResourceSelect
           value={resourceId}
           onChange={selectResource}
@@ -289,7 +294,7 @@ export function UserEffectivePermissionsPage({ userId }: { userId: string }) {
                         />
                       </div>
                       {name && name !== row.code ? (
-                        <p className="mt-1 text-xs text-muted">{name}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">{name}</p>
                       ) : null}
                     </div>
                   )
@@ -301,7 +306,7 @@ export function UserEffectivePermissionsPage({ userId }: { userId: string }) {
                 render: (row) => {
                   const info = labelMap.get(row.id)
                   return info?.__typename === 'Scope' ? (
-                    <span className="text-sm text-muted">
+                    <span className="text-sm text-muted-foreground">
                       {resolveLocalizedText(info.descriptions, locale) ??
                         info.description}
                     </span>
@@ -314,54 +319,49 @@ export function UserEffectivePermissionsPage({ userId }: { userId: string }) {
                 render: (row) => (
                   <div className="flex max-w-xl flex-wrap gap-2">
                     {row.sources.map((source) => (
-                      <Chip key={source.roleId} size="sm" variant="soft">
-                        <Chip.Label>
-                          {scope.rolesRead ? (
-                            <Link
-                              to="/roles/$roleId"
-                              params={{ roleId: source.roleId }}
-                              className="hover:underline"
-                            >
-                              {roleName(source.roleId)}
-                            </Link>
-                          ) : (
-                            t('rbacRoleSource')
-                          )}
-                        </Chip.Label>
-                      </Chip>
+                      <Badge key={source.roleId} variant="secondary">
+                        {scope.rolesRead ? (
+                          <Link
+                            to="/roles/$roleId"
+                            params={{ roleId: source.roleId }}
+                            className="hover:underline"
+                          >
+                            {roleName(source.roleId)}
+                          </Link>
+                        ) : (
+                          t('rbacRoleSource')
+                        )}
+                      </Badge>
                     ))}
                     {row.groupSources.map((source) => (
-                      <Chip
+                      <Badge
                         key={`${source.groupId}/${source.roleId}`}
-                        size="sm"
-                        variant="soft"
+                        variant="secondary"
                       >
-                        <Chip.Label>
-                          {scope.groupsRead ? (
-                            <Link
-                              to="/groups/$groupId"
-                              params={{ groupId: source.groupId }}
-                              className="hover:underline"
-                            >
-                              {groupName(source.groupId)}
-                            </Link>
-                          ) : (
-                            t('rbacGroupSource')
-                          )}
-                          <span className="mx-1 text-muted">/</span>
-                          {scope.rolesRead ? (
-                            <Link
-                              to="/roles/$roleId"
-                              params={{ roleId: source.roleId }}
-                              className="hover:underline"
-                            >
-                              {roleName(source.roleId)}
-                            </Link>
-                          ) : (
-                            t('rbacRoleSource')
-                          )}
-                        </Chip.Label>
-                      </Chip>
+                        {scope.groupsRead ? (
+                          <Link
+                            to="/groups/$groupId"
+                            params={{ groupId: source.groupId }}
+                            className="hover:underline"
+                          >
+                            {groupName(source.groupId)}
+                          </Link>
+                        ) : (
+                          t('rbacGroupSource')
+                        )}
+                        <span className="mx-1 text-muted-foreground">/</span>
+                        {scope.rolesRead ? (
+                          <Link
+                            to="/roles/$roleId"
+                            params={{ roleId: source.roleId }}
+                            className="hover:underline"
+                          >
+                            {roleName(source.roleId)}
+                          </Link>
+                        ) : (
+                          t('rbacRoleSource')
+                        )}
+                      </Badge>
                     ))}
                   </div>
                 ),
@@ -370,12 +370,11 @@ export function UserEffectivePermissionsPage({ userId }: { userId: string }) {
           />
         ) : null}
         {labels.failed ? (
-          <Alert status="warning">
-            <Alert.Content>
-              <Alert.Description>
-                {t('rbacLabelsUnavailable')}
-              </Alert.Description>
-            </Alert.Content>
+          <Alert variant="default" className="text-warning">
+            <TriangleAlert aria-hidden="true" />
+            <AlertDescription>
+              {t('rbacLabelsUnavailable')}
+            </AlertDescription>
           </Alert>
         ) : null}
       </section>

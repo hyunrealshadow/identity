@@ -1,8 +1,10 @@
-import { Button, toast, useOverlayState } from '@heroui/react'
+import { Button } from '@identity/ui/components/button'
+import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
 import { UserMinus, UserPlus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { TableRowActions } from '#/components/table-row-actions'
+import { toast } from '#/lib/toast'
 import {
   ConsoleGroupsDocument,
   ConsoleUsersDocument,
@@ -185,7 +187,7 @@ function AddMembershipDialog({
 
   return (
     <>
-      <Button onPress={state.open} isDisabled={fixedGroup && !target.version}>
+      <Button onClick={state.open} disabled={fixedGroup && !target.version}>
         <UserPlus className="size-4" aria-hidden="true" />
         {t(fixedGroup ? 'groupMembersAddAction' : 'userGroupsAddAction')}
       </Button>
@@ -219,7 +221,7 @@ function AddMembershipDialog({
           !fixedGroup ? 'userGroupsConflictDescription' : undefined
         }
       >
-        <p className="text-sm leading-6 text-muted">
+        <p className="text-sm leading-6 text-muted-foreground">
           {fixedGroup
             ? t('groupMembersAddDescription', { group: target.label })
             : t('userGroupsAddDescription', { user: target.label })}
@@ -239,7 +241,7 @@ function AddMembershipDialog({
           }}
         />
         {selection.id && !selectedVisible ? (
-          <p className="mt-3 break-all font-mono text-xs text-muted">
+          <p className="mt-3 break-all font-mono text-xs text-muted-foreground">
             {fixedGroup
               ? t('groupMembersAddSelectedUser', { user: selection.id })
               : t('userGroupsAddSelectedGroup', { group: selection.id })}
@@ -259,11 +261,11 @@ function AddMembershipDialog({
               : 'userGroupsAddNoCandidates',
           )}
         >
-          <ul className="divide-y divide-separator">
+          <ul className="divide-y divide-border">
             {fixedGroup
               ? userEdges.map(({ node }) => (
                   <li key={node.id}>
-                    <label className="flex cursor-pointer items-start gap-3 p-3 hover:bg-surface-secondary">
+                    <label className="flex cursor-pointer items-start gap-3 p-3 hover:bg-muted">
                       <input
                         type="radio"
                         name="membership-user"
@@ -275,7 +277,7 @@ function AddMembershipDialog({
                         <span className="block text-sm font-medium">
                           {node.username}
                         </span>
-                        <span className="block break-all text-xs text-muted">
+                        <span className="block break-all text-xs text-muted-foreground">
                           {node.email}
                         </span>
                         <UserStatusBadges user={node} />
@@ -285,7 +287,7 @@ function AddMembershipDialog({
                 ))
               : groupEdges.map(({ node }) => (
                   <li key={node.id}>
-                    <label className="flex cursor-pointer items-start gap-3 p-3 hover:bg-surface-secondary">
+                    <label className="flex cursor-pointer items-start gap-3 p-3 hover:bg-muted">
                       <input
                         type="radio"
                         name="membership-group"
@@ -298,7 +300,7 @@ function AddMembershipDialog({
                           {resolveLocalizedText(node.names, locale) ??
                             node.name}
                         </span>
-                        <span className="block text-xs text-muted">
+                        <span className="block text-xs text-muted-foreground">
                           {resolveLocalizedText(node.descriptions, locale) ??
                             node.description}
                         </span>
@@ -433,7 +435,7 @@ function RemoveMembershipDialog({
           }, 'remove_group_member_request_failed')
         }
       >
-        <p className="text-sm leading-6 text-muted">{description}</p>
+        <p className="text-sm leading-6 text-muted-foreground">{description}</p>
       </RelationDialog>
     </>
   )

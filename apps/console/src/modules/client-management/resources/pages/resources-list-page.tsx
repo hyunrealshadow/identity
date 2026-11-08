@@ -1,6 +1,7 @@
 import { TableRowActions } from '#/components/table-row-actions'
 import { CopyButton } from '#/components/copy-button'
-import { Button, Chip } from '@heroui/react'
+import { Badge } from '@identity/ui/components/badge'
+import { Button } from '@identity/ui/components/button'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { useEffect, useMemo, useState } from 'react'
 import { AsyncState } from '#/components/async-state'
@@ -137,7 +138,7 @@ export function ResourcesListPage({ search }: { search: ResourcesSearch }) {
               </Button>
               <Button
                 variant="ghost"
-                onPress={() => void navigate({ to: '/resources', search: {} })}
+                onClick={() => void navigate({ to: '/resources', search: {} })}
               >
                 {t('resourcesReset')}
               </Button>
@@ -226,19 +227,16 @@ export function ResourcesListPage({ search }: { search: ResourcesSearch }) {
                   id: 'status',
                   label: t('resourcesStatus'),
                   render: (resource) => (
-                    <Chip
-                      size="sm"
-                      variant="soft"
-                      color={resource.enabled ? 'success' : 'default'}
+                    <Badge
+                      variant="secondary"
+                      className={resource.enabled ? 'text-success' : undefined}
                     >
-                      <Chip.Label>
-                        {t(
-                          resource.enabled
-                            ? 'permissionsEnabled'
-                            : 'permissionsDisabled',
-                        )}
-                      </Chip.Label>
-                    </Chip>
+                      {t(
+                        resource.enabled
+                          ? 'permissionsEnabled'
+                          : 'permissionsDisabled',
+                      )}
+                    </Badge>
                   ),
                 },
                 {

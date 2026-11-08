@@ -34,11 +34,13 @@ describe('date picker field', () => {
     const user = userEvent.setup()
     renderWithLocale(<Fixture onChange={onChange} />)
 
-    await user.click(screen.getByRole('button'))
+    await user.click(screen.getByRole('button', { name: /Feb 1, 2026/ }))
     const calendar = screen.getByRole('dialog')
-    await user.click(
-      within(calendar).getByRole('button', { name: /February 2, 2026/ }),
-    )
+    const day = within(calendar)
+      .getAllByRole('button', { name: /February 2/ })
+      .find((button) => button.textContent?.trim() === '2')
+    if (!day) throw new Error('February 2 button is missing')
+    await user.click(day)
     expect(onChange).toHaveBeenLastCalledWith('2026-02-02')
     expect(
       new FormData(screen.getByRole('form') as HTMLFormElement).get(
@@ -46,7 +48,6 @@ describe('date picker field', () => {
       ),
     ).toBe('2026-02-02')
 
-    await user.click(screen.getByRole('button'))
     await user.click(screen.getByRole('button', { name: 'Clear' }))
     expect(onChange).toHaveBeenLastCalledWith('')
     expect(screen.queryByRole('dialog')).toBeNull()
@@ -71,14 +72,14 @@ describe('date picker field', () => {
         />
       </form>,
     )
-    await user.click(screen.getByRole('button'))
-    expect(screen.getByRole('grid').getAttribute('aria-label')).toContain(
-      '2000年2月',
+    await user.click(screen.getByRole('button', { name: /2000年2月1日/ }))
+    const calendar = screen.getByRole('dialog')
+    expect(within(calendar).getByRole('grid')).toBeTruthy()
+    await user.click(
+      within(calendar).getByRole('button', { name: /2000年2月2日/ }),
     )
-    await user.click(screen.getByRole('button', { name: /2000年2月2日/ }))
     const form = screen.getByRole('form') as HTMLFormElement
     expect(new FormData(form).get('birthdate')).toBe('2000-02-02')
-    await user.click(screen.getByRole('button'))
     await user.click(screen.getByRole('button', { name: '清除' }))
     expect(new FormData(form).get('birthdate')).toBe('')
   })

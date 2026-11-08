@@ -1,4 +1,11 @@
-import { ListBox, Select, Switch } from '@heroui/react'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@identity/ui/components/select'
+import { Switch } from '@identity/ui/components/switch'
 
 import { SettingsRow } from '#/components/settings-section'
 
@@ -44,22 +51,16 @@ function RowSwitch({
   return (
     <Switch
       aria-label={label}
-      isSelected={isSelected}
-      onChange={onChange}
-      isDisabled={isDisabled}
-    >
-      <Switch.Content>
-        <Switch.Control>
-          <Switch.Thumb />
-        </Switch.Control>
-      </Switch.Content>
-    </Switch>
+      checked={isSelected}
+      onCheckedChange={onChange}
+      disabled={isDisabled}
+    />
   )
 }
 
 function RowError({ children }: { children?: string }) {
   return children ? (
-    <p role="alert" className="px-4 pb-3 text-xs leading-5 text-danger">
+    <p role="alert" className="px-4 pb-3 text-xs leading-5 text-destructive">
       {children}
     </p>
   ) : null
@@ -84,26 +85,26 @@ function RowSelect({
 }) {
   return (
     <Select
-      aria-label={label}
-      selectedKey={value}
-      onSelectionChange={(key) => {
-        if (key !== null) onChange(String(key))
+      value={value}
+      onValueChange={(next) => {
+        if (next !== null) onChange(String(next))
       }}
-      isDisabled={isDisabled}
+      items={options.map((option) => ({
+        value: option.id,
+        label: option.label,
+      }))}
+      disabled={isDisabled}
     >
-      <Select.Trigger className="min-h-8 min-w-40 py-1">
-        <Select.Value />
-        <Select.Indicator />
-      </Select.Trigger>
-      <Select.Popover>
-        <ListBox>
-          {options.map((option) => (
-            <ListBox.Item key={option.id} id={option.id} textValue={option.label}>
-              {option.label}
-            </ListBox.Item>
-          ))}
-        </ListBox>
-      </Select.Popover>
+      <SelectTrigger aria-label={label} className="min-h-8 min-w-40 py-1">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((option) => (
+          <SelectItem key={option.id} value={option.id}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
     </Select>
   )
 }

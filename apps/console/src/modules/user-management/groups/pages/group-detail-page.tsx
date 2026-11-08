@@ -1,16 +1,24 @@
 import { useGroupDetailContext } from '../components/group-detail-context'
 import {
   Alert,
-  Button,
-  Modal,
-  Spinner,
-  toast,
-  useOverlayState,
-} from '@heroui/react'
+  AlertDescription,
+  AlertTitle,
+} from '@identity/ui/components/alert'
+import { Button } from '@identity/ui/components/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@identity/ui/components/dialog'
+import { Spinner } from '@identity/ui/components/spinner'
+import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
 import { useNavigate } from '@tanstack/react-router'
-import { Save, Trash2, Power, PowerOff } from 'lucide-react'
+import { Save, Trash2, Power, PowerOff, TriangleAlert } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
+import { toast } from '#/lib/toast'
 import { AsyncState } from '#/components/async-state'
 import { ErrorDetails } from '#/components/error-details'
 import { LocalizedTextField } from '#/components/localized-text-field'
@@ -312,19 +320,15 @@ export function GroupDetailPage() {
           <RbacNoticeAlert notice={notice} onDismiss={() => setNotice(null)} />
         ) : null}
         {groupQuery.partial ? (
-          <Alert status="warning">
-            <Alert.Indicator />
-            <Alert.Content>
-              <Alert.Title>{t('groupsPartialTitle')}</Alert.Title>
-              <Alert.Description>
-                {t('groupsPartialDescription')}
-              </Alert.Description>
-              <RequestCorrelation
-                requestId={groupQuery.requestId}
-                traceId={groupQuery.traceId}
-              />
-              <ErrorDetails issues={groupQuery.errors} />
-            </Alert.Content>
+          <Alert variant="default" className="text-warning">
+            <TriangleAlert aria-hidden="true" />
+            <AlertTitle>{t('groupsPartialTitle')}</AlertTitle>
+            <AlertDescription>{t('groupsPartialDescription')}</AlertDescription>
+            <RequestCorrelation
+              requestId={groupQuery.requestId}
+              traceId={groupQuery.traceId}
+            />
+            <ErrorDetails issues={groupQuery.errors} />
           </Alert>
         ) : null}
         {!editing && !accessEnded && feedback ? (
@@ -346,7 +350,7 @@ export function GroupDetailPage() {
                   <Button
                     variant="secondary"
                     size="sm"
-                    onPress={() => setEditing(true)}
+                    onClick={() => setEditing(true)}
                   >
                     {t('rbacEntityEdit')}
                   </Button>
@@ -354,7 +358,7 @@ export function GroupDetailPage() {
               </div>
               <dl className="grid gap-x-8 gap-y-6 sm:grid-cols-2">
                 <div>
-                  <dt className="mb-2 text-sm text-muted">
+                  <dt className="mb-2 text-sm text-muted-foreground">
                     {t('rbacEntityName')}
                   </dt>
                   <dd className="text-sm">
@@ -363,7 +367,7 @@ export function GroupDetailPage() {
                   </dd>
                 </div>
                 <div>
-                  <dt className="mb-2 text-sm text-muted">
+                  <dt className="mb-2 text-sm text-muted-foreground">
                     {t('rbacEntityDescription')}
                   </dt>
                   <dd className="whitespace-pre-wrap text-sm">
@@ -372,7 +376,7 @@ export function GroupDetailPage() {
                   </dd>
                 </div>
                 <div>
-                  <dt className="mb-2 text-sm text-muted">
+                  <dt className="mb-2 text-sm text-muted-foreground">
                     {t('rbacEntityCreated')}
                   </dt>
                   <dd className="text-sm">
@@ -380,7 +384,7 @@ export function GroupDetailPage() {
                   </dd>
                 </div>
                 <div>
-                  <dt className="mb-2 text-sm text-muted">
+                  <dt className="mb-2 text-sm text-muted-foreground">
                     {t('rbacEntityUpdated')}
                   </dt>
                   <dd className="text-sm">
@@ -389,8 +393,8 @@ export function GroupDetailPage() {
                 </div>
               </dl>
             </section>
-            <Modal
-              isOpen={editing}
+            <Dialog
+              open={editing}
               onOpenChange={(open) => {
                 if (pending) return
                 if (!open) {
@@ -403,109 +407,103 @@ export function GroupDetailPage() {
                 setEditing(open)
               }}
             >
-              <Modal.Backdrop isDismissable={!pending}>
-                <Modal.Container size="lg">
-                  <Modal.Dialog className="sm:max-w-3xl">
-                    <Modal.CloseTrigger
-                      isDisabled={pending}
-                      aria-label={t('close')}
+              <DialogContent
+                showCloseButton={!pending}
+                closeLabel={t('close')}
+                className="sm:max-w-3xl"
+              >
+                <DialogHeader>
+                  <DialogTitle>{t('rbacEntityEdit')}</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-5">
+                  {feedback ? (
+                    <RbacMutationFeedback
+                      feedback={feedback}
+                      onReload={() => void reloadGroup()}
+                      reloadPending={groupQuery.refreshing}
                     />
-                    <Modal.Header>
-                      <Modal.Heading>{t('rbacEntityEdit')}</Modal.Heading>
-                    </Modal.Header>
-                    <Modal.Body>
-                      <div className="space-y-5">
-                        {feedback ? (
-                          <RbacMutationFeedback
-                            feedback={feedback}
-                            onReload={() => void reloadGroup()}
-                            reloadPending={groupQuery.refreshing}
-                          />
-                        ) : null}
-                        <LocalizedTextField
-                          name="names"
-                          label={t('localizedName')}
-                          defaultValue={readyDraft.name}
-                          onDefaultValueChange={(value) => {
-                            setDraft((current) =>
-                              current ? { ...current, name: value } : current,
-                            )
-                            setFeedback(null)
-                            setLocalErrors({})
-                            setFieldErrors({})
-                          }}
-                          value={readyDraft.names}
-                          onChange={changeNames}
-                          isReadOnly={!editable}
-                          isDisabled={pending}
-                          isRequired
-                          maxLength={256}
-                          error={
-                            localErrors.name
-                              ? t(localErrors.name)
-                              : fieldErrors.names
-                          }
-                        />
-                        <LocalizedTextField
-                          name="descriptions"
-                          label={t('localizedDescription')}
-                          defaultValue={readyDraft.description}
-                          onDefaultValueChange={(value) => {
-                            setDraft((current) =>
-                              current
-                                ? { ...current, description: value }
-                                : current,
-                            )
-                            setFeedback(null)
-                            setLocalErrors({})
-                            setFieldErrors({})
-                          }}
-                          value={readyDraft.descriptions}
-                          onChange={changeDescriptions}
-                          isReadOnly={!editable}
-                          isDisabled={pending}
-                          multiline
-                          maxLength={1024}
-                          error={
-                            fieldErrors.description ?? fieldErrors.descriptions
-                          }
-                        />
-                      </div>
-                    </Modal.Body>
-                    <Modal.Footer>
-                      <Button
-                        type="button"
-                        isDisabled={pending || !versionReady || !changed}
-                        onPress={() => void submit()}
-                      >
-                        {pending ? (
-                          <Spinner size="sm" aria-label={t('saving')} />
-                        ) : (
-                          <Save className="size-4" aria-hidden="true" />
-                        )}
-                        {t('groupSettingsSaveAction')}
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="secondary"
-                        isDisabled={pending}
-                        onPress={() => {
-                          initialized.current = undefined
-                          setDraft(groupEditDraftFromGroup(readyGroup))
-                          clearDraft(draftKey(readyGroup.id))
-                          setLocalErrors({})
-                          setFieldErrors({})
-                          setFeedback(null)
-                          setEditing(false)
-                        }}
-                      >
-                        {t('cancel')}
-                      </Button>
-                    </Modal.Footer>
-                  </Modal.Dialog>
-                </Modal.Container>
-              </Modal.Backdrop>
-            </Modal>
+                  ) : null}
+                  <LocalizedTextField
+                    name="names"
+                    label={t('localizedName')}
+                    defaultValue={readyDraft.name}
+                    onDefaultValueChange={(value) => {
+                      setDraft((current) =>
+                        current ? { ...current, name: value } : current,
+                      )
+                      setFeedback(null)
+                      setLocalErrors({})
+                      setFieldErrors({})
+                    }}
+                    value={readyDraft.names}
+                    onChange={changeNames}
+                    isReadOnly={!editable}
+                    isDisabled={pending}
+                    isRequired
+                    maxLength={256}
+                    error={
+                      localErrors.name
+                        ? t(localErrors.name)
+                        : fieldErrors.names
+                    }
+                  />
+                  <LocalizedTextField
+                    name="descriptions"
+                    label={t('localizedDescription')}
+                    defaultValue={readyDraft.description}
+                    onDefaultValueChange={(value) => {
+                      setDraft((current) =>
+                        current
+                          ? { ...current, description: value }
+                          : current,
+                      )
+                      setFeedback(null)
+                      setLocalErrors({})
+                      setFieldErrors({})
+                    }}
+                    value={readyDraft.descriptions}
+                    onChange={changeDescriptions}
+                    isReadOnly={!editable}
+                    isDisabled={pending}
+                    multiline
+                    maxLength={1024}
+                    error={
+                      fieldErrors.description ?? fieldErrors.descriptions
+                    }
+                  />
+                </div>
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    disabled={pending || !versionReady || !changed}
+                    onClick={() => void submit()}
+                  >
+                    {pending ? (
+                      <Spinner aria-label={t('saving')} />
+                    ) : (
+                      <Save className="size-4" aria-hidden="true" />
+                    )}
+                    {t('groupSettingsSaveAction')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    disabled={pending}
+                    onClick={() => {
+                      initialized.current = undefined
+                      setDraft(groupEditDraftFromGroup(readyGroup))
+                      clearDraft(draftKey(readyGroup.id))
+                      setLocalErrors({})
+                      setFieldErrors({})
+                      setFeedback(null)
+                      setEditing(false)
+                    }}
+                  >
+                    {t('cancel')}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
           </div>
 
           <div className="space-y-4">
@@ -609,9 +607,9 @@ function GroupStateDialog({
   return (
     <>
       <Button
-        variant={action === 'disable' ? 'danger-soft' : 'secondary'}
-        onPress={state.open}
-        isDisabled={!group.version}
+        variant={action === 'disable' ? 'destructive' : 'secondary'}
+        onClick={state.open}
+        disabled={!group.version}
       >
         {action === 'enable' ? (
           <Power className="size-4" aria-hidden="true" />
@@ -620,72 +618,63 @@ function GroupStateDialog({
         )}
         {t(action === 'enable' ? 'groupsEnableAction' : 'groupsDisableAction')}
       </Button>
-      <Modal state={state}>
-        <Modal.Backdrop isDismissable={!pending}>
-          <Modal.Container size="md">
-            <Modal.Dialog>
-              {({ close }) => (
-                <>
-                  <Modal.CloseTrigger
-                    aria-label={t('close')}
-                    isDisabled={pending}
-                  />
-                  <Modal.Header>
-                    <Modal.Heading>
-                      {t(
-                        action === 'enable'
-                          ? 'groupsEnableTitle'
-                          : 'groupsDisableTitle',
-                      )}
-                    </Modal.Heading>
-                  </Modal.Header>
-                  <Modal.Body>
-                    <p className="text-sm leading-6 text-muted">
-                      {t(
-                        action === 'enable'
-                          ? 'groupsEnableDescription'
-                          : 'groupsDisableDescription',
-                      )}
-                    </p>
-                    <p className="mt-3 text-sm font-medium">{displayName}</p>
-                    {feedback ? (
-                      <div className="mt-4">
-                        <RbacMutationFeedback
-                          feedback={feedback}
-                          onReload={onReload}
-                        />
-                      </div>
-                    ) : null}
-                  </Modal.Body>
-                  <Modal.Footer>
-                    <Button
-                      variant="secondary"
-                      isDisabled={pending}
-                      onPress={close}
-                    >
-                      {t('cancel')}
-                    </Button>
-                    <Button
-                      variant={action === 'disable' ? 'danger' : 'primary'}
-                      isDisabled={pending || !group.version}
-                      onPress={() => void submit()}
-                    >
-                      {pending ? (
-                        <Spinner size="sm" aria-label={t('working')} />
-                      ) : null}
-                      {t(
-                        action === 'enable'
-                          ? 'groupsEnableConfirm'
-                          : 'groupsDisableConfirm',
-                      )}
-                    </Button>
-                  </Modal.Footer>
-                </>
+      <Dialog
+        open={state.isOpen}
+        onOpenChange={(open) => {
+          if (!open && pending) return
+          state.setOpen(open)
+        }}
+      >
+        <DialogContent showCloseButton={!pending} closeLabel={t('close')}>
+          <DialogHeader>
+            <DialogTitle>
+              {t(
+                action === 'enable'
+                  ? 'groupsEnableTitle'
+                  : 'groupsDisableTitle',
               )}
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
+            </DialogTitle>
+          </DialogHeader>
+          <div>
+            <p className="text-sm leading-6 text-muted-foreground">
+              {t(
+                action === 'enable'
+                  ? 'groupsEnableDescription'
+                  : 'groupsDisableDescription',
+              )}
+            </p>
+            <p className="mt-3 text-sm font-medium">{displayName}</p>
+            {feedback ? (
+              <div className="mt-4">
+                <RbacMutationFeedback feedback={feedback} onReload={onReload} />
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={pending}
+              onClick={() => state.close()}
+            >
+              {t('cancel')}
+            </Button>
+            <Button
+              type="button"
+              variant={action === 'disable' ? 'destructive' : 'default'}
+              disabled={pending || !group.version}
+              onClick={() => void submit()}
+            >
+              {pending ? <Spinner aria-label={t('working')} /> : null}
+              {t(
+                action === 'enable'
+                  ? 'groupsEnableConfirm'
+                  : 'groupsDisableConfirm',
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }
@@ -755,64 +744,55 @@ function GroupDeleteDialog({
   return (
     <>
       <Button
-        variant="danger-soft"
-        onPress={state.open}
-        isDisabled={!group.version}
+        variant="destructive"
+        onClick={state.open}
+        disabled={!group.version}
       >
         <Trash2 className="size-4" aria-hidden="true" />
         {t('groupsDeleteAction')}
       </Button>
-      <Modal state={state}>
-        <Modal.Backdrop isDismissable={!pending}>
-          <Modal.Container size="md">
-            <Modal.Dialog>
-              {({ close }) => (
-                <>
-                  <Modal.CloseTrigger
-                    aria-label={t('close')}
-                    isDisabled={pending}
-                  />
-                  <Modal.Header>
-                    <Modal.Heading>{t('groupsDeleteTitle')}</Modal.Heading>
-                  </Modal.Header>
-                  <Modal.Body>
-                    <p className="text-sm leading-6 text-muted">
-                      {t('groupsDeleteDescription', { name: displayName })}
-                    </p>
-                    {feedback ? (
-                      <div className="mt-4">
-                        <RbacMutationFeedback
-                          feedback={feedback}
-                          onReload={onReload}
-                        />
-                      </div>
-                    ) : null}
-                  </Modal.Body>
-                  <Modal.Footer>
-                    <Button
-                      variant="secondary"
-                      isDisabled={pending}
-                      onPress={close}
-                    >
-                      {t('cancel')}
-                    </Button>
-                    <Button
-                      variant="danger"
-                      isDisabled={pending || !group.version}
-                      onPress={() => void submit()}
-                    >
-                      {pending ? (
-                        <Spinner size="sm" aria-label={t('working')} />
-                      ) : null}
-                      {t('groupsDeleteConfirm')}
-                    </Button>
-                  </Modal.Footer>
-                </>
-              )}
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
+      <Dialog
+        open={state.isOpen}
+        onOpenChange={(open) => {
+          if (!open && pending) return
+          state.setOpen(open)
+        }}
+      >
+        <DialogContent showCloseButton={!pending} closeLabel={t('close')}>
+          <DialogHeader>
+            <DialogTitle>{t('groupsDeleteTitle')}</DialogTitle>
+          </DialogHeader>
+          <div>
+            <p className="text-sm leading-6 text-muted-foreground">
+              {t('groupsDeleteDescription', { name: displayName })}
+            </p>
+            {feedback ? (
+              <div className="mt-4">
+                <RbacMutationFeedback feedback={feedback} onReload={onReload} />
+              </div>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={pending}
+              onClick={() => state.close()}
+            >
+              {t('cancel')}
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={pending || !group.version}
+              onClick={() => void submit()}
+            >
+              {pending ? <Spinner aria-label={t('working')} /> : null}
+              {t('groupsDeleteConfirm')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   )
 }

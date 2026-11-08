@@ -1,14 +1,20 @@
 import {
   Alert,
-  Button,
-  Chip,
-  Modal,
-  Spinner,
-  toast,
-  useOverlayState,
-} from '@heroui/react'
+  AlertDescription,
+} from '@identity/ui/components/alert'
+import { Badge } from '@identity/ui/components/badge'
+import { Button } from '@identity/ui/components/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@identity/ui/components/dialog'
+import { Spinner } from '@identity/ui/components/spinner'
+import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
 import { DataTable, type DataTableColumn } from '@identity/ui/data-table'
-import { Plus } from 'lucide-react'
+import { Plus, TriangleAlert } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
 
 import { AsyncState } from '#/components/async-state'
@@ -29,6 +35,7 @@ import {
 } from '#/lib/graphql/presentation'
 import { useConsoleQuery } from '#/lib/graphql/use-console-query'
 import { useLocale, useTranslator, type MessageKey } from '#/lib/i18n'
+import { toast } from '#/lib/toast'
 import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
 import type { RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
@@ -102,13 +109,16 @@ function credentialLabel(credential: Credential): string {
 
 function CredentialStatus({ credential }: { credential: Credential }) {
   const t = useTranslator()
-  const [key, color] = credential.active
+  const [key, tone] = credential.active
     ? (['clientsCredentialActive', 'success'] as const)
     : (['clientsCredentialExpired', 'warning'] as const)
   return (
-    <Chip size="sm" variant="soft" color={color}>
-      <Chip.Label>{t(key)}</Chip.Label>
-    </Chip>
+    <Badge
+      variant="secondary"
+      className={tone === 'success' ? 'text-success' : 'text-warning'}
+    >
+      {t(key)}
+    </Badge>
   )
 }
 
@@ -166,11 +176,7 @@ export function ClientCredentialsPage() {
     credential: Credential
     action: 'rotate' | 'revoke'
   } | null>(null)
-  const revealDialog = useOverlayState({
-    onOpenChange: (open) => {
-      if (!open) setIssued(null)
-    },
-  })
+  const revealDialog = useOverlayState()
   const confirmDialog = useOverlayState()
   const publicKeyDialog = useOverlayState()
   const jwksDialog = useOverlayState()
@@ -335,11 +341,11 @@ export function ClientCredentialsPage() {
           <Button
             size="sm"
             className="h-auto"
-            isDisabled={pending || full}
-            onPress={() => void issue()}
+            disabled={pending || full}
+            onClick={() => void issue()}
           >
             {pending && !target ? (
-              <Spinner size="sm" aria-label={t('working')} />
+              <Spinner aria-label={t('working')} />
             ) : (
               <Plus className="size-4" aria-hidden="true" />
             )}
@@ -351,8 +357,8 @@ export function ClientCredentialsPage() {
     return (
       <Button
         size="sm"
-        isDisabled={pending || full}
-        onPress={kind === 'PUBLIC_KEY' ? publicKeyDialog.open : jwksDialog.open}
+        disabled={pending || full}
+        onClick={kind === 'PUBLIC_KEY' ? publicKeyDialog.open : jwksDialog.open}
       >
         <Plus className="size-4" aria-hidden="true" />
         {t(kind === 'PUBLIC_KEY' ? 'clientsPublicKeyAdd' : 'clientsJwksAdd')}
@@ -448,14 +454,14 @@ export function ClientCredentialsPage() {
             <div className="min-w-0">
               <h2 className="flex items-baseline gap-2 text-sm font-semibold">
                 {t(entry.label)}
-                <span className="text-xs font-normal tabular-nums text-muted">
+                <span className="text-xs font-normal tabular-nums text-muted-foreground">
                   {t('clientsCredentialUsage', {
                     used: activeCount(entry.kind),
                     max: MAX_ACTIVE_CREDENTIALS[entry.kind],
                   })}
                 </span>
               </h2>
-              <p className="mt-0.5 max-w-2xl text-xs leading-5 text-muted">
+              <p className="mt-0.5 max-w-2xl text-xs leading-5 text-muted-foreground">
                 {t(entry.description)}
               </p>
               {canAdd && atLimit(entry.kind) ? (
@@ -492,47 +498,51 @@ export function ClientCredentialsPage() {
         }}
       />
 
-      <Modal state={revealDialog}>
-        <Modal.Backdrop isDismissable={false}>
-          <Modal.Container size="md">
-            <Modal.Dialog>
-              {({ close }) => (
-                <>
-                  <Modal.Header>
-                    <Modal.Heading>{t('clientsSecretIssuedTitle')}</Modal.Heading>
-                  </Modal.Header>
-                  <Modal.Body className="space-y-3">
-                    <Alert status="warning">
-                      <Alert.Indicator />
-                      <Alert.Content>
-                        <Alert.Description>{t('clientsSecretIssuedWarning')}</Alert.Description>
-                      </Alert.Content>
-                    </Alert>
-                    {issued ? (
-                      <>
-                        <div className="flex items-start gap-1 rounded-field bg-surface-secondary p-3">
-                          <code className="min-w-0 flex-1 break-all text-sm">{issued.secret}</code>
-                          <CopyButton value={issued.secret} label={t('clientsSecret')} />
-                        </div>
-                        {issued.expiresAt ? (
-                          <p className="text-xs text-muted">
-                            {t('clientsSecretIssuedExpires', {
-                              date: formatDateTime(issued.expiresAt, locale, timeZone),
-                            })}
-                          </p>
-                        ) : null}
-                      </>
-                    ) : null}
-                  </Modal.Body>
-                  <Modal.Footer>
-                    <Button onPress={close}>{t('clientsSecretStored')}</Button>
-                  </Modal.Footer>
-                </>
-              )}
-            </Modal.Dialog>
-          </Modal.Container>
-        </Modal.Backdrop>
-      </Modal>
+      <Dialog
+        open={revealDialog.isOpen}
+        onOpenChange={(open) => {
+          revealDialog.setOpen(open)
+          if (!open) setIssued(null)
+        }}
+        disablePointerDismissal
+      >
+        <DialogContent showCloseButton={false}>
+          <DialogHeader>
+            <DialogTitle>{t('clientsSecretIssuedTitle')}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Alert className="text-warning">
+              <TriangleAlert aria-hidden="true" />
+              <AlertDescription>{t('clientsSecretIssuedWarning')}</AlertDescription>
+            </Alert>
+            {issued ? (
+              <>
+                <div className="flex items-start gap-1 rounded-lg bg-muted p-3">
+                  <code className="min-w-0 flex-1 break-all text-sm">{issued.secret}</code>
+                  <CopyButton value={issued.secret} label={t('clientsSecret')} />
+                </div>
+                {issued.expiresAt ? (
+                  <p className="text-xs text-muted-foreground">
+                    {t('clientsSecretIssuedExpires', {
+                      date: formatDateTime(issued.expiresAt, locale, timeZone),
+                    })}
+                  </p>
+                ) : null}
+              </>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={() => {
+                setIssued(null)
+                revealDialog.close()
+              }}
+            >
+              {t('clientsSecretStored')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Kept mounted while the credentials refetch so a draft survives. */}
       <>
@@ -604,48 +614,53 @@ function AddCredentialDialog({
 }) {
   const t = useTranslator()
   return (
-    <Modal state={state}>
-      <Modal.Backdrop isDismissable={!pending}>
-        <Modal.Container size="lg">
-          <Modal.Dialog>
-            {({ close }) => (
-              <form
-                noValidate
-                aria-busy={pending}
-                onSubmit={(event) => {
-                  event.preventDefault()
-                  onSubmit()
-                }}
-              >
-                <Modal.Header>
-                  <Modal.Heading>{title}</Modal.Heading>
-                </Modal.Header>
-                <Modal.Body className="space-y-4">
-                  {feedback ? <RbacMutationFeedback feedback={feedback} /> : null}
-                  {children}
-                </Modal.Body>
-                <Modal.Footer>
-                  <Button
-                    variant="secondary"
-                    isDisabled={pending}
-                    onPress={() => {
-                      close()
-                      onClosed()
-                    }}
-                  >
-                    {t('cancel')}
-                  </Button>
-                  <Button type="submit" isDisabled={pending}>
-                    {pending ? <Spinner size="sm" aria-label={t('working')} /> : null}
-                    {t('clientsCredentialAddSubmit')}
-                  </Button>
-                </Modal.Footer>
-              </form>
-            )}
-          </Modal.Dialog>
-        </Modal.Container>
-      </Modal.Backdrop>
-    </Modal>
+    <Dialog
+      open={state.isOpen}
+      onOpenChange={(open) => {
+        if (!open && pending) return
+        state.setOpen(open)
+      }}
+    >
+      <DialogContent
+        showCloseButton={!pending}
+        closeLabel={t('close')}
+        className="sm:max-w-lg"
+      >
+        <form
+          noValidate
+          aria-busy={pending}
+          className="grid gap-6"
+          onSubmit={(event) => {
+            event.preventDefault()
+            onSubmit()
+          }}
+        >
+          <DialogHeader>
+            <DialogTitle>{title}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {feedback ? <RbacMutationFeedback feedback={feedback} /> : null}
+            {children}
+          </div>
+          <DialogFooter>
+            <Button
+              variant="secondary"
+              disabled={pending}
+              onClick={() => {
+                state.close()
+                onClosed()
+              }}
+            >
+              {t('cancel')}
+            </Button>
+            <Button type="submit" disabled={pending}>
+              {pending ? <Spinner aria-label={t('working')} /> : null}
+              {t('clientsCredentialAddSubmit')}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -752,7 +767,7 @@ function AddPublicKeyDialog({
         error={add.fieldErrors.key}
       />
       {certificate ? (
-        <p className="text-xs text-muted">{t('clientsPublicKeyCertificateExpiry')}</p>
+        <p className="text-xs text-muted-foreground">{t('clientsPublicKeyCertificateExpiry')}</p>
       ) : (
         <DatePickerField
           name="public-key-expiry"

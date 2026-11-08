@@ -5,9 +5,15 @@ import {
   ResourceTable,
   type ResourceTableControls,
 } from '#/components/resource-table'
-import { Alert, Button, Skeleton } from '@heroui/react'
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from '@identity/ui/components/alert'
+import { Button } from '@identity/ui/components/button'
+import { Skeleton } from '@identity/ui/components/skeleton'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { Plus, RotateCcw, Search } from 'lucide-react'
+import { Plus, RotateCcw, Search, TriangleAlert } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
@@ -86,12 +92,12 @@ function GroupsTable({
                   <Link
                     to="/groups/$groupId"
                     params={{ groupId: node.id }}
-                    className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-focus"
+                    className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                   >
                     {name}
                   </Link>
                   {description ? (
-                    <p className="mt-1 max-w-md text-xs leading-5 text-muted">
+                    <p className="mt-1 max-w-md text-xs leading-5 text-muted-foreground">
                       {description}
                     </p>
                   ) : null}
@@ -240,7 +246,7 @@ export function GroupsListPage({ search }: { search: GroupsSearch }) {
       description={t('groupsDescription')}
       actions={
         scope.groupsWrite ? (
-          <Button onPress={() => void navigate({ to: '/groups/new' })}>
+          <Button onClick={() => void navigate({ to: '/groups/new' })}>
             <Plus className="size-4" aria-hidden="true" />
             {t('groupsNewAction')}
           </Button>
@@ -292,15 +298,15 @@ export function GroupsListPage({ search }: { search: GroupsSearch }) {
     if (groups.status !== 'ready' || !groups.data) {
       return (
         <div
-          className="space-y-3 rounded-field border border-border bg-surface p-4"
+          className="space-y-3 rounded-lg border border-border bg-card p-4"
           role="status"
           aria-live="polite"
           aria-label={t('groupsTableLoading')}
         >
           <span className="sr-only">{t('groupsTableLoading')}</span>
-          <Skeleton className="h-10 w-full rounded-field" />
+          <Skeleton className="h-10 w-full rounded-lg" />
           {Array.from({ length: 5 }, (_, index) => (
-            <Skeleton key={index} className="h-14 w-full rounded-field" />
+            <Skeleton key={index} className="h-14 w-full rounded-lg" />
           ))}
         </div>
       )
@@ -317,7 +323,7 @@ export function GroupsListPage({ search }: { search: GroupsSearch }) {
               title={t('groupsNoResultsTitle')}
               description={t('groupsNoResultsDescription')}
               action={
-                <Button variant="secondary" onPress={reset}>
+                <Button variant="secondary" onClick={reset}>
                   {t('groupsClearFilters')}
                 </Button>
               }
@@ -331,7 +337,7 @@ export function GroupsListPage({ search }: { search: GroupsSearch }) {
             description={t('groupsEmptyDescription')}
             action={
               scope.groupsWrite ? (
-                <Button onPress={() => void navigate({ to: '/groups/new' })}>
+                <Button onClick={() => void navigate({ to: '/groups/new' })}>
                   <Plus className="size-4" aria-hidden="true" />
                   {t('groupsNewAction')}
                 </Button>
@@ -347,19 +353,15 @@ export function GroupsListPage({ search }: { search: GroupsSearch }) {
     return (
       <div className="space-y-4">
         {groups.partial ? (
-          <Alert status="warning">
-            <Alert.Indicator />
-            <Alert.Content>
-              <Alert.Title>{t('groupsPartialTitle')}</Alert.Title>
-              <Alert.Description>
-                {t('groupsPartialDescription')}
-              </Alert.Description>
-              <RequestCorrelation
-                requestId={groups.requestId}
-                traceId={groups.traceId}
-              />
-              <ErrorDetails issues={groups.errors} />
-            </Alert.Content>
+          <Alert variant="default" className="text-warning">
+            <TriangleAlert aria-hidden="true" />
+            <AlertTitle>{t('groupsPartialTitle')}</AlertTitle>
+            <AlertDescription>{t('groupsPartialDescription')}</AlertDescription>
+            <RequestCorrelation
+              requestId={groups.requestId}
+              traceId={groups.traceId}
+            />
+            <ErrorDetails issues={groups.errors} />
           </Alert>
         ) : null}
         <GroupsTable
@@ -447,7 +449,7 @@ export function GroupsListPage({ search }: { search: GroupsSearch }) {
                 <Search className="size-4" aria-hidden="true" />
                 {t('groupsApplyFilters')}
               </Button>
-              <Button type="button" variant="secondary" onPress={reset}>
+              <Button type="button" variant="secondary" onClick={reset}>
                 <RotateCcw className="size-4" aria-hidden="true" />
                 {t('groupsResetFilters')}
               </Button>

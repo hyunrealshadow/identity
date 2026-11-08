@@ -1,21 +1,24 @@
-import { Chip } from '@heroui/react'
+import { Badge } from '@identity/ui/components/badge'
 
 import { useTranslator } from '#/lib/i18n'
 
 export function ClientStatusChip({ enabled }: { enabled: boolean }) {
   const t = useTranslator()
   return (
-    <Chip size="sm" variant="soft" color={enabled ? 'success' : 'default'}>
-      <Chip.Label>{t(enabled ? 'clientsEnabled' : 'clientsDisabled')}</Chip.Label>
-    </Chip>
+    <Badge
+      variant="secondary"
+      className={enabled ? 'text-success' : undefined}
+    >
+      {t(enabled ? 'clientsEnabled' : 'clientsDisabled')}
+    </Badge>
   )
 }
 
 export function ClientBuiltInChip() {
   const t = useTranslator()
   return (
-    <Chip size="sm" variant="soft" color="accent">
-      <Chip.Label>{t('clientsBuiltIn')}</Chip.Label>
-    </Chip>
+    <Badge variant="secondary" className="text-primary">
+      {t('clientsBuiltIn')}
+    </Badge>
   )
 }

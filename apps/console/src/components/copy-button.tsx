@@ -1,4 +1,4 @@
-import { Button } from '@heroui/react'
+import { Button } from '@identity/ui/components/button'
 import { Check, Copy } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslator } from '#/lib/i18n'
@@ -26,13 +26,12 @@ export function CopyButton({ value, label }: { value: string; label: string }) {
     >
       <Button
         type="button"
-        isIconOnly
-        size="sm"
+        size="icon-xs"
         variant="ghost"
-        className="size-6 min-w-6 shrink-0"
+        className="shrink-0"
         aria-label={t('copyValue', { label })}
-        isDisabled={pending}
-        onPress={async () => {
+        disabled={pending}
+        onClick={async () => {
           setPending(true)
           try {
             await navigator.clipboard.writeText(value)
@@ -54,7 +53,7 @@ export function CopyButton({ value, label }: { value: string; label: string }) {
         {feedback}
       </span>
       {status === 'failed' ? (
-        <span className="ml-1 text-xs text-danger" aria-hidden="true">
+        <span className="ml-1 text-xs text-destructive" aria-hidden="true">
           {feedback}
         </span>
       ) : null}

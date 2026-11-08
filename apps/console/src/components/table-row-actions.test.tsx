@@ -38,7 +38,7 @@ describe('table row actions', () => {
     expect(forbidden).not.toHaveBeenCalled()
     await user.keyboard('{Escape}')
     await waitFor(() => expect(document.activeElement).toBe(trigger))
-    await user.click(trigger)
+    await user.keyboard('{ArrowDown}')
     await user.click(screen.getByRole('menuitem', { name: 'View' }))
     expect(view).toHaveBeenCalledTimes(1)
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())

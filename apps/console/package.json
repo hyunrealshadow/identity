@@ -16,8 +16,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@heroui/react": "3.2.6",
-    "@heroui/styles": "3.2.6",
     "@identity/graphql-access": "workspace:*",
     "@identity/ui": "workspace:*",
     "@internationalized/date": "3.12.4",
@@ -27,7 +25,6 @@
     "lucide-react": "1.52.0",
     "oauth4webapi": "3.8.8",
     "react": "19.3.0",
-    "react-aria": "3.52.1",
     "react-dom": "19.3.0",
     "react-intl": "12.1.4"
   },

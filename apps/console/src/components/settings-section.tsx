@@ -1,4 +1,4 @@
-import { Skeleton } from '@heroui/react'
+import { Skeleton } from '@identity/ui/components/skeleton'
 import type { ReactNode } from 'react'
 
 /**
@@ -26,16 +26,16 @@ export function SettingsGroup({
     <section>
       <div className="mb-2 flex min-h-8 items-center justify-between gap-3 px-1">
         <div className="min-w-0">
-          <h2 className={`text-sm font-semibold ${danger ? 'text-danger' : ''}`}>{title}</h2>
+          <h2 className={`text-sm font-semibold ${danger ? 'text-destructive' : ''}`}>{title}</h2>
           {description ? (
-            <p className="mt-0.5 text-xs leading-5 text-muted">{description}</p>
+            <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{description}</p>
           ) : null}
         </div>
         {action}
       </div>
       <div
-        className={`divide-y divide-separator overflow-hidden rounded-3xl border bg-surface ${
-          danger ? 'console-card-danger border-danger' : 'console-card border-border'
+        className={`divide-y divide-border overflow-hidden rounded-xl border bg-card ${
+          danger ? 'console-card-danger border-destructive' : 'console-card border-border'
         }`}
       >
         {children}
@@ -72,7 +72,7 @@ export function SettingsRow({
         <div className="flex items-center gap-3">
           {icon ? (
             <span
-              className="flex size-9 shrink-0 items-center justify-center rounded-field bg-surface-secondary text-muted"
+              className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"
               aria-hidden="true"
             >
               {icon}
@@ -81,7 +81,7 @@ export function SettingsRow({
           <div className="min-w-0 flex-1">
             {label ? <div className="text-sm font-medium">{label}</div> : null}
             {description ? (
-              <div className="mt-0.5 text-xs leading-5 text-muted">{description}</div>
+              <div className="mt-0.5 text-xs leading-5 text-muted-foreground">{description}</div>
             ) : null}
           </div>
           {action ? <div className="shrink-0">{action}</div> : null}
@@ -110,8 +110,8 @@ export type SettingsRowSkeletonKind =
 function RowTextSkeleton({ description }: { description: boolean }) {
   return (
     <div className="min-w-0 flex-1 space-y-2">
-      <Skeleton className="h-4 w-32 rounded-field" />
-      {description ? <Skeleton className="h-3 w-64 max-w-full rounded-field" /> : null}
+      <Skeleton className="h-4 w-32 rounded-lg" />
+      {description ? <Skeleton className="h-3 w-64 max-w-full rounded-lg" /> : null}
     </div>
   )
 }
@@ -119,12 +119,12 @@ function RowTextSkeleton({ description }: { description: boolean }) {
 function LocalizedSkeleton({ field }: { field: string }) {
   return (
     <div className="space-y-3">
-      <Skeleton className="h-4 w-16 rounded-field" />
+      <Skeleton className="h-4 w-16 rounded-lg" />
       <div className="grid gap-4 md:grid-cols-2">
         {[0, 1].map((column) => (
           <div key={column} className="space-y-2">
-            <Skeleton className="h-4 w-20 rounded-field" />
-            <Skeleton className={`${field} w-full rounded-field`} />
+            <Skeleton className="h-4 w-20 rounded-lg" />
+            <Skeleton className={`${field} w-full rounded-lg`} />
           </div>
         ))}
       </div>
@@ -146,10 +146,10 @@ export function SettingsGroupSkeleton({
   return (
     <section aria-hidden="true">
       <div className="mb-2 flex min-h-8 flex-col justify-center gap-1.5 px-1">
-        <Skeleton className="h-4 w-24 rounded-field" />
-        {description ? <Skeleton className="h-3 w-56 rounded-field" /> : null}
+        <Skeleton className="h-4 w-24 rounded-lg" />
+        {description ? <Skeleton className="h-3 w-56 rounded-lg" /> : null}
       </div>
-      <div className="console-card divide-y divide-separator overflow-hidden rounded-3xl border border-border bg-surface">
+      <div className="console-card divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
         {rows.map((kind, index) => (
           <div key={index} className="px-5 py-4">
             {kind === 'localized' || kind === 'localizedTextarea' ? (
@@ -157,7 +157,7 @@ export function SettingsGroupSkeleton({
             ) : kind === 'textarea' ? (
               <div className="space-y-3">
                 <RowTextSkeleton description />
-                <Skeleton className="h-20 w-full rounded-field" />
+                <Skeleton className="h-20 w-full rounded-lg" />
               </div>
             ) : (
               <div className="flex items-center gap-3">
@@ -165,9 +165,9 @@ export function SettingsGroupSkeleton({
                 {kind === 'switch' ? (
                   <Skeleton className="h-5 w-10 shrink-0 rounded-full" />
                 ) : kind === 'control' ? (
-                  <Skeleton className="h-9 w-36 shrink-0 rounded-field" />
+                  <Skeleton className="h-9 w-36 shrink-0 rounded-lg" />
                 ) : (
-                  <Skeleton className="h-4 w-36 shrink-0 rounded-field" />
+                  <Skeleton className="h-4 w-36 shrink-0 rounded-lg" />
                 )}
               </div>
             )}

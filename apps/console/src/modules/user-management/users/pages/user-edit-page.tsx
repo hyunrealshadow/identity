@@ -1,6 +1,12 @@
-import { Alert, Button, Spinner, toast } from '@heroui/react'
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from '@identity/ui/components/alert'
+import { Button } from '@identity/ui/components/button'
+import { Spinner } from '@identity/ui/components/spinner'
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowLeft, Save } from 'lucide-react'
+import { ArrowLeft, Save, TriangleAlert } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
@@ -35,6 +41,7 @@ import {
   type UserProfileField,
 } from '#/modules/user-management/users/lib/user-form'
 import { clearDraft, readDraft, writeDraft } from '#/lib/draft-storage'
+import { toast } from '#/lib/toast'
 import { useUserMutations } from '#/modules/user-management/users/hooks/user-mutations'
 import { userManagementScope } from '#/modules/user-management/users/lib/user-scope'
 import { useUserDetail } from '#/modules/user-management/users/hooks/use-user-detail'
@@ -154,8 +161,8 @@ export function UserEditPage({ userId }: { userId: string }) {
       actions={
         <Button
           variant="secondary"
-          isDisabled={pending}
-          onPress={() => {
+          disabled={pending}
+          onClick={() => {
             leaveEditor()
             void navigate({
               to: '/users/$userId',
@@ -273,7 +280,7 @@ export function UserEditPage({ userId }: { userId: string }) {
           action={
             <Button
               variant="secondary"
-              onPress={() => void navigate({ to: '/users' })}
+              onClick={() => void navigate({ to: '/users' })}
             >
               {t('backToUsers')}
             </Button>
@@ -486,19 +493,15 @@ export function UserEditPage({ userId }: { userId: string }) {
 
       <div className="max-w-3xl space-y-6">
         {detail.partial ? (
-          <Alert status="warning">
-            <Alert.Indicator />
-            <Alert.Content>
-              <Alert.Title>{t('usersPartialTitle')}</Alert.Title>
-              <Alert.Description>
-                {t('usersPartialDescription')}
-              </Alert.Description>
-              <RequestCorrelation
-                requestId={detail.requestId}
-                traceId={detail.traceId}
-              />
-              <ErrorDetails issues={detail.errors} />
-            </Alert.Content>
+          <Alert variant="default" className="text-warning">
+            <TriangleAlert aria-hidden="true" />
+            <AlertTitle>{t('usersPartialTitle')}</AlertTitle>
+            <AlertDescription>{t('usersPartialDescription')}</AlertDescription>
+            <RequestCorrelation
+              requestId={detail.requestId}
+              traceId={detail.traceId}
+            />
+            <ErrorDetails issues={detail.errors} />
           </Alert>
         ) : null}
 
@@ -527,13 +530,11 @@ export function UserEditPage({ userId }: { userId: string }) {
               </div>
 
               {!versionReady || versionError ? (
-                <Alert status="warning">
-                  <Alert.Indicator />
-                  <Alert.Content>
-                    <Alert.Title>
-                      {versionError ?? t('usersStateVersionUnavailable')}
-                    </Alert.Title>
-                  </Alert.Content>
+                <Alert variant="default" className="text-warning">
+                  <TriangleAlert aria-hidden="true" />
+                  <AlertTitle>
+                    {versionError ?? t('usersStateVersionUnavailable')}
+                  </AlertTitle>
                 </Alert>
               ) : null}
 
@@ -566,7 +567,7 @@ export function UserEditPage({ userId }: { userId: string }) {
               </div>
             </section>
 
-            <section className="space-y-4 border-t border-separator pt-6">
+            <section className="space-y-4 border-t border-border pt-6">
               <div>
                 <h2 className="text-base font-semibold tracking-tight">
                   {t('usersSectionProfile')}
@@ -582,16 +583,18 @@ export function UserEditPage({ userId }: { userId: string }) {
             </section>
 
             {noChangesError ? (
-              <p className="text-xs leading-5 text-muted">{noChangesError}</p>
+              <p className="text-xs leading-5 text-muted-foreground">
+                {noChangesError}
+              </p>
             ) : null}
 
-            <div className="flex flex-wrap items-center gap-2 border-t border-separator pt-5">
+            <div className="flex flex-wrap items-center gap-2 border-t border-border pt-5">
               <Button
                 type="submit"
-                isDisabled={pending || !dirty || !versionReady}
+                disabled={pending || !dirty || !versionReady}
               >
                 {pending ? (
-                  <Spinner size="sm" aria-label={t('usersEditPending')} />
+                  <Spinner aria-label={t('usersEditPending')} />
                 ) : (
                   <Save className="size-4" aria-hidden="true" />
                 )}
@@ -600,8 +603,8 @@ export function UserEditPage({ userId }: { userId: string }) {
               <Button
                 type="button"
                 variant="secondary"
-                isDisabled={pending}
-                onPress={() => {
+                disabled={pending}
+                onClick={() => {
                   leaveEditor()
                   void navigate({
                     to: '/users/$userId',

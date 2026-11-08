@@ -44,17 +44,15 @@ describe('role permission table', () => {
     }
     const user = userEvent.setup()
     renderWithLocale(<Fixture />)
-    await user.click(
-      screen.getByRole('button', { name: 'Actions for report.read' }),
-    )
+    screen.getByRole('button', { name: 'Actions for report.read' }).focus()
+    await user.keyboard('{ArrowDown}')
     await user.click(
       screen.getByRole('menuitem', { name: 'Remove' }),
     )
     expect(onToggle).toHaveBeenLastCalledWith(permission.id)
     expect(screen.getByRole('rowheader', { name: /Read reports/ })).toBeTruthy()
-    await user.click(
-      screen.getByRole('button', { name: 'Actions for report.read' }),
-    )
+    screen.getByRole('button', { name: 'Actions for report.read' }).focus()
+    await user.keyboard('{ArrowDown}')
     await user.click(
       screen.getByRole('menuitem', { name: 'Undo removal' }),
     )

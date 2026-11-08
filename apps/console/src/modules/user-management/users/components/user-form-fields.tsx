@@ -1,13 +1,19 @@
 import {
-  Description,
+  Field,
+  FieldDescription,
   FieldError,
-  Input,
-  Label,
-  ListBox,
+  FieldLabel,
+} from '@identity/ui/components/field'
+import { Input } from '@identity/ui/components/input'
+import {
   Select,
-  TextArea,
-  TextField,
-} from '@heroui/react'
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@identity/ui/components/select'
+import { Textarea } from '@identity/ui/components/textarea'
+import { useId } from 'react'
 
 import {
   USER_PROFILE_DATE_FIELDS,
@@ -56,28 +62,40 @@ export function UserTextField({
   maxLength?: number
   inputMode?: 'text' | 'email' | 'numeric'
 }) {
+  const id = useId()
+  const descriptionId = `${id}-description`
+  const errorId = `${id}-error`
+  const describedBy =
+    [
+      description ? descriptionId : undefined,
+      error ? errorId : undefined,
+    ]
+      .filter(Boolean)
+      .join(' ') || undefined
+
   return (
-    <TextField
-      name={name}
-      value={value}
-      onChange={onChange}
-      type={type}
-      isRequired={isRequired}
-      isDisabled={isDisabled}
-      isInvalid={Boolean(error)}
-      fullWidth
-    >
-      <Label>{label}</Label>
+    <Field data-invalid={error ? true : undefined}>
+      <FieldLabel htmlFor={id}>{label}</FieldLabel>
       <Input
+        id={id}
+        name={name}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
         type={type}
         autoComplete={autoComplete}
         placeholder={placeholder}
         maxLength={maxLength}
         inputMode={inputMode}
+        required={isRequired}
+        disabled={isDisabled}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy}
       />
-      {description ? <Description>{description}</Description> : null}
-      {error ? <FieldError>{error}</FieldError> : null}
-    </TextField>
+      {description ? (
+        <FieldDescription id={descriptionId}>{description}</FieldDescription>
+      ) : null}
+      {error ? <FieldError id={errorId}>{error}</FieldError> : null}
+    </Field>
   )
 }
 
@@ -109,26 +127,40 @@ export function UserTextAreaField({
   /** Keep the label for assistive technology when the row shows it already. */
   hideLabel?: boolean
 }) {
+  const id = useId()
+  const descriptionId = `${id}-description`
+  const errorId = `${id}-error`
+  const describedBy =
+    [
+      description ? descriptionId : undefined,
+      error ? errorId : undefined,
+    ]
+      .filter(Boolean)
+      .join(' ') || undefined
+
   return (
-    <TextField
-      name={name}
-      value={value}
-      onChange={onChange}
-      isRequired={isRequired}
-      isDisabled={isDisabled}
-      isInvalid={Boolean(error)}
-      fullWidth
-    >
-      <Label className={hideLabel ? 'sr-only' : undefined}>{label}</Label>
-      <TextArea
+    <Field data-invalid={error ? true : undefined}>
+      <FieldLabel htmlFor={id} className={hideLabel ? 'sr-only' : undefined}>
+        {label}
+      </FieldLabel>
+      <Textarea
+        id={id}
+        name={name}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
         rows={rows}
         placeholder={placeholder}
         maxLength={maxLength}
-        fullWidth
+        required={isRequired}
+        disabled={isDisabled}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={describedBy}
       />
-      {description ? <Description>{description}</Description> : null}
-      {error ? <FieldError>{error}</FieldError> : null}
-    </TextField>
+      {description ? (
+        <FieldDescription id={descriptionId}>{description}</FieldDescription>
+      ) : null}
+      {error ? <FieldError id={errorId}>{error}</FieldError> : null}
+    </Field>
   )
 }
 
@@ -157,45 +189,58 @@ export function UserSelectField({
   /** One step below the default trigger height, for inline toolbar controls. */
   size?: 'sm'
 }) {
+  const id = useId()
+  const descriptionId = `${id}-description`
+  const errorId = `${id}-error`
+  const describedBy =
+    [
+      description ? descriptionId : undefined,
+      error ? errorId : undefined,
+    ]
+      .filter(Boolean)
+      .join(' ') || undefined
+  const items = options.map((option) => ({
+    value: option.id,
+    label: option.label,
+  }))
+
   return (
     <div className="min-w-0">
-      <Select
-        name={name}
-        selectedKey={value}
-        onSelectionChange={(key) => {
-          if (key !== null) onChange(String(key))
-        }}
-        isDisabled={isDisabled}
-        isInvalid={Boolean(error)}
-        fullWidth
-      >
-        <Label className={hideLabel ? 'sr-only' : undefined}>{label}</Label>
-        <Select.Trigger className={size === 'sm' ? 'min-h-8 py-1' : undefined}>
-          <Select.Value />
-          <Select.Indicator />
-        </Select.Trigger>
-        <Select.Popover>
-          <ListBox>
+      <Field data-invalid={error ? true : undefined}>
+        <FieldLabel htmlFor={id} className={hideLabel ? 'sr-only' : undefined}>
+          {label}
+        </FieldLabel>
+        <Select
+          name={name}
+          value={value}
+          onValueChange={(next: string | null) => {
+            if (next !== null) onChange(String(next))
+          }}
+          items={items}
+          disabled={isDisabled}
+        >
+          <SelectTrigger
+            id={id}
+            size={size === 'sm' ? 'sm' : 'default'}
+            className="w-full"
+            aria-invalid={error ? true : undefined}
+            aria-describedby={describedBy}
+          >
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
             {options.map((option) => (
-              <ListBox.Item
-                key={option.id}
-                id={option.id}
-                textValue={option.label}
-              >
+              <SelectItem key={option.id} value={option.id}>
                 {option.label}
-              </ListBox.Item>
+              </SelectItem>
             ))}
-          </ListBox>
-        </Select.Popover>
-      </Select>
-      {description ? (
-        <p className="mt-1 text-xs leading-5 text-muted">{description}</p>
-      ) : null}
-      {error ? (
-        <p role="alert" className="mt-1 text-xs leading-5 text-danger">
-          {error}
-        </p>
-      ) : null}
+          </SelectContent>
+        </Select>
+        {description ? (
+          <FieldDescription id={descriptionId}>{description}</FieldDescription>
+        ) : null}
+        {error ? <FieldError id={errorId}>{error}</FieldError> : null}
+      </Field>
     </div>
   )
 }

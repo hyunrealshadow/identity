@@ -1,12 +1,21 @@
 import {
   Alert,
-  Button,
-  Spinner,
-  toast,
-  useOverlayState,
-} from '@heroui/react'
+  AlertDescription,
+  AlertTitle,
+} from '@identity/ui/components/alert'
+import { Button } from '@identity/ui/components/button'
+import { Spinner } from '@identity/ui/components/spinner'
+import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
 import { useNavigate } from '@tanstack/react-router'
-import { Power, Save, ShieldCheck, ShieldOff, Trash2 } from 'lucide-react'
+import {
+  Info,
+  Power,
+  Save,
+  ShieldCheck,
+  ShieldOff,
+  Trash2,
+  TriangleAlert,
+} from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
 import { ConfirmationDialog } from '#/components/confirmation-dialog'
@@ -28,6 +37,7 @@ import {
 import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
 import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
 import type { RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
+import { toast } from '#/lib/toast'
 import { useClientDetail, type ConsoleClient } from '../components/client-detail-shell'
 import {
   CorsRow,
@@ -182,21 +192,17 @@ function ClientOverview({ client }: { client: ConsoleClient }) {
   return (
     <div className="space-y-8">
       {client.builtIn ? (
-        <Alert status="default" className="console-card border border-border">
-          <Alert.Indicator />
-          <Alert.Content>
-            <Alert.Title>{t('clientsBuiltInTitle')}</Alert.Title>
-            <Alert.Description>{t('clientsBuiltInDescription')}</Alert.Description>
-          </Alert.Content>
+        <Alert className="console-card border border-border">
+          <Info aria-hidden="true" />
+          <AlertTitle>{t('clientsBuiltInTitle')}</AlertTitle>
+          <AlertDescription>{t('clientsBuiltInDescription')}</AlertDescription>
         </Alert>
       ) : null}
       {!client.enabled ? (
-        <Alert status="warning" className="console-card border border-border">
-          <Alert.Indicator />
-          <Alert.Content>
-            <Alert.Title>{t('clientsDisabledTitle')}</Alert.Title>
-            <Alert.Description>{t('clientsDisabledDescription')}</Alert.Description>
-          </Alert.Content>
+        <Alert className="console-card border border-border text-warning">
+          <TriangleAlert aria-hidden="true" />
+          <AlertTitle>{t('clientsDisabledTitle')}</AlertTitle>
+          <AlertDescription>{t('clientsDisabledDescription')}</AlertDescription>
         </Alert>
       ) : null}
 
@@ -261,7 +267,7 @@ function ClientOverview({ client }: { client: ConsoleClient }) {
           <SettingsRow
             label={t('tableColumnCreated')}
             action={
-              <span className="text-sm text-muted">
+              <span className="text-sm text-muted-foreground">
                 {formatDateTime(client.createdAt, locale, timeZone)}
               </span>
             }
@@ -269,7 +275,7 @@ function ClientOverview({ client }: { client: ConsoleClient }) {
           <SettingsRow
             label={t('clientsUpdated')}
             action={
-              <span className="text-sm text-muted">
+              <span className="text-sm text-muted-foreground">
                 {client.updatedAt
                   ? formatDateTime(client.updatedAt, locale, timeZone)
                   : t('clientsNeverUpdated')}
@@ -293,14 +299,14 @@ function ClientOverview({ client }: { client: ConsoleClient }) {
                 <ul className="flex flex-wrap gap-2">
                   {client.corsOrigins.map((origin) => (
                     <li key={origin}>
-                      <code className="rounded-field bg-surface-secondary px-2 py-1 text-xs">
+                      <code className="rounded-lg bg-muted px-2 py-1 text-xs">
                         {origin}
                       </code>
                     </li>
                   ))}
                 </ul>
               ) : (
-                <p className="text-sm text-muted">{t('clientsCorsOriginsEmpty')}</p>
+                <p className="text-sm text-muted-foreground">{t('clientsCorsOriginsEmpty')}</p>
               )}
             </SettingsRow>
           ) : null}
@@ -335,11 +341,11 @@ function ClientOverview({ client }: { client: ConsoleClient }) {
         {editable ? (
           <div className="flex flex-wrap items-center justify-end gap-3">
             {settingsChanged ? (
-              <span className="text-xs text-muted">{t('clientsSettingsWithdrawNote')}</span>
+              <span className="text-xs text-muted-foreground">{t('clientsSettingsWithdrawNote')}</span>
             ) : null}
-            <Button type="submit" isDisabled={pending || !dirty}>
+            <Button type="submit" disabled={pending || !dirty}>
               {pending ? (
-                <Spinner size="sm" aria-label={t('clientsSavePending')} />
+                <Spinner aria-label={t('clientsSavePending')} />
               ) : (
                 <Save className="size-4" aria-hidden="true" />
               )}
@@ -463,15 +469,15 @@ function ClientLifecycle({ client }: { client: ConsoleClient }) {
           action={
             client.skipConsent ? (
               <Button
-                variant="danger-soft"
-                isDisabled={pending}
-                onPress={() => void setSkipConsent(false)}
+                variant="destructive"
+                disabled={pending}
+                onClick={() => void setSkipConsent(false)}
               >
                 <ShieldCheck className="size-4" aria-hidden="true" />
                 {t('clientsSkipConsentDisable')}
               </Button>
             ) : (
-              <Button variant="danger-soft" onPress={consentDialog.open}>
+              <Button variant="destructive" onClick={consentDialog.open}>
                 <ShieldOff className="size-4" aria-hidden="true" />
                 {t('clientsSkipConsentEnable')}
               </Button>
@@ -486,7 +492,7 @@ function ClientLifecycle({ client }: { client: ConsoleClient }) {
             client.enabled ? 'clientsDisableDescription' : 'clientsEnableDescription',
           )}
           action={
-            <Button variant="danger-soft" onPress={stateDialog.open}>
+            <Button variant="destructive" onClick={stateDialog.open}>
               <Power className="size-4" aria-hidden="true" />
               {t(client.enabled ? 'clientsDisable' : 'clientsEnable')}
             </Button>
@@ -498,7 +504,7 @@ function ClientLifecycle({ client }: { client: ConsoleClient }) {
           label={t('clientsDeleteRow')}
           description={t('clientsDeleteRowHint')}
           action={
-            <Button variant="danger" onPress={deleteDialog.open}>
+            <Button variant="destructive" onClick={deleteDialog.open}>
               <Trash2 className="size-4" aria-hidden="true" />
               {t('clientsDelete')}
             </Button>

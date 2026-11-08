@@ -6,7 +6,9 @@ import {
 import { RelationDialog } from '../../components/relation-dialog'
 import { useRelationMutation } from '../../lib/relation-mutation'
 
-import { Button, Chip, toast, useOverlayState } from '@heroui/react'
+import { Badge } from '@identity/ui/components/badge'
+import { Button } from '@identity/ui/components/button'
+import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
 
 import { ShieldPlus } from 'lucide-react'
 import { useMemo, useState } from 'react'
@@ -18,6 +20,7 @@ import {
 } from '#/generated/graphql'
 
 import { useLocale, useTranslator } from '#/lib/i18n'
+import { toast } from '#/lib/toast'
 
 import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
 
@@ -147,7 +150,7 @@ export function AssignRolesDialog({
 
   return (
     <>
-      <Button onPress={state.open}>
+      <Button onClick={state.open}>
         <ShieldPlus className="size-4" aria-hidden="true" />
         {t('userRolesAssignAction')}
       </Button>
@@ -162,7 +165,7 @@ export function AssignRolesDialog({
         onReload={onReload}
         reloadPending={reloadPending}
       >
-        <p className="text-sm leading-6 text-muted">
+        <p className="text-sm leading-6 text-muted-foreground">
           {t('userRolesAssignDescription', { user: username })}
         </p>
         <CandidateSearch
@@ -181,10 +184,10 @@ export function AssignRolesDialog({
           label={t('userRolesSearchRoles')}
           empty={t('userRolesNoCandidates')}
         >
-          <ul className="divide-y divide-separator">
+          <ul className="divide-y divide-border">
             {edges.map(({ node }) => (
               <li key={node.id}>
-                <label className="flex cursor-pointer items-start gap-3 p-3 hover:bg-surface-secondary">
+                <label className="flex cursor-pointer items-start gap-3 p-3 hover:bg-muted">
                   <input
                     type="checkbox"
                     className="mt-1 size-4"
@@ -206,14 +209,9 @@ export function AssignRolesDialog({
                         node.id}
                     </span>
                     {!node.enabled ? (
-                      <Chip
-                        size="sm"
-                        variant="soft"
-                        color="default"
-                        className="mt-1"
-                      >
-                        <Chip.Label>{t('rolesDisabled')}</Chip.Label>
-                      </Chip>
+                      <Badge variant="secondary" className="mt-1">
+                        {t('rolesDisabled')}
+                      </Badge>
                     ) : null}
                   </span>
                 </label>

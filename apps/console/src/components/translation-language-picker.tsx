@@ -1,14 +1,14 @@
+import { Button } from '@identity/ui/components/button'
 import {
-  Button,
-  ComboBox,
-  Input,
-  Label,
-  ListBox,
-  ListLayout,
-  Virtualizer,
-} from '@heroui/react'
-import { memo, useMemo } from 'react'
-import { useFilter } from 'react-aria'
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from '@identity/ui/components/combobox'
+import { Field, FieldLabel } from '@identity/ui/components/field'
+import { memo, useId, useMemo } from 'react'
 
 import { useLocale, useTranslator } from '#/lib/i18n'
 import {
@@ -16,20 +16,12 @@ import {
   type TranslationLocaleOption,
 } from '#/lib/translation-locales'
 
-const LANGUAGE_LAYOUT = { rowHeight: 40 }
-
-function renderLanguage(option: TranslationLocaleOption) {
+function matchesLanguage(option: TranslationLocaleOption, query: string) {
+  const value = query.trim().toLocaleLowerCase()
+  if (!value) return true
   return (
-    <ListBox.Item
-      id={option.tag}
-      textValue={option.search}
-      className="h-10 min-h-0 transition-none"
-    >
-      <span className="truncate" title={option.label}>
-        {option.label}
-      </span>
-      <ListBox.ItemIndicator />
-    </ListBox.Item>
+    option.search.toLocaleLowerCase().includes(value) ||
+    option.label.toLocaleLowerCase().includes(value)
   )
 }
 
@@ -46,7 +38,7 @@ export const TranslationLanguagePicker = memo(
   }) {
     const t = useTranslator()
     const { locale } = useLocale()
-    const { contains } = useFilter({ sensitivity: 'base' })
+    const inputId = useId()
     const options = useMemo(() => {
       const used = new Set(usedLocalesKey.split('\0'))
       return translationLocaleOptions(locale).filter(
@@ -55,53 +47,44 @@ export const TranslationLanguagePicker = memo(
     }, [locale, usedLocalesKey])
 
     return (
-      <>
-        <ComboBox
-          defaultItems={options}
-          menuTrigger="input"
-          selectedKey={null}
-          onSelectionChange={(key) => {
-            if (typeof key === 'string') onSelect(key)
-          }}
-          allowsCustomValue={false}
-          allowsEmptyCollection
-          defaultFilter={contains}
-          autoFocus
-          fullWidth
-        >
-          <Label>{t('localizedChooseLanguage')}</Label>
-          <ComboBox.InputGroup>
-            <Input
+      <div>
+        <Field>
+          <FieldLabel htmlFor={inputId}>{t('localizedChooseLanguage')}</FieldLabel>
+          <Combobox
+            items={options}
+            value={null}
+            itemToStringLabel={(option: TranslationLocaleOption) => option.label}
+            itemToStringValue={(option: TranslationLocaleOption) => option.tag}
+            filter={matchesLanguage}
+            onValueChange={(option: TranslationLocaleOption | null) => {
+              if (option) onSelect(option.tag)
+            }}
+          >
+            <ComboboxInput
+              id={inputId}
+              showTrigger={false}
+              aria-label={t('localizedChooseLanguage')}
               placeholder={t('localizedSearchLanguages')}
               autoComplete="off"
             />
-            <ComboBox.Trigger />
-          </ComboBox.InputGroup>
-          <ComboBox.Popover className="w-(--trigger-width) overflow-hidden">
-            <Virtualizer layout={ListLayout} layoutOptions={LANGUAGE_LAYOUT}>
-              <ListBox
-                className="block max-h-64 overflow-y-auto p-0"
-                renderEmptyState={() => (
-                  <p className="p-3 text-sm text-muted">
-                    {t('localizedNoLanguages')}
-                  </p>
+            <ComboboxContent>
+              <ComboboxEmpty>{t('localizedNoLanguages')}</ComboboxEmpty>
+              <ComboboxList>
+                {(option: TranslationLocaleOption) => (
+                  <ComboboxItem key={option.tag} value={option}>
+                    <span className="truncate" title={option.label}>
+                      {option.label}
+                    </span>
+                  </ComboboxItem>
                 )}
-              >
-                {renderLanguage}
-              </ListBox>
-            </Virtualizer>
-          </ComboBox.Popover>
-        </ComboBox>
-        <Button
-          type="button"
-          size="sm"
-          variant="ghost"
-          className="mt-2"
-          onPress={onCancel}
-        >
+              </ComboboxList>
+            </ComboboxContent>
+          </Combobox>
+        </Field>
+        <Button type="button" size="sm" variant="ghost" className="mt-2" onClick={onCancel}>
           {t('localizedCancel')}
         </Button>
-      </>
+      </div>
     )
   },
 )

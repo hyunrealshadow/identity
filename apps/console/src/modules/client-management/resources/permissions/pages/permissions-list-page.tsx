@@ -1,4 +1,5 @@
-import { Button, Chip } from '@heroui/react'
+import { Badge } from '@identity/ui/components/badge'
+import { Button } from '@identity/ui/components/button'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { useEffect, useMemo, useState } from 'react'
 import { AsyncState } from '#/components/async-state'
@@ -110,12 +111,12 @@ export function PermissionsListPage({
       ) : (
         <section className="space-y-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm text-muted">
+            <p className="text-sm text-muted-foreground">
               {t('resourcePermissionsDescription')}
             </p>
             {canCreate ? (
               <Button
-                onPress={() =>
+                onClick={() =>
                   void navigate({
                     to: '/resources/$resourceId/permissions/new',
                     params: { resourceId },
@@ -174,7 +175,7 @@ export function PermissionsListPage({
             </Button>
             <Button
               variant="ghost"
-              onPress={() =>
+              onClick={() =>
                 void navigate({
                   to: '/resources/$resourceId/permissions',
                   params: { resourceId },
@@ -264,7 +265,7 @@ export function PermissionsListPage({
                         <PermissionBuiltInChip builtIn={permission.builtIn} />
                       ) : null}
                     </div>
-                    <p className="mt-1 text-xs text-muted">
+                    <p className="mt-1 text-xs text-muted-foreground">
                       {permissionDisplayName(
                         withPermissionDisplayFields(permission),
                         locale,
@@ -277,7 +278,7 @@ export function PermissionsListPage({
                 id: 'description',
                 label: t('rbacPermissionDescription'),
                 render: (permission) => (
-                  <span className="text-sm text-muted">
+                  <span className="text-sm text-muted-foreground">
                     {permissionDisplayDescription(
                       withPermissionDisplayFields(permission),
                       locale,
@@ -291,19 +292,18 @@ export function PermissionsListPage({
                       id: 'status',
                       label: t('resourcesStatus'),
                       render: (permission) => (
-                        <Chip
-                          size="sm"
-                          variant="soft"
-                          color={permission.enabled ? 'success' : 'default'}
+                        <Badge
+                          variant="secondary"
+                          className={
+                            permission.enabled ? 'text-success' : undefined
+                          }
                         >
-                          <Chip.Label>
-                            {t(
-                              permission.enabled
-                                ? 'permissionsEnabled'
-                                : 'permissionsDisabled',
-                            )}
-                          </Chip.Label>
-                        </Chip>
+                          {t(
+                            permission.enabled
+                              ? 'permissionsEnabled'
+                              : 'permissionsDisabled',
+                          )}
+                        </Badge>
                       ),
                     },
                     {

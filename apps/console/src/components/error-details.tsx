@@ -7,7 +7,7 @@ export function ErrorDetails({ issues }: { issues?: ReadonlyArray<GraphQLIssue> 
 
   return (
     <div className="mt-3">
-      <p className="text-xs font-medium text-muted">{t('errorDetailsLabel')}</p>
+      <p className="text-xs font-medium text-muted-foreground">{t('errorDetailsLabel')}</p>
       <ul className="mt-1.5 space-y-1 text-xs">
         {issues.map((issue, index) => {
           const code = issue.code !== undefined ? String(issue.code) : issue.kind
@@ -15,7 +15,7 @@ export function ErrorDetails({ issues }: { issues?: ReadonlyArray<GraphQLIssue> 
             <li key={`${code ?? 'error'}-${index}`} className="break-words">
               {issue.message ? <span>{issue.message}</span> : null}
               {code ? (
-                <code className="ms-1.5 rounded bg-surface-secondary px-1 py-0.5 font-mono text-[10px] text-muted">
+                <code className="ms-1.5 rounded bg-muted px-1 py-0.5 font-mono text-[10px] text-muted-foreground">
                   {code}
                 </code>
               ) : null}
