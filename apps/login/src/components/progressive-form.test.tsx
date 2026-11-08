@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { renderToString } from 'react-dom/server'
 
 import { ProgressiveForm } from './progressive-form'
+import { SubmitButton } from './submit-button'
 import { TextField } from './text-field'
 
 afterEach(() => {
@@ -131,5 +132,27 @@ describe('ProgressiveForm', () => {
     expect(body.get('decision')).toBe('deny')
     expect(await screen.findByText('Navigation failed')).not.toBeNull()
     expect(screen.getByRole('button', { name: 'Deny' }).closest('form')?.getAttribute('aria-busy')).toBe('false')
+  })
+
+  it('clears an in-flight submitter when the page is restored from the back/forward cache', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(new Promise(() => {})))
+    render(
+      <ProgressiveForm action="/login" enhancementErrorMessage="Navigation failed">
+        <input name="intent" defaultValue="select" />
+        <SubmitButton value="select">Use this account</SubmitButton>
+      </ProgressiveForm>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Use this account' }))
+    const form = screen.getByRole('button', { name: 'Use this account' }).closest('form')
+    await waitFor(() => expect(form?.getAttribute('aria-busy')).toBe('true'))
+    expect(screen.getByRole('button', { name: 'Use this account' }).hasAttribute('data-pending')).toBe(true)
+
+    const restored = new Event('pageshow')
+    Object.defineProperty(restored, 'persisted', { value: true })
+    window.dispatchEvent(restored)
+
+    await waitFor(() => expect(form?.getAttribute('aria-busy')).toBe('false'))
+    expect(screen.getByRole('button', { name: 'Use this account' }).hasAttribute('data-pending')).toBe(false)
   })
 })

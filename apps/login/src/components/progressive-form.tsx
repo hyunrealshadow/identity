@@ -69,6 +69,17 @@ export function ProgressiveForm({
   // handlers. Expose completion so browser clients can safely fill the form.
   useEffect(() => setEnhanced(true), [])
 
+  // A page restored from the back/forward cache keeps the markup and state it
+  // had when it was left, including a submitter whose request already
+  // navigated away. That spinner would never clear, so drop the stale state.
+  useEffect(() => {
+    function clearRestoredPending(event: PageTransitionEvent) {
+      if (event.persisted) setPendingSubmitter(undefined)
+    }
+    window.addEventListener('pageshow', clearRestoredPending)
+    return () => window.removeEventListener('pageshow', clearRestoredPending)
+  }, [])
+
   async function enhance(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setEnhancementError(undefined)
