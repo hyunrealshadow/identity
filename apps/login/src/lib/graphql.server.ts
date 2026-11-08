@@ -6,7 +6,7 @@ import {
 import { forwardRequestContext } from './request-context.server'
 import { backchannelIdentityGraphqlUrl } from './identity-url.server'
 import { emitEvent, fetchWithSpan } from './observability.server'
-import { preflightOperation, type PreflightContext } from '@identity/graphql-access'
+import { preflightOperation, type PreflightContext, type PreflightResult } from '@identity/graphql-access'
 import { translate } from './i18n'
 import { requestLocale } from './i18n.server'
 
@@ -62,11 +62,22 @@ export async function preflightIdentityGraphql(
   variables?: Record<string, unknown>,
   options?: GraphqlOptions,
 ) {
-  const token = await graphqlAccessToken(options)
-  if (!token) {
-    throw new AccountSessionExpiredError()
+  const standard = await accessToken()
+  const elevated =
+    options?.authorization === 'elevated' ? await elevatedAccessToken() : undefined
+  if (!standard && !elevated) throw new AccountSessionExpiredError()
+
+  let result = await evaluatePreflight(query, variables, elevated ?? standard ?? '')
+  // An elevation token is minted for a single purpose. After an MFA change it
+  // can carry `account.*` only, so an unrelated operation's scope looks
+  // forbidden even though reauthenticating for that purpose would grant it.
+  // The ordinary token still answers whether the operation is reachable that
+  // way, so let it run the same check instead of reporting a dead end.
+  if (result?.status === 'forbidden' && elevated && standard) {
+    const fallback = await evaluatePreflight(query, variables, standard)
+    if (fallback && fallback.status !== 'forbidden') result = fallback
   }
-  await preflightGraphql(query, variables, token)
+  if (result) assertPreflightRejection(result)
 }
 
 export async function identityGraphql<T>(
@@ -76,7 +87,8 @@ export async function identityGraphql<T>(
 ) {
   const token = await graphqlAccessToken(options)
   if (!token) return
-  await preflightGraphql(query, variables, token)
+  const preflight = await evaluatePreflight(query, variables, token)
+  if (preflight) assertPreflightRejection(preflight)
   const headers = forwardRequestContext(
     new Headers({
       accept: 'application/graphql-response+json, application/json',
@@ -147,11 +159,11 @@ export async function accountAccessContext(mfaEnabled?: boolean) {
 }
 
 /** Local checks never replace live authorization or submit the pending write. */
-async function preflightGraphql(
+async function evaluatePreflight(
   query: string,
   variables: Record<string, unknown> | undefined,
   token: string,
-) {
+): Promise<PreflightResult | undefined> {
   const context = tokenPreflightContext(token)
   if (!context) return
   let result = preflightOperation(query, variables, context)
@@ -181,6 +193,10 @@ async function preflightGraphql(
       }
     }
   }
+  return result
+}
+
+function assertPreflightRejection(result: PreflightResult) {
   if (result.status !== 'forbidden' && result.status !== 'reauthentication') return
   const authentication = result.status === 'reauthentication'
   emitEvent('graphql.access_preflight', {

@@ -114,12 +114,15 @@ it('does not create a window on a failed request', async () => {
   expect(window.open).not.toHaveBeenCalled()
 })
 
-it('rejects missing permissions before a server request or popup', async () => {
+it('defers a local scope denial to the server instead of blocking the action', async () => {
+  mocks.execute.mockResolvedValueOnce({ ok: false })
   setup(access(0, []))
   fireEvent.click(screen.getByText('prepare'))
-  await waitFor(() => expect(screen.getByText('没有执行此操作的权限')).toBeTruthy())
-  expect(mocks.execute).not.toHaveBeenCalled()
+  await waitFor(() => expect(mocks.execute).toHaveBeenCalledExactlyOnceWith({ data: {
+    action: 'prepare-change-password', values: { username: 'draft-user' },
+  } }))
   expect(window.open).not.toHaveBeenCalled()
+  expect(mocks.success).not.toHaveBeenCalled()
 })
 
 it('prepares an expired request without submitting the draft, then opens only for the real challenge', async () => {

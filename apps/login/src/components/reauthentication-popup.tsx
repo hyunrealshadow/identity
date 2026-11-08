@@ -63,9 +63,10 @@ export function AccountReauthProvider({ locale, access, children }: { locale: Lo
 
   const prepareAction = useCallback(async (action: string): Promise<AccountActionResult & { localError?: string }> => {
     const decision = preflightAccountAction(action, access)
-    if (decision.status === 'forbidden') {
-      return { ok: false, localError: translate(locale, 'accountPermissionRequired') }
-    }
+    // A local `forbidden` cannot prove the live server condition: the elevated
+    // token may have been minted for another purpose, in which case the server
+    // can still recover by starting a step-up for this one. Only the server
+    // decides that, so a denial is not surfaced here.
     if (decision.status === 'reauthentication') {
       // The server resolves the challenge without receiving pending credentials.
       const result = await execute({ data: { action, values: {}, preflightOnly: true } })
@@ -73,7 +74,7 @@ export function AccountReauthProvider({ locale, access, children }: { locale: Lo
       return result
     }
     return { ok: true }
-  }, [access, cancel, execute, locale])
+  }, [access, cancel, execute])
   const executeAction = useCallback(async (input: AccountActionInput) => {
     const prepared = await prepareAction(input.action)
     if (prepared.reauth || prepared.localError || !prepared.ok) return prepared

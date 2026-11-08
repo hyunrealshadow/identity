@@ -97,6 +97,39 @@ describe('identityGraphql', () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
+  it('falls back to the account token when the step-up token was minted for another purpose', async () => {
+    // An MFA step-up stores an aal2 token scoped for account.* only; the
+    // password operation needs its own scope and a fresh aal2 step-up.
+    mocks.accessToken.mockResolvedValue(token('account.read password.change', 'aal1', 10))
+    mocks.elevatedAccessToken.mockResolvedValue(token('account.read account.*', 'aal2', 10))
+    const fetch = vi.fn().mockResolvedValue(jsonResponse({ data: { security: { mfaEnabled: true } } }))
+    vi.stubGlobal('fetch', fetch)
+    await expect(preflightIdentityGraphql(
+      'mutation Change($input: ChangePasswordInput!) { changePassword(input: $input) { changed } }',
+      undefined,
+      { authorization: 'elevated' },
+    )).rejects.toMatchObject({
+      challenge: { acrValues: 'aal2', maxAge: 3600 },
+      errors: [{ extensions: { code: 'insufficient_user_authentication' } }],
+    })
+    expect(fetch).toHaveBeenCalledOnce()
+  })
+
+  it('still denies an operation neither token can reach', async () => {
+    mocks.accessToken.mockResolvedValue(token('account.read', 'aal2', 10))
+    mocks.elevatedAccessToken.mockResolvedValue(token('account.read account.*', 'aal2', 10))
+    const fetch = vi.fn()
+    vi.stubGlobal('fetch', fetch)
+    await expect(preflightIdentityGraphql(
+      'mutation Change($input: ChangePasswordInput!) { changePassword(input: $input) { changed } }',
+      undefined,
+      { authorization: 'elevated' },
+    )).rejects.toMatchObject({
+      errors: [{ message: '没有执行此操作的权限', extensions: { code: 'insufficient_scope' } }],
+    })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
   it('prechecks schema freshness before submitting an account write', async () => {
     mocks.accessToken.mockResolvedValue(token('account.update', 'aal1', 301))
     const fetch = vi.fn()

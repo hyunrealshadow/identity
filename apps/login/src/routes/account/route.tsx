@@ -145,6 +145,13 @@ function AccountLayout() {
   }, [flash])
 
   if (!current.data) {
+    if (!current.error) {
+      // Missing data without an error means the account-center token was just
+      // withdrawn — an MFA change does that — and the loader is restarting
+      // authorization for this same page. Rendering the failure panel here
+      // would flash a dead end the user cannot act on.
+      return <main className="min-h-screen bg-background" aria-busy="true" />
+    }
     return <main className="flex min-h-screen items-center justify-center p-6"><Alert variant="destructive" className="max-w-lg"><CircleAlert aria-hidden="true" /><AlertTitle>{translate(current.locale, 'unableToContinue')}</AlertTitle><AlertDescription>{current.error}</AlertDescription></Alert></main>
   }
 
