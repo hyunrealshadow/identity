@@ -242,20 +242,20 @@ fn group_metadata(role: AdministratorRole) -> Result<LocalizedMetadata, AppError
         AdministratorRole::Owner => (
             "Owners",
             "所有者",
-            "Members receive the complete owner role preset",
-            "成员取得完整的所有者角色预设",
+            "Grants the Owner role",
+            "授予所有者角色",
         ),
         AdministratorRole::Admin => (
             "Administrators",
             "管理员",
-            "Members receive the administrator role preset",
-            "成员取得管理员角色预设",
+            "Grants the Administrator role",
+            "授予管理员角色",
         ),
         AdministratorRole::Viewer => (
             "Viewers",
             "查看者",
-            "Members receive the read-only viewer role preset",
-            "成员取得只读查看者角色预设",
+            "Grants the Viewer role",
+            "授予查看者角色",
         ),
     };
     LocalizedMetadata::canonicalize(

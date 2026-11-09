@@ -104,8 +104,9 @@ fn default_graphql_max_depth() -> usize {
     12
 }
 
+/// Must admit a full page (`max_page_size`) of the heaviest Console list query.
 fn default_graphql_max_complexity() -> usize {
-    300
+    3000
 }
 
 fn default_graphql_max_page_size() -> usize {
