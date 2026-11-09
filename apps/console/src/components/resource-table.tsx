@@ -53,6 +53,35 @@ export interface ResourceTableProps<T> {
   refreshing?: boolean
   density?: 'compact' | 'comfortable'
   maxHeight?: CSSProperties['maxHeight']
+  /** Filter controls shown at the start of the table toolbar. */
+  filters?: ReactNode
+  /** Full-width content under the toolbar row, such as expanded advanced filters. */
+  filtersPanel?: ReactNode
+}
+
+/**
+ * One toolbar row above a collection: filters at the start, table tools at the
+ * end. Pages render it on its own while the table is loading or unavailable so
+ * the filters keep their place.
+ */
+export function CollectionToolbar({
+  filters,
+  tools,
+  panel,
+}: {
+  filters?: ReactNode
+  tools?: ReactNode
+  panel?: ReactNode
+}) {
+  return (
+    <div className="resource-collection-toolbar">
+      <div className="min-w-0 flex-1">{filters}</div>
+      {tools ? (
+        <div className="flex shrink-0 items-center gap-2">{tools}</div>
+      ) : null}
+      {panel ? <div className="min-w-0 basis-full">{panel}</div> : null}
+    </div>
+  )
 }
 
 export type ResourceTableControls = Pick<
@@ -63,6 +92,8 @@ export type ResourceTableControls = Pick<
   | 'pagination'
   | 'emptyState'
   | 'refreshing'
+  | 'filters'
+  | 'filtersPanel'
 >
 
 export function ResourceTable<T extends { id: string }>({
@@ -78,6 +109,8 @@ export function ResourceTable<T extends { id: string }>({
   refreshing = false,
   density,
   maxHeight,
+  filters,
+  filtersPanel,
 }: ResourceTableProps<T>) {
   const t = useTranslator()
   const storageKey = `identity.console.table.${id}.v1`
@@ -113,11 +146,14 @@ export function ResourceTable<T extends { id: string }>({
 
   return (
     <section className="resource-collection" aria-label={label}>
-      <div className="resource-collection-toolbar">
-        <div className="flex items-center gap-2">
+      <CollectionToolbar
+        filters={filters}
+        panel={filtersPanel}
+        tools={
+        <>
           <Button
-            variant="ghost"
-            size="icon-sm"
+            variant="outline"
+            size="icon"
             aria-label={t('tableRefresh')}
             disabled={refreshing}
             onClick={onRefresh}
@@ -134,8 +170,8 @@ export function ResourceTable<T extends { id: string }>({
             <PopoverTrigger
               render={
                 <Button
-                  variant="ghost"
-                  size="icon-sm"
+                  variant="outline"
+                  size="icon"
                   aria-label={t('tablePreferences')}
                 />
               }
@@ -204,8 +240,9 @@ export function ResourceTable<T extends { id: string }>({
               </div>
             </PopoverContent>
           </Popover>
-        </div>
-      </div>
+        </>
+        }
+      />
       <DataTable
         label={label}
         loading={refreshing}

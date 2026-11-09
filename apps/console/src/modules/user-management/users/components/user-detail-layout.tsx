@@ -8,17 +8,16 @@ import { Skeleton } from '@identity/ui/components/skeleton'
 import { useNavigate } from '@tanstack/react-router'
 import {
   ArrowLeft,
-  Check,
-  Copy,
   Ellipsis,
   Pencil,
   TriangleAlert,
 } from 'lucide-react'
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 
 import { AccountAvatar } from '#/components/account-avatar'
 import { useBreadcrumbLabel } from '#/components/app-breadcrumbs'
 import { AsyncState } from '#/components/async-state'
+import { CopyButton } from '#/components/copy-button'
 import { ErrorDetails } from '#/components/error-details'
 import { RequestCorrelation } from '#/components/request-correlation'
 import { StepUpPanel } from '#/components/step-up-panel'
@@ -61,8 +60,6 @@ export function UserDetailLayout({
   const detail = useUserDetail(userId, scope.read)
   const [notice, setNotice] = useState<UserNotice | null>(null)
   const [accessEnded, setAccessEnded] = useState(false)
-  const [copied, setCopied] = useState(false)
-  const [copyFailed, setCopyFailed] = useState(false)
   const workspaceLoading =
     (workspace.status === 'idle' || workspace.status === 'loading') &&
     !permissions
@@ -73,26 +70,6 @@ export function UserDetailLayout({
       (detail.status === 'idle' || detail.status === 'loading'))
   const user = detail.user
   useBreadcrumbLabel(`/users/${userId}`, user?.username)
-
-  useEffect(() => {
-    if (!copied && !copyFailed) return
-    const timeout = window.setTimeout(() => {
-      setCopied(false)
-      setCopyFailed(false)
-    }, 2500)
-    return () => window.clearTimeout(timeout)
-  }, [copied, copyFailed])
-
-  async function copyId() {
-    if (!user) return
-    try {
-      await navigator.clipboard.writeText(user.id)
-      setCopied(true)
-      setCopyFailed(false)
-    } catch {
-      setCopyFailed(true)
-    }
-  }
 
   function reloadAfterWrite(): Promise<boolean> {
     return detail.reload().then((outcome) => {
@@ -231,7 +208,8 @@ export function UserDetailLayout({
       <div className="mb-6">
         <Button
           variant="ghost"
-          className="mb-5 -ml-3"
+          size="sm"
+          className="mb-5 -ml-2"
           onClick={() => void navigate({ to: '/users' })}
         >
           <ArrowLeft className="size-4" aria-hidden="true" />
@@ -241,68 +219,47 @@ export function UserDetailLayout({
           className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between"
           aria-label={t('usersDetailTitle')}
         >
-          <div className="flex min-w-0 items-center gap-4">
-            {user ? (
-              <AccountAvatar
-                name={name}
-                label={t('usersDetailAvatarLabel', { username: user.username })}
-                size="lg"
-                className="size-16 shrink-0 text-lg"
-              />
-            ) : (
-              <Skeleton className="size-16 shrink-0 rounded-lg" />
-            )}
-            <div className="min-w-0 space-y-1.5">
-              <div className="flex flex-wrap items-center gap-3">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-6 gap-y-3">
+            <div className="flex min-w-0 items-center gap-3">
+              {user ? (
+                <AccountAvatar
+                  name={name}
+                  label={t('usersDetailAvatarLabel', { username: user.username })}
+                  size="lg"
+                  className="shrink-0"
+                />
+              ) : (
+                <Skeleton className="size-10 shrink-0 rounded-full" />
+              )}
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  {user ? (
+                    <>
+                      <h1 className="break-all text-xl font-semibold tracking-tight">
+                        {user.username}
+                      </h1>
+                      <UserStatusBadges user={user} />
+                    </>
+                  ) : (
+                    <Skeleton className="h-7 w-44 max-w-full rounded-lg" />
+                  )}
+                </div>
                 {user ? (
-                  <>
-                    <h1 className="break-all text-2xl font-semibold tracking-tight">
-                      {user.username}
-                    </h1>
-                    <UserStatusBadges user={user} />
-                  </>
+                  <p className="break-all text-sm text-muted-foreground">{user.email}</p>
                 ) : (
-                  <Skeleton className="h-8 w-44 max-w-full rounded-lg" />
+                  <Skeleton className="mt-1 h-5 w-52 max-w-full rounded-lg" />
                 )}
               </div>
-              {user ? (
-                <p className="break-all text-sm text-muted-foreground">{user.email}</p>
-              ) : (
-                <Skeleton className="h-5 w-52 max-w-full rounded-lg" />
-              )}
-              {user ? (
-                <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-                  <span className="shrink-0">{t('usersUserIdLabel')}</span>
-                  <code
-                    className="min-w-0 truncate rounded-lg bg-secondary px-2 py-1"
-                    title={user.id}
-                  >
-                    {user.id}
-                  </code>
-                  <Button
-                    size="icon-sm"
-                    variant="ghost"
-                    aria-label={t(copied ? 'usersIdCopied' : 'usersCopyId')}
-                    onClick={() => void copyId()}
-                  >
-                    {copied ? (
-                      <Check className="size-3.5" />
-                    ) : (
-                      <Copy className="size-3.5" />
-                    )}
-                  </Button>
-                  <span className="sr-only" role="status">
-                    {copied
-                      ? t('usersIdCopied')
-                      : copyFailed
-                        ? t('usersIdCopyFailed')
-                        : ''}
-                  </span>
-                </div>
-              ) : (
-                <Skeleton className="h-9 w-64 max-w-full rounded-lg md:h-8" />
-              )}
             </div>
+            {user ? (
+              <div className="flex min-w-0 flex-col justify-center self-stretch border-l border-border pl-6">
+                <p className="text-xs text-muted-foreground">{t('usersUserIdLabel')}</p>
+                <div className="flex min-w-0 items-center gap-1">
+                  <code className="break-all text-sm">{user.id}</code>
+                  <CopyButton value={user.id} label={t('usersUserIdLabel')} />
+                </div>
+              </div>
+            ) : null}
           </div>
           <div className="flex shrink-0 flex-wrap items-center gap-2">
             {scope.update && user && !accessEnded ? (

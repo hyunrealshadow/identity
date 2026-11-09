@@ -1,3 +1,4 @@
+import { parsePageSize } from '#/lib/page-size'
 import { startOfZonedDate } from '#/lib/time-zone'
 import type {
   ConsoleUsersQueryVariables,
@@ -33,6 +34,7 @@ export interface UsersSearch {
   createdFrom?: string
   createdBefore?: string
   order?: UsersOrder
+  size?: number
   after?: string
   before?: string
 }
@@ -109,6 +111,7 @@ export function validateUsersSearch(raw: Record<string, unknown>): UsersSearch {
     createdFrom: text(raw.createdFrom),
     createdBefore: text(raw.createdBefore),
     order,
+    size: parsePageSize(raw.size),
     after,
     before,
   }
@@ -234,7 +237,7 @@ export function usersQueryVariables(
     return {
       filter: hasFilter ? filter : undefined,
       orderBy,
-      last: USERS_PAGE_SIZE,
+      last: search.size ?? USERS_PAGE_SIZE,
       before: search.before,
     }
   }
@@ -242,7 +245,7 @@ export function usersQueryVariables(
   return {
     filter: hasFilter ? filter : undefined,
     orderBy,
-    first: USERS_PAGE_SIZE,
+    first: search.size ?? USERS_PAGE_SIZE,
     after: search.after,
   }
 }
@@ -257,6 +260,7 @@ export function usersSearchKey(search: UsersSearch): string {
     search.createdFrom ?? '',
     search.createdBefore ?? '',
     search.order ?? DEFAULT_USERS_ORDER,
+    search.size ?? USERS_PAGE_SIZE,
     search.after ?? '',
     search.before ?? '',
   ])

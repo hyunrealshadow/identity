@@ -37,7 +37,7 @@ export function NumberedPagination({
     <nav
       data-slot="pagination"
       aria-label={label}
-      className="mx-auto flex w-full flex-wrap items-center justify-center gap-2 text-sm"
+      className="flex w-full flex-wrap items-center justify-between gap-2 text-sm"
     >
       {summary ? <span className="text-muted-foreground">{summary}</span> : null}
       <div data-slot="pagination-content" className="flex items-center gap-1">

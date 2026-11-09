@@ -4,7 +4,7 @@ import { Alert, AlertDescription, AlertTitle } from '@identity/ui/components/ale
 import { Button } from '@identity/ui/components/button'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { ChevronLeft, ChevronRight, RotateCcw, Search, TriangleAlert } from 'lucide-react'
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState, type ReactNode } from 'react'
 import { useIntl } from 'react-intl'
 
 import { AsyncState } from '#/components/async-state'
@@ -297,7 +297,7 @@ export function RoleGroupsPage({ roleId }: { roleId: string }) {
                 event.preventDefault()
                 applyFilters()
               }}
-              className="collection-filter-controls flex flex-col gap-3 py-2 lg:flex-row lg:items-end"
+              className="flex flex-col gap-3 py-2 lg:flex-row lg:items-end"
             >
               <div className="min-w-0 flex-1">
                 <UserTextField
@@ -390,9 +390,10 @@ export function RoleGroupsPage({ roleId }: { roleId: string }) {
               </div>
             ) : null}
 
-            {edges.length === 0 ? (
-              <div className="p-4">
-                {filtered ? (
+            <RoleGroupsTable
+              edges={edges}
+              emptyState={
+                filtered ? (
                   <AsyncState
                     kind="empty"
                     compact
@@ -411,28 +412,30 @@ export function RoleGroupsPage({ roleId }: { roleId: string }) {
                     title={tr('roleGroupsEmptyTitle')}
                     description={tr('roleGroupsEmptyDescription')}
                   />
-                )}
-              </div>
-            ) : (
-              <RoleGroupsTable edges={edges} />
-            )}
+                )
+              }
+            />
           </div>
-          {edges.length > 0 ? (
-            <footer className="border-t border-border pt-4">
-              <RoleGroupsPagination
-                connection={connection}
-                onNext={goNext}
-                onPrevious={goPrevious}
-              />
-            </footer>
-          ) : null}
+          <footer className="border-t border-border pt-4">
+            <RoleGroupsPagination
+              connection={connection}
+              onNext={goNext}
+              onPrevious={goPrevious}
+            />
+          </footer>
         </section>
       </div>
     </ConsoleWorkspaceGate>
   )
 }
 
-function RoleGroupsTable({ edges }: { edges: RoleGroupsConnection['edges'] }) {
+function RoleGroupsTable({
+  edges,
+  emptyState,
+}: {
+  edges: RoleGroupsConnection['edges']
+  emptyState: ReactNode
+}) {
   const navigate = useNavigate()
   const tr = useRoleGroupsTranslator()
   const { locale, timeZone } = useLocale()
@@ -468,7 +471,7 @@ function RoleGroupsTable({ edges }: { edges: RoleGroupsConnection['edges'] }) {
         },
       ]}
     >
-      <DataTable.Body>
+      <DataTable.Body renderEmptyState={() => emptyState}>
         {edges.map(({ node }) => {
           const name =
             resolveLocalizedText(node.names, locale) ?? node.name ?? node.id

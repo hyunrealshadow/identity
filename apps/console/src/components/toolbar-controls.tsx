@@ -165,7 +165,7 @@ export function AccountMenu({
           />
         }
       >
-        <AccountAvatar name={name} picture={picture} label={avatarLabel} size="sm" />
+        <AccountAvatar name={name} picture={picture} label={avatarLabel} />
         <span className="hidden min-w-0 text-start sm:block">
           <span className="block truncate text-sm font-medium">{name}</span>
           <span className="block truncate text-xs font-normal text-muted-foreground">{email}</span>

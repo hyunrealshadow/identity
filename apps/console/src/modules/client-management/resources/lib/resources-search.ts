@@ -1,9 +1,14 @@
 import type { ResourceOrder } from '#/generated/graphql'
+import { parsePageSize } from '#/lib/page-size'
 import { cursorPage } from '#/modules/user-management/lib/cursor-page'
+
+export const RESOURCES_PAGE_SIZE = 10
+
 export interface ResourcesSearch {
   q?: string
   enabled?: 'enabled' | 'disabled'
   order?: ResourceOrder
+  size?: number
   after?: string
   before?: string
 }
@@ -31,6 +36,7 @@ export function normalizeResourcesSearch(
       typeof input.order === 'string' && orders.includes(input.order)
         ? (input.order as ResourceOrder)
         : undefined,
+    size: parsePageSize(input.size),
     after: typeof input.after === 'string' ? input.after : undefined,
     before: typeof input.before === 'string' ? input.before : undefined,
   }
@@ -47,6 +53,6 @@ export function resourcesQueryVariables(search: ResourcesSearch) {
             : undefined,
     },
     orderBy: search.order ?? ('NAME_ASC' as ResourceOrder),
-    ...cursorPage(10, search.after, search.before),
+    ...cursorPage(search.size ?? RESOURCES_PAGE_SIZE, search.after, search.before),
   }
 }

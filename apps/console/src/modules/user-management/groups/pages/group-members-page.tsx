@@ -17,6 +17,7 @@ import { Info, TriangleAlert } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
+import { CollectionToolbar } from '#/components/resource-table'
 import { ErrorDetails } from '#/components/error-details'
 import { RequestCorrelation } from '#/components/request-correlation'
 import { StepUpPanel } from '#/components/step-up-panel'
@@ -45,7 +46,6 @@ import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
 import { UserSelectField } from '#/modules/user-management/users/components/user-form-fields'
 
-const PAGE_SIZE = 10
 
 type GroupNode = NonNullable<ConsoleGroupMembersQuery['group']>
 type MemberEdge = GroupNode['members']['edges'][number]
@@ -65,6 +65,7 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
   const [status, setStatus] = useState<MemberStatus>('any')
   const [after, setAfter] = useState<string | undefined>()
   const [before, setBefore] = useState<string | undefined>()
+  const [pageSize, setPageSize] = useState(10)
   const [notice, setNotice] = useState<RbacNotice | null>(null)
 
   const variables = useMemo<ConsoleGroupMembersQueryVariables | null>(
@@ -74,10 +75,10 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
             groupId,
             filter: status === 'any' ? {} : { enabled: status === 'enabled' },
             orderBy: 'CREATED_AT_DESC',
-            ...cursorPage(PAGE_SIZE, after, before),
+            ...cursorPage(pageSize, after, before),
           }
         : null,
-    [after, before, canRead, groupId, status],
+    [after, before, canRead, groupId, status, pageSize],
   )
   const members = useGroupMembers(variables)
   const group = members.data?.group ?? null
@@ -177,7 +178,7 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
         ) : null}
 
         <section className="space-y-4">
-          <header className="flex flex-col gap-3 py-2 sm:flex-row sm:items-end sm:justify-between">
+          <header className="flex flex-col gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-base font-semibold">
                 {t('groupMembersListTitle')}
@@ -186,30 +187,7 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
                 {t('groupMembersListDescription')}
               </p>
             </div>
-            <div className="flex flex-wrap items-end gap-2">
-              <div className="w-44">
-                <UserSelectField
-                  name="group-member-status"
-                  label={t('groupMembersStatusFilterLabel')}
-                  value={status}
-                  onChange={(value) => {
-                    if (
-                      value === 'any' ||
-                      value === 'enabled' ||
-                      value === 'disabled'
-                    ) {
-                      setStatus(value)
-                      setAfter(undefined)
-                      setBefore(undefined)
-                    }
-                  }}
-                  options={[
-                    { id: 'any', label: t('groupMembersFilterAll') },
-                    { id: 'enabled', label: t('groupMembersFilterActive') },
-                    { id: 'disabled', label: t('groupMembersFilterRemoved') },
-                  ]}
-                />
-              </div>
+            <div className="flex shrink-0 items-center gap-2">
               {scope.groupMembershipsWrite ? (
                 <AddMemberDialog
                   groupId={readyGroup.id}
@@ -228,8 +206,38 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
               ) : null}
             </div>
           </header>
+          <CollectionToolbar
+            filters={
+              <div className="flex flex-wrap items-start gap-2">
+                <div className="w-36">
+                  <UserSelectField
+                    name="group-member-status"
+                    label={t('groupMembersStatusFilterLabel')}
+                    hideLabel
+                    value={status}
+                    onChange={(value) => {
+                      if (
+                        value === 'any' ||
+                        value === 'enabled' ||
+                        value === 'disabled'
+                      ) {
+                        setStatus(value)
+                        setAfter(undefined)
+                        setBefore(undefined)
+                      }
+                    }}
+                    options={[
+                      { id: 'any', label: t('groupMembersFilterAll') },
+                      { id: 'enabled', label: t('groupMembersFilterActive') },
+                      { id: 'disabled', label: t('groupMembersFilterRemoved') },
+                    ]}
+                  />
+                </div>
+              </div>
+            }
+          />
           <div className="p-0">{renderMembers()}</div>
-          <footer className="border-t border-border pt-4">
+          <footer className="resource-collection-pagination">
             <RelationPagination
               connection={readyGroup.members}
               variables={variables}
@@ -241,6 +249,12 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
               }}
               label={t('roleUsersPagination')}
               isDisabled={members.refreshing || members.status !== 'ready'}
+              pageSize={pageSize}
+              onPageSizeChange={(size) => {
+                setPageSize(size)
+                setAfter(undefined)
+                setBefore(undefined)
+              }}
             />
           </footer>
         </section>
@@ -273,26 +287,6 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
   }
 
   function renderMemberTable(edges: GroupNode['members']['edges']) {
-    if (edges.length === 0) {
-      return (
-        <div className="p-4">
-          <AsyncState
-            kind="empty"
-            compact
-            title={
-              status === 'any'
-                ? t('groupMembersEmptyTitle')
-                : t('groupMembersEmptyFilteredTitle')
-            }
-            description={
-              status === 'any'
-                ? t('groupMembersEmptyDescription')
-                : t('groupMembersEmptyFilteredDescription')
-            }
-          />
-        </div>
-      )
-    }
     return (
       <DataTable
         label={t('groupMembersTableLabel')}
@@ -320,7 +314,24 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
           },
         ]}
       >
-        <DataTable.Body>
+        <DataTable.Body
+          renderEmptyState={() => (
+            <AsyncState
+              kind="empty"
+              compact
+              title={
+                status === 'any'
+                  ? t('groupMembersEmptyTitle')
+                  : t('groupMembersEmptyFilteredTitle')
+              }
+              description={
+                status === 'any'
+                  ? t('groupMembersEmptyDescription')
+                  : t('groupMembersEmptyFilteredDescription')
+              }
+            />
+          )}
+        >
           {edges.map((edge) => (
             <DataTable.Row key={edge.node.id} id={edge.node.id}>
               <DataTable.Cell>{renderMemberIdentity(edge)}</DataTable.Cell>

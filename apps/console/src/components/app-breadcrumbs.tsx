@@ -1,5 +1,14 @@
 import { Link, useMatches } from '@tanstack/react-router'
 import {
+  Breadcrumb as BreadcrumbRoot,
+  BreadcrumbItem,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbPage,
+  BreadcrumbSeparator,
+} from '@identity/ui/components/breadcrumb'
+import {
+  Fragment,
   createContext,
   useCallback,
   useContext,
@@ -89,34 +98,36 @@ export function usePageBreadcrumbs(): Breadcrumb[] {
 export function AppBreadcrumbs({ items }: { items: readonly Breadcrumb[] }) {
   const t = useTranslator()
   return (
-    <nav aria-label={t('breadcrumbLabel')} className="hidden md:block">
-      <ol className="flex min-w-0 items-center gap-1.5 overflow-hidden text-xs text-muted">
+    <BreadcrumbRoot aria-label={t('breadcrumbLabel')} className="hidden min-w-0 md:block">
+      <BreadcrumbList className="flex-nowrap gap-1.5 overflow-hidden text-xs sm:gap-1.5">
         {items.map((item, index) => {
           const current = index === items.length - 1
           return (
-            <li key={index} className="flex min-w-0 items-center gap-1.5">
-              {index > 0 ? <span aria-hidden="true">/</span> : null}
-              {item.href && !current ? (
-                <Link
-                  to={item.href}
-                  className="max-w-48 truncate hover:text-foreground hover:underline"
-                  title={item.label}
-                >
-                  {item.label}
-                </Link>
-              ) : (
-                <span
-                  aria-current={current ? 'page' : undefined}
-                  className={`truncate ${current ? 'font-medium text-foreground' : ''}`}
-                  title={item.label}
-                >
-                  {item.label}
-                </span>
-              )}
-            </li>
+            <Fragment key={index}>
+              {index > 0 ? <BreadcrumbSeparator /> : null}
+              <BreadcrumbItem className="min-w-0">
+                {item.href && !current ? (
+                  <BreadcrumbLink
+                    className="max-w-48 truncate"
+                    title={item.label}
+                    render={<Link to={item.href} activeOptions={{ exact: true }} />}
+                  >
+                    {item.label}
+                  </BreadcrumbLink>
+                ) : current ? (
+                  <BreadcrumbPage className="truncate font-medium" title={item.label}>
+                    {item.label}
+                  </BreadcrumbPage>
+                ) : (
+                  <span className="truncate" title={item.label}>
+                    {item.label}
+                  </span>
+                )}
+              </BreadcrumbItem>
+            </Fragment>
           )
         })}
-      </ol>
-    </nav>
+      </BreadcrumbList>
+    </BreadcrumbRoot>
   )
 }

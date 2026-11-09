@@ -31,6 +31,7 @@ import {
 } from '#/modules/user-management/roles/lib/role-localization'
 import { usePermissionList } from '../hooks/use-permissions'
 import {
+  PERMISSION_PAGE_SIZE,
   permissionsFilterDraft,
   permissionsSearchForResource,
   resourcePermissionsQueryVariables,
@@ -76,6 +77,7 @@ export function PermissionsListPage({
       search.enabled,
       search.builtIn,
       search.order,
+      search.size,
       search.after,
       search.before,
     ])
@@ -127,67 +129,72 @@ export function PermissionsListPage({
               </Button>
             ) : null}
           </div>
-          <form
-            className="collection-filter-controls flex flex-wrap items-end gap-3"
-            onSubmit={(event) => {
-              event.preventDefault()
-              void navigate({
-                to: '/resources/$resourceId/permissions',
-                params: { resourceId },
-                search: {
-                  ...permissionsSearchFromDraft(draft),
-                  resourceId: undefined,
-                },
-              })
-            }}
-          >
-            <div className="min-w-48 flex-1">
-              <UserTextField
-                name="permission-search"
-                label={t('permissionsFilterSearchLabel')}
-                placeholder={t('permissionsFilterSearchPlaceholder')}
-                value={draft.q}
-                onChange={(q) => setDraft({ ...draft, q })}
-              />
-            </div>
-            {!readOnly ? (
-              <div className="w-40">
-                <UserSelectField
-                  name="permission-status"
-                  label={t('permissionsFilterStatusLabel')}
-                  value={draft.enabled}
-                  onChange={(enabled) =>
-                    setDraft({
-                      ...draft,
-                      enabled: enabled as typeof draft.enabled,
-                    })
-                  }
-                  options={[
-                    { id: 'any', label: t('permissionsFilterAny') },
-                    { id: 'enabled', label: t('permissionsEnabled') },
-                    { id: 'disabled', label: t('permissionsDisabled') },
-                  ]}
-                />
-              </div>
-            ) : null}
-            <Button type="submit" variant="secondary">
-              {t('resourcesFilter')}
-            </Button>
-            <Button
-              variant="ghost"
-              onClick={() =>
-                void navigate({
-                  to: '/resources/$resourceId/permissions',
-                  params: { resourceId },
-                  search: {},
-                })
-              }
-            >
-              {t('resourcesReset')}
-            </Button>
-          </form>
           <ResourceTable
             id="resource-permissions"
+            filters={
+              <form
+                className="flex flex-wrap items-start gap-2"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                  void navigate({
+                    to: '/resources/$resourceId/permissions',
+                    params: { resourceId },
+                    search: {
+                      ...permissionsSearchFromDraft(draft),
+                      resourceId: undefined,
+                      size: search.size,
+                    },
+                  })
+                }}
+              >
+                <div className="w-full sm:w-72">
+                  <UserTextField
+                    name="permission-search"
+                    label={t('permissionsFilterSearchLabel')}
+                    hideLabel
+                    placeholder={t('permissionsFilterSearchPlaceholder')}
+                    value={draft.q}
+                    onChange={(q) => setDraft({ ...draft, q })}
+                  />
+                </div>
+                {!readOnly ? (
+                  <div className="w-36">
+                    <UserSelectField
+                      name="permission-status"
+                      label={t('permissionsFilterStatusLabel')}
+                      hideLabel
+                      value={draft.enabled}
+                      onChange={(enabled) =>
+                        setDraft({
+                          ...draft,
+                          enabled: enabled as typeof draft.enabled,
+                        })
+                      }
+                      options={[
+                        { id: 'any', label: t('permissionsFilterAny') },
+                        { id: 'enabled', label: t('permissionsEnabled') },
+                        { id: 'disabled', label: t('permissionsDisabled') },
+                      ]}
+                    />
+                  </div>
+                ) : null}
+                <Button type="submit" variant="secondary">
+                  {t('resourcesFilter')}
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() =>
+                    void navigate({
+                      to: '/resources/$resourceId/permissions',
+                      params: { resourceId },
+                      search: { size: search.size },
+                    })
+                  }
+                >
+                  {t('resourcesReset')}
+                </Button>
+              </form>
+            }
             density="compact"
             maxHeight="clamp(12rem, calc(100dvh - 34rem), 30rem)"
             label={t('permissionsTableLabel')}
@@ -238,6 +245,14 @@ export function PermissionsListPage({
                   pageInfo={connection.pageInfo}
                   controller={pager}
                   isDisabled={query.refreshing}
+                  pageSize={search.size ?? PERMISSION_PAGE_SIZE}
+                  onPageSizeChange={(size) =>
+                    void navigate({
+                      to: '/resources/$resourceId/permissions',
+                      params: { resourceId },
+                      search: { ...search, size, after: undefined, before: undefined },
+                    })
+                  }
                 />
               ) : null
             }

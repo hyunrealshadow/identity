@@ -273,7 +273,8 @@ export function LocalizedTextField({
           {shownError ? <FieldError>{shownError}</FieldError> : null}
           {description ? <FieldDescription>{description}</FieldDescription> : null}
         </Field>
-        <div className="flex min-w-0 flex-col gap-1">
+        {/* Same vertical rhythm as the default column's `Field` (gap-3), so both inputs line up */}
+        <div className="flex min-w-0 flex-col gap-3">
           <div className="flex min-h-10 min-w-0 flex-wrap items-center gap-2 sm:h-10 sm:flex-nowrap">
             <span className="shrink-0 text-sm font-medium">
               {t('localizedTranslations')}
@@ -374,7 +375,7 @@ export function LocalizedTextField({
                 type="button"
                 size="sm"
                 variant="ghost"
-                className="h-8 shrink-0 gap-1 px-2"
+                className="shrink-0"
                 disabled={isDisabled || atMax}
                 aria-label={
                   atMax
@@ -385,7 +386,7 @@ export function LocalizedTextField({
                 aria-controls={addPanelId}
                 onClick={openTranslationChooser}
               >
-                <Plus className="size-4" aria-hidden="true" />
+                <Plus aria-hidden="true" />
                 <span className="hidden sm:inline">
                   {t('localizedAddTranslation')}
                 </span>
@@ -398,14 +399,14 @@ export function LocalizedTextField({
                   type="button"
                   size="sm"
                   variant="ghost"
-                  className="h-7 shrink-0 gap-1 px-2 text-destructive"
+                  className="shrink-0 text-destructive"
                   disabled={isDisabled || !hasActiveTranslation}
                   aria-label={t('localizedRemoveTranslationFor', {
                     locale: activeLocale,
                   })}
                   onClick={removeActiveTranslation}
                 >
-                  <X className="size-3.5" aria-hidden="true" />
+                  <X aria-hidden="true" />
                   <span className="hidden sm:inline">
                     {t('localizedRemoveTranslation')}
                   </span>
@@ -421,14 +422,14 @@ export function LocalizedTextField({
                       type="button"
                       size="sm"
                       variant="ghost"
-                      className="h-7 shrink-0 gap-1 px-2"
+                      className="shrink-0"
                       disabled={
                         isDisabled ||
                         (atMax && !hasLocale(value, removed.locale))
                       }
                       onClick={undoRemoval}
                     >
-                      <Undo2 className="size-3.5" aria-hidden="true" />
+                      <Undo2 aria-hidden="true" />
                       {t('localizedUndoRemove')}
                     </Button>
                   </div>

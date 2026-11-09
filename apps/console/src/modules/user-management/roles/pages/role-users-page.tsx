@@ -13,6 +13,7 @@ import { TriangleAlert } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
+import { CollectionToolbar } from '#/components/resource-table'
 import { ErrorDetails } from '#/components/error-details'
 import { RequestCorrelation } from '#/components/request-correlation'
 
@@ -48,7 +49,6 @@ import { UserSelectField } from '#/modules/user-management/users/components/user
 
 type UserStatus = 'any' | 'active' | 'revoked'
 
-const PAGE_SIZE = 10
 
 export function RoleUsersPage({ roleId }: { roleId: string }) {
   const t = useTranslator()
@@ -63,6 +63,7 @@ export function RoleUsersPage({ roleId }: { roleId: string }) {
   const [status, setStatus] = useState<UserStatus>('any')
   const [after, setAfter] = useState<string | undefined>()
   const [before, setBefore] = useState<string | undefined>()
+  const [pageSize, setPageSize] = useState(10)
   const [notice, setNotice] = useState<RbacNotice | null>(null)
   const assignmentsVariables = useMemo<ConsoleRoleUsersQueryVariables | null>(
     () =>
@@ -76,7 +77,7 @@ export function RoleUsersPage({ roleId }: { roleId: string }) {
                   ? false
                   : undefined,
             orderBy: 'CREATED_AT_DESC',
-            ...cursorPage(PAGE_SIZE, after, before),
+            ...cursorPage(pageSize, after, before),
           }
         : null,
     [
@@ -87,6 +88,7 @@ export function RoleUsersPage({ roleId }: { roleId: string }) {
       scope.rolesRead,
       scope.usersRead,
       status,
+      pageSize,
     ],
   )
   const assignments = useConsoleQuery<
@@ -180,30 +182,7 @@ export function RoleUsersPage({ roleId }: { roleId: string }) {
                 {t('roleUsersListDescription')}
               </p>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-40">
-                <UserSelectField
-                  name="role-user-status"
-                  label={t('rolesFilterStatusLabel')}
-                  value={status}
-                  onChange={(value) => {
-                    if (
-                      value === 'any' ||
-                      value === 'active' ||
-                      value === 'revoked'
-                    ) {
-                      setStatus(value)
-                      setAfter(undefined)
-                      setBefore(undefined)
-                    }
-                  }}
-                  options={[
-                    { id: 'any', label: t('assignmentFilterAll') },
-                    { id: 'active', label: t('assignmentFilterActive') },
-                    { id: 'revoked', label: t('assignmentFilterRevoked') },
-                  ]}
-                />
-              </div>
+            <div className="flex shrink-0 items-center gap-2">
               {scope.assignmentsWrite && scope.usersRead ? (
                 <AssignUserDialog
                   role={roleReady}
@@ -221,8 +200,38 @@ export function RoleUsersPage({ roleId }: { roleId: string }) {
               ) : null}
             </div>
           </header>
+          <CollectionToolbar
+            filters={
+              <div className="flex flex-wrap items-start gap-2">
+                <div className="w-36">
+                  <UserSelectField
+                    name="role-user-status"
+                    label={t('rolesFilterStatusLabel')}
+                    hideLabel
+                    value={status}
+                    onChange={(value) => {
+                      if (
+                        value === 'any' ||
+                        value === 'active' ||
+                        value === 'revoked'
+                      ) {
+                        setStatus(value)
+                        setAfter(undefined)
+                        setBefore(undefined)
+                      }
+                    }}
+                    options={[
+                      { id: 'any', label: t('assignmentFilterAll') },
+                      { id: 'active', label: t('assignmentFilterActive') },
+                      { id: 'revoked', label: t('assignmentFilterRevoked') },
+                    ]}
+                  />
+                </div>
+              </div>
+            }
+          />
           <div className="p-0">{renderAssignments()}</div>
-          <footer className="border-t border-border pt-4">
+          <footer className="resource-collection-pagination">
             <RelationPagination
               connection={assignments.data?.role?.users ?? null}
               variables={assignmentsVariables}
@@ -234,6 +243,12 @@ export function RoleUsersPage({ roleId }: { roleId: string }) {
               }}
               label={t('roleUsersPagination')}
               isDisabled={assignments.refreshing || assignments.status !== 'ready'}
+              pageSize={pageSize}
+              onPageSizeChange={(size) => {
+                setPageSize(size)
+                setAfter(undefined)
+                setBefore(undefined)
+              }}
             />
           </footer>
         </section>
@@ -274,22 +289,6 @@ export function RoleUsersPage({ roleId }: { roleId: string }) {
       )
     }
     const edges = assignments.data.role?.users.edges ?? []
-    if (edges.length === 0) {
-      return (
-        <div className="p-4">
-          <AsyncState
-            kind="empty"
-            compact
-            title={t('roleUsersEmptyTitle')}
-            description={
-              status === 'any'
-                ? t('roleUsersEmptyDescription')
-                : t('roleUsersEmptyFilteredDescription')
-            }
-          />
-        </div>
-      )
-    }
     return (
       <div>
         {assignments.partial ? (
@@ -334,7 +333,20 @@ export function RoleUsersPage({ roleId }: { roleId: string }) {
             },
           ]}
         >
-          <DataTable.Body>
+          <DataTable.Body
+            renderEmptyState={() => (
+              <AsyncState
+                kind="empty"
+                compact
+                title={t('roleUsersEmptyTitle')}
+                description={
+                  status === 'any'
+                    ? t('roleUsersEmptyDescription')
+                    : t('roleUsersEmptyFilteredDescription')
+                }
+              />
+            )}
+          >
             {edges.map((edge) => {
               const user = edge.node
               return (

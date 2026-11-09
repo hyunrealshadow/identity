@@ -83,12 +83,6 @@ export function PermissionRoleReferences({
           </>
         ) : !connection ? (
           <AsyncState kind="loading" title={t('loading')} />
-        ) : connection.edges.length === 0 ? (
-          <AsyncState
-            kind="empty"
-            compact
-            title={t('permissionsRolesEmptyTitle')}
-          />
         ) : (
           <>
             {query.partial ? <ErrorDetails issues={query.errors} /> : null}
@@ -108,7 +102,15 @@ export function PermissionRoleReferences({
                 },
               ]}
             >
-              <DataTable.Body>
+              <DataTable.Body
+                renderEmptyState={() => (
+                  <AsyncState
+                    kind="empty"
+                    compact
+                    title={t('permissionsRolesEmptyTitle')}
+                  />
+                )}
+              >
                 {connection.edges.map(({ node }) => (
                   <DataTable.Row key={node.id} id={node.id}>
                     <DataTable.Cell>

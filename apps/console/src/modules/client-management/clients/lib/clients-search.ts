@@ -1,10 +1,12 @@
 import type { ClientOrder } from '#/generated/graphql'
+import { parsePageSize } from '#/lib/page-size'
 import { cursorPage } from '#/modules/user-management/lib/cursor-page'
 
 export interface ClientsSearch {
   q?: string
   enabled?: 'enabled' | 'disabled'
   order?: ClientOrder
+  size?: number
   after?: string
   before?: string
 }
@@ -34,6 +36,7 @@ export function normalizeClientsSearch(
       typeof input.order === 'string' && orders.includes(input.order)
         ? (input.order as ClientOrder)
         : undefined,
+    size: parsePageSize(input.size),
     after: typeof input.after === 'string' ? input.after : undefined,
     before: typeof input.before === 'string' ? input.before : undefined,
   }
@@ -51,6 +54,6 @@ export function clientsQueryVariables(search: ClientsSearch) {
             : undefined,
     },
     orderBy: search.order ?? ('CREATED_AT_DESC' as ClientOrder),
-    ...cursorPage(CLIENTS_PAGE_SIZE, search.after, search.before),
+    ...cursorPage(search.size ?? CLIENTS_PAGE_SIZE, search.after, search.before),
   }
 }

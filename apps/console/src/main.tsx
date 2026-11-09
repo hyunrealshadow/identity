@@ -33,10 +33,10 @@ function StartupError({ error }: { error: unknown }) {
     <main className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
       <div className="w-full max-w-lg rounded-field border border-border bg-surface p-6 shadow-sm">
         <h1 className="text-lg font-semibold">{translate(locale, 'startupConfigTitle')}</h1>
-        <p className="mt-2 text-sm leading-6 text-muted">
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
           {translate(locale, 'startupConfigDescription')}
         </p>
-        <p className="mt-3 text-sm leading-6 text-muted">
+        <p className="mt-3 text-sm leading-6 text-muted-foreground">
           {translate(locale, fetchFailed ? 'startupConfigFetch' : 'startupConfigInvalid')}
         </p>
         <button

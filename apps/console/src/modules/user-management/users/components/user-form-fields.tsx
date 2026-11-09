@@ -47,6 +47,7 @@ export function UserTextField({
   isDisabled = false,
   maxLength,
   inputMode,
+  hideLabel = false,
 }: {
   name: string
   label: string
@@ -61,6 +62,8 @@ export function UserTextField({
   isDisabled?: boolean
   maxLength?: number
   inputMode?: 'text' | 'email' | 'numeric'
+  /** Keep the label for assistive technology when the placeholder explains the field. */
+  hideLabel?: boolean
 }) {
   const id = useId()
   const descriptionId = `${id}-description`
@@ -75,7 +78,9 @@ export function UserTextField({
 
   return (
     <Field data-invalid={error ? true : undefined}>
-      <FieldLabel htmlFor={id}>{label}</FieldLabel>
+      <FieldLabel htmlFor={id} className={hideLabel ? 'sr-only' : undefined}>
+        {label}
+      </FieldLabel>
       <Input
         id={id}
         name={name}

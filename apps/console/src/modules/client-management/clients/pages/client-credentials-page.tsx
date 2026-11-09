@@ -327,7 +327,6 @@ export function ClientCredentialsPage() {
               name="secret-lifetime"
               label={t('clientsSecretLifetime')}
               hideLabel
-              size="sm"
               value={lifetime}
               onChange={setLifetime}
               options={LIFETIMES.map((days) => ({
@@ -337,10 +336,7 @@ export function ClientCredentialsPage() {
               isDisabled={pending || full}
             />
           </div>
-          {/* Stretch to the select's height so the pair lines up exactly. */}
           <Button
-            size="sm"
-            className="h-auto"
             disabled={pending || full}
             onClick={() => void issue()}
           >
@@ -356,7 +352,6 @@ export function ClientCredentialsPage() {
     }
     return (
       <Button
-        size="sm"
         disabled={pending || full}
         onClick={kind === 'PUBLIC_KEY' ? publicKeyDialog.open : jwksDialog.open}
       >

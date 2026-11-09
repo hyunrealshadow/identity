@@ -14,6 +14,7 @@ import { ShieldPlus, TriangleAlert } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
+import { CollectionToolbar } from '#/components/resource-table'
 import { ErrorDetails } from '#/components/error-details'
 import { RequestCorrelation } from '#/components/request-correlation'
 import { StepUpPanel } from '#/components/step-up-panel'
@@ -56,7 +57,6 @@ import { UserSelectField } from '#/modules/user-management/users/components/user
 
 type AssignmentStatus = 'any' | 'active' | 'revoked'
 
-const PAGE_SIZE = 10
 
 export function UserRolesPage({ userId }: { userId: string }) {
   const t = useTranslator()
@@ -71,6 +71,7 @@ export function UserRolesPage({ userId }: { userId: string }) {
   const [status, setStatus] = useState<AssignmentStatus>('active')
   const [after, setAfter] = useState<string | undefined>()
   const [before, setBefore] = useState<string | undefined>()
+  const [pageSize, setPageSize] = useState(10)
   const [notice, setNotice] = useState<RbacNotice | null>(null)
   const variables = useMemo<ConsoleUserRolesQueryVariables | null>(
     () =>
@@ -84,7 +85,7 @@ export function UserRolesPage({ userId }: { userId: string }) {
                   ? false
                   : undefined,
             orderBy: 'CREATED_AT_DESC',
-            ...cursorPage(PAGE_SIZE, after, before),
+            ...cursorPage(pageSize, after, before),
           }
         : null,
     [
@@ -95,6 +96,7 @@ export function UserRolesPage({ userId }: { userId: string }) {
       scope.usersRead,
       status,
       userId,
+      pageSize,
     ],
   )
   const assignments = useConsoleQuery<
@@ -225,30 +227,7 @@ export function UserRolesPage({ userId }: { userId: string }) {
                   {t('userRolesListDescription')}
                 </p>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="w-40">
-                  <UserSelectField
-                    name="user-role-status"
-                    label={t('rolesFilterStatusLabel')}
-                    value={status}
-                    onChange={(value) => {
-                      if (
-                        value === 'any' ||
-                        value === 'active' ||
-                        value === 'revoked'
-                      ) {
-                        setStatus(value)
-                        setAfter(undefined)
-                        setBefore(undefined)
-                      }
-                    }}
-                    options={[
-                      { id: 'any', label: t('assignmentFilterAll') },
-                      { id: 'active', label: t('assignmentFilterActive') },
-                      { id: 'revoked', label: t('assignmentFilterRevoked') },
-                    ]}
-                  />
-                </div>
+              <div className="flex shrink-0 items-center gap-2">
                 {readyUser &&
                 scope.assignmentsWrite &&
                 scope.rolesRead &&
@@ -275,8 +254,38 @@ export function UserRolesPage({ userId }: { userId: string }) {
                 ) : null}
               </div>
             </header>
+            <CollectionToolbar
+              filters={
+                <div className="flex flex-wrap items-start gap-2">
+                  <div className="w-36">
+                    <UserSelectField
+                      name="user-role-status"
+                      label={t('rolesFilterStatusLabel')}
+                      hideLabel
+                      value={status}
+                      onChange={(value) => {
+                        if (
+                          value === 'any' ||
+                          value === 'active' ||
+                          value === 'revoked'
+                        ) {
+                          setStatus(value)
+                          setAfter(undefined)
+                          setBefore(undefined)
+                        }
+                      }}
+                      options={[
+                        { id: 'any', label: t('assignmentFilterAll') },
+                        { id: 'active', label: t('assignmentFilterActive') },
+                        { id: 'revoked', label: t('assignmentFilterRevoked') },
+                      ]}
+                    />
+                  </div>
+                </div>
+              }
+            />
             <div className="min-w-0">{renderAssignments()}</div>
-            <footer className="border-t border-border pt-4">
+            <footer className="resource-collection-pagination">
               {connection ? (
                 <RelationPagination
                   connection={connection}
@@ -291,6 +300,12 @@ export function UserRolesPage({ userId }: { userId: string }) {
                   isDisabled={
                     assignments.refreshing || assignments.status !== 'ready'
                   }
+                  pageSize={pageSize}
+                  onPageSizeChange={(size) => {
+                    setPageSize(size)
+                    setAfter(undefined)
+                    setBefore(undefined)
+                  }}
                 />
               ) : assignments.status === 'idle' ||
                 assignments.status === 'loading' ? (
@@ -325,22 +340,6 @@ export function UserRolesPage({ userId }: { userId: string }) {
       return <UserDetailTableSkeleton label={t('userRolesLoading')} />
     }
     const edges = connection?.edges ?? []
-    if (edges.length === 0) {
-      return (
-        <div className="p-4">
-          <AsyncState
-            kind="empty"
-            compact
-            title={t('userRolesEmptyTitle')}
-            description={
-              status !== 'revoked'
-                ? t('userRolesEmptyDescription')
-                : t('userRolesEmptyFilteredDescription')
-            }
-          />
-        </div>
-      )
-    }
     return (
       <div>
         {assignments.partial ? (
@@ -385,7 +384,20 @@ export function UserRolesPage({ userId }: { userId: string }) {
             },
           ]}
         >
-          <DataTable.Body>
+          <DataTable.Body
+            renderEmptyState={() => (
+              <AsyncState
+                kind="empty"
+                compact
+                title={t('userRolesEmptyTitle')}
+                description={
+                  status !== 'revoked'
+                    ? t('userRolesEmptyDescription')
+                    : t('userRolesEmptyFilteredDescription')
+                }
+              />
+            )}
+          >
             {edges.map((edge) => {
               const role = edge.node
               const roleName =

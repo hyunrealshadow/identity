@@ -2,6 +2,7 @@ import { TableRowActions } from '#/components/table-row-actions'
 import { CursorPagination } from '#/components/cursor-pagination'
 import { useCursorPagination } from '#/lib/use-cursor-pagination'
 import {
+  CollectionToolbar,
   ResourceTable,
   type ResourceTableControls,
 } from '#/components/resource-table'
@@ -9,7 +10,7 @@ import { Alert, AlertDescription, AlertTitle } from '@identity/ui/components/ale
 import { Button } from '@identity/ui/components/button'
 import { Skeleton } from '@identity/ui/components/skeleton'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { Plus, RotateCcw, Search, TriangleAlert } from 'lucide-react'
+import { Plus, TriangleAlert } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
@@ -47,6 +48,7 @@ import {
   isRoleOrder,
   rolesFilterDraft,
   rolesQueryVariables,
+  ROLE_PAGE_SIZE,
   rolesSearchFromDraft,
   rolesSearchKey,
   type RolesFilterDraft,
@@ -214,11 +216,14 @@ export function RolesListPage({ search }: { search: RolesSearch }) {
 
   const reset = () => {
     setDraft(rolesFilterDraft({}))
-    void navigate({ to: '/roles', search: {} })
+    void navigate({ to: '/roles', search: { size: search.size } })
   }
 
   const apply = () => {
-    void navigate({ to: '/roles', search: rolesSearchFromDraft(draft) })
+    void navigate({
+      to: '/roles',
+      search: { ...rolesSearchFromDraft(draft), size: search.size },
+    })
   }
 
   const pager = useCursorPagination({
@@ -230,6 +235,62 @@ export function RolesListPage({ search }: { search: RolesSearch }) {
         search: { ...search, after: undefined, before: undefined, ...cursor },
       }),
   })
+
+  const filters = (
+    <form
+      aria-label={t('rolesFiltersTitle')}
+      onSubmit={(event) => {
+        event.preventDefault()
+        apply()
+      }}
+      className="flex flex-wrap items-start gap-2"
+    >
+      <div className="w-full sm:w-72">
+        <UserTextField
+          name="q"
+          label={t('rolesFilterSearchLabel')}
+          hideLabel
+          value={draft.q}
+          onChange={(value) =>
+            setDraft((current) => ({ ...current, q: value }))
+          }
+          placeholder={t('rolesFilterSearchPlaceholder')}
+          maxLength={256}
+        />
+      </div>
+      <div className="w-36">
+        <UserSelectField
+          name="status"
+          label={t('rolesFilterStatusLabel')}
+          hideLabel
+          value={draft.status}
+          onChange={(value) => {
+            if (
+              value === 'any' ||
+              value === 'enabled' ||
+              value === 'disabled'
+            ) {
+              setDraft((current) => ({ ...current, status: value }))
+            }
+          }}
+          options={[
+            { id: 'any', label: t('rolesFilterAny') },
+            { id: 'enabled', label: t('rolesFilterEnabled') },
+            { id: 'disabled', label: t('rolesFilterDisabled') },
+          ]}
+        />
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" variant="secondary">
+          {t('rolesApplyFilters')}
+        </Button>
+        <Button type="button" variant="ghost" onClick={reset}>
+          {t('rolesResetFilters')}
+        </Button>
+      </div>
+    </form>
+  )
 
   const header = (
     <PageHeader
@@ -246,6 +307,7 @@ export function RolesListPage({ search }: { search: RolesSearch }) {
     />
   )
 
+  let tableRendered = false
   function content() {
     if (!scope.rolesRead) {
       return (
@@ -309,6 +371,7 @@ export function RolesListPage({ search }: { search: RolesSearch }) {
           return (
             <AsyncState
               kind="empty"
+              compact
               title={t('rolesNoResultsTitle')}
               description={t('rolesNoResultsDescription')}
               action={
@@ -322,6 +385,7 @@ export function RolesListPage({ search }: { search: RolesSearch }) {
         return (
           <AsyncState
             kind="empty"
+            compact
             title={t('rolesEmptyTitle')}
             description={t('rolesEmptyDescription')}
             action={
@@ -339,6 +403,7 @@ export function RolesListPage({ search }: { search: RolesSearch }) {
     })()
 
     const { pageInfo } = connection
+    tableRendered = true
     return (
       <div className="space-y-4">
         {roles.partial ? (
@@ -356,6 +421,7 @@ export function RolesListPage({ search }: { search: RolesSearch }) {
           </Alert>
         ) : null}
         <RolesTable
+          filters={filters}
           emptyState={emptyState}
           roles={edges}
           order={search.order}
@@ -381,6 +447,13 @@ export function RolesListPage({ search }: { search: RolesSearch }) {
               pageInfo={pageInfo}
               controller={pager}
               isDisabled={roles.refreshing}
+              pageSize={search.size ?? ROLE_PAGE_SIZE}
+              onPageSizeChange={(size) =>
+                void navigate({
+                  to: '/roles',
+                  search: { ...search, size, after: undefined, before: undefined },
+                })
+              }
             />
           }
         />
@@ -388,66 +461,13 @@ export function RolesListPage({ search }: { search: RolesSearch }) {
     )
   }
 
+  const body = content()
   return (
     <>
       {header}
       <ConsoleWorkspaceGate>
-        <div className="collection-filters">
-          <form
-            aria-label={t('rolesFiltersTitle')}
-            onSubmit={(event) => {
-              event.preventDefault()
-              apply()
-            }}
-            className="collection-filter-controls flex flex-col gap-3 lg:flex-row lg:items-end"
-          >
-            <div className="min-w-0 flex-1">
-              <UserTextField
-                name="q"
-                label={t('rolesFilterSearchLabel')}
-                value={draft.q}
-                onChange={(value) =>
-                  setDraft((current) => ({ ...current, q: value }))
-                }
-                placeholder={t('rolesFilterSearchPlaceholder')}
-                maxLength={256}
-              />
-            </div>
-            <div className="sm:w-52">
-              <UserSelectField
-                name="status"
-                label={t('rolesFilterStatusLabel')}
-                value={draft.status}
-                onChange={(value) => {
-                  if (
-                    value === 'any' ||
-                    value === 'enabled' ||
-                    value === 'disabled'
-                  ) {
-                    setDraft((current) => ({ ...current, status: value }))
-                  }
-                }}
-                options={[
-                  { id: 'any', label: t('rolesFilterAny') },
-                  { id: 'enabled', label: t('rolesFilterEnabled') },
-                  { id: 'disabled', label: t('rolesFilterDisabled') },
-                ]}
-              />
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Button type="submit">
-                <Search className="size-4" aria-hidden="true" />
-                {t('rolesApplyFilters')}
-              </Button>
-              <Button type="button" variant="secondary" onClick={reset}>
-                <RotateCcw className="size-4" aria-hidden="true" />
-                {t('rolesResetFilters')}
-              </Button>
-            </div>
-          </form>
-        </div>
-        {content()}
+        {tableRendered ? null : <CollectionToolbar filters={filters} />}
+        {body}
       </ConsoleWorkspaceGate>
     </>
   )

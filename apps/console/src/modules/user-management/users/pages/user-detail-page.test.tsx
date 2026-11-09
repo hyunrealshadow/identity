@@ -92,7 +92,7 @@ describe('user detail action authority', () => {
     expect(
       identity.compareDocumentPosition(tabs) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Copy user ID' })).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Copy User ID' })).toBeTruthy()
     expect(screen.getByText('User:target')).toBeTruthy()
     expect(
       screen.queryByText('5e7f4626-1618-4ef5-b227-703e5802d10d'),

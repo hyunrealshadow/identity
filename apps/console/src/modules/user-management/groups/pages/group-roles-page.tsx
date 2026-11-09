@@ -14,6 +14,7 @@ import { Info, TriangleAlert } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
+import { CollectionToolbar } from '#/components/resource-table'
 import { ErrorDetails } from '#/components/error-details'
 import { RequestCorrelation } from '#/components/request-correlation'
 import { StepUpPanel } from '#/components/step-up-panel'
@@ -42,7 +43,6 @@ import {
   UserTextField,
 } from '#/modules/user-management/users/components/user-form-fields'
 
-const PAGE_SIZE = 5
 
 type RelationStatus = 'any' | 'enabled' | 'disabled'
 
@@ -59,6 +59,7 @@ export function GroupRolesPage({ groupId }: { groupId: string }) {
   const [status, setStatus] = useState<RelationStatus>('any')
   const [after, setAfter] = useState<string | undefined>()
   const [before, setBefore] = useState<string | undefined>()
+  const [pageSize, setPageSize] = useState(10)
   const [search, setSearch] = useState('')
   const [notice, setNotice] = useState<RbacNotice | null>(null)
 
@@ -69,10 +70,10 @@ export function GroupRolesPage({ groupId }: { groupId: string }) {
             groupId,
             filter: status === 'any' ? {} : { enabled: status === 'enabled' },
             orderBy: 'ROLE_NAME_ASC',
-            ...cursorPage(PAGE_SIZE, after, before),
+            ...cursorPage(pageSize, after, before),
           }
         : null,
-    [after, before, canRead, groupId, status],
+    [after, before, canRead, groupId, status, pageSize],
   )
   const roles = useGroupRoles(variables)
   const group = roles.data?.group ?? null
@@ -183,7 +184,7 @@ export function GroupRolesPage({ groupId }: { groupId: string }) {
         ) : null}
 
         <section className="space-y-4">
-          <header className="flex flex-col gap-3 py-2 sm:flex-row sm:items-end sm:justify-between">
+          <header className="flex flex-col gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <h2 className="text-base font-semibold">
                 {t('groupRolesListTitle')}
@@ -192,40 +193,7 @@ export function GroupRolesPage({ groupId }: { groupId: string }) {
                 {t('groupRolesListDescription')}
               </p>
             </div>
-            <div className="flex flex-wrap items-end gap-2">
-              <div className="w-48">
-                <UserTextField
-                  name="group-role-search"
-                  label={t('groupRolesSearchLabel')}
-                  value={search}
-                  onChange={setSearch}
-                  placeholder={t('groupRolesSearchPlaceholder')}
-                  maxLength={256}
-                />
-              </div>
-              <div className="w-40">
-                <UserSelectField
-                  name="group-role-status"
-                  label={t('groupRolesFilterStatusLabel')}
-                  value={status}
-                  onChange={(value) => {
-                    if (
-                      value === 'any' ||
-                      value === 'enabled' ||
-                      value === 'disabled'
-                    ) {
-                      setStatus(value)
-                      setAfter(undefined)
-                      setBefore(undefined)
-                    }
-                  }}
-                  options={[
-                    { id: 'any', label: t('groupRolesFilterAll') },
-                    { id: 'enabled', label: t('groupRolesFilterActive') },
-                    { id: 'disabled', label: t('groupRolesFilterRemoved') },
-                  ]}
-                />
-              </div>
+            <div className="flex shrink-0 items-center gap-2">
               {!readyGroup.builtIn &&
               scope.rolesRead &&
               scope.groupRolesWrite ? (
@@ -249,6 +217,47 @@ export function GroupRolesPage({ groupId }: { groupId: string }) {
               ) : null}
             </div>
           </header>
+          <CollectionToolbar
+            filters={
+              <div className="flex flex-wrap items-start gap-2">
+                <div className="w-full sm:w-72">
+                  <UserTextField
+                    name="group-role-search"
+                    label={t('groupRolesSearchLabel')}
+                    hideLabel
+                    value={search}
+                    onChange={setSearch}
+                    placeholder={t('groupRolesSearchPlaceholder')}
+                    maxLength={256}
+                  />
+                </div>
+                <div className="w-36">
+                  <UserSelectField
+                    name="group-role-status"
+                    label={t('groupRolesFilterStatusLabel')}
+                    hideLabel
+                    value={status}
+                    onChange={(value) => {
+                      if (
+                        value === 'any' ||
+                        value === 'enabled' ||
+                        value === 'disabled'
+                      ) {
+                        setStatus(value)
+                        setAfter(undefined)
+                        setBefore(undefined)
+                      }
+                    }}
+                    options={[
+                      { id: 'any', label: t('groupRolesFilterAll') },
+                      { id: 'enabled', label: t('groupRolesFilterActive') },
+                      { id: 'disabled', label: t('groupRolesFilterRemoved') },
+                    ]}
+                  />
+                </div>
+              </div>
+            }
+          />
           <div className="p-0">
             {roles.partial ? (
               <div className="p-3">
@@ -266,100 +275,98 @@ export function GroupRolesPage({ groupId }: { groupId: string }) {
                 </Alert>
               </div>
             ) : null}
-            {readyGroup.roles.edges.length === 0 ? (
-              <div className="p-4">
-                <AsyncState
-                  kind="empty"
-                  compact
-                  title={
-                    status === 'any'
-                      ? t('groupRolesEmptyTitle')
-                      : t('groupRolesEmptyFilteredTitle')
-                  }
-                  description={
-                    status === 'any'
-                      ? t('groupRolesEmptyDescription')
-                      : t('groupRolesEmptyFilteredDescription')
-                  }
-                />
-              </div>
-            ) : edges.length === 0 ? (
-              <div className="p-4">
-                <AsyncState
-                  kind="empty"
-                  compact
-                  title={t('groupRolesSearchNoMatches')}
-                  description={t('groupRolesSearchDescription')}
-                />
-              </div>
-            ) : (
-              <DataTable
-                label={t('groupRolesTableLabel')}
-                minWidth={820}
-                columns={[
-                  {
-                    id: 'groupRolesColumnRole',
-                    label: t('groupRolesColumnRole'),
-                    primary: true,
-                  },
-                  {
-                    id: 'groupRolesColumnRelation',
-                    label: t('groupRolesColumnRelation'),
-                    primary: false,
-                  },
-                ]}
+            <DataTable
+              label={t('groupRolesTableLabel')}
+              minWidth={820}
+              columns={[
+                {
+                  id: 'groupRolesColumnRole',
+                  label: t('groupRolesColumnRole'),
+                  primary: true,
+                },
+                {
+                  id: 'groupRolesColumnRelation',
+                  label: t('groupRolesColumnRelation'),
+                  primary: false,
+                },
+              ]}
+            >
+              <DataTable.Body
+                renderEmptyState={() =>
+                  readyGroup.roles.edges.length === 0 ? (
+                    <AsyncState
+                      kind="empty"
+                      compact
+                      title={
+                        status === 'any'
+                          ? t('groupRolesEmptyTitle')
+                          : t('groupRolesEmptyFilteredTitle')
+                      }
+                      description={
+                        status === 'any'
+                          ? t('groupRolesEmptyDescription')
+                          : t('groupRolesEmptyFilteredDescription')
+                      }
+                    />
+                  ) : (
+                    <AsyncState
+                      kind="empty"
+                      compact
+                      title={t('groupRolesSearchNoMatches')}
+                      description={t('groupRolesSearchDescription')}
+                    />
+                  )
+                }
               >
-                <DataTable.Body>
-                  {edges.map((edge) => {
-                    const role = edge.node
-                    const name =
-                      resolveLocalizedText(role.names, locale) ?? role.name
-                    return (
-                      <DataTable.Row key={role.id} id={role.id}>
-                        <DataTable.Cell>
-                          <div className="min-w-56">
-                            <Link
-                              to="/roles/$roleId"
-                              params={{ roleId: role.id }}
-                              className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                            >
-                              {name}
-                            </Link>
-                            <div className="mt-1 flex flex-wrap gap-1">
-                              {role.builtIn ? (
-                                <Badge
-                                  variant="secondary"
-                                  className="text-primary"
-                                >
-                                  {t('groupRolesBuiltInRoleLabel')}
-                                </Badge>
-                              ) : null}
-                              {!role.enabled ? (
-                                <Badge
-                                  variant="secondary"
-                                  className="text-warning"
-                                >
-                                  {t('rolesDisabled')}
-                                </Badge>
-                              ) : null}
-                            </div>
+                {edges.map((edge) => {
+                  const role = edge.node
+                  const name =
+                    resolveLocalizedText(role.names, locale) ?? role.name
+                  return (
+                    <DataTable.Row key={role.id} id={role.id}>
+                      <DataTable.Cell>
+                        <div className="min-w-56">
+                          <Link
+                            to="/roles/$roleId"
+                            params={{ roleId: role.id }}
+                            className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                          >
+                            {name}
+                          </Link>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {role.builtIn ? (
+                              <Badge
+                                variant="secondary"
+                                className="text-primary"
+                              >
+                                {t('groupRolesBuiltInRoleLabel')}
+                              </Badge>
+                            ) : null}
+                            {!role.enabled ? (
+                              <Badge
+                                variant="secondary"
+                                className="text-warning"
+                              >
+                                {t('rolesDisabled')}
+                              </Badge>
+                            ) : null}
                           </div>
-                        </DataTable.Cell>
-                        <DataTable.Cell>
-                          <AssignmentStatusChip
-                            enabled={edge.enabled}
-                            revokedAt={edge.revokedAt}
-                            roleEnabled={role.enabled}
-                          />
-                        </DataTable.Cell>
-                      </DataTable.Row>
-                    )
-                  })}
-                </DataTable.Body>
-              </DataTable>
-            )}
+                        </div>
+                      </DataTable.Cell>
+                      <DataTable.Cell>
+                        <AssignmentStatusChip
+                          enabled={edge.enabled}
+                          revokedAt={edge.revokedAt}
+                          roleEnabled={role.enabled}
+                        />
+                      </DataTable.Cell>
+                    </DataTable.Row>
+                  )
+                })}
+              </DataTable.Body>
+            </DataTable>
           </div>
-          <footer className="border-t border-border pt-4">
+          <footer className="resource-collection-pagination">
             <RelationPagination
               connection={readyGroup.roles}
               variables={variables}
@@ -371,6 +378,12 @@ export function GroupRolesPage({ groupId }: { groupId: string }) {
               }}
               label={t('roleUsersPagination')}
               isDisabled={roles.refreshing || roles.status !== 'ready'}
+              pageSize={pageSize}
+              onPageSizeChange={(size) => {
+                setPageSize(size)
+                setAfter(undefined)
+                setBefore(undefined)
+              }}
             />
           </footer>
         </section>

@@ -30,6 +30,7 @@ import {
   UserTextField,
 } from '#/modules/user-management/users/components/user-form-fields'
 import {
+  RESOURCES_PAGE_SIZE,
   resourcesQueryVariables,
   type ResourcesSearch,
 } from '../lib/resources-search'
@@ -53,6 +54,7 @@ export function ResourcesListPage({ search }: { search: ResourcesSearch }) {
       search.q,
       search.enabled,
       search.order,
+      search.size,
       search.after,
       search.before,
     ],
@@ -94,58 +96,63 @@ export function ResourcesListPage({ search }: { search: ResourcesSearch }) {
           />
         ) : (
           <section className="space-y-5">
-            <form
-              className="collection-filter-controls flex flex-wrap items-end gap-3"
-              onSubmit={(event) => {
-                event.preventDefault()
-                void navigate({
-                  to: '/resources',
-                  search: {
-                    q: q.trim() || undefined,
-                    enabled:
-                      enabled === 'any'
-                        ? undefined
-                        : (enabled as ResourcesSearch['enabled']),
-                    order: search.order,
-                  },
-                })
-              }}
-            >
-              <div className="min-w-48 flex-1">
-                <UserTextField
-                  name="resource-search"
-                  label={t('resourcesSearch')}
-                  value={q}
-                  onChange={setQ}
-                  placeholder={t('resourcesSearchPlaceholder')}
-                />
-              </div>
-              <div className="w-40">
-                <UserSelectField
-                  name="resource-status"
-                  label={t('resourcesStatus')}
-                  value={enabled}
-                  onChange={(value) => setEnabled(value as typeof enabled)}
-                  options={[
-                    { id: 'any', label: t('permissionsFilterAny') },
-                    { id: 'enabled', label: t('permissionsEnabled') },
-                    { id: 'disabled', label: t('permissionsDisabled') },
-                  ]}
-                />
-              </div>
-              <Button type="submit" variant="secondary">
-                {t('resourcesFilter')}
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={() => void navigate({ to: '/resources', search: {} })}
-              >
-                {t('resourcesReset')}
-              </Button>
-            </form>
             <ResourceTable
               id="resources"
               label={t('resourcesTable')}
+              filters={
+                <form
+                  className="flex flex-wrap items-start gap-2"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    void navigate({
+                      to: '/resources',
+                      search: {
+                        q: q.trim() || undefined,
+                        enabled:
+                          enabled === 'any'
+                            ? undefined
+                            : (enabled as ResourcesSearch['enabled']),
+                        order: search.order,
+                        size: search.size,
+                      },
+                    })
+                  }}
+                >
+                  <div className="w-full sm:w-72">
+                    <UserTextField
+                      name="resource-search"
+                      label={t('resourcesSearch')}
+                      hideLabel
+                      value={q}
+                      onChange={setQ}
+                      placeholder={t('resourcesSearchPlaceholder')}
+                    />
+                  </div>
+                  <div className="w-36">
+                    <UserSelectField
+                      name="resource-status"
+                      label={t('resourcesStatus')}
+                      hideLabel
+                      value={enabled}
+                      onChange={(value) => setEnabled(value as typeof enabled)}
+                      options={[
+                        { id: 'any', label: t('permissionsFilterAny') },
+                        { id: 'enabled', label: t('permissionsEnabled') },
+                        { id: 'disabled', label: t('permissionsDisabled') },
+                      ]}
+                    />
+                  </div>
+                  <Button type="submit" variant="secondary">
+                    {t('resourcesFilter')}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() => void navigate({ to: '/resources', search: { size: search.size } })}
+                  >
+                    {t('resourcesReset')}
+                  </Button>
+                </form>
+              }
               items={(connection?.edges ?? []).map(({ node }) => node)}
               order={search.order}
               onOrderChange={(order) =>
@@ -190,6 +197,13 @@ export function ResourcesListPage({ search }: { search: ResourcesSearch }) {
                     pageInfo={connection.pageInfo}
                     controller={pager}
                     isDisabled={query.refreshing}
+                    pageSize={search.size ?? RESOURCES_PAGE_SIZE}
+                    onPageSizeChange={(size) =>
+                      void navigate({
+                        to: '/resources',
+                        search: { ...search, size, after: undefined, before: undefined },
+                      })
+                    }
                   />
                 ) : null
               }

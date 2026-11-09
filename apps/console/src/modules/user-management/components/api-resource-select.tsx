@@ -25,10 +25,13 @@ export function ApiResourceSelect({
   value,
   onChange,
   enabled = true,
+  hideLabel = false,
 }: {
   value: string
   onChange: (id: string) => void
   enabled?: boolean
+  /** Toolbar use: the placeholder names the field; the label stays for assistive technology. */
+  hideLabel?: boolean
 }) {
   const t = useTranslator()
   const inputId = useId()
@@ -85,9 +88,11 @@ export function ApiResourceSelect({
       ? [selected, ...items]
       : items
   return (
-    <div className="w-full max-w-xl">
+    <div className={hideLabel ? 'w-full sm:w-72' : 'w-full max-w-xl'}>
       <Field>
-        <FieldLabel htmlFor={inputId}>{t('rbacApiResource')}</FieldLabel>
+        <FieldLabel htmlFor={inputId} className={hideLabel ? 'sr-only' : undefined}>
+          {t('rbacApiResource')}
+        </FieldLabel>
         <Combobox<Resource>
           items={options}
           value={selected ?? null}

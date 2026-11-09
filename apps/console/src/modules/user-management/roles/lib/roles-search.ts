@@ -1,3 +1,4 @@
+import { parsePageSize } from '#/lib/page-size'
 import { cursorPage } from '#/modules/user-management/lib/cursor-page'
 
 export const ROLE_PAGE_SIZE = 10
@@ -10,6 +11,7 @@ export interface RolesSearch {
   q?: string
   status?: RoleStatusFilter
   order?: RoleOrderValue
+  size?: number
   after?: string
   before?: string
 }
@@ -50,6 +52,8 @@ export function normalizeRolesSearch(
   if (isRoleOrder(search.order)) {
     result.order = search.order
   }
+  const size = parsePageSize(search.size)
+  if (size !== undefined) result.size = size
   if (typeof search.after === 'string' && search.after) {
     result.after = search.after
   }
@@ -101,7 +105,7 @@ export function rolesQueryVariables(search: RolesSearch): {
   } = {
     filter,
     orderBy: search.order ?? DEFAULT_ROLE_ORDER,
-    ...cursorPage(ROLE_PAGE_SIZE, search.after, search.before),
+    ...cursorPage(search.size ?? ROLE_PAGE_SIZE, search.after, search.before),
   }
   return variables
 }

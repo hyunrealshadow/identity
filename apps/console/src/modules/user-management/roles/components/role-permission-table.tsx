@@ -117,19 +117,6 @@ export function RolePermissionTable({
     currentPage * pageSize,
   )
 
-  if (visibleRows.length === 0) {
-    return (
-      <div className="p-4">
-        <AsyncState
-          kind="empty"
-          compact
-          title={t('rolePermissionsNoneTitle')}
-          description={t('rolePermissionsNoneDescription')}
-        />
-      </div>
-    )
-  }
-
   return (
     <div className="space-y-4">
       <DataTable
@@ -165,7 +152,16 @@ export function RolePermissionTable({
           },
         ]}
       >
-        <DataTable.Body>
+        <DataTable.Body
+          renderEmptyState={() => (
+            <AsyncState
+              kind="empty"
+              compact
+              title={t('rolePermissionsNoneTitle')}
+              description={t('rolePermissionsNoneDescription')}
+            />
+          )}
+        >
           {pageRows.map((row) => {
             const removed = row.status === 'removed'
             return (

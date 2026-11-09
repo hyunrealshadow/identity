@@ -3,6 +3,7 @@ import { CursorPagination } from '#/components/cursor-pagination'
 import { DatePickerField } from '#/components/date-picker-field'
 import { useCursorPagination } from '#/lib/use-cursor-pagination'
 import {
+  CollectionToolbar,
   ResourceTable,
   type ResourceTableControls,
 } from '#/components/resource-table'
@@ -14,7 +15,7 @@ import {
 } from '@identity/ui/components/alert'
 import { Skeleton } from '@identity/ui/components/skeleton'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { ChevronDown, Plus, RotateCcw, Search, TriangleAlert } from 'lucide-react'
+import { ChevronDown, Plus, TriangleAlert } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
@@ -34,6 +35,7 @@ import {
 } from '#/modules/user-management/users/hooks/use-users'
 import { userManagementScope } from '#/modules/user-management/users/lib/user-scope'
 import {
+  USERS_PAGE_SIZE,
   emptyUsersFilterDraft,
   hasUserFilters,
   isUserOrder,
@@ -238,192 +240,206 @@ function advancedFilterCount(draft: UsersFilterDraft): number {
   ].filter(Boolean).length
 }
 
-function UsersFilters({
+function UsersFilterBar({
   draft,
   issues,
   onChange,
-  onStatusChange,
   onApply,
   onReset,
+  advancedExpanded,
+  onAdvancedToggle,
 }: {
   draft: UsersFilterDraft
   issues: ReadonlyArray<UsersSearchIssue>
+  onChange: (key: 'q', value: string) => void
+  onApply: () => void
+  onReset: () => void
+  advancedExpanded: boolean
+  onAdvancedToggle: () => void
+}) {
+  const t = useTranslator()
+  const advancedCount = advancedFilterCount(draft)
+  return (
+    <form
+      aria-label={t('usersFiltersTitle')}
+      onSubmit={(event) => {
+        event.preventDefault()
+        onApply()
+      }}
+      noValidate
+      className="flex flex-wrap items-start gap-2"
+    >
+      <div className="w-full sm:w-72">
+        <UserTextField
+          name="q"
+          label={t('usersFilterSearchLabel')}
+          hideLabel
+          value={draft.q}
+          onChange={(value) => onChange('q', value)}
+          placeholder={t('usersFilterSearchPlaceholder')}
+          error={
+            issues.includes('query') ? t('usersFilterQueryTooLong') : undefined
+          }
+          maxLength={256}
+        />
+      </div>
+      <Button type="submit" variant="secondary">
+        {t('usersApplyFilters')}
+      </Button>
+      <Button type="button" variant="ghost" onClick={onReset}>
+        {t('usersResetFilters')}
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        aria-expanded={advancedExpanded}
+        aria-controls={USERS_ADVANCED_FILTERS_ID}
+        onClick={onAdvancedToggle}
+      >
+        {advancedExpanded
+          ? t('usersAdvancedFiltersHide')
+          : t('usersAdvancedFiltersShow')}
+        {advancedCount > 0 ? (
+          <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+            {t('usersAdvancedFiltersActive', { count: advancedCount })}
+          </span>
+        ) : null}
+        <ChevronDown
+          className={`size-4 text-muted-foreground transition-transform ${advancedExpanded ? 'rotate-180' : ''}`}
+          aria-hidden="true"
+        />
+      </Button>
+    </form>
+  )
+}
+
+/** Full-width panel under the toolbar row: advanced fields and filter issues. */
+function UsersAdvancedFilters({
+  draft,
+  issues,
+  expanded,
+  onChange,
+  onStatusChange,
+  onApply,
+}: {
+  draft: UsersFilterDraft
+  issues: ReadonlyArray<UsersSearchIssue>
+  expanded: boolean
   onChange: (
-    key: 'q' | 'username' | 'email' | 'createdFrom' | 'createdBefore',
+    key: 'username' | 'email' | 'createdFrom' | 'createdBefore',
     value: string,
   ) => void
   onStatusChange: (key: 'enabled' | 'locked', value: string) => void
   onApply: () => void
-  onReset: () => void
 }) {
   const t = useTranslator()
   const has = (issue: UsersSearchIssue) => issues.includes(issue)
-  const advancedCount = advancedFilterCount(draft)
-  const advancedInvalid = issues.some(isAdvancedIssue)
-  const [advancedExpanded, setAdvancedExpanded] = useState(
-    () => advancedCount > 0 || advancedInvalid,
-  )
-
-  useEffect(() => {
-    if (advancedInvalid) setAdvancedExpanded(true)
-  }, [advancedInvalid])
-
+  if (!expanded && issues.length === 0) return null
   return (
-    <div className="collection-filters">
-      <form
-        aria-label={t('usersFiltersTitle')}
-        onSubmit={(event) => {
-          event.preventDefault()
-          onApply()
-        }}
-        noValidate
-      >
-        <div className="collection-filter-controls flex flex-col gap-3 lg:flex-row lg:items-end">
-          <div className="min-w-0 flex-1">
+    <div className="flex flex-col gap-3">
+      {expanded ? (
+        <form
+          id={USERS_ADVANCED_FILTERS_ID}
+          aria-label={t('usersAdvancedFiltersShow')}
+          onSubmit={(event) => {
+            event.preventDefault()
+            onApply()
+          }}
+          noValidate
+          className="rounded-lg border border-border p-4"
+        >
+          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
             <UserTextField
-              name="q"
-              label={t('usersFilterSearchLabel')}
-              value={draft.q}
-              onChange={(value) => onChange('q', value)}
-              placeholder={t('usersFilterSearchPlaceholder')}
-              error={has('query') ? t('usersFilterQueryTooLong') : undefined}
-              maxLength={256}
+              name="username"
+              label={t('usersFilterUsernameLabel')}
+              value={draft.username}
+              onChange={(value) => onChange('username', value)}
+              error={
+                has('username')
+                  ? t('usersFilterUsernameTooLong')
+                  : undefined
+              }
+              maxLength={65}
+            />
+            <UserTextField
+              name="email"
+              label={t('usersFilterEmailLabel')}
+              value={draft.email}
+              onChange={(value) => onChange('email', value)}
+              type="email"
+              error={
+                has('email') ? t('usersFilterEmailTooLong') : undefined
+              }
+              maxLength={321}
+            />
+            <UserSelectField
+              name="enabled"
+              label={t('usersFilterEnabledLabel')}
+              value={draft.enabled}
+              onChange={(value) => onStatusChange('enabled', value)}
+              options={[
+                { id: 'any', label: t('usersFilterAny') },
+                { id: 'true', label: t('usersFilterEnabledOnly') },
+                { id: 'false', label: t('usersFilterDisabledOnly') },
+              ]}
+            />
+            <UserSelectField
+              name="locked"
+              label={t('usersFilterLockedLabel')}
+              value={draft.locked}
+              onChange={(value) => onStatusChange('locked', value)}
+              options={[
+                { id: 'any', label: t('usersFilterAny') },
+                { id: 'true', label: t('usersFilterLockedOnly') },
+                { id: 'false', label: t('usersFilterUnlockedOnly') },
+              ]}
+            />
+            <DatePickerField
+              name="createdFrom"
+              label={t('usersFilterCreatedFromLabel')}
+              value={draft.createdFrom}
+              onChange={(value) => onChange('createdFrom', value)}
+              error={
+                has('createdFrom')
+                  ? t('usersFilterDateInvalid')
+                  : undefined
+              }
+            />
+            <DatePickerField
+              name="createdBefore"
+              label={t('usersFilterCreatedBeforeLabel')}
+              value={draft.createdBefore}
+              onChange={(value) => onChange('createdBefore', value)}
+              error={
+                has('createdRange')
+                  ? t('usersFilterDateRange')
+                  : has('createdBefore')
+                    ? t('usersFilterDateInvalid')
+                    : undefined
+              }
             />
           </div>
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end lg:shrink-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <Button type="submit">
-                <Search className="size-4" aria-hidden="true" />
-                {t('usersApplyFilters')}
-              </Button>
-              <Button type="button" variant="secondary" onClick={onReset}>
-                <RotateCcw className="size-4" aria-hidden="true" />
-                {t('usersResetFilters')}
-              </Button>
-            </div>
-          </div>
+          <p className="mt-3 text-xs leading-5 text-muted-foreground">
+            {t('usersFilterDateHint')}
+          </p>
+        </form>
+      ) : null}
+      {issues.length > 0 ? (
+        <div>
+          <Alert variant="default" className="text-warning">
+            <TriangleAlert aria-hidden="true" />
+            <AlertTitle>{t('usersFilterInvalidTitle')}</AlertTitle>
+            <AlertDescription>
+              {t('usersFilterInvalidDescription')}
+            </AlertDescription>
+            <ul className="mt-2 list-inside list-disc text-xs">
+              {issues.map((issue) => (
+                <li key={issue}>{issueMessage(issue, t)}</li>
+              ))}
+            </ul>
+          </Alert>
         </div>
-        <div className="mt-4 border-t border-border pt-3">
-          <details
-            className="group"
-            open={advancedExpanded}
-            onToggle={(event) =>
-              setAdvancedExpanded(event.currentTarget.open)
-            }
-          >
-            <summary className="inline-flex w-fit cursor-pointer list-none items-center gap-2 rounded-lg px-2 py-1.5 text-sm font-medium text-foreground transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring [&::-webkit-details-marker]:hidden">
-              <span>
-                {advancedExpanded
-                  ? t('usersAdvancedFiltersHide')
-                  : t('usersAdvancedFiltersShow')}
-              </span>
-              {advancedCount > 0 ? (
-                <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                  {t('usersAdvancedFiltersActive', {
-                    count: advancedCount,
-                  })}
-                </span>
-              ) : null}
-              <ChevronDown
-                className="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-180"
-                aria-hidden="true"
-              />
-            </summary>
-            <div id={USERS_ADVANCED_FILTERS_ID} role="region" className="pt-3">
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                <UserTextField
-                  name="username"
-                  label={t('usersFilterUsernameLabel')}
-                  value={draft.username}
-                  onChange={(value) => onChange('username', value)}
-                  error={
-                    has('username')
-                      ? t('usersFilterUsernameTooLong')
-                      : undefined
-                  }
-                  maxLength={65}
-                />
-                <UserTextField
-                  name="email"
-                  label={t('usersFilterEmailLabel')}
-                  value={draft.email}
-                  onChange={(value) => onChange('email', value)}
-                  type="email"
-                  error={
-                    has('email') ? t('usersFilterEmailTooLong') : undefined
-                  }
-                  maxLength={321}
-                />
-                <UserSelectField
-                  name="enabled"
-                  label={t('usersFilterEnabledLabel')}
-                  value={draft.enabled}
-                  onChange={(value) => onStatusChange('enabled', value)}
-                  options={[
-                    { id: 'any', label: t('usersFilterAny') },
-                    { id: 'true', label: t('usersFilterEnabledOnly') },
-                    { id: 'false', label: t('usersFilterDisabledOnly') },
-                  ]}
-                />
-                <UserSelectField
-                  name="locked"
-                  label={t('usersFilterLockedLabel')}
-                  value={draft.locked}
-                  onChange={(value) => onStatusChange('locked', value)}
-                  options={[
-                    { id: 'any', label: t('usersFilterAny') },
-                    { id: 'true', label: t('usersFilterLockedOnly') },
-                    { id: 'false', label: t('usersFilterUnlockedOnly') },
-                  ]}
-                />
-                <DatePickerField
-                  name="createdFrom"
-                  label={t('usersFilterCreatedFromLabel')}
-                  value={draft.createdFrom}
-                  onChange={(value) => onChange('createdFrom', value)}
-                  error={
-                    has('createdFrom')
-                      ? t('usersFilterDateInvalid')
-                      : undefined
-                  }
-                />
-                <DatePickerField
-                  name="createdBefore"
-                  label={t('usersFilterCreatedBeforeLabel')}
-                  value={draft.createdBefore}
-                  onChange={(value) => onChange('createdBefore', value)}
-                  error={
-                    has('createdRange')
-                      ? t('usersFilterDateRange')
-                      : has('createdBefore')
-                        ? t('usersFilterDateInvalid')
-                        : undefined
-                  }
-                />
-              </div>
-              <p className="mt-3 text-xs leading-5 text-muted-foreground">
-                {t('usersFilterDateHint')}
-              </p>
-            </div>
-          </details>
-        </div>
-        {issues.length > 0 ? (
-          <div className="mt-3">
-            <Alert variant="default" className="text-warning">
-              <TriangleAlert aria-hidden="true" />
-              <AlertTitle>{t('usersFilterInvalidTitle')}</AlertTitle>
-              <AlertDescription>
-                {t('usersFilterInvalidDescription')}
-              </AlertDescription>
-              <ul className="mt-2 list-inside list-disc text-xs">
-                {issues.map((issue) => (
-                  <li key={issue}>{issueMessage(issue, t)}</li>
-                ))}
-              </ul>
-            </Alert>
-          </div>
-        ) : null}
-      </form>
+      ) : null}
     </div>
   )
 }
@@ -448,6 +464,13 @@ export function UsersListPage({ search }: { search: UsersSearch }) {
 
   const urlIssues = usersSearchIssues(search)
   const issues = localIssues.length > 0 ? localIssues : urlIssues
+  const advancedInvalid = issues.some(isAdvancedIssue)
+  const [advancedExpanded, setAdvancedExpanded] = useState(
+    () => advancedFilterCount(usersFilterDraft(search)) > 0 || advancedInvalid,
+  )
+  useEffect(() => {
+    if (advancedInvalid) setAdvancedExpanded(true)
+  }, [advancedInvalid])
   const variables = useMemo(
     () => usersQueryVariables(search, timeZone),
     [searchKey, timeZone],
@@ -590,53 +613,90 @@ export function UsersListPage({ search }: { search: UsersSearch }) {
       return
     }
     setLocalIssues([])
-    void navigate({ to: '/users', search: next })
+    void navigate({ to: '/users', search: { ...next, size: search.size } })
   }
 
   function resetFilters() {
     setDraft(emptyUsersFilterDraft())
     setLocalIssues([])
-    void navigate({ to: '/users', search: {} })
+    void navigate({ to: '/users', search: { size: search.size } })
   }
 
+  const filters = (
+    <UsersFilterBar
+      draft={draft}
+      issues={issues}
+      onChange={changeDraft}
+      onApply={applyFilters}
+      onReset={resetFilters}
+      advancedExpanded={advancedExpanded}
+      onAdvancedToggle={() => setAdvancedExpanded((open) => !open)}
+    />
+  )
+  const filtersPanel = (
+    <UsersAdvancedFilters
+      draft={draft}
+      issues={issues}
+      expanded={advancedExpanded}
+      onChange={changeDraft}
+      onStatusChange={changeStatus}
+      onApply={applyFilters}
+    />
+  )
+
   function renderList() {
+    const toolbar = <CollectionToolbar filters={filters} panel={filtersPanel} />
     if (issues.length > 0) {
       return (
-        <AsyncState
-          kind="empty"
-          title={t('usersFilterInvalidTitle')}
-          description={t('usersFilterInvalidDescription')}
-        />
+        <>
+          {toolbar}
+          <AsyncState
+            kind="empty"
+            title={t('usersFilterInvalidTitle')}
+            description={t('usersFilterInvalidDescription')}
+          />
+        </>
       )
     }
 
     if (users.stepUp && users.status === 'error') {
       return (
-        <StepUpPanel
-          stepUp={users.stepUp}
-          hideDetails
-          description={t('usersStepUpDescription')}
-          note={t('usersStepUpNote')}
-        />
+        <>
+          {toolbar}
+          <StepUpPanel
+            stepUp={users.stepUp}
+            hideDetails
+            description={t('usersStepUpDescription')}
+            note={t('usersStepUpNote')}
+          />
+        </>
       )
     }
 
     if (users.status === 'error') {
       return (
-        <AsyncState
-          kind={users.forbidden ? 'forbidden' : 'error'}
-          title={t(failureTitleKey(users.failure, users.forbidden))}
-          description={t(failureDescriptionKey(users.failure, users.forbidden))}
-          requestId={users.requestId}
-          traceId={users.traceId}
-          issues={users.errors}
-          onRetry={() => void users.refresh()}
-        />
+        <>
+          {toolbar}
+          <AsyncState
+            kind={users.forbidden ? 'forbidden' : 'error'}
+            title={t(failureTitleKey(users.failure, users.forbidden))}
+            description={t(failureDescriptionKey(users.failure, users.forbidden))}
+            requestId={users.requestId}
+            traceId={users.traceId}
+            issues={users.errors}
+            onRetry={() => void users.refresh()}
+          />
+        </>
       )
     }
 
     if (users.status !== 'ready' || !users.data) {
-      return <UsersTableLoading />
+      return (
+        <>
+          {toolbar}
+          <UsersTableLoading />
+        </>
+      )
     }
 
     const edges = users.data.edges ?? []
@@ -646,6 +706,7 @@ export function UsersListPage({ search }: { search: UsersSearch }) {
           return (
             <AsyncState
               kind="empty"
+              compact
               title={t('usersNoResultsTitle')}
               description={t('usersNoResultsDescription')}
               action={
@@ -659,6 +720,7 @@ export function UsersListPage({ search }: { search: UsersSearch }) {
         return (
           <AsyncState
             kind="empty"
+            compact
             title={t('usersEmptyTitle')}
             description={t('usersEmptyDescription')}
             action={
@@ -693,6 +755,8 @@ export function UsersListPage({ search }: { search: UsersSearch }) {
         ) : null}
 
         <UsersTable
+          filters={filters}
+          filtersPanel={filtersPanel}
           emptyState={emptyState}
           users={edges.map((edge) => edge.node)}
           canEdit={scope.update}
@@ -719,6 +783,13 @@ export function UsersListPage({ search }: { search: UsersSearch }) {
               pageInfo={pageInfo}
               controller={pager}
               isDisabled={users.refreshing}
+              pageSize={search.size ?? USERS_PAGE_SIZE}
+              onPageSizeChange={(size) =>
+                void navigate({
+                  to: '/users',
+                  search: { ...search, size, after: undefined, before: undefined },
+                })
+              }
             />
           }
         />
@@ -729,14 +800,6 @@ export function UsersListPage({ search }: { search: UsersSearch }) {
   return (
     <>
       {header}
-      <UsersFilters
-        draft={draft}
-        issues={issues}
-        onChange={changeDraft}
-        onStatusChange={changeStatus}
-        onApply={applyFilters}
-        onReset={resetFilters}
-      />
       {renderList()}
     </>
   )

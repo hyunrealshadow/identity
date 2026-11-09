@@ -1,4 +1,5 @@
 import { Avatar, AvatarFallback, AvatarImage } from '@identity/ui/components/avatar'
+import type { ComponentProps } from 'react'
 
 function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean)
@@ -11,26 +12,19 @@ export function AccountAvatar({
   name,
   picture,
   label,
-  size = 'sm',
+  size,
   className,
 }: {
   name: string
   picture?: string | null
   label: string
-  size?: 'sm' | 'md' | 'lg'
+  size?: ComponentProps<typeof Avatar>['size']
   className?: string
 }) {
-  const fallbackSize =
-    size === 'lg' ? 'text-base' : size === 'md' ? 'text-sm' : 'text-xs'
-  const avatarSize = size === 'md' ? 'default' : size
   return (
-    <Avatar size={avatarSize} className={className} aria-label={label}>
+    <Avatar size={size} className={className} aria-label={label}>
       {picture ? <AvatarImage src={picture} alt="" /> : null}
-      <AvatarFallback
-        className={`bg-foreground font-semibold text-background ${fallbackSize}`}
-      >
-        {initials(name)}
-      </AvatarFallback>
+      <AvatarFallback>{initials(name)}</AvatarFallback>
     </Avatar>
   )
 }

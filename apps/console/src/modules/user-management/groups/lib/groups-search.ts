@@ -1,4 +1,5 @@
 import type { GroupFilter, GroupOrder } from '#/generated/graphql'
+import { parsePageSize } from '#/lib/page-size'
 import { cursorPage } from '#/modules/user-management/lib/cursor-page'
 import {
   resolveLocalizedValue,
@@ -17,6 +18,7 @@ export interface GroupsSearch {
   q?: string
   enabled?: GroupEnabledFilter
   order?: GroupOrderValue
+  size?: number
   after?: string
   before?: string
 }
@@ -55,6 +57,8 @@ export function normalizeGroupsSearch(
   if (isGroupOrder(search.order)) {
     result.order = search.order
   }
+  const size = parsePageSize(search.size)
+  if (size !== undefined) result.size = size
   if (typeof search.after === 'string' && search.after) {
     result.after = search.after
   }
@@ -103,7 +107,7 @@ export function groupsQueryVariables(search: GroupsSearch): {
   return {
     filter: groupsFilter(search),
     orderBy: search.order ?? DEFAULT_GROUP_ORDER,
-    ...cursorPage(GROUP_PAGE_SIZE, search.after, search.before),
+    ...cursorPage(search.size ?? GROUP_PAGE_SIZE, search.after, search.before),
   }
 }
 

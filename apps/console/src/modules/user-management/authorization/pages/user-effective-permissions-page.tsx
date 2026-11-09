@@ -10,7 +10,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { AsyncState } from '#/components/async-state'
 import { CopyButton } from '#/components/copy-button'
 import { CursorPagination } from '#/components/cursor-pagination'
-import { ResourceTable } from '#/components/resource-table'
+import { CollectionToolbar, ResourceTable } from '#/components/resource-table'
 import {
   ConsoleUserPermissionsDocument,
   type ConsoleUserPermissionsQuery,
@@ -50,6 +50,7 @@ export function UserEffectivePermissionsPage({ userId }: { userId: string }) {
   const [resourceId, setResourceId] = useState('')
   const [after, setAfter] = useState<string>()
   const [before, setBefore] = useState<string>()
+  const [pageSize, setPageSize] = useState(100)
   const selectResource = useCallback((id: string) => {
     setResourceId(id)
     setAfter(undefined)
@@ -62,7 +63,7 @@ export function UserEffectivePermissionsPage({ userId }: { userId: string }) {
             userId,
             resourceId,
             orderBy: 'CODE_ASC',
-            ...cursorPage(100, after, before),
+            ...cursorPage(pageSize, after, before),
           }
         : null,
     [
@@ -71,6 +72,7 @@ export function UserEffectivePermissionsPage({ userId }: { userId: string }) {
       scope.usersRead,
       scope.assignmentsRead,
       scope.groupsRead,
+      pageSize,
       after,
       before,
     ],
@@ -190,6 +192,14 @@ export function UserEffectivePermissionsPage({ userId }: { userId: string }) {
     )
   }
 
+  const filters = (
+    <ApiResourceSelect
+      value={resourceId}
+      onChange={selectResource}
+      enabled={scope.resourcesRead}
+      hideLabel
+    />
+  )
   const items = (connection?.edges ?? []).map(({ node }) => ({
     id: node.permissionId,
     ...node,
@@ -198,11 +208,7 @@ export function UserEffectivePermissionsPage({ userId }: { userId: string }) {
     <ConsoleWorkspaceGate loading={loadingView}>
       <section className="space-y-5">
         <p className="text-sm text-muted-foreground">{t('rbacUserPermissionsIntro')}</p>
-        <ApiResourceSelect
-          value={resourceId}
-          onChange={selectResource}
-          enabled={scope.resourcesRead}
-        />
+        {resourceId ? null : <CollectionToolbar filters={filters} />}
         {!scope.resourcesRead ? (
           <AsyncState
             kind="forbidden"
@@ -213,6 +219,7 @@ export function UserEffectivePermissionsPage({ userId }: { userId: string }) {
         {resourceId ? (
           <ResourceTable
             id="user-effective-permissions"
+            filters={filters}
             density="compact"
             maxHeight="clamp(12rem, calc(100dvh - 34rem), 30rem)"
             label={t('userPermissionsTableLabel')}
@@ -257,6 +264,12 @@ export function UserEffectivePermissionsPage({ userId }: { userId: string }) {
                   pageInfo={connection.pageInfo}
                   controller={pagination}
                   isDisabled={permissions.refreshing}
+                  pageSize={pageSize}
+                  onPageSizeChange={(size) => {
+                    setPageSize(size)
+                    setAfter(undefined)
+                    setBefore(undefined)
+                  }}
                 />
               ) : null
             }

@@ -1,5 +1,8 @@
 import { Skeleton } from '@identity/ui/components/skeleton'
-import type { ReactNode } from 'react'
+import { createContext, useContext, type ReactNode } from 'react'
+
+/** Row padding inside a {@link SettingsGroup}; compact matches table cells. */
+const SettingsDensity = createContext<'comfortable' | 'compact'>('comfortable')
 
 /**
  * A titled list of settings. The title sits above the list; the list is one
@@ -11,6 +14,7 @@ export function SettingsGroup({
   description,
   action,
   tone = 'default',
+  density = 'comfortable',
   footer,
   children,
 }: {
@@ -18,6 +22,8 @@ export function SettingsGroup({
   description?: string
   action?: ReactNode
   tone?: 'default' | 'danger'
+  /** `compact` gives rows the same padding as data table cells. */
+  density?: 'comfortable' | 'compact'
   footer?: ReactNode
   children: ReactNode
 }) {
@@ -38,7 +44,7 @@ export function SettingsGroup({
           danger ? 'console-card-danger border-destructive' : 'console-card border-border'
         }`}
       >
-        {children}
+        <SettingsDensity.Provider value={density}>{children}</SettingsDensity.Provider>
         {footer ? (
           <div className="flex flex-wrap items-center justify-end gap-3 px-5 py-4">{footer}</div>
         ) : null}
@@ -66,8 +72,9 @@ export function SettingsRow({
   children?: ReactNode
 }) {
   const heading = label || description || icon || action
+  const compact = useContext(SettingsDensity) === 'compact'
   return (
-    <div className="px-5 py-4">
+    <div className={compact ? 'px-3 py-2' : 'px-5 py-4'}>
       {heading ? (
         <div className="flex items-center gap-3">
           {icon ? (

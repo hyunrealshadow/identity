@@ -16,6 +16,7 @@ import { Search, TriangleAlert, UserPlus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
+import { CollectionToolbar } from '#/components/resource-table'
 import { ErrorDetails } from '#/components/error-details'
 import { RequestCorrelation } from '#/components/request-correlation'
 import { StepUpPanel } from '#/components/step-up-panel'
@@ -58,7 +59,6 @@ import { RbacAccessRestricted } from '#/modules/user-management/roles/components
 import { useUserDetailContext } from '#/modules/user-management/users/components/user-detail-context'
 import { UserTextField } from '#/modules/user-management/users/components/user-form-fields'
 
-const PAGE_SIZE = 10
 
 type UserGroupsConnection = NonNullable<
   NonNullable<ConsoleUserGroupsQuery['user']>['groups']
@@ -78,6 +78,7 @@ export function UserGroupsPage({ userId }: { userId: string }) {
   const [appliedQuery, setAppliedQuery] = useState('')
   const [after, setAfter] = useState<string | undefined>()
   const [before, setBefore] = useState<string | undefined>()
+  const [pageSize, setPageSize] = useState(10)
   const [notice, setNotice] = useState<RbacNotice | null>(null)
 
   const canRead =
@@ -90,10 +91,10 @@ export function UserGroupsPage({ userId }: { userId: string }) {
             userId,
             filter: appliedQuery ? { query: appliedQuery } : {},
             orderBy: 'CREATED_AT_DESC',
-            ...cursorPage(PAGE_SIZE, after, before),
+            ...cursorPage(pageSize, after, before),
           }
         : null,
-    [after, appliedQuery, before, canRead, userId],
+    [after, appliedQuery, before, canRead, userId, pageSize],
   )
   const memberships = useConsoleQuery<
     ConsoleUserGroupsQuery,
@@ -232,7 +233,7 @@ export function UserGroupsPage({ userId }: { userId: string }) {
           ) : null}
 
           <section className="space-y-4">
-            <header className="flex flex-col gap-3 py-2 lg:flex-row lg:items-end lg:justify-between">
+            <header className="flex flex-col gap-3 py-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-base font-semibold">
                   {t('userGroupsListTitle')}
@@ -241,31 +242,7 @@ export function UserGroupsPage({ userId }: { userId: string }) {
                   {t('userGroupsListDescription')}
                 </p>
               </div>
-              <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
-                <form
-                  className="flex min-w-0 flex-wrap items-end gap-2"
-                  onSubmit={(event) => {
-                    event.preventDefault()
-                    setAppliedQuery(query.trim())
-                    setAfter(undefined)
-                    setBefore(undefined)
-                  }}
-                >
-                  <div className="w-56 max-w-full">
-                    <UserTextField
-                      name="user-group-search"
-                      label={t('userGroupsSearchLabel')}
-                      value={query}
-                      onChange={setQuery}
-                      placeholder={t('userGroupsSearchPlaceholder')}
-                      maxLength={256}
-                    />
-                  </div>
-                  <Button type="submit" variant="secondary">
-                    <Search className="size-4" aria-hidden="true" />
-                    {t('userGroupsSearchAction')}
-                  </Button>
-                </form>
+              <div className="flex shrink-0 items-center gap-2">
                 {readyUser && scope.groupMembershipsWrite ? (
                   <AddGroupMembershipDialog
                     userId={readyUser.id}
@@ -289,8 +266,39 @@ export function UserGroupsPage({ userId }: { userId: string }) {
                 ) : null}
               </div>
             </header>
+            <CollectionToolbar
+              filters={
+                <div className="flex flex-wrap items-start gap-2">
+                  <form
+                    className="flex min-w-0 flex-wrap items-start gap-2"
+                    onSubmit={(event) => {
+                      event.preventDefault()
+                      setAppliedQuery(query.trim())
+                      setAfter(undefined)
+                      setBefore(undefined)
+                    }}
+                  >
+                    <div className="w-full sm:w-72">
+                      <UserTextField
+                        name="user-group-search"
+                        label={t('userGroupsSearchLabel')}
+                        hideLabel
+                        value={query}
+                        onChange={setQuery}
+                        placeholder={t('userGroupsSearchPlaceholder')}
+                        maxLength={256}
+                      />
+                    </div>
+                    <Button type="submit" variant="secondary">
+                      <Search className="size-4" aria-hidden="true" />
+                      {t('userGroupsSearchAction')}
+                    </Button>
+                  </form>
+                </div>
+              }
+            />
             <div className="min-w-0">{renderMemberships()}</div>
-            <footer className="border-t border-border pt-4">
+            <footer className="resource-collection-pagination">
               {connection && memberships.status === 'ready' ? (
                 <RelationPagination
                   connection={connection}
@@ -305,6 +313,12 @@ export function UserGroupsPage({ userId }: { userId: string }) {
                   isDisabled={
                     memberships.refreshing || memberships.status !== 'ready'
                   }
+                  pageSize={pageSize}
+                  onPageSizeChange={(size) => {
+                    setPageSize(size)
+                    setAfter(undefined)
+                    setBefore(undefined)
+                  }}
                 />
               ) : memberships.status === 'idle' ||
                 memberships.status === 'loading' ? (
@@ -355,26 +369,6 @@ export function UserGroupsPage({ userId }: { userId: string }) {
       return <UserDetailTableSkeleton label={t('userGroupsLoading')} />
     }
 
-    if (edges.length === 0) {
-      return (
-        <div className="p-4">
-          <AsyncState
-            kind="empty"
-            compact
-            title={
-              appliedQuery
-                ? t('userGroupsEmptyFilteredTitle')
-                : t('userGroupsEmptyTitle')
-            }
-            description={
-              appliedQuery
-                ? t('userGroupsEmptyFilteredDescription')
-                : t('userGroupsEmptyDescription')
-            }
-          />
-        </div>
-      )
-    }
 
     return (
       <div>
@@ -420,7 +414,24 @@ export function UserGroupsPage({ userId }: { userId: string }) {
             },
           ]}
         >
-          <DataTable.Body>
+          <DataTable.Body
+            renderEmptyState={() => (
+              <AsyncState
+                kind="empty"
+                compact
+                title={
+                  appliedQuery
+                    ? t('userGroupsEmptyFilteredTitle')
+                    : t('userGroupsEmptyTitle')
+                }
+                description={
+                  appliedQuery
+                    ? t('userGroupsEmptyFilteredDescription')
+                    : t('userGroupsEmptyDescription')
+                }
+              />
+            )}
+          >
             {edges.map(({ node }) => (
               <DataTable.Row key={node.id} id={node.id}>
                 <DataTable.Cell>{renderGroupIdentity(node)}</DataTable.Cell>

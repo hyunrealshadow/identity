@@ -96,7 +96,6 @@ function AccountMenu({
           name={name}
           picture={picture}
           label={avatarLabel}
-          size="sm"
         />
         <span className="hidden min-w-0 text-start sm:block">
           <span className="block truncate text-sm font-medium">{name}</span>

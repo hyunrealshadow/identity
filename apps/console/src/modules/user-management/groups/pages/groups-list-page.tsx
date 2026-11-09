@@ -2,6 +2,7 @@ import { TableRowActions } from '#/components/table-row-actions'
 import { CursorPagination } from '#/components/cursor-pagination'
 import { useCursorPagination } from '#/lib/use-cursor-pagination'
 import {
+  CollectionToolbar,
   ResourceTable,
   type ResourceTableControls,
 } from '#/components/resource-table'
@@ -13,7 +14,7 @@ import {
 import { Button } from '@identity/ui/components/button'
 import { Skeleton } from '@identity/ui/components/skeleton'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { Plus, RotateCcw, Search, TriangleAlert } from 'lucide-react'
+import { Plus, TriangleAlert } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
@@ -42,6 +43,7 @@ import {
   isGroupOrder,
   groupsFilterDraft,
   groupsQueryVariables,
+  GROUP_PAGE_SIZE,
   groupsSearchFromDraft,
   groupsSearchKey,
   hasGroupFilters,
@@ -223,11 +225,14 @@ export function GroupsListPage({ search }: { search: GroupsSearch }) {
 
   const reset = () => {
     setDraft(groupsFilterDraft({}))
-    void navigate({ to: '/groups', search: {} })
+    void navigate({ to: '/groups', search: { size: search.size } })
   }
 
   const apply = () => {
-    void navigate({ to: '/groups', search: groupsSearchFromDraft(draft) })
+    void navigate({
+      to: '/groups',
+      search: { ...groupsSearchFromDraft(draft), size: search.size },
+    })
   }
 
   const pager = useCursorPagination({
@@ -239,6 +244,62 @@ export function GroupsListPage({ search }: { search: GroupsSearch }) {
         search: { ...search, after: undefined, before: undefined, ...cursor },
       }),
   })
+
+  const filters = (
+    <form
+      aria-label={t('groupsFiltersTitle')}
+      onSubmit={(event) => {
+        event.preventDefault()
+        apply()
+      }}
+      className="flex flex-wrap items-start gap-2"
+    >
+      <div className="w-full sm:w-72">
+        <UserTextField
+          name="q"
+          label={t('groupsFilterSearchLabel')}
+          hideLabel
+          value={draft.q}
+          onChange={(value) =>
+            setDraft((current) => ({ ...current, q: value }))
+          }
+          placeholder={t('groupsFilterSearchPlaceholder')}
+          maxLength={256}
+        />
+      </div>
+      <div className="w-36">
+        <UserSelectField
+          name="enabled"
+          label={t('groupsFilterEnabledLabel')}
+          hideLabel
+          value={draft.enabled}
+          onChange={(value) => {
+            if (
+              value === 'any' ||
+              value === 'enabled' ||
+              value === 'disabled'
+            ) {
+              setDraft((current) => ({ ...current, enabled: value }))
+            }
+          }}
+          options={[
+            { id: 'any', label: t('groupsFilterAny') },
+            { id: 'enabled', label: t('groupsFilterEnabledOnly') },
+            { id: 'disabled', label: t('groupsFilterDisabledOnly') },
+          ]}
+        />
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button type="submit" variant="secondary">
+          {t('groupsApplyFilters')}
+        </Button>
+        <Button type="button" variant="ghost" onClick={reset}>
+          {t('groupsResetFilters')}
+        </Button>
+      </div>
+    </form>
+  )
 
   const header = (
     <PageHeader
@@ -255,6 +316,7 @@ export function GroupsListPage({ search }: { search: GroupsSearch }) {
     />
   )
 
+  let tableRendered = false
   function content() {
     if (!scope.groupsRead) {
       return (
@@ -320,6 +382,7 @@ export function GroupsListPage({ search }: { search: GroupsSearch }) {
           return (
             <AsyncState
               kind="empty"
+              compact
               title={t('groupsNoResultsTitle')}
               description={t('groupsNoResultsDescription')}
               action={
@@ -333,6 +396,7 @@ export function GroupsListPage({ search }: { search: GroupsSearch }) {
         return (
           <AsyncState
             kind="empty"
+            compact
             title={t('groupsEmptyTitle')}
             description={t('groupsEmptyDescription')}
             action={
@@ -350,6 +414,7 @@ export function GroupsListPage({ search }: { search: GroupsSearch }) {
     })()
 
     const { pageInfo } = connection
+    tableRendered = true
     return (
       <div className="space-y-4">
         {groups.partial ? (
@@ -365,6 +430,7 @@ export function GroupsListPage({ search }: { search: GroupsSearch }) {
           </Alert>
         ) : null}
         <GroupsTable
+          filters={filters}
           emptyState={emptyState}
           groups={edges}
           order={search.order}
@@ -390,6 +456,13 @@ export function GroupsListPage({ search }: { search: GroupsSearch }) {
               pageInfo={pageInfo}
               controller={pager}
               isDisabled={groups.refreshing}
+              pageSize={search.size ?? GROUP_PAGE_SIZE}
+              onPageSizeChange={(size) =>
+                void navigate({
+                  to: '/groups',
+                  search: { ...search, size, after: undefined, before: undefined },
+                })
+              }
             />
           }
         />
@@ -397,66 +470,13 @@ export function GroupsListPage({ search }: { search: GroupsSearch }) {
     )
   }
 
+  const body = content()
   return (
     <>
       {header}
       <ConsoleWorkspaceGate>
-        <div className="collection-filters">
-          <form
-            aria-label={t('groupsFiltersTitle')}
-            onSubmit={(event) => {
-              event.preventDefault()
-              apply()
-            }}
-            className="collection-filter-controls flex flex-col gap-3 lg:flex-row lg:items-end"
-          >
-            <div className="min-w-0 flex-1">
-              <UserTextField
-                name="q"
-                label={t('groupsFilterSearchLabel')}
-                value={draft.q}
-                onChange={(value) =>
-                  setDraft((current) => ({ ...current, q: value }))
-                }
-                placeholder={t('groupsFilterSearchPlaceholder')}
-                maxLength={256}
-              />
-            </div>
-            <div className="sm:w-44">
-              <UserSelectField
-                name="enabled"
-                label={t('groupsFilterEnabledLabel')}
-                value={draft.enabled}
-                onChange={(value) => {
-                  if (
-                    value === 'any' ||
-                    value === 'enabled' ||
-                    value === 'disabled'
-                  ) {
-                    setDraft((current) => ({ ...current, enabled: value }))
-                  }
-                }}
-                options={[
-                  { id: 'any', label: t('groupsFilterAny') },
-                  { id: 'enabled', label: t('groupsFilterEnabledOnly') },
-                  { id: 'disabled', label: t('groupsFilterDisabledOnly') },
-                ]}
-              />
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Button type="submit">
-                <Search className="size-4" aria-hidden="true" />
-                {t('groupsApplyFilters')}
-              </Button>
-              <Button type="button" variant="secondary" onClick={reset}>
-                <RotateCcw className="size-4" aria-hidden="true" />
-                {t('groupsResetFilters')}
-              </Button>
-            </div>
-          </form>
-        </div>
-        {content()}
+        {tableRendered ? null : <CollectionToolbar filters={filters} />}
+        {body}
       </ConsoleWorkspaceGate>
     </>
   )

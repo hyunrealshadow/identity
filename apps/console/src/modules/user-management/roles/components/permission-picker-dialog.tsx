@@ -355,7 +355,7 @@ export function PermissionPickerDialog({
             </p>
 
             <form
-              className="collection-filter-controls flex items-end gap-2"
+              className="flex items-end gap-2"
               onSubmit={(event) => {
                 event.preventDefault()
                 applyCatalogSearch()
@@ -380,7 +380,7 @@ export function PermissionPickerDialog({
             {resourcesRead ? (
               <div className="grid shrink-0 gap-2 sm:grid-cols-2 sm:items-end">
                 <form
-                  className="collection-filter-controls flex items-end gap-2"
+                  className="flex items-end gap-2"
                   onSubmit={(event) => {
                     event.preventDefault()
                     applyResourceSearch()
@@ -402,7 +402,7 @@ export function PermissionPickerDialog({
                     {t('roleUsersSearchAction')}
                   </Button>
                 </form>
-                <div className="collection-filter-controls flex items-end gap-2">
+                <div className="flex items-end gap-2">
                   <div className="min-w-0 flex-1">
                     <UserSelectField
                       name="permission-picker-resource"

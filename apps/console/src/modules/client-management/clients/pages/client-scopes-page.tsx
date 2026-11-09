@@ -44,6 +44,21 @@ import { useClientMutations } from '../hooks/client-mutations'
 /** One page covers every realistic client; larger sets are read-only here. */
 const PAGE_SIZE = 100
 
+/** Display order for login scopes; codes not listed follow alphabetically. */
+const PROTOCOL_SCOPE_ORDER: readonly string[] = [
+  'openid',
+  'profile',
+  'email',
+  'address',
+  'phone',
+  'offline_access',
+]
+
+function protocolScopeRank(code: string) {
+  const index = PROTOCOL_SCOPE_ORDER.indexOf(code)
+  return index === -1 ? PROTOCOL_SCOPE_ORDER.length : index
+}
+
 interface ScopeRow {
   id: string
   code: string
@@ -176,6 +191,11 @@ export function ClientScopesPage() {
       })
     }
   }
+  protocolOptions.sort(
+    (a, b) =>
+      protocolScopeRank(a.code) - protocolScopeRank(b.code) ||
+      a.code.localeCompare(b.code),
+  )
 
   function setProtocolScopes(ids: string[]) {
     setFeedback(null)
@@ -285,6 +305,7 @@ export function ClientScopesPage() {
       <SettingsGroup
         title={t('clientsProtocolScopesTitle')}
         description={t('clientsProtocolScopesDescription')}
+        density="compact"
       >
         {loading || (rbac.scopesRead && protocolCatalog.status !== 'ready' && protocolCatalog.status !== 'error') ? (
           <SettingsRow description={t('tableLoading')} />

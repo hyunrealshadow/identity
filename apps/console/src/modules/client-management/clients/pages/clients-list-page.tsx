@@ -32,7 +32,11 @@ import {
 } from '#/modules/user-management/users/components/user-form-fields'
 import { ClientBuiltInChip, ClientStatusChip } from '../components/client-status'
 import { clientScope } from '../lib/client-scope'
-import { clientsQueryVariables, type ClientsSearch } from '../lib/clients-search'
+import {
+  CLIENTS_PAGE_SIZE,
+  clientsQueryVariables,
+  type ClientsSearch,
+} from '../lib/clients-search'
 
 export function ClientsListPage({ search }: { search: ClientsSearch }) {
   const t = useTranslator()
@@ -51,7 +55,7 @@ export function ClientsListPage({ search }: { search: ClientsSearch }) {
   }, [search.q, search.enabled])
   const variables = useMemo(
     () => (scope.read ? clientsQueryVariables(search) : null),
-    [scope.read, search.q, search.enabled, search.order, search.after, search.before],
+    [scope.read, search.q, search.enabled, search.order, search.size, search.after, search.before],
   )
   const query = useConsoleQuery<ConsoleClientsQuery, ConsoleClientsQueryVariables>(
     ConsoleClientsDocument,
@@ -95,58 +99,65 @@ export function ClientsListPage({ search }: { search: ClientsSearch }) {
           />
         ) : (
           <section className="space-y-5">
-            <form
-              className="collection-filter-controls flex flex-wrap items-end gap-3"
-              onSubmit={(event) => {
-                event.preventDefault()
-                void navigate({
-                  to: '/clients',
-                  search: {
-                    q: q.trim() || undefined,
-                    enabled:
-                      enabled === 'enabled' || enabled === 'disabled'
-                        ? enabled
-                        : undefined,
-                    order: search.order,
-                  },
-                })
-              }}
-            >
-              <div className="min-w-48 flex-1">
-                <UserTextField
-                  name="client-search"
-                  label={t('clientsSearch')}
-                  value={q}
-                  onChange={setQ}
-                  placeholder={t('clientsSearchPlaceholder')}
-                />
-              </div>
-              <div className="w-40">
-                <UserSelectField
-                  name="client-status"
-                  label={t('clientsStatus')}
-                  value={enabled}
-                  onChange={setEnabled}
-                  options={[
-                    { id: 'any', label: t('clientsFilterAny') },
-                    { id: 'enabled', label: t('clientsEnabled') },
-                    { id: 'disabled', label: t('clientsDisabled') },
-                  ]}
-                />
-              </div>
-              <Button type="submit" variant="secondary">
-                {t('clientsFilter')}
-              </Button>
-              <Button
-                variant="ghost"
-                onClick={() => void navigate({ to: '/clients', search: {} })}
-              >
-                {t('clientsReset')}
-              </Button>
-            </form>
             <ResourceTable
               id="clients"
               label={t('clientsTable')}
+              filters={
+                <form
+                  className="flex flex-wrap items-start gap-2"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    void navigate({
+                      to: '/clients',
+                      search: {
+                        q: q.trim() || undefined,
+                        enabled:
+                          enabled === 'enabled' || enabled === 'disabled'
+                            ? enabled
+                            : undefined,
+                        order: search.order,
+                        size: search.size,
+                      },
+                    })
+                  }}
+                >
+                  <div className="w-full sm:w-72">
+                    <UserTextField
+                      name="client-search"
+                      label={t('clientsSearch')}
+                      hideLabel
+                      value={q}
+                      onChange={setQ}
+                      placeholder={t('clientsSearchPlaceholder')}
+                    />
+                  </div>
+                  <div className="w-36">
+                    <UserSelectField
+                      name="client-status"
+                      label={t('clientsStatus')}
+                      hideLabel
+                      value={enabled}
+                      onChange={setEnabled}
+                      options={[
+                        { id: 'any', label: t('clientsFilterAny') },
+                        { id: 'enabled', label: t('clientsEnabled') },
+                        { id: 'disabled', label: t('clientsDisabled') },
+                      ]}
+                    />
+                  </div>
+                  <Button type="submit" variant="secondary">
+                    {t('clientsFilter')}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    onClick={() =>
+                        void navigate({ to: '/clients', search: { size: search.size } })
+                      }
+                  >
+                    {t('clientsReset')}
+                  </Button>
+                </form>
+              }
               items={(connection?.edges ?? []).map(({ node }) => node)}
               order={search.order}
               onOrderChange={(order) =>
@@ -184,9 +195,17 @@ export function ClientsListPage({ search }: { search: ClientsSearch }) {
                   <CursorPagination
                     label={t('clientsTable')}
                     pageCount={connection.edges.length}
+                    totalCount={connection.totalCount}
                     pageInfo={connection.pageInfo}
                     controller={pager}
                     isDisabled={query.refreshing}
+                    pageSize={search.size ?? CLIENTS_PAGE_SIZE}
+                    onPageSizeChange={(size) =>
+                      void navigate({
+                        to: '/clients',
+                        search: { ...search, size, after: undefined, before: undefined },
+                      })
+                    }
                   />
                 ) : null
               }

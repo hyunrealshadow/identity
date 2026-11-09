@@ -36,6 +36,8 @@ export function RelationPagination({
   onNavigate,
   label,
   isDisabled = false,
+  pageSize,
+  onPageSizeChange,
 }: {
   connection: Connection | null | undefined
   variables: object | null
@@ -44,6 +46,8 @@ export function RelationPagination({
   onNavigate: (cursor: PageCursor) => void
   label: string
   isDisabled?: boolean
+  pageSize?: number
+  onPageSizeChange?: (size: number) => void
 }) {
   const controller = useCursorPagination({
     search: { after, before },
@@ -59,6 +63,8 @@ export function RelationPagination({
       pageInfo={connection.pageInfo}
       controller={controller}
       isDisabled={isDisabled}
+      pageSize={pageSize}
+      onPageSizeChange={onPageSizeChange}
     />
   )
 }
@@ -77,7 +83,7 @@ export function CandidateSearch({
   const t = useTranslator()
   return (
     <form
-      className="collection-filter-controls mt-4 flex items-end gap-2"
+      className="mt-4 flex items-end gap-2"
       onSubmit={(event) => {
         event.preventDefault()
         onSearch()

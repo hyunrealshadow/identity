@@ -92,7 +92,15 @@ export function AsyncState({
         }
       >
         <div className="mx-auto max-w-md">
-          <p className="text-sm font-semibold">{resolvedTitle}</p>
+          <p
+            className={
+              compact
+                ? 'text-sm text-muted-foreground'
+                : 'text-sm font-semibold'
+            }
+          >
+            {resolvedTitle}
+          </p>
           {resolvedDescription ? (
             <p className="mt-1.5 text-sm text-muted-foreground">{resolvedDescription}</p>
           ) : null}
