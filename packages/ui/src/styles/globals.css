@@ -4,9 +4,8 @@
 @import "@fontsource-variable/inter";
 
 @custom-variant dark (&:is(.dark *));
-@source "../components";
-@source "../hooks";
-@source "../lib";
+/* Scan all of packages/ui/src: shared modules such as data-table.tsx live at its root. */
+@source "..";
 
 @theme inline {
     --font-heading: var(--font-sans);
