@@ -1,12 +1,5 @@
-import { Avatar, AvatarFallback } from '@identity/ui/components/avatar'
-import { cn } from '@identity/ui/lib/utils'
-
-interface AccountAvatarProps {
-  name: string
-  picture?: string
-  size?: 'sm' | 'md' | 'lg'
-  className?: string
-}
+import { Avatar, AvatarFallback, AvatarImage } from '@identity/ui/components/avatar'
+import type { ComponentProps } from 'react'
 
 export function accountInitials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean)
@@ -15,14 +8,21 @@ export function accountInitials(name: string) {
   return `${Array.from(parts[0])[0]}${Array.from(parts[parts.length - 1])[0]}`.toLocaleUpperCase()
 }
 
-export function AccountAvatar({ name, size = 'sm', className }: AccountAvatarProps) {
-  const sizeClass = size === 'lg' ? 'size-12 text-base' : size === 'md' ? 'size-10 text-sm' : 'size-9 text-xs'
-
+export function AccountAvatar({
+  name,
+  picture,
+  size,
+  className,
+}: {
+  name: string
+  picture?: string | null
+  size?: ComponentProps<typeof Avatar>['size']
+  className?: string
+}) {
   return (
-    <Avatar className={cn(sizeClass, className)}>
-      <AvatarFallback className="bg-foreground font-semibold text-background">
-        {accountInitials(name)}
-      </AvatarFallback>
+    <Avatar size={size} className={className}>
+      {picture ? <AvatarImage src={picture} alt="" /> : null}
+      <AvatarFallback>{accountInitials(name)}</AvatarFallback>
     </Avatar>
   )
 }

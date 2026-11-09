@@ -6,7 +6,6 @@ import { createServerFn } from '@tanstack/react-start'
 import { AtSign, CircleAlert, CircleCheck, KeyRound, Laptop, UserRound, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
-import { AccountAvatar } from '#/components/account-avatar'
 import { AccountReauthProvider } from '#/components/reauthentication-popup'
 import { UserMenu } from '#/components/user-menu'
 import { resolveAccountLocale } from '#/lib/account-locale'
@@ -185,10 +184,6 @@ function AccountLayout() {
         </header>
         <div className="mx-auto grid max-w-5xl gap-8 px-5 py-8 md:grid-cols-[180px_minmax(0,1fr)]">
           <aside>
-            <div className="mb-5 flex items-center gap-3 px-2">
-              <AccountAvatar name={displayName} picture={account.picture} size="md" className="shrink-0" />
-              <div className="min-w-0"><p className="truncate text-sm font-medium">{displayName}</p><p className="truncate text-xs text-muted-foreground">{account.email}</p></div>
-            </div>
             <nav className="account-nav grid grid-cols-2 gap-1 md:flex md:flex-col" aria-label={t('accountSettings')}>
               {navItems.map(({ to, label, icon: Icon }) => {
                 return <Link key={to} to={to} preload={false} activeOptions={{ exact: true }} activeProps={{ className: 'font-medium' }} inactiveProps={{ className: 'text-muted-foreground' }} className="account-nav-link flex min-w-fit items-center gap-2.5 rounded-md px-3 py-2 text-sm"><Icon className="size-4" aria-hidden="true" />{label}</Link>

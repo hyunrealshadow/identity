@@ -1,14 +1,14 @@
+import { Button } from '@identity/ui/components/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@identity/ui/components/dropdown-menu'
 import { useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { ArrowLeftRight, LogOut } from 'lucide-react'
+import { ArrowLeftRight, ChevronDown, LogOut } from 'lucide-react'
 import { useState } from 'react'
 
 import { AccountAvatar } from '#/components/account-avatar'
@@ -68,15 +68,24 @@ export function UserMenu({
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger aria-label={menuLabel} className="cursor-pointer rounded-full outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+      <DropdownMenuTrigger
+        render={
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={menuLabel}
+            className="h-10 max-w-64 gap-2 px-1.5"
+          />
+        }
+      >
         <AccountAvatar name={user.name} picture={user.picture} />
+        <span className="hidden min-w-0 text-start sm:block">
+          <span className="block truncate text-sm font-medium">{user.name}</span>
+          <span className="block truncate text-xs font-normal text-muted-foreground">{user.email}</span>
+        </span>
+        <ChevronDown className="hidden size-3.5 text-muted-foreground sm:block" aria-hidden="true" />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="min-w-[220px]">
-        <div className="px-2 pb-2 pt-1.5">
-          <p className="truncate text-sm font-medium">{user.name}</p>
-          <p className="truncate text-xs text-muted-foreground">{user.email}</p>
-        </div>
-        <DropdownMenuSeparator />
+      <DropdownMenuContent align="end" className="min-w-56">
         <DropdownMenuGroup>
           <DropdownMenuItem onClick={() => void onAction('switch-account')}>
             <ArrowLeftRight className="text-muted-foreground" aria-hidden="true" />

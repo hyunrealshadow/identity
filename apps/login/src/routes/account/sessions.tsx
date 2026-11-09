@@ -79,7 +79,7 @@ function SessionsPage() {
               </ul>
               <div className="flex justify-end border-t border-border bg-muted/40 px-5 py-3 sm:px-6">
                 <AccountActionForm action="revoke-others" requestFailedMessage={t('accountRequestFailed')}>
-                  <Button type="submit" size="sm" variant="destructive">{t('accountRevokeOthers')}</Button>
+                  <Button type="submit" variant="destructive">{t('accountRevokeOthers')}</Button>
                 </AccountActionForm>
               </div>
             </>

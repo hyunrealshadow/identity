@@ -358,6 +358,7 @@ function ChallengePage() {
             name="intent"
             value="switch"
             variant="link"
+            size="sm"
             className="mx-auto flex w-fit font-semibold"
           >
             <ArrowLeft className="size-4" aria-hidden="true" />
