@@ -6,6 +6,8 @@ import {
   ConsoleGroupRoleIdsDocument,
   ConsoleGroupRolesDocument,
   ConsoleSetGroupRolesDocument,
+  ConsoleUserPermissionsDocument,
+  ConsoleUserRolesDocument,
   type ConsoleGroupRoleIdsQuery,
   type ConsoleGroupRoleIdsQueryVariables,
   type ConsoleGroupRolesQuery,
@@ -74,7 +76,13 @@ export function useGroupRoleMutations() {
         >(
           ConsoleSetGroupRolesDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          [ConsoleGroupRolesDocument, ConsoleGroupRoleIdsDocument, ConsoleGroupDocument],
+          [
+            ConsoleGroupRolesDocument,
+            ConsoleGroupRoleIdsDocument,
+            ConsoleGroupDocument,
+            ConsoleUserRolesDocument,
+            ConsoleUserPermissionsDocument,
+          ],
         )
       },
       async loadActiveRoleIds(groupId: string): Promise<GroupRoleLinkSnapshot> {

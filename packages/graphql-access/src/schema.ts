@@ -4043,6 +4043,25 @@ export const schemaMetadata: SchemaMetadata = {
             }
           ]
         },
+        "group": {
+          "name": "group",
+          "returnType": "Group",
+          "policies": [
+            {
+              "scopes": [
+                "management.group.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
+        },
+        "groupId": {
+          "name": "groupId",
+          "returnType": "ID",
+          "policies": []
+        },
         "node": {
           "name": "node",
           "returnType": "Role",
@@ -4056,6 +4075,11 @@ export const schemaMetadata: SchemaMetadata = {
         "revokedAt": {
           "name": "revokedAt",
           "returnType": "DateTime",
+          "policies": []
+        },
+        "source": {
+          "name": "source",
+          "returnType": "AuthorizationSource",
           "policies": []
         },
         "updatedAt": {

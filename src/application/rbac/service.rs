@@ -29,8 +29,8 @@ use crate::{
         client::{ClientScopePageRequest, ClientScopeSetResult, SetClientScopesCommand},
         cursor::{
             CURSOR_KIND_CLIENT_SCOPE, CURSOR_KIND_EFFECTIVE, CURSOR_KIND_RESOURCE,
-            CURSOR_KIND_ROLE, CURSOR_KIND_SCOPE, CURSOR_KIND_USER_ROLE, PageArguments,
-            encode_cursor, prepare_page,
+            CURSOR_KIND_ROLE, CURSOR_KIND_SCOPE, CURSOR_KIND_USER_ROLE,
+            CURSOR_KIND_USER_ROLE_GRANT, PageArguments, encode_cursor, prepare_page,
         },
         model::{
             MAX_BATCH_LOOKUPS, MAX_CLIENT_MUTATION_ID_LENGTH, MAX_DESCRIPTION_LENGTH,
@@ -46,7 +46,7 @@ use crate::{
             ResourceStateTransaction, RevokeUserRolesTransaction, RoleQuery, RoleStateTransaction,
             ScopeQuery, ScopeStateTransaction, SetClientScopesTransaction,
             SetRolePermissionsTransaction, UpdateResourceTransaction, UpdateRoleTransaction,
-            UpdateScopeTransaction, UserRoleQuery,
+            UpdateScopeTransaction, UserRoleGrantQuery, UserRoleQuery,
         },
         resource::{
             ApiResourceRecord, CreateResourceCommand, ResourceFilter, ResourcePage,
@@ -61,10 +61,10 @@ use crate::{
             ScopeStateCommand, UpdateScopeCommand,
         },
         user_role::{
-            AssignUserRolesCommand, EffectivePermissionPage, EffectivePermissionPageItem,
-            EffectivePermissionPageRequest, RevokeUserRolesCommand, RoleUserPageRequest,
-            UserRoleMutationResult, UserRoleOrder, UserRolePage, UserRolePageItem,
-            UserRolePageRequest,
+            AssignUserRolesCommand, AuthorizationSource, EffectivePermissionPage,
+            EffectivePermissionPageItem, EffectivePermissionPageRequest, RevokeUserRolesCommand,
+            RoleUserPageRequest, UserRoleGrantPage, UserRoleGrantPageItem, UserRoleMutationResult,
+            UserRoleOrder, UserRolePage, UserRolePageItem, UserRolePageRequest,
         },
     },
 };

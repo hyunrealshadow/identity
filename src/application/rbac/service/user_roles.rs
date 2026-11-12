@@ -5,27 +5,64 @@ use super::*;
 use crate::rbac::role::RoleRecord;
 
 impl RbacManagementService {
-    #[tracing::instrument(skip_all, name = "rbac.user_roles.list")]
+    #[tracing::instrument(skip_all, name = "rbac.user_roles.list", fields(source = ?request.source))]
     pub async fn list_user_roles(
         &self,
         request: UserRolePageRequest,
-    ) -> Result<UserRolePage, AppError> {
-        let user_oid = request.user_oid;
-        // The repository returns the page rows and the live generation from one
-        // REPEATABLE READ snapshot. `userRoles` therefore has the generation
-        // even when the binding list is empty, without a second query that
-        // could observe a newer generation than the cursor page.
-        self.list_bindings(
-            Some(user_oid),
-            None,
-            request.enabled,
-            request.order,
-            request.first,
-            request.after,
-            request.last,
-            request.before,
+    ) -> Result<UserRoleGrantPage, AppError> {
+        let order = request.order;
+        // The repository returns the page rows and the live version from one
+        // REPEATABLE READ snapshot, so the version stays valid for the page
+        // even when it is empty.
+        let fingerprint_input = (request.user_oid, request.source, request.enabled);
+        let prepared = prepare_page(
+            self.data_protector.as_ref(),
+            CURSOR_KIND_USER_ROLE_GRANT,
+            order.as_u8(),
+            &fingerprint_input,
+            PageArguments {
+                first: request.first,
+                after: request.after,
+                last: request.last,
+                before: request.before,
+            },
         )
-        .await
+        .await?;
+        let data = self
+            .repository
+            .list_user_role_grants(UserRoleGrantQuery {
+                user_oid: request.user_oid,
+                source: request.source,
+                enabled: request.enabled,
+                order,
+                direction: prepared.direction,
+                after: prepared.after,
+                before: prepared.before,
+                limit: prepared.limit,
+            })
+            .await
+            .map_err(map_repository_error)?;
+        let mut items = Vec::with_capacity(data.items.len());
+        for entry in data.items {
+            let cursor = encode_cursor(
+                self.data_protector.as_ref(),
+                CURSOR_KIND_USER_ROLE_GRANT,
+                order.as_u8(),
+                &prepared.filter_fingerprint,
+                &entry.sort_key,
+            )
+            .await?;
+            items.push(UserRoleGrantPageItem {
+                grant: entry.grant,
+                cursor,
+            });
+        }
+        Ok(UserRoleGrantPage {
+            items,
+            has_previous_page: data.has_previous_page,
+            has_next_page: data.has_next_page,
+            user_version: data.user_version,
+        })
     }
 
     #[tracing::instrument(skip_all, name = "rbac.role_users.list")]
@@ -120,25 +157,26 @@ impl RbacManagementService {
         })
     }
 
-    #[tracing::instrument(skip_all, name = "rbac.effective_permissions.count")]
+    #[tracing::instrument(skip_all, name = "rbac.effective_permissions.count", fields(source = ?source))]
     pub async fn count_user_permissions(
         &self,
         user_oid: UserOid,
         resource_oid: ResourceOid,
+        source: Option<AuthorizationSource>,
     ) -> Result<u64, AppError> {
         self.repository
-            .count_effective_permissions(user_oid, resource_oid)
+            .count_effective_permissions(user_oid, resource_oid, source)
             .await
             .map_err(map_repository_error)
     }
 
-    #[tracing::instrument(skip_all, name = "rbac.effective_permissions.list")]
+    #[tracing::instrument(skip_all, name = "rbac.effective_permissions.list", fields(source = ?request.source))]
     pub async fn list_user_permissions(
         &self,
         request: EffectivePermissionPageRequest,
     ) -> Result<EffectivePermissionPage, AppError> {
         let order = request.order;
-        let fingerprint_input = (request.user_oid, request.resource_oid);
+        let fingerprint_input = (request.user_oid, request.resource_oid, request.source);
         let prepared = prepare_page(
             self.data_protector.as_ref(),
             CURSOR_KIND_EFFECTIVE,
@@ -157,6 +195,7 @@ impl RbacManagementService {
             .list_effective_permissions(EffectivePermissionQuery {
                 user_oid: request.user_oid,
                 resource_oid: request.resource_oid,
+                source: request.source,
                 order,
                 direction: prepared.direction,
                 after: prepared.after,

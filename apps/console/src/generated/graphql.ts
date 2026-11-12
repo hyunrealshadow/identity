@@ -41,6 +41,13 @@ export type AssignUserRolesInput = {
   userId: string | number;
 };
 
+/** Where a user's role or permission comes from. */
+export type AuthorizationSource =
+  /** Assigned to the user directly. */
+  | 'DIRECT'
+  /** Inherited through an active membership in an enabled group. */
+  | 'GROUP';
+
 export type ClientCredentialKind =
   | 'CLIENT_SECRET'
   | 'JWKS_URI'
@@ -721,6 +728,7 @@ export type InstanceDashboardQuery = { instanceOverview: { generatedAt: string, 
 
 export type ConsoleUserRolesQueryVariables = Exact<{
   userId: string | number;
+  source?: AuthorizationSource | null | undefined;
   enabled?: boolean | null | undefined;
   orderBy?: UserRoleOrder | null | undefined;
   first?: number | null | undefined;
@@ -730,7 +738,7 @@ export type ConsoleUserRolesQueryVariables = Exact<{
 }>;
 
 
-export type ConsoleUserRolesQuery = { user: { id: string, roles: { userVersion: string, pageInfo: { hasNextPage: boolean, hasPreviousPage: boolean, startCursor: string | null, endCursor: string | null }, edges: Array<{ cursor: string, enabled: boolean, revokedAt: string | null, reason: string, createdAt: string, updatedAt: string | null, node: { id: string, name: string, description: string, enabled: boolean, names: Array<{ locale: string, value: string }> } }> } } | null };
+export type ConsoleUserRolesQuery = { user: { id: string, roles: { userVersion: string, pageInfo: { hasNextPage: boolean, hasPreviousPage: boolean, startCursor: string | null, endCursor: string | null }, edges: Array<{ cursor: string, source: AuthorizationSource, groupId: string | null, enabled: boolean, revokedAt: string | null, reason: string, createdAt: string, updatedAt: string | null, node: { id: string, name: string, description: string, enabled: boolean, names: Array<{ locale: string, value: string }> } }> } } | null };
 
 export type ConsoleUserRoleVersionQueryVariables = Exact<{
   userId: string | number;
@@ -742,6 +750,7 @@ export type ConsoleUserRoleVersionQuery = { user: { id: string, roles: { userVer
 export type ConsoleUserPermissionsQueryVariables = Exact<{
   userId: string | number;
   resourceId: string | number;
+  source?: AuthorizationSource | null | undefined;
   orderBy?: EffectivePermissionOrder | null | undefined;
   first?: number | null | undefined;
   after?: string | null | undefined;
@@ -1700,10 +1709,11 @@ export const InstanceDashboardDocument = new TypedDocumentString(`
 }
     `) as unknown as TypedDocumentString<InstanceDashboardQuery, InstanceDashboardQueryVariables>;
 export const ConsoleUserRolesDocument = new TypedDocumentString(`
-    query ConsoleUserRoles($userId: ID!, $enabled: Boolean, $orderBy: UserRoleOrder, $first: Int, $after: String, $last: Int, $before: String) {
+    query ConsoleUserRoles($userId: ID!, $source: AuthorizationSource, $enabled: Boolean, $orderBy: UserRoleOrder, $first: Int, $after: String, $last: Int, $before: String) {
   user(id: $userId) {
     id
     roles(
+      source: $source
       enabled: $enabled
       orderBy: $orderBy
       first: $first
@@ -1720,6 +1730,8 @@ export const ConsoleUserRolesDocument = new TypedDocumentString(`
       }
       edges {
         cursor
+        source
+        groupId
         enabled
         revokedAt
         reason
@@ -1744,18 +1756,19 @@ export const ConsoleUserRoleVersionDocument = new TypedDocumentString(`
     query ConsoleUserRoleVersion($userId: ID!) {
   user(id: $userId) {
     id
-    roles(first: 1) {
+    roles(source: DIRECT, first: 1) {
       userVersion
     }
   }
 }
     `) as unknown as TypedDocumentString<ConsoleUserRoleVersionQuery, ConsoleUserRoleVersionQueryVariables>;
 export const ConsoleUserPermissionsDocument = new TypedDocumentString(`
-    query ConsoleUserPermissions($userId: ID!, $resourceId: ID!, $orderBy: EffectivePermissionOrder, $first: Int, $after: String, $last: Int, $before: String) {
+    query ConsoleUserPermissions($userId: ID!, $resourceId: ID!, $source: AuthorizationSource, $orderBy: EffectivePermissionOrder, $first: Int, $after: String, $last: Int, $before: String) {
   user(id: $userId) {
     id
     effectivePermissions(
       resourceId: $resourceId
+      source: $source
       orderBy: $orderBy
       first: $first
       after: $after

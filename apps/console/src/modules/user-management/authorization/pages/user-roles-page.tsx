@@ -4,12 +4,13 @@ import { RelationPagination } from '../../components/relation-picker'
 import { RevokeUserRoleDialog } from '../../roles/components/revoke-user-role-dialog'
 
 import { DataTable } from '@identity/ui/data-table'
+import { Badge } from '@identity/ui/components/badge'
 import {
   Alert,
   AlertDescription,
   AlertTitle,
 } from '@identity/ui/components/alert'
-import { useNavigate } from '@tanstack/react-router'
+import { Link, useNavigate } from '@tanstack/react-router'
 import { ShieldPlus, TriangleAlert } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
@@ -53,6 +54,13 @@ import { cursorPage } from '#/modules/user-management/lib/cursor-page'
 
 import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
 import { useUserDetailContext } from '#/modules/user-management/users/components/user-detail-context'
+import {
+  AuthorizationSourceFilter,
+  canFilterBySource,
+  sourceVariable,
+  type AuthorizationSourceFilterValue,
+} from '#/modules/user-management/authorization/components/authorization-source-filter'
+import { useAuthorizationLabels } from '#/modules/user-management/authorization/hooks/use-authorization-labels'
 import { UserSelectField } from '#/modules/user-management/users/components/user-form-fields'
 
 type AssignmentStatus = 'any' | 'active' | 'revoked'
@@ -69,6 +77,11 @@ export function UserRolesPage({ userId }: { userId: string }) {
   )
   const userDetail = useUserDetailContext()
   const [status, setStatus] = useState<AssignmentStatus>('active')
+  const sourceFilterable = canFilterBySource(scope)
+  const [sourceFilter, setSourceFilter] =
+    useState<AuthorizationSourceFilterValue>('any')
+  // Without group reads the server only allows the direct list.
+  const source = sourceFilterable ? sourceVariable(sourceFilter) : 'DIRECT'
   const [after, setAfter] = useState<string | undefined>()
   const [before, setBefore] = useState<string | undefined>()
   const [pageSize, setPageSize] = useState(10)
@@ -78,6 +91,7 @@ export function UserRolesPage({ userId }: { userId: string }) {
       scope.usersRead && scope.assignmentsRead && scope.rolesRead
         ? {
             userId,
+            source,
             enabled:
               status === 'active'
                 ? true
@@ -94,6 +108,7 @@ export function UserRolesPage({ userId }: { userId: string }) {
       scope.assignmentsRead,
       scope.rolesRead,
       scope.usersRead,
+      source,
       status,
       userId,
       pageSize,
@@ -111,6 +126,26 @@ export function UserRolesPage({ userId }: { userId: string }) {
   )
   const user = userDetail.user
   const connection = assignments.data?.user?.roles ?? null
+  const groupIds = useMemo(
+    () =>
+      scope.groupsRead
+        ? [
+            ...new Set(
+              (connection?.edges ?? []).flatMap((edge) =>
+                edge.groupId ? [edge.groupId] : [],
+              ),
+            ),
+          ]
+        : [],
+    [connection, scope.groupsRead],
+  )
+  const groupLabels = useAuthorizationLabels(groupIds)
+  const groupName = (id: string) => {
+    const group = groupLabels.nodes.find((node) => node.id === id)
+    return group?.__typename === 'Group'
+      ? (resolveLocalizedText(group.names, locale) ?? group.name)
+      : t('authorizationSourceGroup')
+  }
 
   const loadingView = <UserDetailTabSkeleton userId={userId} tab="roles" />
 
@@ -257,6 +292,17 @@ export function UserRolesPage({ userId }: { userId: string }) {
             <CollectionToolbar
               filters={
                 <div className="flex flex-wrap items-start gap-2">
+                  {sourceFilterable ? (
+                    <AuthorizationSourceFilter
+                      name="user-role-source"
+                      value={sourceFilter}
+                      onChange={(value) => {
+                        setSourceFilter(value)
+                        setAfter(undefined)
+                        setBefore(undefined)
+                      }}
+                    />
+                  ) : null}
                   <div className="w-36">
                     <UserSelectField
                       name="user-role-status"
@@ -360,12 +406,17 @@ export function UserRolesPage({ userId }: { userId: string }) {
           loading={assignments.refreshing}
           loadingLabel={t('tableLoading')}
           label={t('userRolesTableLabel')}
-          minWidth={820}
+          minWidth={960}
           columns={[
             {
               id: 'userRolesColumnRole',
               label: t('userRolesColumnRole'),
               primary: true,
+            },
+            {
+              id: 'userRolesColumnSource',
+              label: t('userRolesColumnSource'),
+              primary: false,
             },
             {
               id: 'userRolesColumnStatus',
@@ -391,9 +442,9 @@ export function UserRolesPage({ userId }: { userId: string }) {
                 compact
                 title={t('userRolesEmptyTitle')}
                 description={
-                  status !== 'revoked'
-                    ? t('userRolesEmptyDescription')
-                    : t('userRolesEmptyFilteredDescription')
+                  status !== 'any' || sourceFilter !== 'any'
+                    ? t('userRolesEmptyFilteredDescription')
+                    : undefined
                 }
               />
             )}
@@ -403,7 +454,7 @@ export function UserRolesPage({ userId }: { userId: string }) {
               const roleName =
                 resolveLocalizedText(role.names, locale) ?? role.name
               return (
-                <DataTable.Row key={role.id} id={role.id}>
+                <DataTable.Row key={edge.cursor} id={edge.cursor}>
                   <DataTable.Cell>
                     <div className="min-w-48">
                       <p className="font-medium">{roleName}</p>
@@ -413,6 +464,27 @@ export function UserRolesPage({ userId }: { userId: string }) {
                         </p>
                       ) : null}
                     </div>
+                  </DataTable.Cell>
+                  <DataTable.Cell>
+                    {edge.source === 'GROUP' && edge.groupId ? (
+                      <Badge variant="secondary">
+                        {scope.groupsRead ? (
+                          <Link
+                            to="/groups/$groupId"
+                            params={{ groupId: edge.groupId }}
+                            className="hover:underline"
+                          >
+                            {groupName(edge.groupId)}
+                          </Link>
+                        ) : (
+                          t('authorizationSourceGroup')
+                        )}
+                      </Badge>
+                    ) : (
+                      <span className="text-sm">
+                        {t('authorizationSourceDirect')}
+                      </span>
+                    )}
                   </DataTable.Cell>
                   <DataTable.Cell>
                     <AssignmentStatusChip
@@ -427,7 +499,11 @@ export function UserRolesPage({ userId }: { userId: string }) {
                     </span>
                   </DataTable.Cell>
                   <DataTable.Cell>
-                    {edge.enabled ? (
+                    {edge.source === 'GROUP' ? (
+                      <span className="text-xs text-muted-foreground">
+                        {t('userRolesInheritedNotRevocable')}
+                      </span>
+                    ) : edge.enabled ? (
                       scope.assignmentsWrite ? (
                         <RevokeUserRoleDialog
                           assignment={{

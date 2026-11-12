@@ -6,6 +6,8 @@ import {
   ConsoleGroupDocument,
   ConsoleGroupMembersDocument,
   ConsoleRemoveGroupMemberDocument,
+  ConsoleUserPermissionsDocument,
+  ConsoleUserRolesDocument,
   type AddGroupMemberInput,
   type ConsoleAddGroupMemberMutation,
   type ConsoleAddGroupMemberMutationVariables,
@@ -57,7 +59,12 @@ export function useGroupMemberMutations() {
         >(
           ConsoleAddGroupMemberDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          [ConsoleGroupMembersDocument, ConsoleGroupDocument],
+          [
+            ConsoleGroupMembersDocument,
+            ConsoleGroupDocument,
+            ConsoleUserRolesDocument,
+            ConsoleUserPermissionsDocument,
+          ],
         )
       },
       remove(input: RemoveGroupMemberInput) {
@@ -67,7 +74,12 @@ export function useGroupMemberMutations() {
         >(
           ConsoleRemoveGroupMemberDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          [ConsoleGroupMembersDocument, ConsoleGroupDocument],
+          [
+            ConsoleGroupMembersDocument,
+            ConsoleGroupDocument,
+            ConsoleUserRolesDocument,
+            ConsoleUserPermissionsDocument,
+          ],
         )
       },
     }),

@@ -25,6 +25,8 @@ pub(crate) const CURSOR_KIND_USER_ROLE: u8 = 5;
 pub(crate) const CURSOR_KIND_EFFECTIVE: u8 = 6;
 pub(crate) const CURSOR_KIND_CLIENT_SCOPE: u8 = 8;
 pub(crate) const CURSOR_KIND_CLIENT: u8 = 9;
+/// A single user's direct and inherited roles; ties on the binding OID.
+pub(crate) const CURSOR_KIND_USER_ROLE_GRANT: u8 = 12;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RbacTie {

@@ -12,7 +12,10 @@ use super::{
     connection::{EffectivePermissionConnection, EffectivePermissionEdge},
     integration,
     types::{RoleFilter, RoleNode, RoleOrder, decode_role_oid},
-    user_role::{EffectivePermissionNode, EffectivePermissionOrder},
+    user_role::{
+        AuthorizationSource, EffectivePermissionNode, EffectivePermissionOrder,
+        ensure_group_source_read,
+    },
 };
 use crate::graphql::schema::{
     RequestContext,
@@ -101,6 +104,7 @@ impl RoleQuery {
             request,
             user_oid,
             resource_oid,
+            None,
             order_by.unwrap_or_else(EffectivePermissionOrder::default_order),
             page,
         )
@@ -145,14 +149,21 @@ pub(crate) async fn load_effective_permission_connection(
     request: &RequestContext,
     user_oid: UserOid,
     resource_oid: ResourceOid,
+    source: Option<AuthorizationSource>,
     order: EffectivePermissionOrder,
     page: PageArgs,
 ) -> Result<EffectivePermissionConnection> {
+    if source.is_some() {
+        // Either filter value is derived from group memberships and roles.
+        ensure_group_source_read(ctx).await?;
+    }
+    let source = source.map(Into::into);
     let page = integration::list_effective_permissions(
         request,
         EffectivePermissionPageRequest {
             user_oid,
             resource_oid,
+            source,
             order: order.into(),
             first: page.first,
             after: page.after,
@@ -167,7 +178,7 @@ pub(crate) async fn load_effective_permission_connection(
             .state
             .services()
             .rbac_management()
-            .count_user_permissions(user_oid, resource_oid)
+            .count_user_permissions(user_oid, resource_oid, source)
             .await
             .map_err(|error| app_error(ctx, error))
     })

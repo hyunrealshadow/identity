@@ -1,5 +1,6 @@
 query ConsoleUserRoles(
   $userId: ID!
+  $source: AuthorizationSource
   $enabled: Boolean
   $orderBy: UserRoleOrder
   $first: Int
@@ -10,6 +11,7 @@ query ConsoleUserRoles(
   user(id: $userId) {
     id
     roles(
+      source: $source
       enabled: $enabled
       orderBy: $orderBy
       first: $first
@@ -26,6 +28,8 @@ query ConsoleUserRoles(
       }
       edges {
         cursor
+        source
+        groupId
         enabled
         revokedAt
         reason
@@ -49,7 +53,7 @@ query ConsoleUserRoles(
 query ConsoleUserRoleVersion($userId: ID!) {
   user(id: $userId) {
     id
-    roles(first: 1) {
+    roles(source: DIRECT, first: 1) {
       userVersion
     }
   }
@@ -58,6 +62,7 @@ query ConsoleUserRoleVersion($userId: ID!) {
 query ConsoleUserPermissions(
   $userId: ID!
   $resourceId: ID!
+  $source: AuthorizationSource
   $orderBy: EffectivePermissionOrder
   $first: Int
   $after: String
@@ -68,6 +73,7 @@ query ConsoleUserPermissions(
     id
     effectivePermissions(
       resourceId: $resourceId
+      source: $source
       orderBy: $orderBy
       first: $first
       after: $after

@@ -37,7 +37,10 @@ import { cursorPage } from '#/modules/user-management/lib/cursor-page'
 
 import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
-import { AssignmentStatusChip } from '#/modules/user-management/roles/components/role-status'
+import {
+  AssignmentStatusChip,
+  RoleBuiltInChip,
+} from '#/modules/user-management/roles/components/role-status'
 import {
   UserSelectField,
   UserTextField,
@@ -326,22 +329,15 @@ export function GroupRolesPage({ groupId }: { groupId: string }) {
                     <DataTable.Row key={role.id} id={role.id}>
                       <DataTable.Cell>
                         <div className="min-w-56">
-                          <Link
-                            to="/roles/$roleId"
-                            params={{ roleId: role.id }}
-                            className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                          >
-                            {name}
-                          </Link>
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {role.builtIn ? (
-                              <Badge
-                                variant="secondary"
-                                className="text-primary"
-                              >
-                                {t('groupRolesBuiltInRoleLabel')}
-                              </Badge>
-                            ) : null}
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Link
+                              to="/roles/$roleId"
+                              params={{ roleId: role.id }}
+                              className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                            >
+                              {name}
+                            </Link>
+                            <RoleBuiltInChip builtIn={role.builtIn} />
                             {!role.enabled ? (
                               <Badge
                                 variant="secondary"

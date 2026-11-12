@@ -36,6 +36,12 @@ import { cursorPage } from '#/modules/user-management/lib/cursor-page'
 import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
 import { UserDetailTabSkeleton } from '#/modules/user-management/users/components/user-detail-skeleton'
 import { useUserDetailContext } from '#/modules/user-management/users/components/user-detail-context'
+import {
+  AuthorizationSourceFilter,
+  canFilterBySource,
+  sourceVariable,
+  type AuthorizationSourceFilterValue,
+} from '#/modules/user-management/authorization/components/authorization-source-filter'
 
 export function UserEffectivePermissionsPage({ userId }: { userId: string }) {
   const t = useTranslator()
@@ -51,6 +57,10 @@ export function UserEffectivePermissionsPage({ userId }: { userId: string }) {
   const [after, setAfter] = useState<string>()
   const [before, setBefore] = useState<string>()
   const [pageSize, setPageSize] = useState(100)
+  const sourceFilterable = canFilterBySource(scope)
+  const [sourceFilter, setSourceFilter] =
+    useState<AuthorizationSourceFilterValue>('any')
+  const source = sourceFilterable ? sourceVariable(sourceFilter) : undefined
   const selectResource = useCallback((id: string) => {
     setResourceId(id)
     setAfter(undefined)
@@ -62,6 +72,7 @@ export function UserEffectivePermissionsPage({ userId }: { userId: string }) {
         ? {
             userId,
             resourceId,
+            source,
             orderBy: 'CODE_ASC',
             ...cursorPage(pageSize, after, before),
           }
@@ -69,9 +80,9 @@ export function UserEffectivePermissionsPage({ userId }: { userId: string }) {
     [
       userId,
       resourceId,
+      source,
       scope.usersRead,
       scope.assignmentsRead,
-      scope.groupsRead,
       pageSize,
       after,
       before,
@@ -193,12 +204,25 @@ export function UserEffectivePermissionsPage({ userId }: { userId: string }) {
   }
 
   const filters = (
-    <ApiResourceSelect
-      value={resourceId}
-      onChange={selectResource}
-      enabled={scope.resourcesRead}
-      hideLabel
-    />
+    <div className="flex flex-wrap items-start gap-2">
+      <ApiResourceSelect
+        value={resourceId}
+        onChange={selectResource}
+        enabled={scope.resourcesRead}
+        hideLabel
+      />
+      {resourceId && sourceFilterable ? (
+        <AuthorizationSourceFilter
+          name="user-permission-source"
+          value={sourceFilter}
+          onChange={(value) => {
+            setSourceFilter(value)
+            setAfter(undefined)
+            setBefore(undefined)
+          }}
+        />
+      ) : null}
+    </div>
   )
   const items = (connection?.edges ?? []).map(({ node }) => ({
     id: node.permissionId,
@@ -251,7 +275,11 @@ export function UserEffectivePermissionsPage({ userId }: { userId: string }) {
                 <AsyncState
                   kind="empty"
                   compact
-                  title={t('userPermissionsEmptyTitle')}
+                  title={t(
+                    source
+                      ? 'userPermissionsEmptyFilteredTitle'
+                      : 'userPermissionsEmptyTitle',
+                  )}
                 />
               )
             }

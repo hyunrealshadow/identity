@@ -6,14 +6,18 @@ use async_graphql::{
 use identity_application::{
     authorization::ManagementTarget,
     rbac::{
-        EffectiveGroupPermissionSourceRecord,
+        AuthorizationSource as RbacAuthorizationSource, EffectiveGroupPermissionSourceRecord,
         EffectivePermissionOrder as RbacEffectivePermissionOrder, EffectivePermissionRecord,
-        EffectivePermissionSourceRecord, RoleUserPageRequest, ScopeOid, UserRoleMutationResult,
-        UserRoleOrder as RbacUserRoleOrder, UserRolePage, UserRolePageRequest, UserRoleRecord,
+        EffectivePermissionSourceRecord, RoleUserPageRequest, ScopeOid, UserRoleGrant,
+        UserRoleMutationResult, UserRoleOrder as RbacUserRoleOrder, UserRolePage,
+        UserRolePageRequest, UserRoleRecord,
     },
 };
 use identity_domain::{
-    authorization::ManagementScope, openid_connect::ApiScope, rbac::RoleOid, user::UserOid,
+    authorization::ManagementScope,
+    openid_connect::ApiScope,
+    rbac::{GroupOid, RoleOid},
+    user::UserOid,
 };
 use identity_infrastructure::graphql::id::GlobalId;
 use uuid::Uuid;
@@ -43,9 +47,15 @@ use crate::graphql::schema::{
     },
 };
 
-/// `User.roles`: role nodes with the user's assignment facts on each edge.
-pub(crate) type UserRoleConnection =
-    RelationConnection<RoleNode, UserVersionFields, UserRoleConnectionName, UserRoleEdgeName>;
+/// `User.roles`: role nodes with the source of each role on its edge.
+pub(crate) type UserRoleConnection = async_graphql::connection::Connection<
+    RbacConnectionCursor,
+    RoleNode,
+    UserVersionFields,
+    UserRoleFacts,
+    UserRoleConnectionName,
+    UserRoleEdgeName,
+>;
 
 /// `Role.users`: user nodes with the role assignment facts on each edge.
 pub(crate) type RoleUserConnection =
@@ -75,6 +85,126 @@ impl From<UserRoleOrder> for RbacUserRoleOrder {
             UserRoleOrder::CreatedAtAsc => Self::CreatedAtAsc,
             UserRoleOrder::CreatedAtDesc => Self::CreatedAtDesc,
         }
+    }
+}
+
+/// Where a user's role or permission comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]
+pub(crate) enum AuthorizationSource {
+    /// Assigned to the user directly.
+    #[graphql(name = "DIRECT")]
+    Direct,
+    /// Inherited through an active membership in an enabled group.
+    #[graphql(name = "GROUP")]
+    Group,
+}
+
+impl From<AuthorizationSource> for RbacAuthorizationSource {
+    fn from(source: AuthorizationSource) -> Self {
+        match source {
+            AuthorizationSource::Direct => Self::Direct,
+            AuthorizationSource::Group => Self::Group,
+        }
+    }
+}
+
+/// Listing or filtering by group-derived access reveals memberships and group
+/// roles, so it needs both of those read scopes in addition to the field's own
+/// declaration.
+pub(crate) async fn ensure_group_source_read(ctx: &Context<'_>) -> GraphqlResult<()> {
+    ManagementGuard::new(
+        ManagementScope::GroupMembershipsRead,
+        ManagementTarget::instance(),
+    )
+    .check(ctx)
+    .await?;
+    ManagementGuard::new(
+        ManagementScope::GroupRolesRead,
+        ManagementTarget::instance(),
+    )
+    .check(ctx)
+    .await
+}
+
+/// Edge facts of `User.roles`. Direct rows carry the assignment facts;
+/// inherited rows are live grants through `group`.
+pub(crate) struct UserRoleFacts {
+    facts: RelationFacts,
+    source: AuthorizationSource,
+    group_oid: Option<GroupOid>,
+}
+
+#[Object]
+impl UserRoleFacts {
+    /// Whether the role was assigned directly or inherited through a group.
+    #[graphql(complexity = 0)]
+    async fn source(&self) -> AuthorizationSource {
+        self.source
+    }
+
+    /// Whether the relation is active. Revoked relations remain as history;
+    /// inherited roles are always active.
+    #[graphql(complexity = 0)]
+    async fn enabled(&self) -> bool {
+        self.facts.enabled
+    }
+
+    #[graphql(complexity = 0)]
+    async fn revoked_at(&self) -> Option<chrono::DateTime<chrono::Utc>> {
+        self.facts.revoked_at
+    }
+
+    #[graphql(complexity = 0)]
+    async fn reason(&self) -> &str {
+        &self.facts.reason
+    }
+
+    /// When the user obtained the role. For an inherited role this is the
+    /// later of joining the group and the group receiving the role.
+    #[graphql(complexity = 0)]
+    async fn created_at(&self) -> chrono::DateTime<chrono::Utc> {
+        self.facts.created_at
+    }
+
+    #[graphql(complexity = 0)]
+    async fn updated_at(&self) -> Option<chrono::DateTime<chrono::Utc>> {
+        self.facts.updated_at
+    }
+
+    /// The user who assigned a direct role, when one was recorded and still
+    /// exists.
+    #[graphql(
+        guard = "ManagementGuard::new(ManagementScope::UsersRead, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::UsersRead))
+    )]
+    async fn granted_by(&self, ctx: &Context<'_>) -> GraphqlResult<Option<UserNode>> {
+        let Some(user_oid) = self.facts.granted_by_user_oid else {
+            return Ok(None);
+        };
+        let user = user_integration::find_user(request_context(ctx)?, user_oid)
+            .await
+            .map_err(|error| app_error(ctx, error))?;
+        Ok(user.map(UserNode::managed))
+    }
+
+    /// The group an inherited role comes from.
+    #[graphql(complexity = 0)]
+    async fn group_id(&self) -> Option<ID> {
+        self.group_oid.map(group_types::group_global_id)
+    }
+
+    #[graphql(
+        guard = "ManagementGuard::new(ManagementScope::GroupsRead, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::GroupsRead))
+    )]
+    async fn group(&self, ctx: &Context<'_>) -> GraphqlResult<Option<GroupNode>> {
+        let Some(group_oid) = self.group_oid else {
+            return Ok(None);
+        };
+        let record = group_integration::find_group(request_context(ctx)?, group_oid)
+            .await
+            .map_err(|error| app_error(ctx, error))?;
+        Ok(record.map(GroupNode::new))
     }
 }
 
@@ -133,20 +263,24 @@ fn facts(record: &UserRoleRecord) -> RelationFacts {
     }
 }
 
-/// One page of a user's role assignments, with each role loaded in a single
-/// batch.
+/// One page of a user's roles, with each role loaded in a single batch.
 pub(crate) async fn load_user_roles(
     ctx: &Context<'_>,
     request: &RequestContext,
     user_oid: UserOid,
+    source: Option<AuthorizationSource>,
     enabled: Option<bool>,
     order: UserRoleOrder,
     page: PageArgs,
 ) -> GraphqlResult<UserRoleConnection> {
+    if source != Some(AuthorizationSource::Direct) {
+        ensure_group_source_read(ctx).await?;
+    }
     let page = integration::list_user_roles(
         request,
         UserRolePageRequest {
             user_oid,
+            source: source.map(Into::into),
             enabled,
             order: order.into(),
             first: page.first,
@@ -157,46 +291,53 @@ pub(crate) async fn load_user_roles(
     )
     .await
     .map_err(|error| app_error(ctx, error))?;
-    let user_version = match page.user_version {
-        Some(version) => version,
-        None => current_user_version(ctx, request, user_oid).await?,
-    };
     let roles = integration::find_roles(
         request,
-        page.items.iter().map(|item| item.record.role_oid).collect(),
+        page.items
+            .iter()
+            .map(|item| item.grant.role_oid())
+            .collect(),
     )
     .await
     .map_err(|error| app_error(ctx, error))?;
-    let mut roles = index_by(roles, |role| role.oid.0);
+    let roles = index_by(roles, |role| role.oid.0);
     let mut connection = UserRoleConnection::with_additional_fields(
         page.has_previous_page,
         page.has_next_page,
-        UserVersionFields { user_version },
+        UserVersionFields {
+            user_version: page.user_version,
+        },
     );
     for item in page.items {
-        if let Some(role) = roles.remove(&item.record.role_oid.0) {
-            connection.edges.push(Edge::with_additional_fields(
-                RbacConnectionCursor::from_backend(item.cursor),
-                RoleNode::new(role),
-                facts(&item.record),
-            ));
-        }
+        let Some(role) = roles.get(&item.grant.role_oid().0) else {
+            continue;
+        };
+        let fields = match &item.grant {
+            UserRoleGrant::Direct(record) => UserRoleFacts {
+                facts: facts(record),
+                source: AuthorizationSource::Direct,
+                group_oid: None,
+            },
+            UserRoleGrant::Group(record) => UserRoleFacts {
+                facts: RelationFacts {
+                    granted_by_user_oid: None,
+                    reason: String::new(),
+                    enabled: true,
+                    revoked_at: None,
+                    created_at: record.created_at,
+                    updated_at: None,
+                },
+                source: AuthorizationSource::Group,
+                group_oid: Some(record.group_oid),
+            },
+        };
+        connection.edges.push(Edge::with_additional_fields(
+            RbacConnectionCursor::from_backend(item.cursor),
+            RoleNode::new(role.clone()),
+            fields,
+        ));
     }
     Ok(connection)
-}
-
-/// `list_user_roles` always reports the single user's version; this only
-/// guards against an adapter that omits it.
-async fn current_user_version(
-    ctx: &Context<'_>,
-    request: &RequestContext,
-    user_oid: UserOid,
-) -> GraphqlResult<Uuid> {
-    user_integration::find_user(request, user_oid)
-        .await
-        .map_err(|error| app_error(ctx, error))?
-        .map(|user| user.version)
-        .ok_or_else(|| "user not found".into())
 }
 
 /// One page of a role's user assignments, with each user loaded in a single

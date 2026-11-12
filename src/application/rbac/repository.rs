@@ -27,8 +27,8 @@ use super::{
     role::{RoleFilter, RoleOrder, RoleRecord},
     scope::{ScopeFilter, ScopeOrder, ScopeRecord},
     user_role::{
-        EffectivePermissionOrder, EffectivePermissionRecord, UserRoleMutationResult, UserRoleOrder,
-        UserRoleRecord,
+        AuthorizationSource, EffectivePermissionOrder, EffectivePermissionRecord, UserRoleGrant,
+        UserRoleMutationResult, UserRoleOrder, UserRoleRecord,
     },
 };
 
@@ -89,6 +89,36 @@ pub struct UserRolePageData {
 }
 
 #[derive(Debug, Clone)]
+pub struct UserRoleGrantPageEntry {
+    pub sort_key: RbacSortKey,
+    pub grant: UserRoleGrant,
+}
+
+/// One consistent page of a single user's roles and that user's version.
+#[derive(Debug, Clone)]
+pub struct UserRoleGrantPageData {
+    pub items: Vec<UserRoleGrantPageEntry>,
+    pub has_previous_page: bool,
+    pub has_next_page: bool,
+    pub user_version: Uuid,
+}
+
+/// A single user's roles. Direct rows follow `enabled`; inherited rows are
+/// always active and are omitted when `enabled` is `Some(false)`. Ordered by
+/// grant time with the binding OID as the tie-breaker.
+#[derive(Debug, Clone)]
+pub struct UserRoleGrantQuery {
+    pub user_oid: UserOid,
+    pub source: Option<AuthorizationSource>,
+    pub enabled: Option<bool>,
+    pub order: UserRoleOrder,
+    pub direction: RbacPageDirection,
+    pub after: Option<RbacSortKey>,
+    pub before: Option<RbacSortKey>,
+    pub limit: usize,
+}
+
+#[derive(Debug, Clone)]
 pub struct EffectivePermissionPageData {
     pub items: Vec<EffectivePermissionPageEntry>,
     pub has_previous_page: bool,
@@ -142,6 +172,9 @@ pub struct UserRoleQuery {
 pub struct EffectivePermissionQuery {
     pub user_oid: UserOid,
     pub resource_oid: ResourceOid,
+    /// `None` keeps every source; otherwise only permissions reachable
+    /// through that source are listed.
+    pub source: Option<AuthorizationSource>,
     pub order: EffectivePermissionOrder,
     pub direction: RbacPageDirection,
     pub after: Option<RbacSortKey>,
@@ -461,6 +494,13 @@ pub trait RbacManagementRepository: Send + Sync {
         query: UserRoleQuery,
     ) -> Result<UserRolePageData, RbacManagementRepositoryError>;
 
+    /// One snapshot read of a single user's direct and inherited roles with
+    /// the user's current version.
+    async fn list_user_role_grants(
+        &self,
+        query: UserRoleGrantQuery,
+    ) -> Result<UserRoleGrantPageData, RbacManagementRepositoryError>;
+
     /// Current core user UUID version for one real user.
     ///
     /// A missing user is `NotFound(User)`, never a fabricated version.
@@ -481,6 +521,7 @@ pub trait RbacManagementRepository: Send + Sync {
         &self,
         user_oid: UserOid,
         resource_oid: ResourceOid,
+        source: Option<AuthorizationSource>,
     ) -> Result<u64, RbacManagementRepositoryError>;
 
     async fn list_effective_permissions(

@@ -24,6 +24,48 @@ pub struct EffectiveGroupPermissionSourceRecord {
     pub role_oid: RoleOid,
 }
 
+/// Where a user's role or permission comes from.
+///
+/// `Direct` is an active user-role assignment. `Group` is an active membership
+/// in an enabled group that holds an active group-role binding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize)]
+pub enum AuthorizationSource {
+    Direct,
+    Group,
+}
+
+/// A role a user holds through one group: the membership and the group-role
+/// binding that are both active.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InheritedUserRoleRecord {
+    pub user_oid: UserOid,
+    pub role_oid: RoleOid,
+    pub group_oid: GroupOid,
+    pub membership_oid: GroupMembershipOid,
+    pub group_role_oid: GroupRoleOid,
+    /// When the user obtained the role: the later of joining the group and
+    /// the group receiving the role.
+    pub created_at: DateTime<Utc>,
+}
+
+/// One row of a user's role list: a direct assignment (active or revoked
+/// history) or a role currently inherited through a group.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum UserRoleGrant {
+    Direct(UserRoleRecord),
+    Group(InheritedUserRoleRecord),
+}
+
+impl UserRoleGrant {
+    #[must_use]
+    pub const fn role_oid(&self) -> RoleOid {
+        match self {
+            Self::Direct(record) => record.role_oid,
+            Self::Group(record) => record.role_oid,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EffectivePermissionRecord {
     /// Canonical scope OID projected as the permission identity.
@@ -70,6 +112,8 @@ impl EffectivePermissionOrder {
 pub struct EffectivePermissionPageRequest {
     pub user_oid: UserOid,
     pub resource_oid: ResourceOid,
+    /// `None` lists permissions from every source.
+    pub source: Option<AuthorizationSource>,
     pub order: EffectivePermissionOrder,
     pub first: Option<u32>,
     pub after: Option<String>,
@@ -140,6 +184,8 @@ impl UserRoleOrder {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct UserRolePageRequest {
     pub user_oid: UserOid,
+    /// `None` lists direct assignments and inherited roles together.
+    pub source: Option<AuthorizationSource>,
     pub enabled: Option<bool>,
     pub order: UserRoleOrder,
     pub first: Option<u32>,
@@ -166,12 +212,26 @@ pub struct UserRolePageItem {
 }
 
 #[derive(Debug, Clone)]
+pub struct UserRoleGrantPageItem {
+    pub grant: UserRoleGrant,
+    pub cursor: String,
+}
+
+/// One page of a single user's roles and the user's current version.
+#[derive(Debug, Clone)]
+pub struct UserRoleGrantPage {
+    pub items: Vec<UserRoleGrantPageItem>,
+    pub has_previous_page: bool,
+    pub has_next_page: bool,
+    pub user_version: Uuid,
+}
+
+#[derive(Debug, Clone)]
 pub struct UserRolePage {
     pub items: Vec<UserRolePageItem>,
     pub has_previous_page: bool,
     pub has_next_page: bool,
-    /// `Some` for `list_user_roles` (including an empty binding page) and
-    /// `None` for `list_role_users`, which can span several users.
+    /// Always `None` for `list_role_users`, which can span several users.
     pub user_version: Option<Uuid>,
 }
 
@@ -215,6 +275,7 @@ mod tests {
     fn user_request(user_oid: UserOid, enabled: Option<bool>) -> UserRolePageRequest {
         UserRolePageRequest {
             user_oid,
+            source: None,
             enabled,
             order: UserRoleOrder::CreatedAtDesc,
             first: Some(20),

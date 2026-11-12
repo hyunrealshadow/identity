@@ -545,7 +545,11 @@ const enUS = {
   roleUserRevokedToast: 'User role revoked',
   roleUserRevokedCommitted:
     '{count, plural, one {# assignment revoked} other {# assignments revoked}}.',
-  assignmentFilterAll: 'All assignments',
+  assignmentFilterAll: 'All statuses',
+  authorizationSourceFilterLabel: 'Source',
+  authorizationSourceAny: 'All sources',
+  authorizationSourceDirect: 'Direct',
+  authorizationSourceGroup: 'Inherited from group',
   assignmentFilterActive: 'Active',
   assignmentFilterRevoked: 'Revoked',
   assignmentActive: 'Active',
@@ -557,24 +561,21 @@ const enUS = {
   userAuthorizationUsersReadDescription:
     'This account does not have management.user.read, so the user record and related authorization pages are not requested.',
   userRolesTitle: 'User roles',
-  userRolesDescription:
-    'Review direct roles and revoked assignments. See Permissions for access inherited through groups.',
   userRolesNoReadTitle: 'User roles cannot be read',
   userRolesNoReadDescription:
     'This account does not have management.role_assignment.read, so role assignments were not requested.',
   userRolesStepUpNote:
     'Stronger authentication is required before assigning or revoking roles for this user.',
   userRolesListTitle: 'Roles',
-  userRolesListDescription: 'Roles assigned directly to this user',
+  userRolesListDescription: 'Roles assigned directly or inherited through groups',
   userRolesLoading: 'Loading user roles…',
-  userRolesEmptyTitle: 'No directly assigned roles',
-  userRolesEmptyDescription:
-    'Permissions inherited from groups are shown on the Permissions tab',
-  userRolesEmptyFilteredDescription:
-    'No role assignments match the selected status.',
+  userRolesEmptyTitle: 'No roles',
+  userRolesEmptyFilteredDescription: 'No roles match the selected filters',
   userRolesTableLabel: 'User roles',
   userRolesColumnRole: 'Role',
-  userRolesColumnStatus: 'Assignment status',
+  userRolesColumnStatus: 'Status',
+  userRolesColumnSource: 'Source',
+  userRolesInheritedNotRevocable: 'Remove in the group',
   userRolesColumnCreated: 'Granted',
   userRolesColumnActions: 'Actions',
   userRolesPagination: 'User role pagination',
@@ -638,6 +639,7 @@ const enUS = {
   userPermissionsSourceDetails: 'Relationship identifiers',
   userPermissionsLoading: 'Loading effective permissions…',
   userPermissionsEmptyTitle: 'No effective permissions',
+  userPermissionsEmptyFilteredTitle: 'No permissions from this source',
   userPermissionsEmptyDescription:
     'No active direct or group role assignment currently grants a permission on this resource.',
   userPermissionsPartialTitle:
@@ -948,7 +950,6 @@ const enUS = {
     'You can view role links but cannot change them.',
   groupRolesWriteStepUpNote:
     'Your pending role selection is kept. After verifying, return and submit again; the change is never replayed automatically.',
-  groupRolesBuiltInRoleLabel: 'Built-in role',
   groupRolesEditAction: 'Edit role links',
   groupRolesEditTitle: 'Replace the group role set',
   groupRolesEditDescription:

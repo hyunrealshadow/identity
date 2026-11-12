@@ -11,6 +11,8 @@ import {
   ConsoleGroupsDocument,
   ConsoleSetGroupEnabledDocument,
   ConsoleUpdateGroupDocument,
+  ConsoleUserPermissionsDocument,
+  ConsoleUserRolesDocument,
   type ConsoleCreateGroupMutation,
   type ConsoleCreateGroupMutationVariables,
   type ConsoleDeleteGroupMutation,
@@ -55,7 +57,7 @@ export function useGroupMutations() {
         >(
           ConsoleUpdateGroupDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          [ConsoleGroupDocument, ConsoleGroupsDocument, ConsoleGroupMembersDocument, ConsoleGroupRolesDocument, ConsoleGroupRoleIdsDocument],
+          [ConsoleGroupDocument, ConsoleGroupsDocument, ConsoleGroupMembersDocument, ConsoleGroupRolesDocument, ConsoleGroupRoleIdsDocument, ConsoleUserRolesDocument, ConsoleUserPermissionsDocument],
         )
       },
       setEnabled(input: SetGroupEnabledInput) {
@@ -65,7 +67,7 @@ export function useGroupMutations() {
         >(
           ConsoleSetGroupEnabledDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          [ConsoleGroupDocument, ConsoleGroupsDocument, ConsoleGroupMembersDocument, ConsoleGroupRolesDocument, ConsoleGroupRoleIdsDocument],
+          [ConsoleGroupDocument, ConsoleGroupsDocument, ConsoleGroupMembersDocument, ConsoleGroupRolesDocument, ConsoleGroupRoleIdsDocument, ConsoleUserRolesDocument, ConsoleUserPermissionsDocument],
         )
       },
       remove(input: GroupStateInput) {
@@ -75,7 +77,7 @@ export function useGroupMutations() {
         >(
           ConsoleDeleteGroupDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
-          [ConsoleGroupDocument, ConsoleGroupsDocument],
+          [ConsoleGroupDocument, ConsoleGroupsDocument, ConsoleUserRolesDocument, ConsoleUserPermissionsDocument],
         )
       },
     }),

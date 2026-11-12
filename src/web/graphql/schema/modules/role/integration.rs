@@ -6,8 +6,8 @@ use identity_application::{
         AssignUserRolesCommand, CreateRoleCommand, EffectivePermissionPage,
         EffectivePermissionPageRequest, RevokeUserRolesCommand, RoleFilter,
         RoleOrder as ApplicationOrder, RolePage, RolePageRequest, RoleRecord, RoleStateCommand,
-        RoleUserPageRequest, SetRolePermissionsCommand, UpdateRoleCommand, UserRoleMutationResult,
-        UserRolePage, UserRolePageRequest,
+        RoleUserPageRequest, SetRolePermissionsCommand, UpdateRoleCommand, UserRoleGrantPage,
+        UserRoleMutationResult, UserRolePage, UserRolePageRequest,
     },
 };
 use identity_domain::rbac::RoleOid;
@@ -116,7 +116,7 @@ pub(crate) async fn set_role_permissions(
 pub(crate) async fn list_user_roles(
     request: &RequestContext,
     request_page: UserRolePageRequest,
-) -> Result<UserRolePage, AppError> {
+) -> Result<UserRoleGrantPage, AppError> {
     request
         .state
         .services()

@@ -40,6 +40,7 @@ import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-
 
 import { useGroupRoleMutations } from '#/modules/user-management/groups/hooks/use-group-roles'
 import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
+import { RoleBuiltInChip } from '#/modules/user-management/roles/components/role-status'
 import type { RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
 import { useConsoleQuery } from '#/lib/graphql/use-console-query'
 import { cursorPage } from '#/modules/user-management/lib/cursor-page'
@@ -423,11 +424,7 @@ export function EditRolesDialog({
                       <span className="min-w-0 flex-1">
                         <span className="flex flex-wrap items-center gap-2">
                           <span className="text-sm font-medium">{name}</span>
-                          {node.builtIn ? (
-                            <Badge variant="secondary" className="text-primary">
-                              {t('groupRolesBuiltInRoleLabel')}
-                            </Badge>
-                          ) : null}
+                          <RoleBuiltInChip builtIn={node.builtIn} />
                           {!node.enabled ? (
                             <Badge variant="secondary" className="text-warning">
                               {t('rolesDisabled')}

@@ -49,7 +49,8 @@ pub use repository::{
     RolePageEntry, RoleQuery, RoleStateTransaction, ScopePageEntry, ScopeQuery,
     ScopeStateTransaction, SetClientScopesTransaction, SetRolePermissionsTransaction,
     SharedRbacManagementRepository, UpdateResourceTransaction, UpdateRoleTransaction,
-    UpdateScopeTransaction, UserRolePageData, UserRolePageEntry, UserRoleQuery,
+    UpdateScopeTransaction, UserRoleGrantPageData, UserRoleGrantPageEntry, UserRoleGrantQuery,
+    UserRolePageData, UserRolePageEntry, UserRoleQuery,
 };
 pub use resource::{
     ApiResourceRecord, CreateResourceCommand, ResourceFilter, ResourceOrder, ResourcePage,
@@ -66,9 +67,10 @@ pub use scope::{
 pub use service::RbacManagementService;
 pub use service_group::GroupManagementService;
 pub use user_role::{
-    AssignUserRolesCommand, EffectiveGroupPermissionSourceRecord, EffectivePermissionOrder,
-    EffectivePermissionPage, EffectivePermissionPageItem, EffectivePermissionPageRequest,
-    EffectivePermissionRecord, EffectivePermissionSourceRecord, RevokeUserRolesCommand,
-    RoleUserPageRequest, UserRoleMutationResult, UserRoleOrder, UserRolePage, UserRolePageItem,
-    UserRolePageRequest, UserRoleRecord,
+    AssignUserRolesCommand, AuthorizationSource, EffectiveGroupPermissionSourceRecord,
+    EffectivePermissionOrder, EffectivePermissionPage, EffectivePermissionPageItem,
+    EffectivePermissionPageRequest, EffectivePermissionRecord, EffectivePermissionSourceRecord,
+    InheritedUserRoleRecord, RevokeUserRolesCommand, RoleUserPageRequest, UserRoleGrant,
+    UserRoleGrantPage, UserRoleGrantPageItem, UserRoleMutationResult, UserRoleOrder, UserRolePage,
+    UserRolePageItem, UserRolePageRequest, UserRoleRecord,
 };

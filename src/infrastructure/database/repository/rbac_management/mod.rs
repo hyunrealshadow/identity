@@ -17,15 +17,16 @@ mod user_role;
 
 use async_trait::async_trait;
 use identity_application::rbac::{
-    ApiResourceRecord, AssignUserRolesTransaction, ClientScopePageEntry, ClientScopeQuery,
-    ClientScopeSetResult, CreateResourceTransaction, CreateRoleTransaction, CreateScopeTransaction,
-    EffectivePermissionPageData, EffectivePermissionQuery, RbacManagementRepository,
-    RbacManagementRepositoryError, RbacPageData, ResourcePageEntry, ResourceQuery,
-    ResourceStateTransaction, RevokeUserRolesTransaction, RoleFilter, RolePageEntry, RoleQuery,
-    RoleRecord, RoleStateTransaction, ScopeFilter, ScopeOid, ScopePageEntry, ScopeQuery,
+    ApiResourceRecord, AssignUserRolesTransaction, AuthorizationSource, ClientScopePageEntry,
+    ClientScopeQuery, ClientScopeSetResult, CreateResourceTransaction, CreateRoleTransaction,
+    CreateScopeTransaction, EffectivePermissionPageData, EffectivePermissionQuery,
+    RbacManagementRepository, RbacManagementRepositoryError, RbacPageData, ResourcePageEntry,
+    ResourceQuery, ResourceStateTransaction, RevokeUserRolesTransaction, RoleFilter, RolePageEntry,
+    RoleQuery, RoleRecord, RoleStateTransaction, ScopeFilter, ScopeOid, ScopePageEntry, ScopeQuery,
     ScopeRecord, ScopeStateTransaction, SetClientScopesTransaction, SetRolePermissionsTransaction,
     UpdateResourceTransaction, UpdateRoleTransaction, UpdateScopeTransaction,
-    UserRoleMutationResult, UserRolePageData, UserRoleQuery,
+    UserRoleGrantPageData, UserRoleGrantQuery, UserRoleMutationResult, UserRolePageData,
+    UserRoleQuery,
 };
 use identity_domain::{
     client::model::ClientOid,
@@ -186,6 +187,13 @@ impl RbacManagementRepository for RbacManagementRepositoryImpl {
         self.user_role_list(query).await
     }
 
+    async fn list_user_role_grants(
+        &self,
+        query: UserRoleGrantQuery,
+    ) -> Result<UserRoleGrantPageData, RbacManagementRepositoryError> {
+        self.user_role_grant_list(query).await
+    }
+
     async fn find_user_version(
         &self,
         user_oid: UserOid,
@@ -204,8 +212,9 @@ impl RbacManagementRepository for RbacManagementRepositoryImpl {
         &self,
         user_oid: UserOid,
         resource_oid: ResourceOid,
+        source: Option<AuthorizationSource>,
     ) -> Result<u64, RbacManagementRepositoryError> {
-        self.effective_count(user_oid, resource_oid).await
+        self.effective_count(user_oid, resource_oid, source).await
     }
 
     async fn list_effective_permissions(

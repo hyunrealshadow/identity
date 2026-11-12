@@ -20,7 +20,10 @@ use super::super::{
     role::{
         connection::EffectivePermissionConnection,
         query as role_query,
-        user_role::{EffectivePermissionOrder, UserRoleConnection, UserRoleOrder, load_user_roles},
+        user_role::{
+            AuthorizationSource, EffectivePermissionOrder, UserRoleConnection, UserRoleOrder,
+            load_user_roles,
+        },
     },
     user::access::ensure_user_management_read,
 };
@@ -121,8 +124,11 @@ impl UserNode {
         .await
     }
 
-    /// Roles assigned directly to the user, with the assignment facts on each
-    /// edge. `userVersion` is the expected version for assigning or revoking.
+    /// The user's roles, assigned directly or inherited through groups, with
+    /// the source on each edge. `source` narrows the list; leaving it unset or
+    /// choosing `GROUP` also needs the group membership and group role read
+    /// scopes. Inherited roles are live grants and never appear as revoked.
+    /// `userVersion` is the expected version for assigning or revoking.
     #[graphql(
         guard = "ManagementGuard::new(ManagementScope::RoleAssignmentsRead, ManagementTarget::instance()).and(ManagementGuard::new(ManagementScope::RolesRead, ManagementTarget::instance()))",
         directive = access::apply(ManagementGuard::policy(ManagementScope::RoleAssignmentsRead)),
@@ -133,6 +139,7 @@ impl UserNode {
     async fn roles(
         &self,
         ctx: &Context<'_>,
+        source: Option<AuthorizationSource>,
         enabled: Option<bool>,
         order_by: Option<UserRoleOrder>,
         #[graphql(validator(minimum = 1, maximum = 100))] first: Option<i32>,
@@ -145,6 +152,7 @@ impl UserNode {
             ctx,
             request_context(ctx)?,
             self.oid(),
+            source,
             enabled,
             order_by.unwrap_or_else(UserRoleOrder::default_order),
             page,
@@ -158,10 +166,14 @@ impl UserNode {
         complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * (1 + child_complexity)"
     )]
     #[allow(clippy::too_many_arguments)]
+    /// Permissions the user holds on one API resource. `source` keeps only
+    /// permissions reachable through that source and needs the group
+    /// membership and group role read scopes.
     async fn effective_permissions(
         &self,
         ctx: &Context<'_>,
         resource_id: ID,
+        source: Option<AuthorizationSource>,
         order_by: Option<EffectivePermissionOrder>,
         #[graphql(validator(minimum = 1, maximum = 100))] first: Option<i32>,
         after: Option<String>,
@@ -175,6 +187,7 @@ impl UserNode {
             request_context(ctx)?,
             self.oid(),
             resource,
+            source,
             order_by.unwrap_or_else(EffectivePermissionOrder::default_order),
             page,
         )
