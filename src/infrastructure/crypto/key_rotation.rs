@@ -88,13 +88,15 @@ fn generate_same_algorithm(
                 .map_err(|error| internal().with_source(error))?,
             certificate: None,
         };
-        return Ok((AsymmetricKeyAlgorithm::Rsa { bits }, data));
+        let algorithm = AsymmetricKeyAlgorithm::from_rsa_bits(bits).ok_or_else(internal)?;
+        return Ok((algorithm, data));
     }
     let algorithm = infer_algorithm_from_private_key_pem(previous_private_key)
         .map_err(|error| internal().with_source(error))?;
     let data = AsymmetricKeyGeneratorImpl
         .generate(&AsymmetricKeySpec {
-            algorithm: algorithm.clone(),
+            algorithm,
+            signing: None,
         })
         .map_err(|error| internal().with_source(error))?;
     Ok((algorithm, data))
@@ -136,7 +138,8 @@ mod tests {
         let algorithm = AsymmetricKeyAlgorithm::EcdsaP256;
         let mut previous = AsymmetricKeyGeneratorImpl
             .generate(&AsymmetricKeySpec {
-                algorithm: algorithm.clone(),
+                algorithm,
+                signing: None,
             })
             .unwrap();
         previous.certificate = Some(
@@ -186,7 +189,7 @@ mod tests {
             let previous = RsaPssKeyPair::generate(2048, hash, hash, salt_length).unwrap();
             let private = String::from_utf8(previous.to_pem_private_key()).unwrap();
             let (algorithm, next) = generate_same_algorithm(&private).unwrap();
-            assert_eq!(algorithm, AsymmetricKeyAlgorithm::Rsa { bits: 2048 });
+            assert_eq!(algorithm, AsymmetricKeyAlgorithm::Rsa2048);
             let jwks = generate_all_jwks_for_key(&next.private_key, "next", None).unwrap();
             assert_eq!(jwks[0].0, expected);
         }
@@ -200,7 +203,7 @@ mod tests {
             let certificate = generate_self_signed_certificate(
                 &private_key,
                 "id.unsvc.net",
-                &AsymmetricKeyAlgorithm::Rsa { bits: 2048 },
+                &AsymmetricKeyAlgorithm::Rsa2048,
             )
             .unwrap();
             let key = Key {

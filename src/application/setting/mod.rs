@@ -3,6 +3,7 @@ pub mod binding;
 pub mod definition;
 mod definitions;
 pub mod error;
+pub mod management;
 pub mod runtime;
 
 pub use binding::{SettingChanges, SettingRegistry, SettingsSnapshot, SettingsSource};

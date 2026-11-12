@@ -67,7 +67,9 @@ pub fn generate_self_signed_certificate(
     let mut key_usage = KeyUsage::new();
     key_usage.critical();
     match algorithm {
-        AsymmetricKeyAlgorithm::Rsa { .. } => {
+        AsymmetricKeyAlgorithm::Rsa2048
+        | AsymmetricKeyAlgorithm::Rsa3072
+        | AsymmetricKeyAlgorithm::Rsa4096 => {
             key_usage.digital_signature().key_encipherment();
         }
         AsymmetricKeyAlgorithm::EcdsaP256
@@ -124,9 +126,7 @@ fn certificate_digest(
     private_key_pem: &str,
     algorithm: &AsymmetricKeyAlgorithm,
 ) -> Result<MessageDigest, KeyMaterialError> {
-    if matches!(algorithm, AsymmetricKeyAlgorithm::Rsa { .. })
-        && RsaPssKeyPair::from_pem(private_key_pem, None, None, None).is_ok()
-    {
+    if algorithm.is_rsa() && RsaPssKeyPair::from_pem(private_key_pem, None, None, None).is_ok() {
         return if PS256.signer_from_pem(private_key_pem).is_ok() {
             Ok(MessageDigest::sha256())
         } else if PS384.signer_from_pem(private_key_pem).is_ok() {
@@ -143,7 +143,7 @@ fn certificate_digest(
         AsymmetricKeyAlgorithm::Ed25519 | AsymmetricKeyAlgorithm::Ed448 => MessageDigest::null(),
         AsymmetricKeyAlgorithm::EcdsaP384 => MessageDigest::sha384(),
         AsymmetricKeyAlgorithm::EcdsaP521 => MessageDigest::sha512(),
-        AsymmetricKeyAlgorithm::Rsa { bits } if *bits >= 4096 => MessageDigest::sha512(),
+        AsymmetricKeyAlgorithm::Rsa4096 => MessageDigest::sha512(),
         _ => MessageDigest::sha256(),
     })
 }

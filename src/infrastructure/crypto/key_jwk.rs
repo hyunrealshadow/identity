@@ -1,3 +1,4 @@
+use josekit::jwk::Jwk;
 use serde_json::{from_value, to_value};
 
 use crate::{
@@ -5,11 +6,31 @@ use crate::{
         error::{AppError, codes::key::KeyErrorCode},
         key::asymmetric::{GeneratedKeyJwk, KeyJwkGenerator},
     },
-    domain::key::PublicJwk,
-    infrastructure::crypto::key::generate_all_jwks_for_key,
+    domain::key::generator::KeyMaterialError,
+    domain::key::{JwaSigningAlgorithm, PublicJwk},
+    infrastructure::crypto::key::{generate_all_jwks_for_key, generate_jwks_for_key},
 };
 
 pub struct KeyJwkGeneratorImpl;
+
+fn bindings(
+    generated: Result<Vec<(String, Jwk)>, KeyMaterialError>,
+) -> Result<Vec<GeneratedKeyJwk>, AppError> {
+    generated
+        .map_err(AppError::map_source(KeyErrorCode::JwkGenerationFailed))?
+        .into_iter()
+        .map(|(algorithm, jwk)| {
+            let jwk_value = to_value(jwk)
+                .map_err(AppError::map_source(KeyErrorCode::JwkSerializationFailed))?;
+            let jwk = from_value::<PublicJwk>(jwk_value)
+                .map_err(AppError::map_source(KeyErrorCode::JwkSerializationFailed))?;
+            let algorithm = algorithm
+                .parse()
+                .map_err(|_| AppError::from_code(KeyErrorCode::UnsupportedAlgorithm))?;
+            Ok(GeneratedKeyJwk { algorithm, jwk })
+        })
+        .collect()
+}
 
 impl KeyJwkGenerator for KeyJwkGeneratorImpl {
     fn generate(
@@ -18,19 +39,25 @@ impl KeyJwkGenerator for KeyJwkGeneratorImpl {
         key_id: &str,
         certificate_pem: Option<&str>,
     ) -> Result<Vec<GeneratedKeyJwk>, AppError> {
-        generate_all_jwks_for_key(private_key_pem, key_id, certificate_pem)
-            .map_err(AppError::map_source(KeyErrorCode::JwkGenerationFailed))?
-            .into_iter()
-            .map(|(algorithm, jwk)| {
-                let jwk_value = to_value(jwk)
-                    .map_err(AppError::map_source(KeyErrorCode::JwkSerializationFailed))?;
-                let jwk = from_value::<PublicJwk>(jwk_value)
-                    .map_err(AppError::map_source(KeyErrorCode::JwkSerializationFailed))?;
-                let algorithm = algorithm
-                    .parse()
-                    .map_err(|_| AppError::from_code(KeyErrorCode::UnsupportedAlgorithm))?;
-                Ok(GeneratedKeyJwk { algorithm, jwk })
-            })
-            .collect()
+        bindings(generate_all_jwks_for_key(
+            private_key_pem,
+            key_id,
+            certificate_pem,
+        ))
+    }
+
+    fn generate_for(
+        &self,
+        private_key_pem: &str,
+        key_id: &str,
+        certificate_pem: Option<&str>,
+        signing: &[JwaSigningAlgorithm],
+    ) -> Result<Vec<GeneratedKeyJwk>, AppError> {
+        bindings(generate_jwks_for_key(
+            private_key_pem,
+            key_id,
+            certificate_pem,
+            signing,
+        ))
     }
 }

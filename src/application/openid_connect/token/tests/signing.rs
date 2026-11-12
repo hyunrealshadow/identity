@@ -148,6 +148,16 @@ impl KeyJwkGenerator for TestKeyJwkGenerator {
     ) -> Result<Vec<GeneratedKeyJwk>, AppError> {
         Ok(vec![])
     }
+
+    fn generate_for(
+        &self,
+        _private_key_pem: &str,
+        _key_id: &str,
+        _certificate_pem: Option<&str>,
+        _signing: &[identity_domain::key::JwaSigningAlgorithm],
+    ) -> Result<Vec<GeneratedKeyJwk>, AppError> {
+        Ok(vec![])
+    }
 }
 
 pub(super) fn test_key_jwk_generator() -> Arc<dyn KeyJwkGenerator> {

@@ -11,6 +11,7 @@ pub mod graphql;
 pub mod graphql_transport;
 pub mod group;
 pub mod install;
+pub mod instance;
 pub mod key;
 pub mod openid_connect;
 pub mod provider;
@@ -27,9 +28,10 @@ mod tests {
         client::ClientErrorCode, common::CommonErrorCode, data_protection::DataProtectionErrorCode,
         device::DeviceAuthorizationErrorCode, graphql::GraphqlErrorCode,
         graphql_transport::GraphqlTransportErrorCode, group::GroupErrorCode,
-        install::InstallErrorCode, key::KeyErrorCode, openid_connect::OpenIdConnectErrorCode,
-        provider::ProviderErrorCode, rbac::RbacErrorCode, registration::RegistrationErrorCode,
-        token::TokenErrorCode, user_management::UserManagementErrorCode,
+        install::InstallErrorCode, instance::InstanceErrorCode, key::KeyErrorCode,
+        openid_connect::OpenIdConnectErrorCode, provider::ProviderErrorCode, rbac::RbacErrorCode,
+        registration::RegistrationErrorCode, token::TokenErrorCode,
+        user_management::UserManagementErrorCode,
     };
     use crate::error::code::AppErrorCode;
     use std::{collections::HashSet, ops::RangeInclusive};
@@ -71,5 +73,6 @@ mod tests {
         check::<AuthorizationErrorCode>(&mut seen, 27000..=27099);
         check::<GraphqlTransportErrorCode>(&mut seen, 28100..=28199);
         check::<GraphqlErrorCode>(&mut seen, 28000..=28099);
+        check::<InstanceErrorCode>(&mut seen, 29000..=29099);
     }
 }

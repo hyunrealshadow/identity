@@ -23,11 +23,8 @@ pub fn generate_self_signed_tls_cert(domain: &str) -> Result<(String, String), K
     let key_pem =
         String::from_utf8(pkey.private_key_to_pem_pkcs8().map_err(internal)?).map_err(internal)?;
 
-    let cert_pem = generate_self_signed_certificate(
-        &key_pem,
-        domain,
-        &AsymmetricKeyAlgorithm::Rsa { bits: 2048 },
-    )?;
+    let cert_pem =
+        generate_self_signed_certificate(&key_pem, domain, &AsymmetricKeyAlgorithm::Rsa2048)?;
 
     Ok((cert_pem, key_pem))
 }

@@ -13,11 +13,17 @@ import { Route as AppRouteRouteImport } from './routes/_app/route'
 import { Route as CallbackRouteImport } from './routes/callback'
 import { Route as SignedOutRouteImport } from './routes/signed-out'
 import { Route as AppdashboardIndexRouteImport } from './routes/_app/(dashboard)/index'
+import { Route as AppinstanceSettingsRouteRouteImport } from './routes/_app/(instance)/settings/route'
 import { Route as AppclientManagementClientsIndexRouteImport } from './routes/_app/(client-management)/clients/index'
 import { Route as AppclientManagementClientsClientIdRouteRouteImport } from './routes/_app/(client-management)/clients/$clientId/route'
 import { Route as AppclientManagementClientsNewRouteImport } from './routes/_app/(client-management)/clients/new'
 import { Route as AppclientManagementResourcesIndexRouteImport } from './routes/_app/(client-management)/resources/index'
 import { Route as AppclientManagementResourcesResourceIdRouteRouteImport } from './routes/_app/(client-management)/resources/$resourceId/route'
+import { Route as AppinstanceSettingsIndexRouteImport } from './routes/_app/(instance)/settings/index'
+import { Route as AppinstanceSettingsAuthenticationRouteImport } from './routes/_app/(instance)/settings/authentication'
+import { Route as AppinstanceSettingsEncryptionKeysRouteImport } from './routes/_app/(instance)/settings/encryption-keys'
+import { Route as AppinstanceSettingsProtocolRouteImport } from './routes/_app/(instance)/settings/protocol'
+import { Route as AppinstanceSettingsSigningKeysRouteImport } from './routes/_app/(instance)/settings/signing-keys'
 import { Route as AppuserManagementGroupsIndexRouteImport } from './routes/_app/(user-management)/groups/index'
 import { Route as AppuserManagementGroupsGroupIdRouteRouteImport } from './routes/_app/(user-management)/groups/$groupId/route'
 import { Route as AppuserManagementGroupsNewRouteImport } from './routes/_app/(user-management)/groups/new'
@@ -67,6 +73,12 @@ const AppdashboardIndexRoute = AppdashboardIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppRouteRoute,
 } as any)
+const AppinstanceSettingsRouteRoute =
+  AppinstanceSettingsRouteRouteImport.update({
+    id: '/(instance)/settings',
+    path: '/settings',
+    getParentRoute: () => AppRouteRoute,
+  } as any)
 const AppclientManagementClientsIndexRoute =
   AppclientManagementClientsIndexRouteImport.update({
     id: '/(client-management)/clients/',
@@ -96,6 +108,36 @@ const AppclientManagementResourcesResourceIdRouteRoute =
     id: '/(client-management)/resources/$resourceId',
     path: '/resources/$resourceId',
     getParentRoute: () => AppRouteRoute,
+  } as any)
+const AppinstanceSettingsIndexRoute =
+  AppinstanceSettingsIndexRouteImport.update({
+    id: '/',
+    path: '/',
+    getParentRoute: () => AppinstanceSettingsRouteRoute,
+  } as any)
+const AppinstanceSettingsAuthenticationRoute =
+  AppinstanceSettingsAuthenticationRouteImport.update({
+    id: '/authentication',
+    path: '/authentication',
+    getParentRoute: () => AppinstanceSettingsRouteRoute,
+  } as any)
+const AppinstanceSettingsEncryptionKeysRoute =
+  AppinstanceSettingsEncryptionKeysRouteImport.update({
+    id: '/encryption-keys',
+    path: '/encryption-keys',
+    getParentRoute: () => AppinstanceSettingsRouteRoute,
+  } as any)
+const AppinstanceSettingsProtocolRoute =
+  AppinstanceSettingsProtocolRouteImport.update({
+    id: '/protocol',
+    path: '/protocol',
+    getParentRoute: () => AppinstanceSettingsRouteRoute,
+  } as any)
+const AppinstanceSettingsSigningKeysRoute =
+  AppinstanceSettingsSigningKeysRouteImport.update({
+    id: '/signing-keys',
+    path: '/signing-keys',
+    getParentRoute: () => AppinstanceSettingsRouteRoute,
   } as any)
 const AppuserManagementGroupsIndexRoute =
   AppuserManagementGroupsIndexRouteImport.update({
@@ -278,17 +320,23 @@ export interface FileRoutesByFullPath {
   '/': typeof AppdashboardIndexRoute
   '/callback': typeof CallbackRoute
   '/signed-out': typeof SignedOutRoute
+  '/settings': typeof AppinstanceSettingsRouteRouteWithChildren
   '/clients/$clientId': typeof AppclientManagementClientsClientIdRouteRouteWithChildren
   '/resources/$resourceId': typeof AppclientManagementResourcesResourceIdRouteRouteWithChildren
   '/groups/$groupId': typeof AppuserManagementGroupsGroupIdRouteRouteWithChildren
   '/roles/$roleId': typeof AppuserManagementRolesRoleIdRouteRouteWithChildren
   '/users/$userId': typeof AppuserManagementUsersUserIdRouteRouteWithChildren
   '/clients/new': typeof AppclientManagementClientsNewRoute
+  '/settings/authentication': typeof AppinstanceSettingsAuthenticationRoute
+  '/settings/encryption-keys': typeof AppinstanceSettingsEncryptionKeysRoute
+  '/settings/protocol': typeof AppinstanceSettingsProtocolRoute
+  '/settings/signing-keys': typeof AppinstanceSettingsSigningKeysRoute
   '/groups/new': typeof AppuserManagementGroupsNewRoute
   '/roles/new': typeof AppuserManagementRolesNewRoute
   '/users/new': typeof AppuserManagementUsersNewRoute
   '/clients/': typeof AppclientManagementClientsIndexRoute
   '/resources/': typeof AppclientManagementResourcesIndexRoute
+  '/settings/': typeof AppinstanceSettingsIndexRoute
   '/groups/': typeof AppuserManagementGroupsIndexRoute
   '/roles/': typeof AppuserManagementRolesIndexRoute
   '/users/': typeof AppuserManagementUsersIndexRoute
@@ -318,11 +366,16 @@ export interface FileRoutesByTo {
   '/signed-out': typeof SignedOutRoute
   '/': typeof AppdashboardIndexRoute
   '/clients/new': typeof AppclientManagementClientsNewRoute
+  '/settings/authentication': typeof AppinstanceSettingsAuthenticationRoute
+  '/settings/encryption-keys': typeof AppinstanceSettingsEncryptionKeysRoute
+  '/settings/protocol': typeof AppinstanceSettingsProtocolRoute
+  '/settings/signing-keys': typeof AppinstanceSettingsSigningKeysRoute
   '/groups/new': typeof AppuserManagementGroupsNewRoute
   '/roles/new': typeof AppuserManagementRolesNewRoute
   '/users/new': typeof AppuserManagementUsersNewRoute
   '/clients': typeof AppclientManagementClientsIndexRoute
   '/resources': typeof AppclientManagementResourcesIndexRoute
+  '/settings': typeof AppinstanceSettingsIndexRoute
   '/groups': typeof AppuserManagementGroupsIndexRoute
   '/roles': typeof AppuserManagementRolesIndexRoute
   '/users': typeof AppuserManagementUsersIndexRoute
@@ -352,6 +405,7 @@ export interface FileRoutesById {
   '/_app': typeof AppRouteRouteWithChildren
   '/callback': typeof CallbackRoute
   '/signed-out': typeof SignedOutRoute
+  '/_app/(instance)/settings': typeof AppinstanceSettingsRouteRouteWithChildren
   '/_app/(dashboard)/': typeof AppdashboardIndexRoute
   '/_app/(client-management)/clients/$clientId': typeof AppclientManagementClientsClientIdRouteRouteWithChildren
   '/_app/(client-management)/resources/$resourceId': typeof AppclientManagementResourcesResourceIdRouteRouteWithChildren
@@ -359,11 +413,16 @@ export interface FileRoutesById {
   '/_app/(user-management)/roles/$roleId': typeof AppuserManagementRolesRoleIdRouteRouteWithChildren
   '/_app/(user-management)/users/$userId': typeof AppuserManagementUsersUserIdRouteRouteWithChildren
   '/_app/(client-management)/clients/new': typeof AppclientManagementClientsNewRoute
+  '/_app/(instance)/settings/authentication': typeof AppinstanceSettingsAuthenticationRoute
+  '/_app/(instance)/settings/encryption-keys': typeof AppinstanceSettingsEncryptionKeysRoute
+  '/_app/(instance)/settings/protocol': typeof AppinstanceSettingsProtocolRoute
+  '/_app/(instance)/settings/signing-keys': typeof AppinstanceSettingsSigningKeysRoute
   '/_app/(user-management)/groups/new': typeof AppuserManagementGroupsNewRoute
   '/_app/(user-management)/roles/new': typeof AppuserManagementRolesNewRoute
   '/_app/(user-management)/users/new': typeof AppuserManagementUsersNewRoute
   '/_app/(client-management)/clients/': typeof AppclientManagementClientsIndexRoute
   '/_app/(client-management)/resources/': typeof AppclientManagementResourcesIndexRoute
+  '/_app/(instance)/settings/': typeof AppinstanceSettingsIndexRoute
   '/_app/(user-management)/groups/': typeof AppuserManagementGroupsIndexRoute
   '/_app/(user-management)/roles/': typeof AppuserManagementRolesIndexRoute
   '/_app/(user-management)/users/': typeof AppuserManagementUsersIndexRoute
@@ -394,17 +453,23 @@ export interface FileRouteTypes {
     | '/'
     | '/callback'
     | '/signed-out'
+    | '/settings'
     | '/clients/$clientId'
     | '/resources/$resourceId'
     | '/groups/$groupId'
     | '/roles/$roleId'
     | '/users/$userId'
     | '/clients/new'
+    | '/settings/authentication'
+    | '/settings/encryption-keys'
+    | '/settings/protocol'
+    | '/settings/signing-keys'
     | '/groups/new'
     | '/roles/new'
     | '/users/new'
     | '/clients/'
     | '/resources/'
+    | '/settings/'
     | '/groups/'
     | '/roles/'
     | '/users/'
@@ -434,11 +499,16 @@ export interface FileRouteTypes {
     | '/signed-out'
     | '/'
     | '/clients/new'
+    | '/settings/authentication'
+    | '/settings/encryption-keys'
+    | '/settings/protocol'
+    | '/settings/signing-keys'
     | '/groups/new'
     | '/roles/new'
     | '/users/new'
     | '/clients'
     | '/resources'
+    | '/settings'
     | '/groups'
     | '/roles'
     | '/users'
@@ -467,6 +537,7 @@ export interface FileRouteTypes {
     | '/_app'
     | '/callback'
     | '/signed-out'
+    | '/_app/(instance)/settings'
     | '/_app/(dashboard)/'
     | '/_app/(client-management)/clients/$clientId'
     | '/_app/(client-management)/resources/$resourceId'
@@ -474,11 +545,16 @@ export interface FileRouteTypes {
     | '/_app/(user-management)/roles/$roleId'
     | '/_app/(user-management)/users/$userId'
     | '/_app/(client-management)/clients/new'
+    | '/_app/(instance)/settings/authentication'
+    | '/_app/(instance)/settings/encryption-keys'
+    | '/_app/(instance)/settings/protocol'
+    | '/_app/(instance)/settings/signing-keys'
     | '/_app/(user-management)/groups/new'
     | '/_app/(user-management)/roles/new'
     | '/_app/(user-management)/users/new'
     | '/_app/(client-management)/clients/'
     | '/_app/(client-management)/resources/'
+    | '/_app/(instance)/settings/'
     | '/_app/(user-management)/groups/'
     | '/_app/(user-management)/roles/'
     | '/_app/(user-management)/users/'
@@ -540,6 +616,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppdashboardIndexRouteImport
       parentRoute: typeof AppRouteRoute
     }
+    '/_app/(instance)/settings': {
+      id: '/_app/(instance)/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AppinstanceSettingsRouteRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
     '/_app/(client-management)/clients/': {
       id: '/_app/(client-management)/clients/'
       path: '/clients'
@@ -574,6 +657,41 @@ declare module '@tanstack/react-router' {
       fullPath: '/resources/$resourceId'
       preLoaderRoute: typeof AppclientManagementResourcesResourceIdRouteRouteImport
       parentRoute: typeof AppRouteRoute
+    }
+    '/_app/(instance)/settings/': {
+      id: '/_app/(instance)/settings/'
+      path: '/'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof AppinstanceSettingsIndexRouteImport
+      parentRoute: typeof AppinstanceSettingsRouteRoute
+    }
+    '/_app/(instance)/settings/authentication': {
+      id: '/_app/(instance)/settings/authentication'
+      path: '/authentication'
+      fullPath: '/settings/authentication'
+      preLoaderRoute: typeof AppinstanceSettingsAuthenticationRouteImport
+      parentRoute: typeof AppinstanceSettingsRouteRoute
+    }
+    '/_app/(instance)/settings/encryption-keys': {
+      id: '/_app/(instance)/settings/encryption-keys'
+      path: '/encryption-keys'
+      fullPath: '/settings/encryption-keys'
+      preLoaderRoute: typeof AppinstanceSettingsEncryptionKeysRouteImport
+      parentRoute: typeof AppinstanceSettingsRouteRoute
+    }
+    '/_app/(instance)/settings/protocol': {
+      id: '/_app/(instance)/settings/protocol'
+      path: '/protocol'
+      fullPath: '/settings/protocol'
+      preLoaderRoute: typeof AppinstanceSettingsProtocolRouteImport
+      parentRoute: typeof AppinstanceSettingsRouteRoute
+    }
+    '/_app/(instance)/settings/signing-keys': {
+      id: '/_app/(instance)/settings/signing-keys'
+      path: '/signing-keys'
+      fullPath: '/settings/signing-keys'
+      preLoaderRoute: typeof AppinstanceSettingsSigningKeysRouteImport
+      parentRoute: typeof AppinstanceSettingsRouteRoute
     }
     '/_app/(user-management)/groups/': {
       id: '/_app/(user-management)/groups/'
@@ -781,6 +899,30 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AppinstanceSettingsRouteRouteChildren {
+  AppinstanceSettingsAuthenticationRoute: typeof AppinstanceSettingsAuthenticationRoute
+  AppinstanceSettingsEncryptionKeysRoute: typeof AppinstanceSettingsEncryptionKeysRoute
+  AppinstanceSettingsProtocolRoute: typeof AppinstanceSettingsProtocolRoute
+  AppinstanceSettingsSigningKeysRoute: typeof AppinstanceSettingsSigningKeysRoute
+  AppinstanceSettingsIndexRoute: typeof AppinstanceSettingsIndexRoute
+}
+
+const AppinstanceSettingsRouteRouteChildren: AppinstanceSettingsRouteRouteChildren =
+  {
+    AppinstanceSettingsAuthenticationRoute:
+      AppinstanceSettingsAuthenticationRoute,
+    AppinstanceSettingsEncryptionKeysRoute:
+      AppinstanceSettingsEncryptionKeysRoute,
+    AppinstanceSettingsProtocolRoute: AppinstanceSettingsProtocolRoute,
+    AppinstanceSettingsSigningKeysRoute: AppinstanceSettingsSigningKeysRoute,
+    AppinstanceSettingsIndexRoute: AppinstanceSettingsIndexRoute,
+  }
+
+const AppinstanceSettingsRouteRouteWithChildren =
+  AppinstanceSettingsRouteRoute._addFileChildren(
+    AppinstanceSettingsRouteRouteChildren,
+  )
+
 interface AppclientManagementClientsClientIdRouteRouteChildren {
   AppclientManagementClientsClientIdCredentialsRoute: typeof AppclientManagementClientsClientIdCredentialsRoute
   AppclientManagementClientsClientIdMetadataRoute: typeof AppclientManagementClientsClientIdMetadataRoute
@@ -902,6 +1044,7 @@ const AppuserManagementUsersUserIdRouteRouteWithChildren =
   )
 
 interface AppRouteRouteChildren {
+  AppinstanceSettingsRouteRoute: typeof AppinstanceSettingsRouteRouteWithChildren
   AppdashboardIndexRoute: typeof AppdashboardIndexRoute
   AppclientManagementClientsClientIdRouteRoute: typeof AppclientManagementClientsClientIdRouteRouteWithChildren
   AppclientManagementResourcesResourceIdRouteRoute: typeof AppclientManagementResourcesResourceIdRouteRouteWithChildren
@@ -920,6 +1063,7 @@ interface AppRouteRouteChildren {
 }
 
 const AppRouteRouteChildren: AppRouteRouteChildren = {
+  AppinstanceSettingsRouteRoute: AppinstanceSettingsRouteRouteWithChildren,
   AppdashboardIndexRoute: AppdashboardIndexRoute,
   AppclientManagementClientsClientIdRouteRoute:
     AppclientManagementClientsClientIdRouteRouteWithChildren,

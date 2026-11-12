@@ -1,5 +1,19 @@
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+  InputGroupText,
+} from '@identity/ui/components/input-group'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@identity/ui/components/select'
 import { Skeleton } from '@identity/ui/components/skeleton'
-import { createContext, useContext, type ReactNode } from 'react'
+import { Switch } from '@identity/ui/components/switch'
+import { createContext, useContext, useId, type ReactNode } from 'react'
 
 /** Row padding inside a {@link SettingsGroup}; compact matches table cells. */
 const SettingsDensity = createContext<'comfortable' | 'compact'>('comfortable')
@@ -182,5 +196,126 @@ export function SettingsGroupSkeleton({
         ))}
       </div>
     </section>
+  )
+}
+
+/** A switch whose name and explanation are shown by the surrounding row. */
+export function SettingsSwitch({
+  label,
+  isSelected,
+  onChange,
+  isDisabled = false,
+}: {
+  label: string
+  isSelected: boolean
+  onChange: (value: boolean) => void
+  isDisabled?: boolean
+}) {
+  return (
+    <Switch
+      aria-label={label}
+      checked={isSelected}
+      onCheckedChange={onChange}
+      disabled={isDisabled}
+    />
+  )
+}
+
+/** A compact select shown at the end of a row. */
+export function SettingsSelect({
+  label,
+  value,
+  onChange,
+  options,
+  isDisabled = false,
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+  options: ReadonlyArray<{ id: string; label: string }>
+  isDisabled?: boolean
+}) {
+  return (
+    <Select
+      value={value}
+      onValueChange={(next) => {
+        if (next !== null) onChange(String(next))
+      }}
+      items={options.map((option) => ({
+        value: option.id,
+        label: option.label,
+      }))}
+      disabled={isDisabled}
+    >
+      <SelectTrigger aria-label={label} className="min-h-8 min-w-40 py-1">
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {options.map((option) => (
+          <SelectItem key={option.id} value={option.id}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  )
+}
+
+/**
+ * A whole-number input at the end of a row. Its unit sits inside the field,
+ * so every row's control keeps the same width and right edge as a
+ * {@link SettingsSelect}. The native input stays the source of the value;
+ * the caller shows `error` below the row.
+ */
+export function SettingsNumberInput({
+  name,
+  label,
+  value,
+  onChange,
+  min,
+  max,
+  unit,
+  invalid = false,
+  errorId,
+  isDisabled = false,
+}: {
+  name: string
+  label: string
+  value: string
+  onChange: (value: string) => void
+  min?: number
+  max?: number
+  unit?: string
+  invalid?: boolean
+  errorId?: string
+  isDisabled?: boolean
+}) {
+  const unitId = useId()
+  return (
+    <InputGroup className="w-40" data-disabled={isDisabled || undefined}>
+      <InputGroupInput
+        name={name}
+        type="number"
+        inputMode="numeric"
+        step={1}
+        min={min}
+        max={max}
+        value={value}
+        onChange={(event) => onChange(event.currentTarget.value)}
+        aria-label={label}
+        aria-invalid={invalid || undefined}
+        aria-describedby={
+          [unit ? unitId : undefined, invalid ? errorId : undefined].filter(Boolean).join(' ') ||
+          undefined
+        }
+        disabled={isDisabled}
+        className="tabular-nums"
+      />
+      {unit ? (
+        <InputGroupAddon align="inline-end">
+          <InputGroupText id={unitId}>{unit}</InputGroupText>
+        </InputGroupAddon>
+      ) : null}
+    </InputGroup>
   )
 }

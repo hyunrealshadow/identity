@@ -1,4 +1,5 @@
 import clientsZhCN from '#/modules/client-management/clients/locales/zh-CN'
+import instanceZhCN from '#/modules/instance/locales/zh-CN'
 import resourcesZhCN from '#/modules/client-management/resources/locales/zh-CN'
 import dashboardZhCN from '#/modules/dashboard/locales/zh-CN'
 import userManagementZhCN from '#/modules/user-management/locales/zh-CN'
@@ -200,6 +201,7 @@ const zhCN = {
   ...permissionsZhCN,
   ...resourcesZhCN,
   ...clientsZhCN,
+  ...instanceZhCN,
 } satisfies Record<keyof typeof enUS, string>
 
 export default zhCN

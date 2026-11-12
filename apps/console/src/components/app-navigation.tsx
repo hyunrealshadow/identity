@@ -14,6 +14,7 @@ import {
   ChevronsRight,
   LayoutDashboard,
   Menu,
+  Settings,
   Shield,
   Users,
   UsersRound,
@@ -24,7 +25,14 @@ import { useTranslator, type MessageKey } from '#/lib/i18n'
 
 interface NavEntry {
   label: MessageKey
-  to?: '/' | '/users' | '/groups' | '/roles' | '/clients' | '/resources'
+  to?:
+    | '/'
+    | '/users'
+    | '/groups'
+    | '/roles'
+    | '/clients'
+    | '/resources'
+    | '/settings'
   icon: LucideIcon
 }
 
@@ -53,6 +61,12 @@ const groups: NavGroup[] = [
       { label: 'navUsers', to: '/users', icon: Users },
       { label: 'navGroups', to: '/groups', icon: UsersRound },
       { label: 'navRoles', to: '/roles', icon: Shield },
+    ],
+  },
+  {
+    label: 'navInstance',
+    entries: [
+      { label: 'navSettings', to: '/settings', icon: Settings },
     ],
   },
 ]

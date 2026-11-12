@@ -51,19 +51,19 @@ impl CachedRuntimeKeyRingProvider {
             let KeyData::Asymmetric(data) = &key.data else {
                 continue;
             };
-            let Some(algorithm) = self
-                .signing_algorithm_detector
-                .detect(&key)
-                .into_iter()
-                .next()
-            else {
-                continue;
-            };
-            let Some(binding) = self
-                .key_jwk_repo
-                .find_active_by_key_oid_and_algorithm(key.oid, algorithm)
-                .await?
-            else {
+            // A key signs only with the algorithms it publishes a binding for.
+            let mut found = None;
+            for algorithm in self.signing_algorithm_detector.detect(&key) {
+                if let Some(binding) = self
+                    .key_jwk_repo
+                    .find_active_by_key_oid_and_algorithm(key.oid, algorithm)
+                    .await?
+                {
+                    found = Some((algorithm, binding));
+                    break;
+                }
+            }
+            let Some((algorithm, binding)) = found else {
                 continue;
             };
 

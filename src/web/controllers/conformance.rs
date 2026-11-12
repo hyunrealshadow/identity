@@ -29,7 +29,7 @@ async fn rotate_keys(depot: &mut Depot, res: &mut Response) -> JsonWebResult<()>
         .services()
         .key()
         .generate_and_store(GenerateAsymmetricKeyInput {
-            algorithm: AsymmetricKeyAlgorithm::Rsa { bits: 2048 },
+            algorithm: AsymmetricKeyAlgorithm::Rsa2048,
             certificate: None,
         })
         .await?;

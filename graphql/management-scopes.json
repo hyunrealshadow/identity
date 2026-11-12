@@ -293,6 +293,48 @@
     "reserved": true
   },
   {
+    "scope": "management.key.read",
+    "action": "key.read",
+    "roles": [
+      "viewer",
+      "admin",
+      "owner"
+    ],
+    "authentication": "aal2",
+    "machineAllowed": true,
+    "reserved": true
+  },
+  {
+    "scope": "management.key.create",
+    "action": "key.create",
+    "roles": [
+      "owner"
+    ],
+    "authentication": "recent_aal2",
+    "machineAllowed": false,
+    "reserved": true
+  },
+  {
+    "scope": "management.key.rotate",
+    "action": "key.rotate",
+    "roles": [
+      "owner"
+    ],
+    "authentication": "recent_aal2",
+    "machineAllowed": false,
+    "reserved": true
+  },
+  {
+    "scope": "management.key.revoke",
+    "action": "key.revoke",
+    "roles": [
+      "owner"
+    ],
+    "authentication": "recent_aal2",
+    "machineAllowed": false,
+    "reserved": true
+  },
+  {
     "scope": "management.audit.read",
     "action": "audit.read",
     "roles": [

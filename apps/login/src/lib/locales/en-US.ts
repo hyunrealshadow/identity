@@ -199,6 +199,8 @@ const enUS = {
   installConsoleOriginDescription: 'Enter the HTTPS origin without a path. Console uses /console automatically.',
   installAdminUsername: 'Administrator username',
   installAdminEmail: 'Administrator email',
+  installSigningAlgorithm: 'Token signing algorithm',
+  installSigningAlgorithmDescription: 'The first signing key signs with this algorithm. You can add keys for other algorithms in the Console later.',
   installPassword: 'Password',
   installConfirmPassword: 'Confirm password',
   installSubmit: 'Install',

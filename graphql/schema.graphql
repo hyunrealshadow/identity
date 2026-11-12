@@ -80,6 +80,21 @@ type AuthenticationContext {
 	recent: Boolean!
 }
 
+type AuthenticationSettings {
+	"""
+	Reject passwords that appear in known breaches.
+	"""
+	breachedPasswordCheckEnabled: Boolean!
+	"""
+	Argon2id cost for newly stored password hashes.
+	"""
+	passwordHashing: PasswordHashing!
+	"""
+	UUID optimistic-lock version of this section.
+	"""
+	version: UUID!
+}
+
 """
 Where a user's role or permission comes from.
 """
@@ -487,6 +502,16 @@ input CreateScopeInput {
 	clientMutationId: String
 }
 
+input CreateSigningKeyInput {
+	algorithm: SigningAlgorithm!
+	"""
+	A key the algorithm signs with, from `signingKeyAlgorithms`. Needed
+	only where it offers several (EdDSA); omitted selects its default.
+	"""
+	keyAlgorithm: KeyAlgorithm
+	clientMutationId: String
+}
+
 input CreateUserInput {
 	username: String!
 	email: String!
@@ -576,6 +601,13 @@ type EffectivePermissions {
 	grantedScopes: [String!]!
 	effectiveScopes: [String!]!
 	authentication: AuthenticationContext!
+}
+
+type GeneralSettings {
+	issuer: String
+	loginUrl: String
+	consoleUrl: String
+	initializedAt: DateTime
 }
 
 type Group implements Node {
@@ -843,6 +875,20 @@ type InstanceSessionOverview {
 	createdLast24Hours: Int!
 }
 
+type InstanceSettings {
+	"""
+	Where this instance is served. Set at installation; read-only.
+	"""
+	general: GeneralSettings!
+	protocol: ProtocolSettings!
+	authentication: AuthenticationSettings!
+}
+
+type InstanceSettingsPayload {
+	settings: InstanceSettings @access(policy: {scopes: ["management.setting.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	clientMutationId: String
+}
+
 type InstanceUserOverview {
 	total: Int!
 	enabled: Int!
@@ -851,9 +897,135 @@ type InstanceUserOverview {
 }
 
 """
+Inclusive bounds the instance accepts for one numeric setting.
+"""
+type IntRange {
+	min: Int!
+	max: Int!
+}
+
+"""
 A scalar that can represent any JSON value.
 """
 scalar JSON
+
+type Key {
+	id: ID!
+	"""
+	How operators and relying parties identify the key: the `kid` of a
+	signing key's signing binding, or the key's own UUID.
+	"""
+	keyId: String!
+	use: KeyUse!
+	status: KeyStatus!
+	"""
+	Whether this key signs new tokens or protects new data on this instance.
+	"""
+	inUse: Boolean!
+	"""
+	JWA algorithms of a signing key, or the cipher of an encryption key.
+	"""
+	algorithms: [String!]!
+	"""
+	Published `kid` values of a signing key.
+	"""
+	keyIds: [String!]!
+	hasCertificate: Boolean!
+	"""
+	The key this one replaced.
+	"""
+	rotatedFromId: ID
+	createdAt: DateTime!
+	expiresAt: DateTime
+	rotatedAt: DateTime
+	revokedAt: DateTime
+}
+
+"""
+A key type this instance generates.
+"""
+enum KeyAlgorithm {
+	RSA_2048
+	RSA_3072
+	RSA_4096
+	ECDSA_P256
+	ECDSA_P384
+	ECDSA_P521
+	ECDSA_SECP256K1
+	ED25519
+	ED448
+	X25519
+	X448
+}
+
+type KeyConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [KeyEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [Key!]!
+	totalCount: Int!
+}
+
+"""
+An edge in a connection.
+"""
+type KeyEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: Key!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
+}
+
+input KeyFilter {
+	use: KeyUse
+	statuses: [KeyStatus!]
+}
+
+input KeyLifecycleInput {
+	id: ID!
+	clientMutationId: String
+}
+
+type KeyPayload {
+	key: Key @access(policy: {scopes: ["management.key.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	clientMutationId: String
+}
+
+enum KeyStatus {
+	"""
+	Used for new signatures or new encryption.
+	"""
+	ACTIVE
+	"""
+	Replaced by a successor; still verifies or decrypts until it expires.
+	"""
+	RETIRED
+	EXPIRED
+	REVOKED
+}
+
+enum KeyUse {
+	"""
+	Signs tokens; its public part is published in the JWKS.
+	"""
+	SIGNING
+	"""
+	Protects sessions, tokens and cursors.
+	"""
+	ENCRYPTION
+}
 
 type LocalizedText {
 	locale: String!
@@ -955,6 +1127,39 @@ type MutationRoot {
 	client itself.
 	"""
 	setClientScopes(input: SetClientScopesInput!): ClientScopeSetPayload! @access(policy: {scopes: ["management.client.scope"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
+	Replace the instance-wide OAuth and OpenID Connect protocol defaults.
+	"""
+	updateProtocolSettings(input: UpdateProtocolSettingsInput!): InstanceSettingsPayload! @access(policy: {scopes: ["management.setting.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	"""
+	Replace the password policy and the password hashing cost. New hashing
+	parameters apply as users next set or sign in with their password.
+	"""
+	updateAuthenticationSettings(input: UpdateAuthenticationSettingsInput!): InstanceSettingsPayload! @access(policy: {scopes: ["management.setting.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	"""
+	Add a signing key with another algorithm. It becomes the newest active
+	signing key; existing keys keep serving clients that ask for their
+	algorithm.
+	"""
+	createSigningKey(input: CreateSigningKeyInput!): KeyPayload! @access(policy: {scopes: ["management.key.create"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	"""
+	Replace a key in use with a new key of the same algorithm. The old key
+	retires: it keeps verifying signatures or decrypting existing data
+	until it expires.
+	"""
+	rotateKey(input: KeyLifecycleInput!): RotateKeyPayload! @access(policy: {scopes: ["management.key.rotate"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	"""
+	Rotate a key in use and revoke it at once. Tokens it signed stop
+	validating and data it protected can no longer be read, so sessions and
+	tokens it protected end. Requires both rotate and revoke permissions.
+	"""
+	rotateAndRevokeKey(input: KeyLifecycleInput!): RotateKeyPayload! @access(policy: {scopes: ["management.key.rotate", "management.key.revoke"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	"""
+	Revoke a retired or expired key. A signing key leaves the published key
+	set; data protected by an encryption key can no longer be read, which
+	ends the sessions and tokens it protected.
+	"""
+	revokeKey(input: KeyLifecycleInput!): KeyPayload! @access(policy: {scopes: ["management.key.revoke"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
 }
 
 """
@@ -999,9 +1204,46 @@ type PasskeyInfo {
 	name: String!
 }
 
+type PasswordHashing {
+	timeCost: Int!
+	timeCostRange: IntRange!
+	memoryCostKib: Int!
+	memoryCostKibRange: IntRange!
+	parallelism: Int!
+	parallelismRange: IntRange!
+}
+
+input PasswordHashingInput {
+	timeCost: Int!
+	memoryCostKib: Int!
+	parallelism: Int!
+}
+
 enum PreferredMfaMethod {
 	PASSKEY
 	OTP
+}
+
+type ProtocolSettings {
+	"""
+	OAuth rules for clients without their own override.
+	"""
+	oauthVersion: ClientOAuthVersion!
+	requirePushedAuthorizationRequests: Boolean!
+	pushedAuthorizationRequestLifetimeSeconds: Int!
+	pushedAuthorizationRequestLifetimeRange: IntRange!
+	deviceAuthorizationRequestLifetimeSeconds: Int!
+	deviceAuthorizationRequestLifetimeRange: IntRange!
+	deviceAuthorizationPollingIntervalSeconds: Int!
+	deviceAuthorizationPollingIntervalRange: IntRange!
+	"""
+	Whether anyone may register a client at the registration endpoint.
+	"""
+	dynamicRegistrationEnabled: Boolean!
+	"""
+	UUID optimistic-lock version of this section.
+	"""
+	version: UUID!
 }
 
 """
@@ -1057,6 +1299,19 @@ type QueryRoot {
 	accountPermissions(resourceId: ID!, orderBy: EffectivePermissionOrder, first: Int, after: String, last: Int, before: String): EffectivePermissionConnection! @access(policy: {scopes: ["account.read"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
 	client(id: ID!): Client @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	clients(filter: ClientFilter, orderBy: ClientOrder, first: Int, after: String, last: Int, before: String): ClientConnection! @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
+	Instance-wide settings as currently stored.
+	"""
+	instanceSettings: InstanceSettings @access(policy: {scopes: ["management.setting.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
+	JWA algorithms a signing key can be added with, and the key each one
+	generates.
+	"""
+	signingKeyAlgorithms: [SigningKeyAlgorithm!]! @access(policy: {scopes: ["management.key.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
+	Signing and data encryption keys, newest first.
+	"""
+	keys(filter: KeyFilter, first: Int, after: String, last: Int, before: String): KeyConnection! @access(policy: {scopes: ["management.key.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 }
 
 type RecoveryCodeEnrollmentPayload {
@@ -1329,6 +1584,18 @@ input RotateClientSecretInput {
 	clientMutationId: String
 }
 
+type RotateKeyPayload {
+	"""
+	The retired key.
+	"""
+	key: Key @access(policy: {scopes: ["management.key.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
+	The key now in use.
+	"""
+	successor: Key @access(policy: {scopes: ["management.key.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	clientMutationId: String
+}
+
 type Scope implements Node {
 	id: ID!
 	"""
@@ -1503,6 +1770,35 @@ input SetRolePermissionsInput {
 	clientMutationId: String
 }
 
+"""
+A JWA algorithm a signing key signs with.
+"""
+enum SigningAlgorithm {
+	RS256
+	RS384
+	RS512
+	PS256
+	PS384
+	PS512
+	ES256
+	ES384
+	ES512
+	ES256K
+	EdDSA
+}
+
+"""
+An algorithm a new signing key can sign with, and one key it can use.
+"""
+type SigningKeyAlgorithm {
+	algorithm: SigningAlgorithm!
+	keyAlgorithm: KeyAlgorithm!
+	"""
+	The key as an operator reads it, such as `ECDSA P-256` or `RSA 3072`.
+	"""
+	keyName: String!
+}
+
 enum TotpAlgorithm {
 	SHA1
 	SHA256
@@ -1530,6 +1826,13 @@ input UnlockUserInput {
 	id: ID!
 	expectedVersion: UUID!
 	reason: String! = ""
+	clientMutationId: String
+}
+
+input UpdateAuthenticationSettingsInput {
+	breachedPasswordCheckEnabled: Boolean!
+	passwordHashing: PasswordHashingInput!
+	expectedVersion: UUID!
 	clientMutationId: String
 }
 
@@ -1585,6 +1888,17 @@ input UpdateProfileInput {
 
 type UpdateProfilePayload {
 	user: User!
+	clientMutationId: String
+}
+
+input UpdateProtocolSettingsInput {
+	oauthVersion: ClientOAuthVersion!
+	requirePushedAuthorizationRequests: Boolean!
+	pushedAuthorizationRequestLifetimeSeconds: Int!
+	deviceAuthorizationRequestLifetimeSeconds: Int!
+	deviceAuthorizationPollingIntervalSeconds: Int!
+	dynamicRegistrationEnabled: Boolean!
+	expectedVersion: UUID!
 	clientMutationId: String
 }
 

@@ -3242,6 +3242,87 @@
     "module": "client"
   },
   {
+    "code": 29000,
+    "kind": "conflict",
+    "fluentKey": "E29000",
+    "requiredParams": [],
+    "optionalParams": [
+      "current_version"
+    ],
+    "module": "instance"
+  },
+  {
+    "code": 29001,
+    "kind": "validation",
+    "fluentKey": "E29001",
+    "requiredParams": [
+      "min",
+      "max"
+    ],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29002,
+    "kind": "validation",
+    "fluentKey": "E29002",
+    "requiredParams": [
+      "max"
+    ],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29003,
+    "kind": "internal",
+    "fluentKey": "E29003",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29004,
+    "kind": "not_found",
+    "fluentKey": "E29004",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29005,
+    "kind": "conflict",
+    "fluentKey": "E29005",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29006,
+    "kind": "conflict",
+    "fluentKey": "E29006",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29007,
+    "kind": "conflict",
+    "fluentKey": "E29007",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29008,
+    "kind": "validation",
+    "fluentKey": "E29008",
+    "requiredParams": [
+      "algorithm"
+    ],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
     "code": 19000,
     "kind": "validation",
     "fluentKey": "E19000",

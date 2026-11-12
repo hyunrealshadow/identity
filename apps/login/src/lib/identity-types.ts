@@ -12,8 +12,47 @@ export interface FieldErrorResponse {
   message: string
 }
 
+/** JWA signing algorithms Identity can create a key for. */
+export type SigningAlgorithm =
+  | 'RS256'
+  | 'RS384'
+  | 'RS512'
+  | 'PS256'
+  | 'PS384'
+  | 'PS512'
+  | 'ES256'
+  | 'ES384'
+  | 'ES512'
+  | 'ES256K'
+  | 'EdDSA'
+
+/** Keys Identity generates. */
+export type KeyAlgorithm =
+  | 'RSA_2048'
+  | 'RSA_3072'
+  | 'RSA_4096'
+  | 'ECDSA_P256'
+  | 'ECDSA_P384'
+  | 'ECDSA_P521'
+  | 'ECDSA_SECP256K1'
+  | 'ED25519'
+  | 'ED448'
+  | 'X25519'
+  | 'X448'
+
+export interface SigningAlgorithmOption {
+  /** Submitted as `signing_algorithm`. */
+  signing_algorithm: SigningAlgorithm
+  /** Submitted as `key_algorithm`. */
+  key_algorithm: KeyAlgorithm
+  /** The key as an operator reads it, such as `ECDSA P-256`. */
+  key_name: string
+}
+
 export interface InstallationStatusResponse {
   installed: boolean
+  /** Present while uninstalled: algorithms the first signing key can use. */
+  signing_algorithms?: SigningAlgorithmOption[]
 }
 
 export interface InstallResponse {

@@ -2,6 +2,8 @@
 #[path = "repository_security/client_management.rs"]
 mod client_management;
 mod common;
+#[path = "repository_security/instance_management.rs"]
+mod instance_management;
 use chrono::{Duration as ChronoDuration, Utc};
 use identity_application::user::{
     CredentialData, CredentialType,

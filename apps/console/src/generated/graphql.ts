@@ -174,6 +174,16 @@ export type CreateScopeInput = {
   resourceId: string | number;
 };
 
+export type CreateSigningKeyInput = {
+  algorithm: SigningAlgorithm;
+  clientMutationId?: string | null | undefined;
+  /**
+   * A key the algorithm signs with, from `signingKeyAlgorithms`. Needed
+   * only where it offers several (EdDSA); omitted selects its default.
+   */
+  keyAlgorithm?: KeyAlgorithm | null | undefined;
+};
+
 export type CreateUserInput = {
   clientMutationId?: string | null | undefined;
   email: string;
@@ -226,9 +236,53 @@ export type GroupStateInput = {
   reason?: string;
 };
 
+/** A key type this instance generates. */
+export type KeyAlgorithm =
+  | 'ECDSA_P256'
+  | 'ECDSA_P384'
+  | 'ECDSA_P521'
+  | 'ECDSA_SECP256K1'
+  | 'ED448'
+  | 'ED25519'
+  | 'RSA_2048'
+  | 'RSA_3072'
+  | 'RSA_4096'
+  | 'X448'
+  | 'X25519';
+
+export type KeyFilter = {
+  statuses?: Array<KeyStatus> | null | undefined;
+  use?: KeyUse | null | undefined;
+};
+
+export type KeyLifecycleInput = {
+  clientMutationId?: string | null | undefined;
+  id: string | number;
+};
+
+export type KeyStatus =
+  /** Used for new signatures or new encryption. */
+  | 'ACTIVE'
+  | 'EXPIRED'
+  /** Replaced by a successor; still verifies or decrypts until it expires. */
+  | 'RETIRED'
+  | 'REVOKED';
+
+export type KeyUse =
+  /** Protects sessions, tokens and cursors. */
+  | 'ENCRYPTION'
+  /** Signs tokens; its public part is published in the JWKS. */
+  | 'SIGNING';
+
 export type LocalizedTextInput = {
   locale: string;
   value: string;
+};
+
+export type PasswordHashingInput = {
+  memoryCostKib: number;
+  parallelism: number;
+  timeCost: number;
 };
 
 export type RemoveGroupMemberInput = {
@@ -360,11 +414,32 @@ export type SetRolePermissionsInput = {
   roleId: string | number;
 };
 
+/** A JWA algorithm a signing key signs with. */
+export type SigningAlgorithm =
+  | 'ES256'
+  | 'ES256K'
+  | 'ES384'
+  | 'ES512'
+  | 'EdDSA'
+  | 'PS256'
+  | 'PS384'
+  | 'PS512'
+  | 'RS256'
+  | 'RS384'
+  | 'RS512';
+
 export type UnlockUserInput = {
   clientMutationId?: string | null | undefined;
   expectedVersion: string;
   id: string | number;
   reason?: string;
+};
+
+export type UpdateAuthenticationSettingsInput = {
+  breachedPasswordCheckEnabled: boolean;
+  clientMutationId?: string | null | undefined;
+  expectedVersion: string;
+  passwordHashing: PasswordHashingInput;
 };
 
 export type UpdateClientInput = {
@@ -388,6 +463,17 @@ export type UpdateGroupInput = {
   name?: string | null | undefined;
   names?: Array<LocalizedTextInput> | null | undefined;
   reason?: string;
+};
+
+export type UpdateProtocolSettingsInput = {
+  clientMutationId?: string | null | undefined;
+  deviceAuthorizationPollingIntervalSeconds: number;
+  deviceAuthorizationRequestLifetimeSeconds: number;
+  dynamicRegistrationEnabled: boolean;
+  expectedVersion: string;
+  oauthVersion: ClientOAuthVersion;
+  pushedAuthorizationRequestLifetimeSeconds: number;
+  requirePushedAuthorizationRequests: boolean;
 };
 
 export type UpdateRoleInput = {
@@ -725,6 +811,78 @@ export type InstanceDashboardQueryVariables = Exact<{
 
 
 export type InstanceDashboardQuery = { instanceOverview: { generatedAt: string, users?: { total: number, enabled: number, createdLast7Days: number, registrations: Array<{ date: string, count: number }> } | null, clients?: { total: number, enabled: number, builtIn: number } | null, sessions?: { active: number, createdLast24Hours: number } | null, resources?: { total: number, enabled: number } | null } };
+
+export type ConsoleKeyFieldsFragment = { id: string, keyId: string, use: KeyUse, status: KeyStatus, inUse: boolean, algorithms: Array<string>, keyIds: Array<string>, hasCertificate: boolean, rotatedFromId: string | null, createdAt: string, expiresAt: string | null, rotatedAt: string | null, revokedAt: string | null };
+
+export type ConsoleKeysQueryVariables = Exact<{
+  filter?: KeyFilter | null | undefined;
+  first?: number | null | undefined;
+  after?: string | null | undefined;
+  last?: number | null | undefined;
+  before?: string | null | undefined;
+}>;
+
+
+export type ConsoleKeysQuery = { keys: { totalCount: number, pageInfo: { hasNextPage: boolean, hasPreviousPage: boolean, startCursor: string | null, endCursor: string | null }, edges: Array<{ cursor: string, node: { id: string, keyId: string, use: KeyUse, status: KeyStatus, inUse: boolean, algorithms: Array<string>, keyIds: Array<string>, hasCertificate: boolean, rotatedFromId: string | null, createdAt: string, expiresAt: string | null, rotatedAt: string | null, revokedAt: string | null } }> } };
+
+export type ConsoleRotateKeyMutationVariables = Exact<{
+  input: KeyLifecycleInput;
+}>;
+
+
+export type ConsoleRotateKeyMutation = { rotateKey: { clientMutationId: string | null, key: { id: string, keyId: string, use: KeyUse, status: KeyStatus, inUse: boolean, algorithms: Array<string>, keyIds: Array<string>, hasCertificate: boolean, rotatedFromId: string | null, createdAt: string, expiresAt: string | null, rotatedAt: string | null, revokedAt: string | null } | null, successor: { id: string, keyId: string, use: KeyUse, status: KeyStatus, inUse: boolean, algorithms: Array<string>, keyIds: Array<string>, hasCertificate: boolean, rotatedFromId: string | null, createdAt: string, expiresAt: string | null, rotatedAt: string | null, revokedAt: string | null } | null } };
+
+export type ConsoleRevokeKeyMutationVariables = Exact<{
+  input: KeyLifecycleInput;
+}>;
+
+
+export type ConsoleRevokeKeyMutation = { revokeKey: { clientMutationId: string | null, key: { id: string, keyId: string, use: KeyUse, status: KeyStatus, inUse: boolean, algorithms: Array<string>, keyIds: Array<string>, hasCertificate: boolean, rotatedFromId: string | null, createdAt: string, expiresAt: string | null, rotatedAt: string | null, revokedAt: string | null } | null } };
+
+export type ConsoleRotateAndRevokeKeyMutationVariables = Exact<{
+  input: KeyLifecycleInput;
+}>;
+
+
+export type ConsoleRotateAndRevokeKeyMutation = { rotateAndRevokeKey: { clientMutationId: string | null, key: { id: string, keyId: string, use: KeyUse, status: KeyStatus, inUse: boolean, algorithms: Array<string>, keyIds: Array<string>, hasCertificate: boolean, rotatedFromId: string | null, createdAt: string, expiresAt: string | null, rotatedAt: string | null, revokedAt: string | null } | null, successor: { id: string, keyId: string, use: KeyUse, status: KeyStatus, inUse: boolean, algorithms: Array<string>, keyIds: Array<string>, hasCertificate: boolean, rotatedFromId: string | null, createdAt: string, expiresAt: string | null, rotatedAt: string | null, revokedAt: string | null } | null } };
+
+export type ConsoleJwksUriQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type ConsoleJwksUriQuery = { instanceMetadata: { jwksUri: string } };
+
+export type ConsoleCreateSigningKeyMutationVariables = Exact<{
+  input: CreateSigningKeyInput;
+}>;
+
+
+export type ConsoleCreateSigningKeyMutation = { createSigningKey: { clientMutationId: string | null, key: { id: string, keyId: string, use: KeyUse, status: KeyStatus, inUse: boolean, algorithms: Array<string>, keyIds: Array<string>, hasCertificate: boolean, rotatedFromId: string | null, createdAt: string, expiresAt: string | null, rotatedAt: string | null, revokedAt: string | null } | null } };
+
+export type ConsoleSigningKeyAlgorithmsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type ConsoleSigningKeyAlgorithmsQuery = { signingKeyAlgorithms: Array<{ algorithm: SigningAlgorithm, keyAlgorithm: KeyAlgorithm, keyName: string }> };
+
+export type ConsoleInstanceSettingsFieldsFragment = { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, version: string, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } } };
+
+export type ConsoleInstanceSettingsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type ConsoleInstanceSettingsQuery = { instanceSettings: { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, version: string, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } } } | null };
+
+export type ConsoleUpdateProtocolSettingsMutationVariables = Exact<{
+  input: UpdateProtocolSettingsInput;
+}>;
+
+
+export type ConsoleUpdateProtocolSettingsMutation = { updateProtocolSettings: { clientMutationId: string | null, settings: { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, version: string, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } } } | null } };
+
+export type ConsoleUpdateAuthenticationSettingsMutationVariables = Exact<{
+  input: UpdateAuthenticationSettingsInput;
+}>;
+
+
+export type ConsoleUpdateAuthenticationSettingsMutation = { updateAuthenticationSettings: { clientMutationId: string | null, settings: { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, version: string, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } } } | null } };
 
 export type ConsoleUserRolesQueryVariables = Exact<{
   userId: string | number;
@@ -1114,6 +1272,75 @@ export const ConsoleClientFieldsFragmentDoc = new TypedDocumentString(`
   updatedAt
 }
     `, {"fragmentName":"ConsoleClientFields"}) as unknown as TypedDocumentString<ConsoleClientFieldsFragment, unknown>;
+export const ConsoleKeyFieldsFragmentDoc = new TypedDocumentString(`
+    fragment ConsoleKeyFields on Key {
+  id
+  keyId
+  use
+  status
+  inUse
+  algorithms
+  keyIds
+  hasCertificate
+  rotatedFromId
+  createdAt
+  expiresAt
+  rotatedAt
+  revokedAt
+}
+    `, {"fragmentName":"ConsoleKeyFields"}) as unknown as TypedDocumentString<ConsoleKeyFieldsFragment, unknown>;
+export const ConsoleInstanceSettingsFieldsFragmentDoc = new TypedDocumentString(`
+    fragment ConsoleInstanceSettingsFields on InstanceSettings {
+  general {
+    issuer
+    loginUrl
+    consoleUrl
+    initializedAt
+  }
+  protocol {
+    oauthVersion
+    requirePushedAuthorizationRequests
+    pushedAuthorizationRequestLifetimeSeconds
+    pushedAuthorizationRequestLifetimeRange {
+      min
+      max
+    }
+    deviceAuthorizationRequestLifetimeSeconds
+    deviceAuthorizationRequestLifetimeRange {
+      min
+      max
+    }
+    deviceAuthorizationPollingIntervalSeconds
+    deviceAuthorizationPollingIntervalRange {
+      min
+      max
+    }
+    dynamicRegistrationEnabled
+    version
+  }
+  authentication {
+    breachedPasswordCheckEnabled
+    passwordHashing {
+      timeCost
+      timeCostRange {
+        min
+        max
+      }
+      memoryCostKib
+      memoryCostKibRange {
+        min
+        max
+      }
+      parallelism
+      parallelismRange {
+        min
+        max
+      }
+    }
+    version
+  }
+}
+    `, {"fragmentName":"ConsoleInstanceSettingsFields"}) as unknown as TypedDocumentString<ConsoleInstanceSettingsFieldsFragment, unknown>;
 export const ConsoleBootstrapDocument = new TypedDocumentString(`
     query ConsoleBootstrap {
   effectivePermissions {
@@ -1708,6 +1935,337 @@ export const InstanceDashboardDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<InstanceDashboardQuery, InstanceDashboardQueryVariables>;
+export const ConsoleKeysDocument = new TypedDocumentString(`
+    query ConsoleKeys($filter: KeyFilter, $first: Int, $after: String, $last: Int, $before: String) {
+  keys(
+    filter: $filter
+    first: $first
+    after: $after
+    last: $last
+    before: $before
+  ) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    edges {
+      cursor
+      node {
+        ...ConsoleKeyFields
+      }
+    }
+  }
+}
+    fragment ConsoleKeyFields on Key {
+  id
+  keyId
+  use
+  status
+  inUse
+  algorithms
+  keyIds
+  hasCertificate
+  rotatedFromId
+  createdAt
+  expiresAt
+  rotatedAt
+  revokedAt
+}`) as unknown as TypedDocumentString<ConsoleKeysQuery, ConsoleKeysQueryVariables>;
+export const ConsoleRotateKeyDocument = new TypedDocumentString(`
+    mutation ConsoleRotateKey($input: KeyLifecycleInput!) {
+  rotateKey(input: $input) {
+    clientMutationId
+    key {
+      ...ConsoleKeyFields
+    }
+    successor {
+      ...ConsoleKeyFields
+    }
+  }
+}
+    fragment ConsoleKeyFields on Key {
+  id
+  keyId
+  use
+  status
+  inUse
+  algorithms
+  keyIds
+  hasCertificate
+  rotatedFromId
+  createdAt
+  expiresAt
+  rotatedAt
+  revokedAt
+}`) as unknown as TypedDocumentString<ConsoleRotateKeyMutation, ConsoleRotateKeyMutationVariables>;
+export const ConsoleRevokeKeyDocument = new TypedDocumentString(`
+    mutation ConsoleRevokeKey($input: KeyLifecycleInput!) {
+  revokeKey(input: $input) {
+    clientMutationId
+    key {
+      ...ConsoleKeyFields
+    }
+  }
+}
+    fragment ConsoleKeyFields on Key {
+  id
+  keyId
+  use
+  status
+  inUse
+  algorithms
+  keyIds
+  hasCertificate
+  rotatedFromId
+  createdAt
+  expiresAt
+  rotatedAt
+  revokedAt
+}`) as unknown as TypedDocumentString<ConsoleRevokeKeyMutation, ConsoleRevokeKeyMutationVariables>;
+export const ConsoleRotateAndRevokeKeyDocument = new TypedDocumentString(`
+    mutation ConsoleRotateAndRevokeKey($input: KeyLifecycleInput!) {
+  rotateAndRevokeKey(input: $input) {
+    clientMutationId
+    key {
+      ...ConsoleKeyFields
+    }
+    successor {
+      ...ConsoleKeyFields
+    }
+  }
+}
+    fragment ConsoleKeyFields on Key {
+  id
+  keyId
+  use
+  status
+  inUse
+  algorithms
+  keyIds
+  hasCertificate
+  rotatedFromId
+  createdAt
+  expiresAt
+  rotatedAt
+  revokedAt
+}`) as unknown as TypedDocumentString<ConsoleRotateAndRevokeKeyMutation, ConsoleRotateAndRevokeKeyMutationVariables>;
+export const ConsoleJwksUriDocument = new TypedDocumentString(`
+    query ConsoleJwksUri {
+  instanceMetadata {
+    jwksUri
+  }
+}
+    `) as unknown as TypedDocumentString<ConsoleJwksUriQuery, ConsoleJwksUriQueryVariables>;
+export const ConsoleCreateSigningKeyDocument = new TypedDocumentString(`
+    mutation ConsoleCreateSigningKey($input: CreateSigningKeyInput!) {
+  createSigningKey(input: $input) {
+    clientMutationId
+    key {
+      ...ConsoleKeyFields
+    }
+  }
+}
+    fragment ConsoleKeyFields on Key {
+  id
+  keyId
+  use
+  status
+  inUse
+  algorithms
+  keyIds
+  hasCertificate
+  rotatedFromId
+  createdAt
+  expiresAt
+  rotatedAt
+  revokedAt
+}`) as unknown as TypedDocumentString<ConsoleCreateSigningKeyMutation, ConsoleCreateSigningKeyMutationVariables>;
+export const ConsoleSigningKeyAlgorithmsDocument = new TypedDocumentString(`
+    query ConsoleSigningKeyAlgorithms {
+  signingKeyAlgorithms {
+    algorithm
+    keyAlgorithm
+    keyName
+  }
+}
+    `) as unknown as TypedDocumentString<ConsoleSigningKeyAlgorithmsQuery, ConsoleSigningKeyAlgorithmsQueryVariables>;
+export const ConsoleInstanceSettingsDocument = new TypedDocumentString(`
+    query ConsoleInstanceSettings {
+  instanceSettings {
+    ...ConsoleInstanceSettingsFields
+  }
+}
+    fragment ConsoleInstanceSettingsFields on InstanceSettings {
+  general {
+    issuer
+    loginUrl
+    consoleUrl
+    initializedAt
+  }
+  protocol {
+    oauthVersion
+    requirePushedAuthorizationRequests
+    pushedAuthorizationRequestLifetimeSeconds
+    pushedAuthorizationRequestLifetimeRange {
+      min
+      max
+    }
+    deviceAuthorizationRequestLifetimeSeconds
+    deviceAuthorizationRequestLifetimeRange {
+      min
+      max
+    }
+    deviceAuthorizationPollingIntervalSeconds
+    deviceAuthorizationPollingIntervalRange {
+      min
+      max
+    }
+    dynamicRegistrationEnabled
+    version
+  }
+  authentication {
+    breachedPasswordCheckEnabled
+    passwordHashing {
+      timeCost
+      timeCostRange {
+        min
+        max
+      }
+      memoryCostKib
+      memoryCostKibRange {
+        min
+        max
+      }
+      parallelism
+      parallelismRange {
+        min
+        max
+      }
+    }
+    version
+  }
+}`) as unknown as TypedDocumentString<ConsoleInstanceSettingsQuery, ConsoleInstanceSettingsQueryVariables>;
+export const ConsoleUpdateProtocolSettingsDocument = new TypedDocumentString(`
+    mutation ConsoleUpdateProtocolSettings($input: UpdateProtocolSettingsInput!) {
+  updateProtocolSettings(input: $input) {
+    clientMutationId
+    settings {
+      ...ConsoleInstanceSettingsFields
+    }
+  }
+}
+    fragment ConsoleInstanceSettingsFields on InstanceSettings {
+  general {
+    issuer
+    loginUrl
+    consoleUrl
+    initializedAt
+  }
+  protocol {
+    oauthVersion
+    requirePushedAuthorizationRequests
+    pushedAuthorizationRequestLifetimeSeconds
+    pushedAuthorizationRequestLifetimeRange {
+      min
+      max
+    }
+    deviceAuthorizationRequestLifetimeSeconds
+    deviceAuthorizationRequestLifetimeRange {
+      min
+      max
+    }
+    deviceAuthorizationPollingIntervalSeconds
+    deviceAuthorizationPollingIntervalRange {
+      min
+      max
+    }
+    dynamicRegistrationEnabled
+    version
+  }
+  authentication {
+    breachedPasswordCheckEnabled
+    passwordHashing {
+      timeCost
+      timeCostRange {
+        min
+        max
+      }
+      memoryCostKib
+      memoryCostKibRange {
+        min
+        max
+      }
+      parallelism
+      parallelismRange {
+        min
+        max
+      }
+    }
+    version
+  }
+}`) as unknown as TypedDocumentString<ConsoleUpdateProtocolSettingsMutation, ConsoleUpdateProtocolSettingsMutationVariables>;
+export const ConsoleUpdateAuthenticationSettingsDocument = new TypedDocumentString(`
+    mutation ConsoleUpdateAuthenticationSettings($input: UpdateAuthenticationSettingsInput!) {
+  updateAuthenticationSettings(input: $input) {
+    clientMutationId
+    settings {
+      ...ConsoleInstanceSettingsFields
+    }
+  }
+}
+    fragment ConsoleInstanceSettingsFields on InstanceSettings {
+  general {
+    issuer
+    loginUrl
+    consoleUrl
+    initializedAt
+  }
+  protocol {
+    oauthVersion
+    requirePushedAuthorizationRequests
+    pushedAuthorizationRequestLifetimeSeconds
+    pushedAuthorizationRequestLifetimeRange {
+      min
+      max
+    }
+    deviceAuthorizationRequestLifetimeSeconds
+    deviceAuthorizationRequestLifetimeRange {
+      min
+      max
+    }
+    deviceAuthorizationPollingIntervalSeconds
+    deviceAuthorizationPollingIntervalRange {
+      min
+      max
+    }
+    dynamicRegistrationEnabled
+    version
+  }
+  authentication {
+    breachedPasswordCheckEnabled
+    passwordHashing {
+      timeCost
+      timeCostRange {
+        min
+        max
+      }
+      memoryCostKib
+      memoryCostKibRange {
+        min
+        max
+      }
+      parallelism
+      parallelismRange {
+        min
+        max
+      }
+    }
+    version
+  }
+}`) as unknown as TypedDocumentString<ConsoleUpdateAuthenticationSettingsMutation, ConsoleUpdateAuthenticationSettingsMutationVariables>;
 export const ConsoleUserRolesDocument = new TypedDocumentString(`
     query ConsoleUserRoles($userId: ID!, $source: AuthorizationSource, $enabled: Boolean, $orderBy: UserRoleOrder, $first: Int, $after: String, $last: Int, $before: String) {
   user(id: $userId) {

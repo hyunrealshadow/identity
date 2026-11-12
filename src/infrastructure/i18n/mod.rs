@@ -284,6 +284,11 @@ mod tests {
             include_str!("../../../assets/i18n/zh-CN/errors/install.ftl"),
         ),
         (
+            "instance",
+            include_str!("../../../assets/i18n/en-US/errors/instance.ftl"),
+            include_str!("../../../assets/i18n/zh-CN/errors/instance.ftl"),
+        ),
+        (
             "key",
             include_str!("../../../assets/i18n/en-US/errors/key.ftl"),
             include_str!("../../../assets/i18n/zh-CN/errors/key.ftl"),

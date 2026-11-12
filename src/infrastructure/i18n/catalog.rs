@@ -11,7 +11,8 @@ use identity_application::error::{
         client::CLIENT_ERROR_INVENTORY, common::CommonErrorCode,
         device::DeviceAuthorizationErrorCode, graphql::GraphqlErrorCode,
         graphql_transport::GraphqlTransportErrorCode, group::GROUP_ERROR_INVENTORY,
-        openid_connect::OpenIdConnectErrorCode, rbac::RBAC_ERROR_INVENTORY, token::TokenErrorCode,
+        instance::INSTANCE_ERROR_INVENTORY, openid_connect::OpenIdConnectErrorCode,
+        rbac::RBAC_ERROR_INVENTORY, token::TokenErrorCode,
         user_management::USER_MANAGEMENT_ERROR_INVENTORY,
     },
     kind::ErrorKind,
@@ -118,6 +119,18 @@ pub fn public_error_inventory() -> Vec<PublicErrorDefinition> {
     );
     inventory.extend(
         CLIENT_ERROR_INVENTORY
+            .iter()
+            .map(|definition| PublicErrorDefinition {
+                code: definition.numeric_code,
+                kind: definition.kind,
+                fluent_key: definition.fluent_key.to_owned(),
+                usage_module: definition.usage_module,
+                required: definition.required_params,
+                optional: definition.optional_params,
+            }),
+    );
+    inventory.extend(
+        INSTANCE_ERROR_INVENTORY
             .iter()
             .map(|definition| PublicErrorDefinition {
                 code: definition.numeric_code,

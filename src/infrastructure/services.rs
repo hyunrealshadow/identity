@@ -10,7 +10,10 @@ use identity_application::{
     data_protection::{DataProtector, DataProtectorImpl},
     install::InstallService,
     instance_overview::InstanceOverviewService,
-    key::{asymmetric::AsymmetricKeyService, rotation::KeyRotationService},
+    key::{
+        asymmetric::AsymmetricKeyService, management::KeyManagementService,
+        rotation::KeyRotationService,
+    },
     observability::EventSink,
     openid_connect::{
         authorize::{AuthorizeService, AuthorizeServiceDependencies},
@@ -26,6 +29,7 @@ use identity_application::{
         user_info::UserInfoService,
     },
     rbac::{GroupManagementService, RbacManagementService},
+    setting::management::InstanceSettingService,
     user::management::UserManagementService,
 };
 use identity_domain::{
@@ -60,10 +64,11 @@ use crate::{
             client_management::ClientManagementRepositoryImpl,
             device_authorization::DeviceAuthorizationRepositoryImpl,
             group_management::GroupManagementRepositoryImpl, install::InstallRepositoryImpl,
-            instance_overview::InstanceOverviewRepositoryImpl, key::KeyRepositoryImpl,
-            key_jwk::KeyJwkRepositoryImpl, key_rotation::KeyRotationRepositoryImpl,
-            login::LoginRepositoryImpl, login_runtime::LoginRuntimeRepositoryImpl,
-            oauth_resource::OAuthResourceRepositoryImpl,
+            instance_overview::InstanceOverviewRepositoryImpl,
+            instance_setting::InstanceSettingRepositoryImpl, key::KeyRepositoryImpl,
+            key_jwk::KeyJwkRepositoryImpl, key_management::KeyManagementRepositoryImpl,
+            key_rotation::KeyRotationRepositoryImpl, login::LoginRepositoryImpl,
+            login_runtime::LoginRuntimeRepositoryImpl, oauth_resource::OAuthResourceRepositoryImpl,
             openid_connect::OpenIdConnectClientRepositoryImpl,
             openid_connect_credential::OpenIdConnectCredentialRepositoryImpl,
             rbac_authorization::RbacAuthorizationRepositoryImpl,
@@ -112,6 +117,8 @@ pub struct AppServices {
     mfa: AppMfaService,
     key: AppKeyService,
     key_rotation: KeyRotationService,
+    key_management: KeyManagementService,
+    instance_setting: InstanceSettingService,
     install: AppInstallService,
     instance_overview: InstanceOverviewService,
     user_management: UserManagementService,
@@ -248,6 +255,20 @@ impl AppServices {
                 Arc::new(KeyRotationMaterialGeneratorImpl),
                 settings.key_ring(),
             ),
+            key_management: KeyManagementService::new(
+                Arc::new(KeyManagementRepositoryImpl::new(db.clone())),
+                Arc::new(KeyRotationMaterialGeneratorImpl),
+                Arc::new(AsymmetricKeyGeneratorImpl),
+                key_jwk_generator.clone(),
+                settings.key_ring(),
+                data_protector.clone(),
+            )
+            .with_events(Arc::clone(&events)),
+            instance_setting: InstanceSettingService::new(
+                Arc::new(InstanceSettingRepositoryImpl::new(db.clone())),
+                settings.store(),
+            )
+            .with_events(Arc::clone(&events)),
             install: InstallService {
                 breach_checker: breach_checker.clone(),
                 password_hasher: Arc::new(PasswordHasherImpl::new()),
@@ -466,6 +487,16 @@ impl AppServices {
     #[must_use]
     pub fn key_rotation(&self) -> &KeyRotationService {
         &self.key_rotation
+    }
+
+    #[must_use]
+    pub fn key_management(&self) -> &KeyManagementService {
+        &self.key_management
+    }
+
+    #[must_use]
+    pub fn instance_setting(&self) -> &InstanceSettingService {
+        &self.instance_setting
     }
 
     #[must_use]

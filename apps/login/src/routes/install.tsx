@@ -6,6 +6,7 @@ import { AuthShell } from '#/components/auth-shell'
 import { ErrorAlert } from '#/components/form-alert'
 import { ProgressiveForm } from '#/components/progressive-form'
 import { SubmitButton } from '#/components/submit-button'
+import { SigningAlgorithmField } from '#/components/signing-algorithm-field'
 import { TextField } from '#/components/text-field'
 import {
   errorMessage,
@@ -13,7 +14,10 @@ import {
   identityInternalJson,
 } from '#/lib/identity.server'
 import type { InstallResponse } from '#/lib/identity-types'
-import { markInstallationComplete } from '#/lib/installation-status.server'
+import {
+  cachedInstallationStatus,
+  markInstallationComplete,
+} from '#/lib/installation-status.server'
 import { translate } from '#/lib/i18n'
 import { formLocale, requestLocale } from '#/lib/i18n.server'
 import {
@@ -40,7 +44,11 @@ const visibleInstallFields = new Set([
   'email',
   'password',
   'confirm_password',
+  'signing_algorithm',
 ])
+
+/** Offered first: compact keys that every client library verifies. */
+const DEFAULT_SIGNING_OPTION = 'ES256:ECDSA_P256'
 
 function optionalString(value: unknown) {
   return typeof value === 'string' ? value : undefined
@@ -54,7 +62,9 @@ const loadInstallPage = createServerFn({ method: 'GET' }).handler(async () => {
   const url = new URL(getRequest().url)
   url.protocol = 'https:'
   const development = process.env.NODE_ENV === 'development'
+  const status = await cachedInstallationStatus()
   return {
+    signingAlgorithms: status.signing_algorithms ?? [],
     // Draft defaults only: submitted addresses are validated and persisted by Identity.
     defaults: {
       domain: development ? 'https://localhost:5150' : url.origin,
@@ -103,6 +113,7 @@ export const Route = createFileRoute('/install')({
           domain,
           application_url: applicationUrl,
           console_url: consoleUrl,
+          signing_option: `${String(form.get('signing_algorithm') ?? '')}:${String(form.get('key_algorithm') ?? '')}`,
         }
         const locale = formLocale(request, null)
 
@@ -127,9 +138,9 @@ export const Route = createFileRoute('/install')({
               domain,
               application_url: applicationUrl,
               console_url: consoleUrl,
-              key_algorithm: String(
-                form.get('key_algorithm') ?? 'ecdsa-p256',
-              ),
+              // Enum values from the chosen option; Identity rejects others.
+              signing_algorithm: String(form.get('signing_algorithm') ?? ''),
+              key_algorithm: String(form.get('key_algorithm') ?? ''),
             },
           })
           markInstallationComplete()
@@ -164,7 +175,8 @@ export const Route = createFileRoute('/install')({
 
 function InstallPage() {
   const search = Route.useSearch()
-  const { locale, error, fieldErrors, formValues, defaults } = Route.useLoaderData()
+  const { locale, error, fieldErrors, formValues, defaults, signingAlgorithms } =
+    Route.useLoaderData()
   const t = (key: Parameters<typeof translate>[1]) => translate(locale, key)
 
   return (
@@ -239,7 +251,12 @@ function InstallPage() {
           autoComplete="new-password"
         />
 
-        <input type="hidden" name="key_algorithm" value="ecdsa-p256" />
+        <SigningAlgorithmField
+          label={t('installSigningAlgorithm')}
+          description={t('installSigningAlgorithmDescription')}
+          options={signingAlgorithms}
+          defaultValue={formValues.signing_option || DEFAULT_SIGNING_OPTION}
+        />
 
         <SubmitButton fullWidth>{t('installSubmit')}</SubmitButton>
       </ProgressiveForm>

@@ -484,7 +484,8 @@ async fn fixture(options: FixtureOptions) -> GraphqlFixture {
     let key_oid = Uuid::new_v4();
     let key_data = AsymmetricKeyGeneratorImpl
         .generate(&AsymmetricKeySpec {
-            algorithm: AsymmetricKeyAlgorithm::Rsa { bits: 2048 },
+            algorithm: AsymmetricKeyAlgorithm::Rsa2048,
+            signing: None,
         })
         .unwrap();
     let key_model = key::Model {

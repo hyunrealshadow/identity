@@ -61,6 +61,28 @@ export const schemaMetadata: SchemaMetadata = {
         }
       }
     },
+    "AuthenticationSettings": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "breachedPasswordCheckEnabled": {
+          "name": "breachedPasswordCheckEnabled",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "passwordHashing": {
+          "name": "passwordHashing",
+          "returnType": "PasswordHashing",
+          "policies": []
+        },
+        "version": {
+          "name": "version",
+          "returnType": "UUID",
+          "policies": []
+        }
+      }
+    },
     "BeginTotpEnrollmentPayload": {
       "kind": "OBJECT",
       "interfaces": [],
@@ -847,6 +869,33 @@ export const schemaMetadata: SchemaMetadata = {
         }
       }
     },
+    "GeneralSettings": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "consoleUrl": {
+          "name": "consoleUrl",
+          "returnType": "String",
+          "policies": []
+        },
+        "initializedAt": {
+          "name": "initializedAt",
+          "returnType": "DateTime",
+          "policies": []
+        },
+        "issuer": {
+          "name": "issuer",
+          "returnType": "String",
+          "policies": []
+        },
+        "loginUrl": {
+          "name": "loginUrl",
+          "returnType": "String",
+          "policies": []
+        }
+      }
+    },
     "Group": {
       "kind": "OBJECT",
       "interfaces": [
@@ -1496,6 +1545,54 @@ export const schemaMetadata: SchemaMetadata = {
         }
       }
     },
+    "InstanceSettings": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "authentication": {
+          "name": "authentication",
+          "returnType": "AuthenticationSettings",
+          "policies": []
+        },
+        "general": {
+          "name": "general",
+          "returnType": "GeneralSettings",
+          "policies": []
+        },
+        "protocol": {
+          "name": "protocol",
+          "returnType": "ProtocolSettings",
+          "policies": []
+        }
+      }
+    },
+    "InstanceSettingsPayload": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "clientMutationId": {
+          "name": "clientMutationId",
+          "returnType": "String",
+          "policies": []
+        },
+        "settings": {
+          "name": "settings",
+          "returnType": "InstanceSettings",
+          "policies": [
+            {
+              "scopes": [
+                "management.setting.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
+        }
+      }
+    },
     "InstanceUserOverview": {
       "kind": "OBJECT",
       "interfaces": [],
@@ -1520,6 +1617,165 @@ export const schemaMetadata: SchemaMetadata = {
           "name": "total",
           "returnType": "Int",
           "policies": []
+        }
+      }
+    },
+    "IntRange": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "max": {
+          "name": "max",
+          "returnType": "Int",
+          "policies": []
+        },
+        "min": {
+          "name": "min",
+          "returnType": "Int",
+          "policies": []
+        }
+      }
+    },
+    "Key": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "algorithms": {
+          "name": "algorithms",
+          "returnType": "String",
+          "policies": []
+        },
+        "createdAt": {
+          "name": "createdAt",
+          "returnType": "DateTime",
+          "policies": []
+        },
+        "expiresAt": {
+          "name": "expiresAt",
+          "returnType": "DateTime",
+          "policies": []
+        },
+        "hasCertificate": {
+          "name": "hasCertificate",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "id": {
+          "name": "id",
+          "returnType": "ID",
+          "policies": []
+        },
+        "inUse": {
+          "name": "inUse",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "keyId": {
+          "name": "keyId",
+          "returnType": "String",
+          "policies": []
+        },
+        "keyIds": {
+          "name": "keyIds",
+          "returnType": "String",
+          "policies": []
+        },
+        "revokedAt": {
+          "name": "revokedAt",
+          "returnType": "DateTime",
+          "policies": []
+        },
+        "rotatedAt": {
+          "name": "rotatedAt",
+          "returnType": "DateTime",
+          "policies": []
+        },
+        "rotatedFromId": {
+          "name": "rotatedFromId",
+          "returnType": "ID",
+          "policies": []
+        },
+        "status": {
+          "name": "status",
+          "returnType": "KeyStatus",
+          "policies": []
+        },
+        "use": {
+          "name": "use",
+          "returnType": "KeyUse",
+          "policies": []
+        }
+      }
+    },
+    "KeyConnection": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "edges": {
+          "name": "edges",
+          "returnType": "KeyEdge",
+          "policies": []
+        },
+        "nodes": {
+          "name": "nodes",
+          "returnType": "Key",
+          "policies": []
+        },
+        "pageInfo": {
+          "name": "pageInfo",
+          "returnType": "PageInfo",
+          "policies": []
+        },
+        "totalCount": {
+          "name": "totalCount",
+          "returnType": "Int",
+          "policies": []
+        }
+      }
+    },
+    "KeyEdge": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "cursor": {
+          "name": "cursor",
+          "returnType": "String",
+          "policies": []
+        },
+        "node": {
+          "name": "node",
+          "returnType": "Key",
+          "policies": []
+        }
+      }
+    },
+    "KeyPayload": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "clientMutationId": {
+          "name": "clientMutationId",
+          "returnType": "String",
+          "policies": []
+        },
+        "key": {
+          "name": "key",
+          "returnType": "Key",
+          "policies": [
+            {
+              "scopes": [
+                "management.key.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
         }
       }
     },
@@ -1813,6 +2069,21 @@ export const schemaMetadata: SchemaMetadata = {
               "authentication": "AAL2",
               "userOnly": false,
               "runtime": true
+            }
+          ]
+        },
+        "createSigningKey": {
+          "name": "createSigningKey",
+          "returnType": "KeyPayload",
+          "policies": [
+            {
+              "scopes": [
+                "management.key.create"
+              ],
+              "authentication": "RECENT_AAL2",
+              "userOnly": true,
+              "runtime": true,
+              "maxAge": 300
             }
           ]
         },
@@ -2176,6 +2447,21 @@ export const schemaMetadata: SchemaMetadata = {
             }
           ]
         },
+        "revokeKey": {
+          "name": "revokeKey",
+          "returnType": "KeyPayload",
+          "policies": [
+            {
+              "scopes": [
+                "management.key.revoke"
+              ],
+              "authentication": "RECENT_AAL2",
+              "userOnly": true,
+              "runtime": true,
+              "maxAge": 300
+            }
+          ]
+        },
         "revokeOtherSessions": {
           "name": "revokeOtherSessions",
           "returnType": "RevokeOtherSessionsPayload",
@@ -2219,6 +2505,22 @@ export const schemaMetadata: SchemaMetadata = {
             }
           ]
         },
+        "rotateAndRevokeKey": {
+          "name": "rotateAndRevokeKey",
+          "returnType": "RotateKeyPayload",
+          "policies": [
+            {
+              "scopes": [
+                "management.key.rotate",
+                "management.key.revoke"
+              ],
+              "authentication": "RECENT_AAL2",
+              "userOnly": true,
+              "runtime": true,
+              "maxAge": 300
+            }
+          ]
+        },
         "rotateClientSecret": {
           "name": "rotateClientSecret",
           "returnType": "ClientSecretPayload",
@@ -2226,6 +2528,21 @@ export const schemaMetadata: SchemaMetadata = {
             {
               "scopes": [
                 "management.client_credential.rotate"
+              ],
+              "authentication": "RECENT_AAL2",
+              "userOnly": true,
+              "runtime": true,
+              "maxAge": 300
+            }
+          ]
+        },
+        "rotateKey": {
+          "name": "rotateKey",
+          "returnType": "RotateKeyPayload",
+          "policies": [
+            {
+              "scopes": [
+                "management.key.rotate"
               ],
               "authentication": "RECENT_AAL2",
               "userOnly": true,
@@ -2321,6 +2638,21 @@ export const schemaMetadata: SchemaMetadata = {
             }
           ]
         },
+        "updateAuthenticationSettings": {
+          "name": "updateAuthenticationSettings",
+          "returnType": "InstanceSettingsPayload",
+          "policies": [
+            {
+              "scopes": [
+                "management.setting.write"
+              ],
+              "authentication": "RECENT_AAL2",
+              "userOnly": true,
+              "runtime": true,
+              "maxAge": 300
+            }
+          ]
+        },
         "updateClient": {
           "name": "updateClient",
           "returnType": "ClientPayload",
@@ -2403,6 +2735,21 @@ export const schemaMetadata: SchemaMetadata = {
               "authentication": "SESSION",
               "userOnly": true,
               "runtime": false
+            }
+          ]
+        },
+        "updateProtocolSettings": {
+          "name": "updateProtocolSettings",
+          "returnType": "InstanceSettingsPayload",
+          "policies": [
+            {
+              "scopes": [
+                "management.setting.write"
+              ],
+              "authentication": "RECENT_AAL2",
+              "userOnly": true,
+              "runtime": true,
+              "maxAge": 300
             }
           ]
         },
@@ -2550,6 +2897,100 @@ export const schemaMetadata: SchemaMetadata = {
         }
       }
     },
+    "PasswordHashing": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "memoryCostKib": {
+          "name": "memoryCostKib",
+          "returnType": "Int",
+          "policies": []
+        },
+        "memoryCostKibRange": {
+          "name": "memoryCostKibRange",
+          "returnType": "IntRange",
+          "policies": []
+        },
+        "parallelism": {
+          "name": "parallelism",
+          "returnType": "Int",
+          "policies": []
+        },
+        "parallelismRange": {
+          "name": "parallelismRange",
+          "returnType": "IntRange",
+          "policies": []
+        },
+        "timeCost": {
+          "name": "timeCost",
+          "returnType": "Int",
+          "policies": []
+        },
+        "timeCostRange": {
+          "name": "timeCostRange",
+          "returnType": "IntRange",
+          "policies": []
+        }
+      }
+    },
+    "ProtocolSettings": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "deviceAuthorizationPollingIntervalRange": {
+          "name": "deviceAuthorizationPollingIntervalRange",
+          "returnType": "IntRange",
+          "policies": []
+        },
+        "deviceAuthorizationPollingIntervalSeconds": {
+          "name": "deviceAuthorizationPollingIntervalSeconds",
+          "returnType": "Int",
+          "policies": []
+        },
+        "deviceAuthorizationRequestLifetimeRange": {
+          "name": "deviceAuthorizationRequestLifetimeRange",
+          "returnType": "IntRange",
+          "policies": []
+        },
+        "deviceAuthorizationRequestLifetimeSeconds": {
+          "name": "deviceAuthorizationRequestLifetimeSeconds",
+          "returnType": "Int",
+          "policies": []
+        },
+        "dynamicRegistrationEnabled": {
+          "name": "dynamicRegistrationEnabled",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "oauthVersion": {
+          "name": "oauthVersion",
+          "returnType": "ClientOAuthVersion",
+          "policies": []
+        },
+        "pushedAuthorizationRequestLifetimeRange": {
+          "name": "pushedAuthorizationRequestLifetimeRange",
+          "returnType": "IntRange",
+          "policies": []
+        },
+        "pushedAuthorizationRequestLifetimeSeconds": {
+          "name": "pushedAuthorizationRequestLifetimeSeconds",
+          "returnType": "Int",
+          "policies": []
+        },
+        "requirePushedAuthorizationRequests": {
+          "name": "requirePushedAuthorizationRequests",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "version": {
+          "name": "version",
+          "returnType": "UUID",
+          "policies": []
+        }
+      }
+    },
     "QueryRoot": {
       "kind": "OBJECT",
       "interfaces": [],
@@ -2684,6 +3125,34 @@ export const schemaMetadata: SchemaMetadata = {
               "authentication": "SESSION",
               "userOnly": false,
               "runtime": false
+            }
+          ]
+        },
+        "instanceSettings": {
+          "name": "instanceSettings",
+          "returnType": "InstanceSettings",
+          "policies": [
+            {
+              "scopes": [
+                "management.setting.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
+        },
+        "keys": {
+          "name": "keys",
+          "returnType": "KeyConnection",
+          "policies": [
+            {
+              "scopes": [
+                "management.key.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
             }
           ]
         },
@@ -2834,6 +3303,20 @@ export const schemaMetadata: SchemaMetadata = {
               "authentication": "SESSION",
               "userOnly": true,
               "runtime": false
+            }
+          ]
+        },
+        "signingKeyAlgorithms": {
+          "name": "signingKeyAlgorithms",
+          "returnType": "SigningKeyAlgorithm",
+          "policies": [
+            {
+              "scopes": [
+                "management.key.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
             }
           ]
         },
@@ -3348,6 +3831,46 @@ export const schemaMetadata: SchemaMetadata = {
         }
       }
     },
+    "RotateKeyPayload": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "clientMutationId": {
+          "name": "clientMutationId",
+          "returnType": "String",
+          "policies": []
+        },
+        "key": {
+          "name": "key",
+          "returnType": "Key",
+          "policies": [
+            {
+              "scopes": [
+                "management.key.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
+        },
+        "successor": {
+          "name": "successor",
+          "returnType": "Key",
+          "policies": [
+            {
+              "scopes": [
+                "management.key.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
+        }
+      }
+    },
     "Scope": {
       "kind": "OBJECT",
       "interfaces": [
@@ -3651,6 +4174,28 @@ export const schemaMetadata: SchemaMetadata = {
         "node": {
           "name": "node",
           "returnType": "Session",
+          "policies": []
+        }
+      }
+    },
+    "SigningKeyAlgorithm": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "algorithm": {
+          "name": "algorithm",
+          "returnType": "SigningAlgorithm",
+          "policies": []
+        },
+        "keyAlgorithm": {
+          "name": "keyAlgorithm",
+          "returnType": "KeyAlgorithm",
+          "policies": []
+        },
+        "keyName": {
+          "name": "keyName",
+          "returnType": "String",
           "policies": []
         }
       }

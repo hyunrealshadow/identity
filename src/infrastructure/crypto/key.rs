@@ -18,6 +18,7 @@ use josekit::{
         },
     },
     jws::{ES256, ES256K, ES384, ES512, EdDSA, PS256, PS384, PS512, RS256, RS384, RS512},
+    util::HashAlgorithm,
 };
 use openssl::{
     base64::encode_block,
@@ -69,7 +70,19 @@ pub struct AsymmetricKeyGeneratorImpl;
 impl AsymmetricKeyGenerator for AsymmetricKeyGeneratorImpl {
     fn generate(&self, spec: &AsymmetricKeySpec) -> Result<AsymmetricKeyData, KeyMaterialError> {
         match spec.algorithm {
-            AsymmetricKeyAlgorithm::Rsa { bits } => generate_rsa_key(bits),
+            AsymmetricKeyAlgorithm::Rsa2048
+            | AsymmetricKeyAlgorithm::Rsa3072
+            | AsymmetricKeyAlgorithm::Rsa4096 => {
+                let bits = spec.algorithm.rsa_bits().unwrap_or(2048);
+                match spec.signing {
+                    Some(
+                        signing @ (JwaSigningAlgorithm::Ps256
+                        | JwaSigningAlgorithm::Ps384
+                        | JwaSigningAlgorithm::Ps512),
+                    ) => generate_rsa_pss_key(bits, signing),
+                    _ => generate_rsa_key(bits),
+                }
+            }
             AsymmetricKeyAlgorithm::EcdsaP256 => generate_p256_key(),
             AsymmetricKeyAlgorithm::EcdsaP384 => generate_p384_key(),
             AsymmetricKeyAlgorithm::EcdsaP521 => generate_p521_key(),
@@ -91,6 +104,35 @@ pub(super) fn generate_rsa_key(bits: usize) -> Result<AsymmetricKeyData, KeyMate
 
     let jwk = Jwk::generate_rsa_key(bits as u32).map_err(internal)?;
     build_key_data(&jwk)
+}
+
+/// An RSA key restricted to the PSS parameters of `signing`, which RSA-PSS
+/// signers require.
+pub(super) fn generate_rsa_pss_key(
+    bits: usize,
+    signing: JwaSigningAlgorithm,
+) -> Result<AsymmetricKeyData, KeyMaterialError> {
+    if bits < 2048 {
+        return Err(KeyMaterialError::InvalidInput(
+            "rsa bits must be at least 2048".to_owned(),
+        ));
+    }
+    let (hash, salt_len) = match signing {
+        JwaSigningAlgorithm::Ps256 => (HashAlgorithm::Sha256, 32),
+        JwaSigningAlgorithm::Ps384 => (HashAlgorithm::Sha384, 48),
+        JwaSigningAlgorithm::Ps512 => (HashAlgorithm::Sha512, 64),
+        other => {
+            return Err(KeyMaterialError::InvalidInput(format!(
+                "{other} does not use RSA-PSS"
+            )));
+        }
+    };
+    let pair = RsaPssKeyPair::generate(bits as u32, hash, hash, salt_len).map_err(internal)?;
+    Ok(AsymmetricKeyData {
+        private_key: String::from_utf8(pair.to_pem_private_key()).map_err(internal)?,
+        public_key: String::from_utf8(pair.to_pem_public_key()).map_err(internal)?,
+        certificate: None,
+    })
 }
 
 pub(super) fn generate_p256_key() -> Result<AsymmetricKeyData, KeyMaterialError> {
@@ -151,7 +193,9 @@ pub fn infer_algorithm_from_private_key_pem(
         && let Ok(rsa) = private_key.rsa()
     {
         let bits = (rsa.size() as usize) * 8;
-        return Ok(AsymmetricKeyAlgorithm::Rsa { bits });
+        return AsymmetricKeyAlgorithm::from_rsa_bits(bits).ok_or_else(|| {
+            KeyMaterialError::InvalidInput(format!("unsupported rsa key size: {bits}"))
+        });
     }
 
     if let Ok(key_pair) = EcKeyPair::from_pem(private_key_pem, None) {
@@ -225,6 +269,19 @@ pub fn generate_all_jwks_for_key(
     certificate_pem: Option<&str>,
 ) -> Result<Vec<(String, Jwk)>, KeyMaterialError> {
     let alg = primary_jwa_algorithm_for_private_key(private_key_pem)?;
+    generate_jwks_for_key(private_key_pem, key_id, certificate_pem, &[alg])
+}
+
+/// Public JWK bindings for a key that signs with `signing` only, plus every
+/// encryption binding the key supports. Each signing algorithm must be one
+/// the key can sign with.
+pub fn generate_jwks_for_key(
+    private_key_pem: &str,
+    key_id: &str,
+    certificate_pem: Option<&str>,
+    signing: &[JwaSigningAlgorithm],
+) -> Result<Vec<(String, Jwk)>, KeyMaterialError> {
+    let pem = private_key_pem.as_bytes();
     let mut base_jwk = public_jwk_from_private_key_pem_without_alg(private_key_pem)?;
     base_jwk.set_key_use("sig");
     base_jwk.set_key_id(key_id);
@@ -233,10 +290,17 @@ pub fn generate_all_jwks_for_key(
         apply_certificate_params(&mut base_jwk, cert_pem)?;
     }
 
-    base_jwk.set_algorithm(alg.as_str());
-
-    let mut jwks = vec![(alg.as_str().to_owned(), base_jwk.clone())];
-    let pem = private_key_pem.as_bytes();
+    let mut jwks = Vec::with_capacity(signing.len() + 2);
+    for alg in signing {
+        if !jwa_algorithm_can_sign(*alg, pem) {
+            return Err(KeyMaterialError::InvalidInput(format!(
+                "the key cannot sign with {alg}"
+            )));
+        }
+        let mut signing_jwk = base_jwk.clone();
+        signing_jwk.set_algorithm(alg.as_str());
+        jwks.push((alg.as_str().to_owned(), signing_jwk));
+    }
     for (encryption_alg, supported) in [
         ("RSA-OAEP", RSA_OAEP.decrypter_from_pem(pem).is_ok()),
         ("RSA-OAEP-256", RSA_OAEP_256.decrypter_from_pem(pem).is_ok()),
@@ -269,7 +333,8 @@ fn primary_jwa_algorithm_for_private_key(
     }
 
     let algorithm = infer_algorithm_from_private_key_pem(private_key_pem)?;
-    Ok(JwaSigningAlgorithm::primary_for_key_type(&algorithm))
+    JwaSigningAlgorithm::primary_for_key_type(&algorithm)
+        .ok_or_else(|| KeyMaterialError::InvalidInput(format!("{algorithm} keys cannot sign")))
 }
 
 fn primary_rsa_pss_jwa_algorithm(

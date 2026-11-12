@@ -8,7 +8,7 @@ use super::rotation::KEY_LIFETIME;
 use crate::{
     application::error::{AppError, codes::key::KeyErrorCode},
     domain::key::{
-        CreateKeyJwkInput, JwkAlgorithm, KeyJwkRepository, PublicJwk,
+        CreateKeyJwkInput, JwaSigningAlgorithm, JwkAlgorithm, KeyJwkRepository, PublicJwk,
         generator::{AsymmetricKeyGenerator, AsymmetricKeySpec},
         model::{AsymmetricKeyAlgorithm, Key, KeyData},
         repository::KeyRepository,
@@ -28,6 +28,16 @@ pub trait KeyJwkGenerator: Send + Sync {
         private_key_pem: &str,
         key_id: &str,
         certificate_pem: Option<&str>,
+    ) -> Result<Vec<GeneratedKeyJwk>, AppError>;
+
+    /// Bindings for a key that signs with `signing` only, plus its
+    /// encryption bindings.
+    fn generate_for(
+        &self,
+        private_key_pem: &str,
+        key_id: &str,
+        certificate_pem: Option<&str>,
+        signing: &[JwaSigningAlgorithm],
     ) -> Result<Vec<GeneratedKeyJwk>, AppError>;
 }
 
@@ -104,13 +114,9 @@ impl AsymmetricKeyService {
         &self,
         input: GenerateAsymmetricKeyInput,
     ) -> Result<Key, AppError> {
-        input.algorithm.validate().map_err(|_| {
-            AppError::from_code(KeyErrorCode::UnsupportedAlgorithm)
-                .with_param("algorithm", input.algorithm.to_string())
-        })?;
-
         let spec = AsymmetricKeySpec {
             algorithm: input.algorithm,
+            signing: None,
         };
 
         let mut data = self.generator.generate(&spec)?;

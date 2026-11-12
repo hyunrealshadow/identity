@@ -41,7 +41,7 @@ use crate::{
         },
     },
     infrastructure::{
-        crypto::key::generate_all_jwks_for_key,
+        crypto::key::generate_jwks_for_key,
         database::{
             entity::{
                 client, client_openid_connect, client_openid_connect_credential,
@@ -348,10 +348,12 @@ impl InstallRepository for InstallRepositoryImpl {
         .await
         .map_err(AppError::internal)?;
 
-        let jwks = generate_all_jwks_for_key(
+        // The first key signs with the chosen algorithm only.
+        let jwks = generate_jwks_for_key(
             &data.key_data.private_key,
             &key_oid.to_string(),
             data.key_data.certificate.as_deref(),
+            &[data.signing_algorithm],
         )
         .map_err(AppError::internal)?;
         let jwk_models = jwks

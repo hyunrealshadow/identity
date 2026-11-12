@@ -1,0 +1,95 @@
+fragment ConsoleKeyFields on Key {
+  id
+  keyId
+  use
+  status
+  inUse
+  algorithms
+  keyIds
+  hasCertificate
+  rotatedFromId
+  createdAt
+  expiresAt
+  rotatedAt
+  revokedAt
+}
+
+query ConsoleKeys(
+  $filter: KeyFilter
+  $first: Int
+  $after: String
+  $last: Int
+  $before: String
+) {
+  keys(filter: $filter, first: $first, after: $after, last: $last, before: $before) {
+    totalCount
+    pageInfo {
+      hasNextPage
+      hasPreviousPage
+      startCursor
+      endCursor
+    }
+    edges {
+      cursor
+      node {
+        ...ConsoleKeyFields
+      }
+    }
+  }
+}
+
+mutation ConsoleRotateKey($input: KeyLifecycleInput!) {
+  rotateKey(input: $input) {
+    clientMutationId
+    key {
+      ...ConsoleKeyFields
+    }
+    successor {
+      ...ConsoleKeyFields
+    }
+  }
+}
+
+mutation ConsoleRevokeKey($input: KeyLifecycleInput!) {
+  revokeKey(input: $input) {
+    clientMutationId
+    key {
+      ...ConsoleKeyFields
+    }
+  }
+}
+
+mutation ConsoleRotateAndRevokeKey($input: KeyLifecycleInput!) {
+  rotateAndRevokeKey(input: $input) {
+    clientMutationId
+    key {
+      ...ConsoleKeyFields
+    }
+    successor {
+      ...ConsoleKeyFields
+    }
+  }
+}
+
+query ConsoleJwksUri {
+  instanceMetadata {
+    jwksUri
+  }
+}
+
+mutation ConsoleCreateSigningKey($input: CreateSigningKeyInput!) {
+  createSigningKey(input: $input) {
+    clientMutationId
+    key {
+      ...ConsoleKeyFields
+    }
+  }
+}
+
+query ConsoleSigningKeyAlgorithms {
+  signingKeyAlgorithms {
+    algorithm
+    keyAlgorithm
+    keyName
+  }
+}

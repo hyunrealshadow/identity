@@ -201,6 +201,8 @@ const zhCN = {
   installConsoleOriginDescription: '填写 HTTPS 来源，无需路径，系统自动使用 /console',
   installAdminUsername: '管理员用户名',
   installAdminEmail: '管理员邮箱',
+  installSigningAlgorithm: '令牌签名算法',
+  installSigningAlgorithmDescription: '首把签名密钥使用此算法签名，之后可在控制台添加其他算法的密钥',
   installPassword: '密码',
   installConfirmPassword: '确认密码',
   installSubmit: '安装',

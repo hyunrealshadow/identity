@@ -26,9 +26,7 @@ use crate::{
         password_policy,
         password_policy::BreachedPasswordChecker,
     },
-    domain::key::{
-        AsymmetricKeyAlgorithm, algorithm::JwaSigningAlgorithm, generator::AsymmetricKeyGenerator,
-    },
+    domain::key::{AsymmetricKeyAlgorithm, JwaSigningAlgorithm, generator::AsymmetricKeyGenerator},
     key::runtime::RuntimeKeyRingProvider,
     observability::{BusinessEvent, EventValue, error_outcome, event_sink},
     setting::{
@@ -48,8 +46,11 @@ pub struct InstallInput {
     /// Exact HTTPS origin of the management console, e.g.
     /// `https://console.example.com`.
     pub console_url: String,
-    /// Wire name of the signing algorithm, e.g. `ecdsa-p256`.
-    pub key_algorithm: String,
+    /// The algorithm the first signing key signs with.
+    pub signing_algorithm: JwaSigningAlgorithm,
+    /// Which key the algorithm signs with when it offers several (EdDSA);
+    /// `None` selects its default.
+    pub key_algorithm: Option<AsymmetricKeyAlgorithm>,
 }
 
 pub trait InstallSettings: SettingsSource + RefreshableSetting {}
@@ -95,6 +96,8 @@ pub struct InstallationData {
     pub client_secret_lifetime: Duration,
     pub key_oid: Uuid,
     pub key_data: AsymmetricKeyData,
+    /// The only algorithm the first signing key publishes and signs with.
+    pub signing_algorithm: JwaSigningAlgorithm,
     /// The installation settings, written in the same transaction.
     pub settings: SettingChanges,
 }
@@ -159,13 +162,13 @@ impl InstallService {
         let password =
             run_password_hashing(move || password_hasher.hash(&input.password, &hash_options))
                 .await?;
-        let mut key_data = self.key_generator.generate(&AsymmetricKeySpec {
-            algorithm: input.key_algorithm.clone(),
-        })?;
+        let spec = AsymmetricKeySpec::for_signing(input.signing_algorithm, input.key_algorithm);
+        let key_algorithm = spec.algorithm;
+        let mut key_data = self.key_generator.generate(&spec)?;
         let certificate = self.certificate_generator.generate_self_signed(
             &key_data.private_key,
             &input.domain,
-            &input.key_algorithm,
+            &key_algorithm,
         )?;
         key_data.certificate = Some(certificate);
         let client_id = Uuid::new_v4();
@@ -202,6 +205,7 @@ impl InstallService {
                 client_secret_lifetime: self.client_secret_lifetime,
                 key_oid,
                 key_data,
+                signing_algorithm: input.signing_algorithm,
                 settings,
             })
             .await?;
@@ -222,6 +226,7 @@ struct ValidatedInstallInput {
     issuer: Url,
     application_url: Url,
     console_url: Url,
+    signing_algorithm: JwaSigningAlgorithm,
     key_algorithm: AsymmetricKeyAlgorithm,
 }
 
@@ -258,8 +263,8 @@ fn validate_install_input(input: InstallInput) -> Result<ValidatedInstallInput, 
     );
     let key_algorithm = collect_field(
         &mut validation,
-        "key_algorithm",
-        parse_install_key_algorithm(&input.key_algorithm),
+        "signing_algorithm",
+        install_key_algorithm(input.signing_algorithm, input.key_algorithm),
     );
     if validation
         .validation()
@@ -276,6 +281,7 @@ fn validate_install_input(input: InstallInput) -> Result<ValidatedInstallInput, 
         issuer: issuer.expect("validated issuer"),
         application_url: application_url.expect("validated application URL"),
         console_url: console_url.expect("validated console URL"),
+        signing_algorithm: input.signing_algorithm,
         key_algorithm: key_algorithm.expect("validated key algorithm"),
     })
 }
@@ -403,19 +409,18 @@ fn login_app_domain(application_url: &Url) -> Option<String> {
         .then(|| application_url.origin().ascii_serialization())
 }
 
-/// Parses the algorithm a client asked for and rejects the ones this
-/// installation cannot sign with.
-fn parse_install_key_algorithm(value: &str) -> Result<AsymmetricKeyAlgorithm, AppError> {
-    let unsupported = || {
-        AppError::from_code(InstallErrorCode::UnsupportedAlgorithm).with_param("algorithm", value)
-    };
-    let algorithm: AsymmetricKeyAlgorithm = value.parse().map_err(|_| unsupported())?;
-    algorithm.validate().map_err(|_| unsupported())?;
-    if JwaSigningAlgorithm::trials_for_key_type(&algorithm).is_empty() {
-        return Err(unsupported());
-    }
-
-    Ok(algorithm)
+/// The key of the first signing key, which must be one the chosen
+/// algorithm signs with.
+fn install_key_algorithm(
+    algorithm: JwaSigningAlgorithm,
+    requested: Option<AsymmetricKeyAlgorithm>,
+) -> Result<AsymmetricKeyAlgorithm, AppError> {
+    algorithm
+        .key_algorithm_for_new_key(requested)
+        .ok_or_else(|| {
+            AppError::from_code(InstallErrorCode::UnsupportedAlgorithm)
+                .with_param("algorithm", algorithm.as_str())
+        })
 }
 
 #[cfg(test)]
@@ -423,13 +428,16 @@ mod tests {
     use super::{InstallInput, validate_install_input};
     use crate::{
         application::error::{code::AppErrorCode, codes::common::CommonErrorCode},
-        domain::key::{ALL_ASYMMETRIC_KEY_ALGORITHMS, AsymmetricKeyAlgorithm},
+        domain::key::{AsymmetricKeyAlgorithm, JwaSigningAlgorithm},
     };
 
     #[test]
-    fn install_validation_rejects_an_unknown_algorithm_name() {
-        let error = validate_install_input(install_input("rsa-1024"))
-            .expect_err("an unknown algorithm name should fail validation");
+    fn install_validation_rejects_a_key_the_algorithm_does_not_sign_with() {
+        let error = validate_install_input(install_input(
+            JwaSigningAlgorithm::Es256,
+            Some(AsymmetricKeyAlgorithm::Ed448),
+        ))
+        .expect_err("ES256 cannot sign with an Ed448 key");
 
         assert_eq!(error.code(), CommonErrorCode::ValidationFailed.code());
         let details = error.validation().expect("validation details");
@@ -439,44 +447,29 @@ mod tests {
                 .iter()
                 .map(|field| (field.field(), field.code()))
                 .collect::<Vec<_>>(),
-            vec![("key_algorithm", 13009)]
+            vec![("signing_algorithm", 13009)]
         );
-        assert_eq!(
-            details.fields()[0].params().get("algorithm"),
-            Some("rsa-1024")
-        );
+        assert_eq!(details.fields()[0].params().get("algorithm"), Some("ES256"));
     }
 
     #[test]
-    fn install_validation_rejects_an_algorithm_that_cannot_sign() {
-        let error = validate_install_input(install_input("x25519"))
-            .expect_err("a key agreement algorithm cannot be the signing key");
-
-        let details = error.validation().expect("validation details");
-        assert_eq!(
-            details
-                .fields()
-                .iter()
-                .map(|field| (field.field(), field.code()))
-                .collect::<Vec<_>>(),
-            vec![("key_algorithm", 13009)]
-        );
-    }
-
-    #[test]
-    fn install_validation_accepts_every_offered_name() {
-        for algorithm in ALL_ASYMMETRIC_KEY_ALGORITHMS.iter().filter(|algorithm| {
-            !matches!(
-                algorithm,
-                AsymmetricKeyAlgorithm::X25519 | AsymmetricKeyAlgorithm::X448
-            )
-        }) {
-            validate_install_input(install_input(&algorithm.to_string()))
-                .unwrap_or_else(|error| panic!("{algorithm} should be accepted: {error}"));
+    fn install_validation_accepts_every_offered_algorithm_and_key() {
+        for algorithm in JwaSigningAlgorithm::all() {
+            for key_type in algorithm.key_algorithms() {
+                let input = validate_install_input(install_input(*algorithm, Some(*key_type)))
+                    .unwrap_or_else(|error| panic!("{algorithm} {key_type:?}: {error}"));
+                assert_eq!(input.key_algorithm, *key_type);
+            }
         }
+        let default = validate_install_input(install_input(JwaSigningAlgorithm::EdDsa, None))
+            .expect("the default key type is accepted");
+        assert_eq!(default.key_algorithm, AsymmetricKeyAlgorithm::Ed25519);
     }
 
-    fn install_input(key_algorithm: &str) -> InstallInput {
+    fn install_input(
+        signing_algorithm: JwaSigningAlgorithm,
+        key_algorithm: Option<AsymmetricKeyAlgorithm>,
+    ) -> InstallInput {
         InstallInput {
             username: "admin".to_owned(),
             email: "admin@example.com".to_owned(),
@@ -484,7 +477,8 @@ mod tests {
             domain: "identity.example.com".to_owned(),
             application_url: "https://login.example.com".to_owned(),
             console_url: "https://console.example.com".to_owned(),
-            key_algorithm: key_algorithm.to_owned(),
+            signing_algorithm,
+            key_algorithm,
         }
     }
 
@@ -497,7 +491,8 @@ mod tests {
             domain: "invalid domain".to_owned(),
             application_url: "not-a-url".to_owned(),
             console_url: "not-a-url".to_owned(),
-            key_algorithm: "ecdsa-p256".to_owned(),
+            signing_algorithm: JwaSigningAlgorithm::Es256,
+            key_algorithm: None,
         })
         .expect_err("invalid form should fail validation");
 
@@ -532,7 +527,8 @@ mod tests {
             domain: "identity.example.com".to_owned(),
             application_url: "https://login.example.com".to_owned(),
             console_url: "https://console.example.com".to_owned(),
-            key_algorithm: "ecdsa-p256".to_owned(),
+            signing_algorithm: JwaSigningAlgorithm::Es256,
+            key_algorithm: None,
         })
         .expect("three different HTTPS origins are allowed");
 
@@ -548,7 +544,7 @@ mod tests {
     fn install_validation_requires_a_console_origin() {
         let error = validate_install_input(InstallInput {
             console_url: "   ".to_owned(),
-            ..install_input("ecdsa-p256")
+            ..install_input(JwaSigningAlgorithm::Es256, None)
         })
         .expect_err("the console origin is required");
 
@@ -576,7 +572,7 @@ mod tests {
         ] {
             let error = validate_install_input(InstallInput {
                 console_url: console_url.to_owned(),
-                ..install_input("ecdsa-p256")
+                ..install_input(JwaSigningAlgorithm::Es256, None)
             })
             .expect_err(console_url);
 
@@ -596,7 +592,7 @@ mod tests {
     fn install_validation_keeps_the_existing_issuer_url_rules() {
         let input = validate_install_input(InstallInput {
             domain: "https://identity.example.com/tenant".to_owned(),
-            ..install_input("ecdsa-p256")
+            ..install_input(JwaSigningAlgorithm::Es256, None)
         })
         .expect("the issuer may keep a path, as before");
 
@@ -615,7 +611,7 @@ mod tests {
             assert!(
                 validate_install_input(InstallInput {
                     domain: value.to_owned(),
-                    ..install_input("ecdsa-p256")
+                    ..install_input(JwaSigningAlgorithm::Es256, None)
                 })
                 .is_err(),
                 "unsafe issuer: {value}"
@@ -623,7 +619,7 @@ mod tests {
             assert!(
                 validate_install_input(InstallInput {
                     application_url: value.to_owned(),
-                    ..install_input("ecdsa-p256")
+                    ..install_input(JwaSigningAlgorithm::Es256, None)
                 })
                 .is_err(),
                 "unsafe login address: {value}"

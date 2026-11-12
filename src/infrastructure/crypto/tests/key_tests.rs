@@ -36,7 +36,7 @@ fn test_rsa_key_and_cert() -> (String, String) {
     let cert = generate_self_signed_certificate(
         &data.private_key,
         "test.example.com",
-        &AsymmetricKeyAlgorithm::Rsa { bits: 2048 },
+        &AsymmetricKeyAlgorithm::Rsa2048,
     )
     .unwrap();
     (data.private_key, cert)
@@ -387,4 +387,49 @@ fn es256k_roundtrip() {
 fn eddsa_roundtrip() {
     let data = generate_ed25519_key().unwrap();
     assert_roundtrip(&data.private_key, &data.public_key, "EdDSA");
+}
+
+#[test]
+fn every_offered_signing_algorithm_creates_a_key_that_publishes_and_signs_only_with_it() {
+    use identity_domain::key::generator::{AsymmetricKeyGenerator, AsymmetricKeySpec};
+
+    use crate::crypto::key::{AsymmetricKeyGeneratorImpl, generate_jwks_for_key};
+
+    // RSA 4096 is slow to generate; the 512 variants share their code path
+    // with the 384 ones, so cover the cheaper sizes here.
+    for (algorithm, key) in JwaSigningAlgorithm::all()
+        .iter()
+        .copied()
+        .filter(|algorithm| {
+            !matches!(
+                algorithm,
+                JwaSigningAlgorithm::Rs512 | JwaSigningAlgorithm::Ps512
+            )
+        })
+        .flat_map(|algorithm| {
+            algorithm
+                .key_algorithms()
+                .iter()
+                .map(move |key| (algorithm, *key))
+        })
+    {
+        let spec = AsymmetricKeySpec::for_signing(algorithm, key);
+        let data = AsymmetricKeyGeneratorImpl.generate(&spec).unwrap();
+        let certificate =
+            generate_self_signed_certificate(&data.private_key, "id.example.test", &spec.algorithm)
+                .unwrap_or_else(|error| {
+                    panic!("{algorithm} {}: certificate: {error}", spec.algorithm)
+                });
+        let jwks =
+            generate_jwks_for_key(&data.private_key, "kid", Some(&certificate), &[algorithm])
+                .unwrap_or_else(|error| {
+                    panic!("{algorithm} {}: bindings: {error}", spec.algorithm)
+                });
+        let signing = jwks
+            .iter()
+            .map(|(name, _)| name.as_str())
+            .filter(|name| name.parse::<JwaSigningAlgorithm>().is_ok())
+            .collect::<Vec<_>>();
+        assert_eq!(signing, [algorithm.as_str()], "{algorithm}");
+    }
 }

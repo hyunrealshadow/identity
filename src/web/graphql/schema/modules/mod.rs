@@ -6,12 +6,14 @@ use self::{
     client::{ClientMutation, ClientQuery},
     group::{GroupMutation, GroupQuery},
     instance::InstanceQuery,
+    key::{KeyMutation, KeyQuery},
     node::NodeQuery,
     resource::{ResourceMutation, ResourceQuery},
     role::{RoleMutation, RoleQuery},
     scope::{ClientScopeMutation, ScopeMutation, ScopeQuery},
     security::{SecurityMutation, SecurityQuery},
     session::{SessionMutation, SessionQuery},
+    setting::{SettingMutation, SettingQuery},
     user::{UserManagementMutation, UserManagementQuery},
 };
 
@@ -20,6 +22,7 @@ mod authorization;
 mod client;
 mod group;
 mod instance;
+mod key;
 mod localized;
 mod node;
 mod relation;
@@ -28,6 +31,7 @@ mod role;
 mod scope;
 mod security;
 mod session;
+mod setting;
 mod user;
 
 /// Flat self-service and management query root. Each functional module
@@ -47,6 +51,8 @@ pub(crate) struct QueryRoot(
     ScopeQuery,
     RoleQuery,
     ClientQuery,
+    SettingQuery,
+    KeyQuery,
 );
 
 #[derive(MergedObject, Default)]
@@ -61,4 +67,6 @@ pub(crate) struct MutationRoot(
     RoleMutation,
     ClientMutation,
     ClientScopeMutation,
+    SettingMutation,
+    KeyMutation,
 );

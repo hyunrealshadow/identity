@@ -2,6 +2,7 @@ use std::error::Error;
 
 use http::StatusCode;
 use identity_application::error::{AppError, ErrorDiagnostics};
+use identity_domain::key::{AsymmetricKeyAlgorithm, JwaSigningAlgorithm};
 use salvo::{Depot, Request, Router, handler};
 use serde::{Deserialize, Serialize};
 use tracing::{error, warn};
@@ -26,6 +27,36 @@ pub fn status_routes() -> Router {
 #[derive(Debug, Serialize)]
 struct InstallationStatusResponse {
     installed: bool,
+    /// Algorithms the first signing key can be created with, in the order offered.
+    signing_algorithms: Vec<SigningAlgorithmOption>,
+}
+
+#[derive(Debug, Serialize)]
+struct SigningAlgorithmOption {
+    /// Submitted as `signing_algorithm`.
+    signing_algorithm: JwaSigningAlgorithm,
+    /// Submitted as `key_algorithm`.
+    key_algorithm: AsymmetricKeyAlgorithm,
+    /// The key as an operator reads it, such as `RSA 3072`.
+    key_name: &'static str,
+}
+
+/// One option per algorithm and key type it can use: EdDSA appears once per
+/// Edwards curve.
+fn signing_algorithm_options() -> Vec<SigningAlgorithmOption> {
+    JwaSigningAlgorithm::all()
+        .iter()
+        .flat_map(|algorithm| {
+            algorithm
+                .key_algorithms()
+                .iter()
+                .map(|key| SigningAlgorithmOption {
+                    signing_algorithm: *algorithm,
+                    key_algorithm: *key,
+                    key_name: key.display_name(),
+                })
+        })
+        .collect()
 }
 
 #[derive(Debug, Deserialize)]
@@ -39,7 +70,10 @@ struct InstallRequest {
     /// localized "console URL required" error instead of a transport error.
     #[serde(default)]
     console_url: String,
-    key_algorithm: String,
+    signing_algorithm: JwaSigningAlgorithm,
+    /// Needed only where the algorithm offers several keys (EdDSA).
+    #[serde(default)]
+    key_algorithm: Option<AsymmetricKeyAlgorithm>,
 }
 
 #[derive(Debug, Serialize)]
@@ -50,14 +84,14 @@ struct InstallResponse {
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct InstallFailureLogContext {
     domain: String,
-    key_algorithm: String,
+    signing_algorithm: String,
 }
 
 impl InstallFailureLogContext {
     fn from_request(request: &InstallRequest) -> Self {
         Self {
             domain: request.domain.clone(),
-            key_algorithm: request.key_algorithm.clone(),
+            signing_algorithm: request.signing_algorithm.as_str().to_owned(),
         }
     }
 }
@@ -79,7 +113,7 @@ fn log_install_failure(error: &AppError, request: &InstallRequest) {
             stacktrace = diagnostics.backtrace.map(ToString::to_string),
             code = error.code(),
             domain = %context.domain,
-            key_algorithm = %context.key_algorithm,
+            signing_algorithm = %context.signing_algorithm,
             "install submission failed"
         );
     } else {
@@ -87,7 +121,7 @@ fn log_install_failure(error: &AppError, request: &InstallRequest) {
             error = %error,
             code = error.code(),
             domain = %context.domain,
-            key_algorithm = %context.key_algorithm,
+            signing_algorithm = %context.signing_algorithm,
             "install submission rejected"
         );
     }
@@ -100,6 +134,7 @@ async fn installation_status(depot: &mut Depot) -> JsonWebResult<AppResponse> {
         StatusCode::OK,
         InstallationStatusResponse {
             installed: ctx.services().install().is_initialized(),
+            signing_algorithms: signing_algorithm_options(),
         },
     );
     insert_no_store_headers(&mut response);
@@ -120,7 +155,8 @@ async fn install_submit(depot: &mut Depot, req: &mut Request) -> JsonWebResult<A
         domain: request.domain.clone(),
         application_url: request.application_url.clone(),
         console_url: request.console_url.clone(),
-        key_algorithm: request.key_algorithm.clone(),
+        signing_algorithm: request.signing_algorithm,
+        key_algorithm: request.key_algorithm,
     };
 
     ctx.services()
@@ -146,6 +182,8 @@ async fn install_submit(depot: &mut Depot, req: &mut Request) -> JsonWebResult<A
 mod tests {
     use identity_application::error::{AppError, codes::common::CommonErrorCode};
 
+    use identity_domain::key::{AsymmetricKeyAlgorithm, JwaSigningAlgorithm};
+
     use super::{InstallFailureLogContext, InstallRequest, should_log_install_failure_as_error};
 
     #[test]
@@ -157,7 +195,8 @@ mod tests {
             domain: "identity.example.com".to_owned(),
             application_url: "https://login.example.com".to_owned(),
             console_url: "https://console.example.com".to_owned(),
-            key_algorithm: "ed25519".to_owned(),
+            signing_algorithm: JwaSigningAlgorithm::EdDsa,
+            key_algorithm: Some(AsymmetricKeyAlgorithm::Ed25519),
         };
         let error = AppError::from_code(CommonErrorCode::InternalError);
 
@@ -165,6 +204,6 @@ mod tests {
 
         assert!(should_log_install_failure_as_error(&error));
         assert_eq!(context.domain, "identity.example.com");
-        assert_eq!(context.key_algorithm, "ed25519");
+        assert_eq!(context.signing_algorithm, "EdDSA");
     }
 }

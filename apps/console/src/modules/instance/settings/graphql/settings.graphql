@@ -1,0 +1,74 @@
+fragment ConsoleInstanceSettingsFields on InstanceSettings {
+  general {
+    issuer
+    loginUrl
+    consoleUrl
+    initializedAt
+  }
+  protocol {
+    oauthVersion
+    requirePushedAuthorizationRequests
+    pushedAuthorizationRequestLifetimeSeconds
+    pushedAuthorizationRequestLifetimeRange {
+      min
+      max
+    }
+    deviceAuthorizationRequestLifetimeSeconds
+    deviceAuthorizationRequestLifetimeRange {
+      min
+      max
+    }
+    deviceAuthorizationPollingIntervalSeconds
+    deviceAuthorizationPollingIntervalRange {
+      min
+      max
+    }
+    dynamicRegistrationEnabled
+    version
+  }
+  authentication {
+    breachedPasswordCheckEnabled
+    passwordHashing {
+      timeCost
+      timeCostRange {
+        min
+        max
+      }
+      memoryCostKib
+      memoryCostKibRange {
+        min
+        max
+      }
+      parallelism
+      parallelismRange {
+        min
+        max
+      }
+    }
+    version
+  }
+}
+
+query ConsoleInstanceSettings {
+  instanceSettings {
+    ...ConsoleInstanceSettingsFields
+  }
+}
+
+mutation ConsoleUpdateProtocolSettings($input: UpdateProtocolSettingsInput!) {
+  updateProtocolSettings(input: $input) {
+    clientMutationId
+    settings {
+      ...ConsoleInstanceSettingsFields
+    }
+  }
+}
+
+mutation ConsoleUpdateAuthenticationSettings($input: UpdateAuthenticationSettingsInput!) {
+  updateAuthenticationSettings(input: $input) {
+    clientMutationId
+    settings {
+      ...ConsoleInstanceSettingsFields
+    }
+  }
+}

@@ -5,13 +5,14 @@ use std::{
 };
 
 use identity_application::{
+    error::{AppError, codes::install::InstallErrorCode},
     install::{InstallInput, InstallService},
     setting::{
         ConsoleClientIdSetting, ConsoleDomainSetting, DomainSetting, InstallationSettings,
         SettingsSource,
     },
 };
-use identity_domain::openid_connect::BUILTIN_CLIENT_SECRET_LIFETIME;
+use identity_domain::{key::JwaSigningAlgorithm, openid_connect::BUILTIN_CLIENT_SECRET_LIFETIME};
 use identity_infrastructure::{
     AppContext, AppLifecycle, AppResources, AppState,
     auth::{
@@ -168,7 +169,15 @@ impl AppBuilder {
             "auto install: config values"
         );
         let settings = Arc::new(AppRuntimeSettings::from_db(db.clone()).await?);
-        let key_algorithm = cfg.key_algorithm.to_string();
+        // The configured key decides both the key type and the algorithm it
+        // signs with by default; keys that cannot sign are rejected here.
+        let unsupported = || {
+            AppError::from_code(InstallErrorCode::UnsupportedAlgorithm)
+                .with_param("algorithm", cfg.key_algorithm.to_string())
+        };
+        let signing_algorithm = JwaSigningAlgorithm::primary_for_key_type(&cfg.key_algorithm)
+            .ok_or_else(unsupported)?;
+
         let mut svc = build_install_service(&settings, db.clone())?;
         svc.repository = Arc::new(
             InstallRepositoryImpl::new(db.clone())
@@ -198,7 +207,8 @@ impl AppBuilder {
                 .ok()
                 .flatten()
                 .unwrap_or_else(|| "https://localhost:3100".to_owned()),
-            key_algorithm,
+            signing_algorithm,
+            key_algorithm: Some(cfg.key_algorithm),
         })
         .await?;
 

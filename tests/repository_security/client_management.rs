@@ -60,7 +60,7 @@ async fn scalar<T: sea_orm::TryGetable>(db: &DatabaseConnection, statement: &str
 }
 
 /// A recoverable administrator must exist for any audited management write.
-async fn owner(db: &DatabaseConnection) {
+pub(super) async fn owner(db: &DatabaseConnection) {
     sql(db, r#"
         INSERT INTO "user"(oid,name,name_normalized,email,email_normalized,email_verified)
             VALUES(gen_random_uuid(),'owner','owner','owner@example.test','owner@example.test',true);
@@ -74,7 +74,10 @@ async fn owner(db: &DatabaseConnection) {
 }
 
 /// A machine principal granted the given management scopes for itself.
-async fn machine(db: &DatabaseConnection, scopes: &[ManagementScope]) -> RbacManagementAuthority {
+pub(super) async fn machine(
+    db: &DatabaseConnection,
+    scopes: &[ManagementScope],
+) -> RbacManagementAuthority {
     let oid = Uuid::new_v4();
     let codes = scopes
         .iter()
@@ -423,7 +426,7 @@ async fn postgres_seed_removes_retired_management_scopes_and_their_relations() {
 
 /// The recoverable owner acting through an issuing client with a fresh AAL2
 /// sign-in, which credential writes require.
-async fn administrator(
+pub(super) async fn administrator(
     db: &DatabaseConnection,
     scopes: &[ManagementScope],
 ) -> RbacManagementAuthority {

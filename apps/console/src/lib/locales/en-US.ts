@@ -1,4 +1,5 @@
 import clientsEnUS from '#/modules/client-management/clients/locales/en-US'
+import instanceEnUS from '#/modules/instance/locales/en-US'
 import resourcesEnUS from '#/modules/client-management/resources/locales/en-US'
 import dashboardEnUS from '#/modules/dashboard/locales/en-US'
 import userManagementEnUS from '#/modules/user-management/locales/en-US'
@@ -228,6 +229,7 @@ const enUS = {
   ...permissionsEnUS,
   ...resourcesEnUS,
   ...clientsEnUS,
+  ...instanceEnUS,
 } as const
 
 export default enUS

@@ -454,21 +454,20 @@ impl LogoutService {
 
         for key in keys {
             if let KeyData::Asymmetric(data) = &key.data {
-                let Some(alg) = self
-                    .signing_algorithm_detector
-                    .detect(&key)
-                    .into_iter()
-                    .next()
-                else {
-                    continue;
-                };
-
-                let Some(binding) = self
-                    .key_jwk_repo
-                    .find_active_by_key_oid_and_algorithm(key.oid, alg)
-                    .await
-                    .map_err(AppError::internal)?
-                else {
+                // A key signs only with the algorithms it publishes a binding for.
+                let mut found = None;
+                for alg in self.signing_algorithm_detector.detect(&key) {
+                    if let Some(binding) = self
+                        .key_jwk_repo
+                        .find_active_by_key_oid_and_algorithm(key.oid, alg)
+                        .await
+                        .map_err(AppError::internal)?
+                    {
+                        found = Some((alg, binding));
+                        break;
+                    }
+                }
+                let Some((alg, binding)) = found else {
                     continue;
                 };
 

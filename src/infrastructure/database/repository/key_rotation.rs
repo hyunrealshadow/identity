@@ -4,17 +4,21 @@ use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use identity_application::{
     error::{AppError, codes::common::CommonErrorCode},
-    key::rotation::{KEY_LIFETIME, KEY_ROTATION_AGE, KeyRotationRepository, RotationMaterial},
+    key::{
+        asymmetric::{GeneratedKeyJwk, KeyJwkGenerator},
+        rotation::{KEY_LIFETIME, KEY_ROTATION_AGE, KeyRotationRepository, RotationMaterial},
+    },
 };
-use identity_domain::key::{Key, KeyOid, KeyType};
+use identity_domain::key::{JwaSigningAlgorithm, Key, KeyData, KeyOid, KeyType};
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, EntityTrait, QueryFilter,
-    Set, TransactionTrait, sea_query::Expr,
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DbErr, EntityTrait,
+    QueryFilter, Set, TransactionTrait, sea_query::Expr,
 };
 use serde_json::to_value;
 use uuid::Uuid;
 
 use super::key::to_domain;
+use crate::crypto::key_jwk::KeyJwkGeneratorImpl;
 use crate::database::{
     entity::{
         key,
@@ -23,6 +27,9 @@ use crate::database::{
     },
     query::advisory_transaction_lock,
 };
+
+/// Advisory lock serializing every key rotation and revocation.
+pub(crate) const KEY_ROTATION_LOCK: i64 = 684395120247316902;
 
 pub struct KeyRotationRepositoryImpl {
     db: DatabaseConnection,
@@ -64,7 +71,7 @@ impl KeyRotationRepository for KeyRotationRepositoryImpl {
         now: DateTime<Utc>,
     ) -> Result<bool, AppError> {
         let txn = self.db.begin().await.map_err(internal)?;
-        txn.execute(&advisory_transaction_lock(684395120247316902_i64))
+        txn.execute(&advisory_transaction_lock(KEY_ROTATION_LOCK))
             .await
             .map_err(internal)?;
 
@@ -87,51 +94,106 @@ impl KeyRotationRepository for KeyRotationRepositoryImpl {
             return Ok(false);
         }
 
-        let next_oid = Uuid::new_v4();
-        let next = key::ActiveModel {
-            oid: Set(next_oid),
-            r#type: Set(previous.r#type.clone()),
-            data: Set(to_value(material.data).map_err(internal)?),
-            expires_at: Set((now + KEY_LIFETIME).into()),
-            revoked_at: Set(None),
-            rotated_from_oid: Set(Some(Uuid::from(previous_oid))),
-            rotated_at: Set(None),
-            created_at: Set(now.into()),
-            updated_at: Set(None),
-            ..Default::default()
-        };
-        next.insert(&txn).await.map_err(internal)?;
-
-        for generated in material.jwks {
-            let binding_oid = Uuid::new_v4();
-            let mut jwk = generated.jwk;
-            jwk.set_key_id(binding_oid.to_string());
-            key_jwk::ActiveModel {
-                oid: Set(binding_oid),
-                key_oid: Set(next_oid),
-                algorithm: Set(generated.algorithm.as_str().to_owned()),
-                jwk: Set(to_value(jwk).map_err(internal)?),
-                created_at: Set(now.into()),
-                updated_at: Set(None),
-                ..Default::default()
-            }
-            .insert(&txn)
-            .await
-            .map_err(internal)?;
-        }
-
-        // Asymmetric predecessors remain available for signature verification.
-        // Symmetric predecessors remain loaded for decryption even after expiry.
-        let retiring_expiry = previous.expires_at.min((now + Duration::days(30)).into());
-        KeyEntity::update_many()
-            .col_expr(KeyColumn::RotatedAt, Expr::value(Some(now.fixed_offset())))
-            .col_expr(KeyColumn::ExpiresAt, Expr::value(retiring_expiry))
-            .col_expr(KeyColumn::UpdatedAt, Expr::value(Some(now.fixed_offset())))
-            .filter(KeyColumn::Id.eq(previous.id))
-            .exec(&txn)
+        insert_successor(&txn, &previous, material, now)
             .await
             .map_err(internal)?;
         txn.commit().await.map_err(internal)?;
         Ok(true)
     }
+}
+
+/// Store `material` as the successor of `previous` and retire `previous`, on
+/// the caller's transaction. The caller holds the rotation lock and has
+/// checked that `previous` is still in use.
+pub(crate) async fn insert_successor<C: ConnectionTrait>(
+    txn: &C,
+    previous: &key::Model,
+    material: RotationMaterial,
+    now: DateTime<Utc>,
+) -> Result<Uuid, DbErr> {
+    // The successor signs with the algorithms its predecessor published.
+    let published = key_jwk::Entity::find()
+        .filter(key_jwk::Column::KeyOid.eq(previous.oid))
+        .all(txn)
+        .await?
+        .into_iter()
+        .filter_map(|binding| binding.algorithm.parse::<JwaSigningAlgorithm>().ok())
+        .collect::<Vec<_>>();
+    let jwks = match (&material.data, published.is_empty()) {
+        (KeyData::Asymmetric(data), false) => KeyJwkGeneratorImpl
+            .generate_for(
+                &data.private_key,
+                "pending",
+                data.certificate.as_deref(),
+                &published,
+            )
+            .map_err(|error| DbErr::Custom(error.to_string()))?,
+        _ => material.jwks,
+    };
+    let next_oid = insert_key(
+        txn,
+        &previous.r#type,
+        material.data,
+        jwks,
+        Some(previous.oid),
+        now,
+    )
+    .await?;
+
+    // Asymmetric predecessors remain available for signature verification.
+    // Symmetric predecessors remain loaded for decryption even after expiry.
+    let retiring_expiry = previous.expires_at.min((now + Duration::days(30)).into());
+    KeyEntity::update_many()
+        .col_expr(KeyColumn::RotatedAt, Expr::value(Some(now.fixed_offset())))
+        .col_expr(KeyColumn::ExpiresAt, Expr::value(retiring_expiry))
+        .col_expr(KeyColumn::UpdatedAt, Expr::value(Some(now.fixed_offset())))
+        .filter(KeyColumn::Id.eq(previous.id))
+        .exec(txn)
+        .await?;
+    Ok(next_oid)
+}
+
+/// Store one key and its JWK bindings, each binding with its own `kid`.
+pub(crate) async fn insert_key<C: ConnectionTrait>(
+    txn: &C,
+    key_type: &str,
+    data: KeyData,
+    jwks: Vec<GeneratedKeyJwk>,
+    rotated_from: Option<Uuid>,
+    now: DateTime<Utc>,
+) -> Result<Uuid, DbErr> {
+    let oid = Uuid::new_v4();
+    let data = to_value(data).map_err(|error| DbErr::Custom(error.to_string()))?;
+    key::ActiveModel {
+        oid: Set(oid),
+        r#type: Set(key_type.to_owned()),
+        data: Set(data),
+        expires_at: Set((now + KEY_LIFETIME).into()),
+        revoked_at: Set(None),
+        rotated_from_oid: Set(rotated_from),
+        rotated_at: Set(None),
+        created_at: Set(now.into()),
+        updated_at: Set(None),
+        ..Default::default()
+    }
+    .insert(txn)
+    .await?;
+    for generated in jwks {
+        let binding_oid = Uuid::new_v4();
+        let mut jwk = generated.jwk;
+        jwk.set_key_id(binding_oid.to_string());
+        let jwk = to_value(jwk).map_err(|error| DbErr::Custom(error.to_string()))?;
+        key_jwk::ActiveModel {
+            oid: Set(binding_oid),
+            key_oid: Set(oid),
+            algorithm: Set(generated.algorithm.as_str().to_owned()),
+            jwk: Set(jwk),
+            created_at: Set(now.into()),
+            updated_at: Set(None),
+            ..Default::default()
+        }
+        .insert(txn)
+        .await?;
+    }
+    Ok(oid)
 }

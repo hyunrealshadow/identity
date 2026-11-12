@@ -7,26 +7,80 @@ use std::{
 use serde::{Deserialize, Serialize};
 use strum::{AsRefStr, Display, EnumIter, IntoEnumIterator, IntoStaticStr, VariantArray};
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
+/// Every key type this instance generates. A closed set: RSA comes in the
+/// three offered sizes only.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, EnumIter, VariantArray,
+)]
 pub enum AsymmetricKeyAlgorithm {
-    Rsa { bits: usize },
+    #[serde(rename = "RSA_2048")]
+    Rsa2048,
+    #[serde(rename = "RSA_3072")]
+    Rsa3072,
+    #[serde(rename = "RSA_4096")]
+    Rsa4096,
+    #[serde(rename = "ECDSA_P256")]
     EcdsaP256,
+    #[serde(rename = "ECDSA_P384")]
     EcdsaP384,
+    #[serde(rename = "ECDSA_P521")]
     EcdsaP521,
+    #[serde(rename = "ECDSA_SECP256K1")]
     EcdsaSecp256k1,
+    #[serde(rename = "ED25519")]
     Ed25519,
+    #[serde(rename = "ED448")]
     Ed448,
+    #[serde(rename = "X25519")]
     X25519,
+    #[serde(rename = "X448")]
     X448,
 }
 
 impl AsymmetricKeyAlgorithm {
-    pub fn validate(&self) -> Result<(), String> {
+    /// The key type as an operator reads it, such as `ECDSA P-256` or `RSA 2048`.
+    #[must_use]
+    pub const fn display_name(self) -> &'static str {
         match self {
-            Self::Rsa { bits } if *bits < 2048 => Err("rsa bits must be at least 2048".to_owned()),
-            _ => Ok(()),
+            Self::Rsa2048 => "RSA 2048",
+            Self::Rsa3072 => "RSA 3072",
+            Self::Rsa4096 => "RSA 4096",
+            Self::EcdsaP256 => "ECDSA P-256",
+            Self::EcdsaP384 => "ECDSA P-384",
+            Self::EcdsaP521 => "ECDSA P-521",
+            Self::EcdsaSecp256k1 => "ECDSA secp256k1",
+            Self::Ed25519 => "Ed25519",
+            Self::Ed448 => "Ed448",
+            Self::X25519 => "X25519",
+            Self::X448 => "X448",
         }
+    }
+
+    /// The modulus size of an RSA key.
+    #[must_use]
+    pub const fn rsa_bits(self) -> Option<usize> {
+        match self {
+            Self::Rsa2048 => Some(2048),
+            Self::Rsa3072 => Some(3072),
+            Self::Rsa4096 => Some(4096),
+            _ => None,
+        }
+    }
+
+    /// The RSA key type of a modulus size, if it is one of the offered sizes.
+    #[must_use]
+    pub const fn from_rsa_bits(bits: usize) -> Option<Self> {
+        match bits {
+            2048 => Some(Self::Rsa2048),
+            3072 => Some(Self::Rsa3072),
+            4096 => Some(Self::Rsa4096),
+            _ => None,
+        }
+    }
+
+    #[must_use]
+    pub const fn is_rsa(self) -> bool {
+        self.rsa_bits().is_some()
     }
 }
 
@@ -38,9 +92,9 @@ pub const ALL_ASYMMETRIC_KEY_ALGORITHMS: &[AsymmetricKeyAlgorithm] = &[
     AsymmetricKeyAlgorithm::EcdsaSecp256k1,
     AsymmetricKeyAlgorithm::Ed25519,
     AsymmetricKeyAlgorithm::Ed448,
-    AsymmetricKeyAlgorithm::Rsa { bits: 2048 },
-    AsymmetricKeyAlgorithm::Rsa { bits: 3072 },
-    AsymmetricKeyAlgorithm::Rsa { bits: 4096 },
+    AsymmetricKeyAlgorithm::Rsa2048,
+    AsymmetricKeyAlgorithm::Rsa3072,
+    AsymmetricKeyAlgorithm::Rsa4096,
     AsymmetricKeyAlgorithm::X25519,
     AsymmetricKeyAlgorithm::X448,
 ];
@@ -48,7 +102,9 @@ pub const ALL_ASYMMETRIC_KEY_ALGORITHMS: &[AsymmetricKeyAlgorithm] = &[
 impl FmtDisplay for AsymmetricKeyAlgorithm {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         let name = match self {
-            Self::Rsa { bits } => return write!(f, "rsa-{bits}"),
+            Self::Rsa2048 => "rsa-2048",
+            Self::Rsa3072 => "rsa-3072",
+            Self::Rsa4096 => "rsa-4096",
             Self::EcdsaP256 => "ecdsa-p256",
             Self::EcdsaP384 => "ecdsa-p384",
             Self::EcdsaP521 => "ecdsa-p521",
@@ -98,9 +154,9 @@ impl FromStr for AsymmetricKeyAlgorithm {
             "ed448" => Ok(Self::Ed448),
             "x25519" => Ok(Self::X25519),
             "x448" => Ok(Self::X448),
-            "rsa-2048" => Ok(Self::Rsa { bits: 2048 }),
-            "rsa-3072" => Ok(Self::Rsa { bits: 3072 }),
-            "rsa-4096" => Ok(Self::Rsa { bits: 4096 }),
+            "rsa-2048" => Ok(Self::Rsa2048),
+            "rsa-3072" => Ok(Self::Rsa3072),
+            "rsa-4096" => Ok(Self::Rsa4096),
             _ => Err(AsymmetricKeyAlgorithmParseError(value.to_owned())),
         }
     }
@@ -118,29 +174,42 @@ impl FromStr for AsymmetricKeyAlgorithm {
     IntoStaticStr,
     EnumIter,
     VariantArray,
+    Serialize,
+    Deserialize,
 )]
 pub enum JwaSigningAlgorithm {
     #[strum(serialize = "RS256")]
+    #[serde(rename = "RS256")]
     Rs256,
     #[strum(serialize = "RS384")]
+    #[serde(rename = "RS384")]
     Rs384,
     #[strum(serialize = "RS512")]
+    #[serde(rename = "RS512")]
     Rs512,
     #[strum(serialize = "PS256")]
+    #[serde(rename = "PS256")]
     Ps256,
     #[strum(serialize = "PS384")]
+    #[serde(rename = "PS384")]
     Ps384,
     #[strum(serialize = "PS512")]
+    #[serde(rename = "PS512")]
     Ps512,
     #[strum(serialize = "ES256")]
+    #[serde(rename = "ES256")]
     Es256,
     #[strum(serialize = "ES384")]
+    #[serde(rename = "ES384")]
     Es384,
     #[strum(serialize = "ES512")]
+    #[serde(rename = "ES512")]
     Es512,
     #[strum(serialize = "ES256K")]
+    #[serde(rename = "ES256K")]
     Es256k,
     #[strum(serialize = "EdDSA")]
+    #[serde(rename = "EdDSA")]
     EdDsa,
 }
 
@@ -169,7 +238,9 @@ impl JwaSigningAlgorithm {
     /// but support different algorithm subsets.
     pub fn trials_for_key_type(algo: &AsymmetricKeyAlgorithm) -> &'static [Self] {
         match algo {
-            AsymmetricKeyAlgorithm::Rsa { .. } => &[
+            AsymmetricKeyAlgorithm::Rsa2048
+            | AsymmetricKeyAlgorithm::Rsa3072
+            | AsymmetricKeyAlgorithm::Rsa4096 => &[
                 Self::Ps256,
                 Self::Ps384,
                 Self::Ps512,
@@ -186,20 +257,54 @@ impl JwaSigningAlgorithm {
         }
     }
 
-    /// Best algorithm name for a given key type (used for signing key selection).
-    pub fn primary_for_key_type(algo: &AsymmetricKeyAlgorithm) -> Self {
+    /// The algorithm a key of this type signs with when none was chosen.
+    /// Key agreement curves (X25519, X448) cannot sign and have none.
+    #[must_use]
+    pub const fn primary_for_key_type(algo: &AsymmetricKeyAlgorithm) -> Option<Self> {
         match algo {
-            AsymmetricKeyAlgorithm::Rsa { bits } if *bits >= 4096 => Self::Rs512,
-            AsymmetricKeyAlgorithm::Rsa { bits } if *bits >= 3072 => Self::Rs384,
-            AsymmetricKeyAlgorithm::Rsa { .. } => Self::Rs256,
-            AsymmetricKeyAlgorithm::EcdsaP256 => Self::Es256,
-            AsymmetricKeyAlgorithm::EcdsaP384 => Self::Es384,
-            AsymmetricKeyAlgorithm::EcdsaP521 => Self::Es512,
-            AsymmetricKeyAlgorithm::EcdsaSecp256k1 => Self::Es256k,
-            AsymmetricKeyAlgorithm::Ed25519
-            | AsymmetricKeyAlgorithm::Ed448
-            | AsymmetricKeyAlgorithm::X25519
-            | AsymmetricKeyAlgorithm::X448 => Self::EdDsa,
+            AsymmetricKeyAlgorithm::Rsa4096 => Some(Self::Rs512),
+            AsymmetricKeyAlgorithm::Rsa3072 => Some(Self::Rs384),
+            AsymmetricKeyAlgorithm::Rsa2048 => Some(Self::Rs256),
+            AsymmetricKeyAlgorithm::EcdsaP256 => Some(Self::Es256),
+            AsymmetricKeyAlgorithm::EcdsaP384 => Some(Self::Es384),
+            AsymmetricKeyAlgorithm::EcdsaP521 => Some(Self::Es512),
+            AsymmetricKeyAlgorithm::EcdsaSecp256k1 => Some(Self::Es256k),
+            AsymmetricKeyAlgorithm::Ed25519 | AsymmetricKeyAlgorithm::Ed448 => Some(Self::EdDsa),
+            AsymmetricKeyAlgorithm::X25519 | AsymmetricKeyAlgorithm::X448 => None,
+        }
+    }
+
+    /// The keys a new signing key for this algorithm can be generated as,
+    /// the default first. RSA sizes follow the hash strength; EdDSA can use
+    /// either Edwards curve.
+    #[must_use]
+    pub const fn key_algorithms(self) -> &'static [AsymmetricKeyAlgorithm] {
+        match self {
+            Self::Rs256 | Self::Ps256 => &[AsymmetricKeyAlgorithm::Rsa2048],
+            Self::Rs384 | Self::Ps384 => &[AsymmetricKeyAlgorithm::Rsa3072],
+            Self::Rs512 | Self::Ps512 => &[AsymmetricKeyAlgorithm::Rsa4096],
+            Self::Es256 => &[AsymmetricKeyAlgorithm::EcdsaP256],
+            Self::Es384 => &[AsymmetricKeyAlgorithm::EcdsaP384],
+            Self::Es512 => &[AsymmetricKeyAlgorithm::EcdsaP521],
+            Self::Es256k => &[AsymmetricKeyAlgorithm::EcdsaSecp256k1],
+            Self::EdDsa => &[
+                AsymmetricKeyAlgorithm::Ed25519,
+                AsymmetricKeyAlgorithm::Ed448,
+            ],
+        }
+    }
+
+    /// The key a new signing key uses: `requested` when this algorithm can
+    /// sign with it, the default when none was requested, `None` otherwise.
+    #[must_use]
+    pub fn key_algorithm_for_new_key(
+        self,
+        requested: Option<AsymmetricKeyAlgorithm>,
+    ) -> Option<AsymmetricKeyAlgorithm> {
+        let offered = self.key_algorithms();
+        match requested {
+            None => offered.first().copied(),
+            Some(key) => offered.contains(&key).then_some(key),
         }
     }
 
@@ -293,10 +398,13 @@ mod tests {
     }
 
     #[test]
-    fn rejects_rsa_below_2048_bits() {
-        let result = AsymmetricKeyAlgorithm::Rsa { bits: 1024 }.validate();
-
-        assert_eq!(result, Err("rsa bits must be at least 2048".to_owned()));
+    fn only_offered_rsa_sizes_have_a_key_type() {
+        assert_eq!(
+            AsymmetricKeyAlgorithm::from_rsa_bits(3072),
+            Some(AsymmetricKeyAlgorithm::Rsa3072)
+        );
+        assert_eq!(AsymmetricKeyAlgorithm::from_rsa_bits(1024), None);
+        assert_eq!(AsymmetricKeyAlgorithm::from_rsa_bits(8192), None);
     }
 
     #[test]
