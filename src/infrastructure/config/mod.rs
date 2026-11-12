@@ -7,8 +7,8 @@ use std::{
     io::{Error as IoError, ErrorKind},
 };
 
+use noyalib::compat::serde_yaml::from_str;
 use serde::Deserialize;
-use serde_yml::from_str;
 use tera::{Context, Error as TeraError, Kwargs, State, Tera, TeraResult, Value};
 use url::Url;
 

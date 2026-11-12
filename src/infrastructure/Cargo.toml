@@ -47,7 +47,7 @@ salvo = { workspace = true }
 sea-orm = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
-serde_yml = { version = "0.0.13" }
+noyalib = { version = "0.0.60", features = ["compat-serde-yaml"] }
 sha2 = { workspace = true }
 subtle = { workspace = true }
 tera = { workspace = true }

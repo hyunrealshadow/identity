@@ -1,6 +1,6 @@
 use std::env;
 
-use serde_yml::from_str;
+use noyalib::compat::serde_yaml::from_str;
 use serial_test::serial;
 
 use super::{AppConfig, AppEnvironment, StaticTokenConfig, render_config_template};
