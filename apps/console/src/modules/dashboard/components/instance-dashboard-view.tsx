@@ -245,21 +245,18 @@ function NewUsersCard({
           <ModuleUnavailable onRetry={onRetry} issues={sectionIssues} />
         ) : users.registrations.length === 0 ? (
           <p className="text-sm text-muted-foreground">{t('dashboardNewUsersNoData')}</p>
+        ) : users.registrations.every((bucket) => bucket.count === 0) ? (
+          <div className="mt-4 flex h-52 items-center justify-center text-center">
+            <p className="text-sm text-muted-foreground">
+              {t('dashboardNewUsersEmpty')}
+            </p>
+          </div>
         ) : (
           <>
             <p className="text-sm text-muted-foreground">
               {t('dashboardNewUsersTotal', { count: users.createdLast7Days })}
             </p>
-            {users.registrations.every((bucket) => bucket.count === 0) ? (
-              <div className="mt-4 rounded-lg border border-dashed border-border px-4 py-6">
-                <p className="text-sm font-medium">{t('dashboardNewUsersEmpty')}</p>
-                <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  {t('dashboardNewUsersEmptyDescription')}
-                </p>
-              </div>
-            ) : (
-              <NewUsersChart registrations={users.registrations} />
-            )}
+            <NewUsersChart registrations={users.registrations} />
           </>
         )}
       </CardContent>

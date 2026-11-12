@@ -25,7 +25,6 @@ const zhCN = {
   dashboardNewUsersDescription: '按当前时区统计每日注册',
   dashboardNewUsersTotal: '{count, plural, other {过去 7 天新增 # 位用户}}',
   dashboardNewUsersEmpty: '过去 7 天没有新增用户',
-  dashboardNewUsersEmptyDescription: '此时段内每天均无新增注册',
   dashboardNewUsersNoData: '未返回注册历史',
   dashboardChartLabel: '{title}，{total}',
   dashboardChartCaption: '每日新增用户数',

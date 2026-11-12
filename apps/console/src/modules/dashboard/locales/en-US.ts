@@ -23,7 +23,6 @@ const enUS = {
   dashboardNewUsersDescription: 'Daily registrations in your time zone.',
   dashboardNewUsersTotal: '{count, plural, one {# new user in the past 7 days} other {# new users in the past 7 days}}',
   dashboardNewUsersEmpty: 'No new users in the past 7 days',
-  dashboardNewUsersEmptyDescription: 'No registrations on any day in this window.',
   dashboardNewUsersNoData: 'No registration history was returned.',
   dashboardChartLabel: '{title}. {total}',
   dashboardChartCaption: 'New users per day',
