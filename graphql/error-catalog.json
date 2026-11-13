@@ -2072,6 +2072,26 @@
     "module": "graphql.transport"
   },
   {
+    "code": 28110,
+    "kind": "validation",
+    "fluentKey": "E28110",
+    "requiredParams": [
+      "max"
+    ],
+    "optionalParams": [],
+    "module": "graphql.transport"
+  },
+  {
+    "code": 28111,
+    "kind": "validation",
+    "fluentKey": "E28111",
+    "requiredParams": [
+      "max"
+    ],
+    "optionalParams": [],
+    "module": "graphql.transport"
+  },
+  {
     "code": 27000,
     "kind": "unauthorized",
     "fluentKey": "E27000",

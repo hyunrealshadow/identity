@@ -1,7 +1,7 @@
 use crate::error::{code::AppErrorCode, kind::ErrorKind};
 
 /// Stable HTTP/GraphQL envelope errors. Range: 28100-28199.
-#[derive(Debug, Clone, Copy, strum::EnumIter)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumIter)]
 pub enum GraphqlTransportErrorCode {
     InvalidRequest,
     UnsupportedMediaType,
@@ -13,6 +13,10 @@ pub enum GraphqlTransportErrorCode {
     Unauthenticated,
     Internal,
     InvalidToken,
+    /// The document exceeds the configured selection depth.
+    QueryTooDeep,
+    /// The document exceeds the configured operation complexity.
+    QueryTooComplex,
 }
 
 impl AppErrorCode for GraphqlTransportErrorCode {
@@ -37,6 +41,8 @@ impl AppErrorCode for GraphqlTransportErrorCode {
             Self::Unauthenticated => 28107,
             Self::Internal => 28108,
             Self::InvalidToken => 28109,
+            Self::QueryTooDeep => 28110,
+            Self::QueryTooComplex => 28111,
         }
     }
 }

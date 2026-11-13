@@ -8,6 +8,13 @@ commands. Their corresponding `*:check` commands detect stale exports.
 The single `/graphql` endpoint uses flat functional queries and explicitly named
 mutations. OAuth/OIDC and login interaction endpoints retain their protocol form.
 
+Schema introspection is enabled on that endpoint and needs the same validated
+access token as any other operation; a request without one is rejected before
+the document runs. The `graphql.max_depth` default admits the canonical
+introspection document, which nests 13 levels deep. A document rejected by the
+`graphql.max_depth` or `graphql.max_complexity` limits reports `28110` or `28111`
+with the configured limit instead of the generic invalid-request `28100`.
+
 User, group, role, and scope connections expose `totalCount`, including their
 filtered nested views and client scope assignments. The count covers the full
 authorized filter rather than the cursor-bounded page. It is calculated only

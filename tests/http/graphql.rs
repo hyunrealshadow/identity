@@ -29,6 +29,7 @@ use identity_infrastructure::{
         client_openid_connect_platform::Model as ClientOpenIdConnectPlatformModel, key,
         resource::Model as ResourceModel, session::Model as SessionModel, setting, user,
     },
+    i18n::init_error_i18n,
     services::AppServices,
     settings::AppRuntimeSettings,
     web::tera::{build_i18n, build_tera},
@@ -86,6 +87,7 @@ struct FixtureOptions {
     scope: &'static str,
     revoked: bool,
     tail: FixtureTail,
+    config: GraphqlConfig,
 }
 
 impl Default for FixtureOptions {
@@ -95,6 +97,7 @@ impl Default for FixtureOptions {
             scope: "openid account.read",
             revoked: false,
             tail: FixtureTail::SelfService,
+            config: GraphqlConfig::default(),
         }
     }
 }
@@ -113,6 +116,158 @@ async fn graphql_http_accepts_a_valid_resource_access_token() {
     assert_eq!(body["data"]["account"]["username"], "ada");
     assert!(body["data"]["account"]["birthdate"].is_null());
     assert!(body.get("errors").is_none());
+}
+
+/// The document GraphiQL and other clients send to fetch the schema. Its
+/// deepest selection is `__schema > types > fields > args > type > ofType x7 >
+/// kind`, so it only passes while the default depth limit admits 13 levels.
+const CANONICAL_INTROSPECTION_QUERY: &str = r#"
+query IntrospectionQuery {
+  __schema {
+    queryType { name }
+    mutationType { name }
+    subscriptionType { name }
+    types { ...FullType }
+    directives {
+      name
+      description
+      locations
+      args { ...InputValue }
+    }
+  }
+}
+
+fragment FullType on __Type {
+  kind
+  name
+  description
+  fields(includeDeprecated: true) {
+    name
+    description
+    args { ...InputValue }
+    type { ...TypeRef }
+    isDeprecated
+    deprecationReason
+  }
+  inputFields { ...InputValue }
+  interfaces { ...TypeRef }
+  enumValues(includeDeprecated: true) {
+    name
+    description
+    isDeprecated
+    deprecationReason
+  }
+  possibleTypes { ...TypeRef }
+}
+
+fragment InputValue on __InputValue {
+  name
+  description
+  type { ...TypeRef }
+  defaultValue
+}
+
+fragment TypeRef on __Type {
+  kind
+  name
+  ofType {
+    kind
+    name
+    ofType {
+      kind
+      name
+      ofType {
+        kind
+        name
+        ofType {
+          kind
+          name
+          ofType {
+            kind
+            name
+            ofType {
+              kind
+              name
+              ofType {
+                kind
+                name
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+"#;
+
+#[tokio::test]
+async fn graphql_http_answers_schema_introspection() {
+    let fixture = fixture(FixtureOptions::default()).await;
+    let mut response = graphql_post(&fixture, CANONICAL_INTROSPECTION_QUERY).await;
+
+    assert_eq!(response.status_code, Some(StatusCode::OK));
+    let body: Value = response.take_json().await.unwrap();
+    assert!(body.get("errors").is_none(), "{body}");
+    assert_eq!(body["data"]["__schema"]["queryType"]["name"], "QueryRoot");
+    assert!(
+        body["data"]["__schema"]["types"]
+            .as_array()
+            .is_some_and(|types| !types.is_empty())
+    );
+}
+
+/// A limit rejection must stay distinguishable from a malformed document: the
+/// caller gets its own code and the configured bound, not a generic 28100.
+#[tokio::test]
+async fn graphql_http_reports_the_depth_limit_instead_of_a_malformed_document() {
+    let fixture = fixture(FixtureOptions {
+        config: GraphqlConfig {
+            // The canonical introspection query is 13 levels deep.
+            max_depth: 12,
+            ..GraphqlConfig::default()
+        },
+        ..FixtureOptions::default()
+    })
+    .await;
+    let mut response = graphql_post(&fixture, CANONICAL_INTROSPECTION_QUERY).await;
+
+    assert_eq!(response.status_code, Some(StatusCode::OK));
+    let body: Value = response.take_json().await.unwrap();
+    assert!(body["data"].is_null());
+    assert_eq!(body["errors"][0]["extensions"]["code"], 28110);
+    assert_eq!(body["errors"][0]["extensions"]["kind"], "validation");
+    assert_eq!(
+        body["errors"][0]["message"],
+        "The query is nested more than 12 levels deep."
+    );
+}
+
+#[tokio::test]
+async fn graphql_http_reports_the_complexity_limit_instead_of_a_malformed_document() {
+    let fixture = fixture(FixtureOptions {
+        config: GraphqlConfig {
+            max_complexity: 10,
+            ..GraphqlConfig::default()
+        },
+        ..FixtureOptions::default()
+    })
+    .await;
+    let wide = (0..6)
+        .map(|index| format!("alias{index}: account {{ id }}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let mut response = graphql_post(&fixture, &format!("query {{ {wide} }}")).await;
+
+    assert_eq!(response.status_code, Some(StatusCode::OK));
+    let body: Value = response.take_json().await.unwrap();
+    assert!(body["data"].is_null());
+    assert_eq!(body["errors"][0]["extensions"]["code"], 28111);
+    assert_eq!(body["errors"][0]["extensions"]["kind"], "validation");
+    assert_eq!(
+        body["errors"][0]["message"],
+        "The query exceeds the allowed complexity of 10."
+    );
 }
 
 #[tokio::test]
@@ -653,6 +808,9 @@ async fn fixture(options: FixtureOptions) -> GraphqlFixture {
     };
     let db = db.into_connection();
     let i18n = build_i18n().unwrap();
+    // The server initializes the process-wide error catalog before serving;
+    // mounting the router directly has to do the same for transport messages.
+    init_error_i18n(i18n.clone());
     let tera = build_tera(i18n.loader()).unwrap();
     let settings = Arc::new(AppRuntimeSettings::from_db(db.clone()).await.unwrap());
     let services = Arc::new(AppServices::from_db(db.clone(), settings.as_ref()).unwrap());
@@ -666,7 +824,7 @@ async fn fixture(options: FixtureOptions) -> GraphqlFixture {
         settings,
         services,
     );
-    let config = GraphqlConfig::default();
+    let config = options.config.clone();
     let token = access_token(
         &key_data.private_key,
         key_oid,

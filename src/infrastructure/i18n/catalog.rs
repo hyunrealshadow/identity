@@ -62,6 +62,8 @@ pub fn public_error_inventory() -> Vec<PublicErrorDefinition> {
                     11019 => &["limit"],
                     28002 => &["max"],
                     28005 => &["scope"],
+                    28110 => &["max"],
+                    28111 => &["max"],
                     _ => &[],
                 },
                 optional: &[],

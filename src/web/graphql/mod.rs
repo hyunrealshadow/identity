@@ -28,7 +28,7 @@ use chrono::DateTime;
 use identity_application::{
     error::{
         AppError, code::AppErrorCode,
-        codes::graphql_transport::GraphqlTransportErrorCode as TransportError,
+        codes::graphql_transport::GraphqlTransportErrorCode as TransportError, params::ErrorParams,
     },
     setting::application_origins,
 };
@@ -48,7 +48,8 @@ const MAX_URI_BYTES: usize = 16 * 1024;
 /// Export the actual executable schema for typed browser operations.
 #[must_use]
 pub fn schema_sdl() -> String {
-    build_schema(12, 300).sdl()
+    let config = GraphqlConfig::default();
+    build_schema(config.max_depth, config.max_complexity).sdl()
 }
 
 pub fn router(state: AppState, config: &GraphqlConfig) -> Router {
@@ -287,7 +288,7 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
             return;
         }
     };
-    attach_correlation(&mut response, &locale, &correlation);
+    attach_correlation(&mut response, &locale, &correlation, config);
     observation.outcome = if response.errors.is_empty() {
         "success"
     } else {
@@ -433,22 +434,20 @@ fn set_graphql_response_headers(res: &mut Response) {
     insert_no_store_headers(res);
 }
 
+/// Render a transport code from the catalog. Every transport code is defined in
+/// both locales, so initialization always happened before the server accepts a
+/// request; a missing catalog is a bug, not something to mask with fallback copy.
 fn localized_transport_error(code: TransportError, locale: &LanguageIdentifier) -> String {
     error_i18n()
-        .map(|i18n| i18n.t_code(locale, code.code()))
-        .unwrap_or_else(|| {
-            if locale.language.as_str() == "zh" {
-                "暂时无法完成请求，请稍后重试。".to_owned()
-            } else {
-                "The request could not be completed. Please try again later.".to_owned()
-            }
-        })
+        .expect("error i18n is initialized during startup")
+        .t_code(locale, code.code())
 }
 
 fn attach_correlation(
     response: &mut AsyncGraphqlResponse,
     locale: &LanguageIdentifier,
     correlation: &RequestCorrelation,
+    config: &GraphqlConfig,
 ) {
     response.extensions.insert(
         "requestId".to_owned(),
@@ -464,15 +463,43 @@ fn attach_correlation(
         if extensions.get("code").is_none() {
             // Parser/type/validator errors may contain supplied literal values.
             // Preserve locations and path, expose a stable localized envelope.
-            error.message = localized_transport_error(TransportError::InvalidRequest, locale);
-            extensions.set("code", TransportError::InvalidRequest.code());
-            extensions.set("kind", "validation");
+            let code = limit_error(&error.message).unwrap_or(TransportError::InvalidRequest);
+            error.message = localized_transport_error_with_limit(code, locale, config);
+            extensions.set("code", code.code());
+            extensions.set("kind", AppError::from_code(code).kind().as_str());
         }
         extensions.set("requestId", correlation.request_id.clone());
         if let Some(trace_id) = &correlation.trace_id {
             extensions.set("traceId", trace_id.clone());
         }
     }
+}
+
+/// async-graphql rejects an over-deep or over-complex document with a plain
+/// server error that carries no extension `code`, so a caller cannot tell a
+/// limit rejection from a malformed request. These are its stable messages.
+fn limit_error(message: &str) -> Option<TransportError> {
+    match message {
+        "Query is nested too deep." => Some(TransportError::QueryTooDeep),
+        "Query is too complex." => Some(TransportError::QueryTooComplex),
+        _ => None,
+    }
+}
+
+fn localized_transport_error_with_limit(
+    code: TransportError,
+    locale: &LanguageIdentifier,
+    config: &GraphqlConfig,
+) -> String {
+    let max = match code {
+        TransportError::QueryTooDeep => config.max_depth,
+        TransportError::QueryTooComplex => config.max_complexity,
+        _ => return localized_transport_error(code, locale),
+    };
+    let params = ErrorParams::new().insert("max", max.to_string());
+    error_i18n()
+        .expect("error i18n is initialized during startup")
+        .t_code_with_params(locale, code.code(), &params)
 }
 
 fn write_unauthorized(

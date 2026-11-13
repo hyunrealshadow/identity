@@ -100,8 +100,12 @@ fn default_health_port() -> u16 {
     8081
 }
 
+/// The canonical GraphiQL/graphql-js introspection query nests 13 levels deep
+/// (`__schema > types > fields > args > type > ofType x7 > kind`), so the
+/// default must admit it; the complexity limit stays the amplification guard
+/// for ordinary operations.
 fn default_graphql_max_depth() -> usize {
-    12
+    15
 }
 
 /// Must admit a full page (`max_page_size`) of the heaviest Console list query.
