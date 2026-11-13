@@ -399,7 +399,7 @@ spec:
             timeoutSeconds: 3
           livenessProbe:
             exec:
-              command: ["sh", "-c", "if [ -f /run/identity-console/config.json ]; then curl --fail --silent --max-time 2 http://127.0.0.1:8081/health; else kill -0 1; fi"]
+              command: ["sh", "-c", "if [ -f /run/identity-console/nginx.conf ]; then curl --fail --silent --max-time 2 http://127.0.0.1:8081/health; else kill -0 1; fi"]
             initialDelaySeconds: 10
             periodSeconds: 20
             timeoutSeconds: 3

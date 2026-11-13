@@ -10,9 +10,10 @@ base URL. Installation also creates a public Console client with a random UUID
 and stores it in `app.console_client_id`; startup only reconciles that existing
 client. The runtime endpoint reads its ID from settings, without a fixed fallback.
 Local development uses an ignored `public/config.json` fetched from the same
-authenticated workload endpoint. The production image obtains this configuration from Identity
-at startup and writes `/run/identity-console/config.json`, served at `/console/config.json`
-with `Cache-Control: no-store`.
+authenticated workload endpoint. The production image does not keep a copy:
+Nginx proxies every `/console/config.json` request to Identity and serves it with
+`Cache-Control: no-store`, so a reload always sees the current client ID,
+addresses and scope.
 
 Before starting local development, fetch the public configuration using the
 Console workload credential. The development configuration reads it from
@@ -74,21 +75,26 @@ docker run --rm -p 8080:8080 \
   identity-console:local
 ```
 
-The entrypoint calls `GET /internal/workloads/self/runtime-configuration` using
-the Console identity. Its response contains only browser-visible values; this
-identity cannot access installation controls or Login client credentials. The
-Console public client has no client secret. The workload credential is read only
-by the entrypoint and is never written into the served configuration or static
-assets. `IDENTITY_WORKLOAD_TOKEN` is also accepted when a mounted file is not used.
+Each `/console/config.json` request makes Nginx call
+`GET /internal/workloads/self/runtime-configuration` with the Console identity.
+The response contains only browser-visible values; this identity cannot access
+installation controls or Login client credentials, and the Console public client
+has no client secret. Browser headers, cookies and request bodies are not
+forwarded. Nginx publishes the response only when it has exactly the expected
+Console fields; anything else, an unavailable Identity or a rejected credential
+returns 503 with `Cache-Control: no-store`. The credential file is reread on
+every request, so a rotated projected token takes effect without a restart. The
+credential never enters the served configuration, static assets or logs.
+`IDENTITY_WORKLOAD_TOKEN` is also accepted when a mounted file is not used.
 
-HTTPS and certificate verification are required for the internal fetch by
+HTTPS and certificate verification are required for the internal calls by
 default. For a trusted private HTTP listener, explicitly set
-`IDENTITY_INTERNAL_API_ALLOW_HTTP=true`. Startup retries transient failures for
-a bounded period, validates the response, and atomically replaces the local
-configuration before starting Nginx. Before installation, a 404 waits and retries
-until settings exist, rereading projected credentials on each attempt. Rejected
-credentials or invalid responses stop startup. There is no development-config
-or stale-file fallback. Restart the container after changing application domains.
+`IDENTITY_INTERNAL_API_ALLOW_HTTP=true`. Startup still waits for a valid
+response before starting Nginx: it retries transient failures for a bounded
+period and, before installation, retries a 404 until settings exist, rereading
+projected credentials on each attempt. Rejected credentials or invalid responses
+stop startup. Changing application domains or the Console client takes effect on
+the next page load.
 
 The non-root runtime listens on `PORT` (8080 by default; 8081 is reserved for
 local health). HTTP is the default for an HTTPS ingress or reverse proxy. Set

@@ -33,6 +33,8 @@ def verify(image):
     }
     payload = config
     transient_failures = 2
+    accepted = {"token": token}
+    forwarded = {}
 
     class Upstream(http.server.BaseHTTPRequestHandler):
         def do_GET(self):
@@ -40,7 +42,8 @@ def verify(image):
             if self.path != "/internal/workloads/self/runtime-configuration":
                 self.send_error(404)
                 return
-            if self.headers.get("Authorization") != f"Bearer {token}":
+            forwarded.update(cookie=self.headers.get("Cookie"), agent=self.headers.get("User-Agent"))
+            if self.headers.get("Authorization") != f"Bearer {accepted['token']}":
                 self.send_error(401)
                 return
             if transient_failures:
@@ -87,6 +90,47 @@ def verify(image):
             else:
                 raise AssertionError("Console did not start")
             assert json.load(response) == config
+
+            # config.json is proxied on every request: a changed Identity
+            # response is visible without restarting the container.
+            def fetch_config():
+                request = urllib.request.Request(
+                    origin + "/console/config.json",
+                    headers={"Cookie": "session=must-not-be-forwarded", "User-Agent": "browser"},
+                )
+                return urllib.request.urlopen(request, timeout=5)
+            payload = {**config, "clientId": "Q2xpZW50OgAAAAAAAAAAAAAAAAAAAAA"}
+            with fetch_config() as refreshed:
+                assert json.load(refreshed) == payload
+                assert refreshed.headers["Cache-Control"] == "no-store"
+            assert forwarded["cookie"] is None and forwarded["agent"] != "browser"
+
+            # A rotated credential file is read on the next request.
+            rotated = secrets.token_urlsafe(36)
+            credential.chmod(0o644)
+            credential.write_bytes((rotated + "\n").encode())
+            credential.chmod(0o444)
+            accepted["token"] = rotated
+            with fetch_config() as after_rotation:
+                assert json.load(after_rotation) == payload
+
+            # Anything other than the exact Console fields is withheld.
+            payload = {"oauth_client": {"client_secret": "must-not-be-published"}}
+            try:
+                fetch_config()
+                raise AssertionError("Unexpected runtime configuration was published")
+            except urllib.error.HTTPError as error:
+                assert error.code == 503
+                assert "must-not-be-published" not in error.read().decode()
+                assert error.headers["Cache-Control"] == "no-store"
+            accepted["token"] = "not-the-console-credential-0123456789"
+            try:
+                fetch_config()
+                raise AssertionError("Rejected credential still produced a configuration")
+            except urllib.error.HTTPError as error:
+                assert error.code == 503
+            accepted["token"] = rotated
+            payload = config
             class NoRedirect(urllib.request.HTTPRedirectHandler):
                 def redirect_request(self, *args, **kwargs):
                     return None
@@ -128,9 +172,12 @@ def verify(image):
             logs = docker("logs", container)
             assert '"path":"/health/ready"' not in logs.stdout
             assert token not in logs.stdout + logs.stderr
+            assert rotated not in logs.stdout + logs.stderr
+            assert "must-not-be-published" not in logs.stdout + logs.stderr
             assert "must-not-be-logged" not in logs.stdout + logs.stderr
             assert docker("exec", container, "sh", "-c",
-                          "test ! -e /usr/share/nginx/html/console/config.json").returncode == 0
+                          "test ! -e /usr/share/nginx/html/console/config.json "
+                          "&& test ! -e /run/identity-console/config.json").returncode == 0
             docker("stop", "--time", "3", container)
             docker("rm", container)
             container = None
@@ -206,14 +253,16 @@ def verify(image):
     except Exception:
         if container:
             logs = docker("logs", container, check=False)
-            print((logs.stdout + logs.stderr).replace(token, "[redacted]"), file=sys.stderr)
+            print((logs.stdout + logs.stderr).replace(token, "[redacted]")
+                  .replace(accepted["token"], "[redacted]"), file=sys.stderr)
         raise
     finally:
         if container:
             docker("rm", "-f", container, check=False)
         upstream.shutdown()
         upstream.server_close()
-    print("Console HTTP/HTTPS startup, custom port, certificate validation, routing, caching and failure handling passed")
+    print("Console HTTP/HTTPS startup, proxied configuration refresh, credential rotation, custom port, "
+          "certificate validation, routing, caching and failure handling passed")
 
 
 if __name__ == "__main__":

@@ -16,6 +16,7 @@ RUN apk add --no-cache ca-certificates curl jq \
     && mkdir -p /run/identity-console \
     && chown nginx:nginx /run/identity-console
 COPY deploy/docker/console/nginx.conf /etc/nginx/nginx.conf.template
+COPY deploy/docker/console/console-config.js /etc/nginx/console-config.js
 COPY --chmod=755 deploy/docker/console/entrypoint.sh /usr/local/bin/console-entrypoint
 COPY --from=builder /app/apps/console/dist/ /usr/share/nginx/html/console/
 USER nginx

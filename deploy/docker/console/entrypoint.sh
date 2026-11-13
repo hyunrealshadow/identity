@@ -4,12 +4,10 @@ set -eu
 : "${IDENTITY_INTERNAL_API_URL:?set IDENTITY_INTERNAL_API_URL}"
 runtime=/run/identity-console
 umask 077
-rm -f "$runtime/config.json"
 headers=$(mktemp "$runtime/.headers.XXXXXX")
 response=$(mktemp "$runtime/.response.XXXXXX")
-config=$(mktemp "$runtime/.config.XXXXXX")
 nginx_config=$(mktemp "$runtime/.nginx.XXXXXX")
-trap 'rm -f "$headers" "$response" "$config" "$nginx_config"' EXIT
+trap 'rm -f "$headers" "$response" "$nginx_config"' EXIT
 trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
@@ -37,11 +35,38 @@ case "${IDENTITY_CONSOLE_TLS_ENABLED:-false}" in
     false) ;;
     *) echo 'IDENTITY_CONSOLE_TLS_ENABLED must be true or false' >&2; exit 1 ;;
 esac
-sed -e "s/@CONSOLE_LISTEN@/$listen/" -e "s|@CONSOLE_TLS@|$tls|" \
-    /etc/nginx/nginx.conf.template > "$nginx_config"
-chmod 644 "$nginx_config"
-mv -f "$nginx_config" "$runtime/nginx.conf"
-nginx -t -c "$runtime/nginx.conf"
+render_nginx() {
+    sed -e "s/@CONSOLE_LISTEN@/$listen/" -e "s|@CONSOLE_TLS@|$tls|" \
+        -e "s|@IDENTITY_RUNTIME_URL@|$1|" -e "s|@IDENTITY_TLS@|$2|" \
+        /etc/nginx/nginx.conf.template > "$nginx_config"
+}
+# Fail fast on listener and certificate errors before waiting for Identity.
+render_nginx http://127.0.0.1:9 ''
+nginx -t -q -c "$nginx_config"
+
+internal_url=${IDENTITY_INTERNAL_API_URL%/}
+if ! printf '%s' "$internal_url" | LC_ALL=C grep -Eq '^https?://([A-Za-z0-9.-]+|\[[0-9A-Fa-f:]+\])(:[0-9]{1,5})?(/[A-Za-z0-9._~/-]*)?$'; then
+    echo 'IDENTITY_INTERNAL_API_URL must be an http(s) URL without credentials, query or fragment' >&2
+    exit 1
+fi
+runtime_url="$internal_url/internal/workloads/self/runtime-configuration"
+upstream_tls=''
+case "$internal_url" in
+    https://*)
+        ca_file=${IDENTITY_CA_FILE:-/etc/ssl/certs/ca-certificates.crt}
+        if [ ! -r "$ca_file" ] || printf '%s' "$ca_file" | grep -q '[|;[:space:]]'; then
+            echo 'Identity CA file is missing or unreadable' >&2
+            exit 1
+        fi
+        upstream_tls="proxy_ssl_verify on; proxy_ssl_verify_depth 4; proxy_ssl_server_name on; proxy_ssl_protocols TLSv1.2 TLSv1.3; proxy_ssl_trusted_certificate $ca_file;"
+        ;;
+    http://*)
+        if [ "${IDENTITY_INTERNAL_API_ALLOW_HTTP:-false}" != true ]; then
+            echo 'IDENTITY_INTERNAL_API_URL must use HTTPS unless IDENTITY_INTERNAL_API_ALLOW_HTTP=true' >&2
+            exit 1
+        fi
+        ;;
+esac
 
 write_headers() {
     if [ -n "${IDENTITY_WORKLOAD_TOKEN_FILE:-}" ]; then
@@ -71,27 +96,31 @@ while :; do
         --connect-timeout 5 --max-time 15 --retry 5 --retry-connrefused --retry-delay 2 --retry-max-time 60 \
         --header "@$headers" --header 'Accept: application/json' \
         --output "$response" --write-out '%{http_code}' \
-        "${IDENTITY_INTERNAL_API_URL%/}/internal/workloads/self/runtime-configuration")
+        "$runtime_url")
     if [ "$status" != 404 ]; then break; fi
     echo 'Waiting for Identity installation and Console settings' >&2
     sleep 5
 done
-unset IDENTITY_WORKLOAD_TOKEN
 if [ "$status" != 200 ]; then
     echo 'Identity did not return Console runtime configuration' >&2
     exit 1
 fi
 
-# Reject Login credentials, unexpected fields and incomplete responses before publishing.
+# Reject Login credentials, unexpected fields and incomplete responses before
+# serving. console-config.js applies the same check to every later response.
 jq --exit-status '
     ["issuer", "graphqlUrl", "clientId", "redirectUri", "postLogoutRedirectUri",
      "accountUrl", "scope", "displayName", "environment"] as $fields |
     if type == "object" and (keys == ($fields | sort)) and
        all(.[]; type == "string" and length > 0)
     then . else error("Invalid Console runtime configuration") end
-' "$response" > "$config"
-chmod 644 "$config"
-mv -f "$config" "$runtime/config.json"
+' "$response" > /dev/null
 rm -f "$headers" "$response"
+
+# Rendered only after Identity answered, so its host name resolves.
+render_nginx "$runtime_url" "$upstream_tls"
+chmod 644 "$nginx_config"
+mv -f "$nginx_config" "$runtime/nginx.conf"
+nginx -t -c "$runtime/nginx.conf"
 trap - EXIT HUP INT TERM QUIT
 exec "$@"
