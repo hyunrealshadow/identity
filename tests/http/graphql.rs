@@ -18,7 +18,7 @@ use identity_domain::{
         generator::{AsymmetricKeyGenerator, AsymmetricKeySpec},
         model::AsymmetricKeyAlgorithm,
     },
-    openid_connect::model::claim::{JwtClaimNames, JwtTokenType, TokenUse},
+    openid_connect::model::claim::{JwtClaimNames, JwtTokenType},
 };
 use identity_infrastructure::{
     AppContext, AppLifecycle, AppResources, AppState,
@@ -505,6 +505,7 @@ async fn fixture(options: FixtureOptions) -> GraphqlFixture {
         r#type: ClientAuthorizationType::AccessToken.to_string(),
         data: to_value(AccessTokenData {
             principal: AccessTokenPrincipal::User,
+            claims: None,
             management: None,
             scope: options.scope.to_owned(),
             resources: Vec::new(),
@@ -717,9 +718,6 @@ fn access_token(
         .unwrap();
     payload
         .set_claim(JwtClaimNames::SID, Some(json!("protected-session")))
-        .unwrap();
-    payload
-        .set_claim(JwtClaimNames::TOKEN_USE, Some(json!(TokenUse::AccessToken)))
         .unwrap();
     let signer = RS256.signer_from_pem(private_key.as_bytes()).unwrap();
     jwt::encode_with_signer(&payload, &header, &signer).unwrap()

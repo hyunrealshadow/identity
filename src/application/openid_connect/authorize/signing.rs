@@ -2,10 +2,7 @@ use std::time::{Duration, SystemTime};
 
 use identity_domain::{
     key::{JwaSigningAlgorithm, JwsAlgorithm},
-    openid_connect::{
-        ClaimsRequest,
-        model::claim::{JwtTokenType, TokenUse},
-    },
+    openid_connect::{ClaimsRequest, model::claim::JwtTokenType},
     user::User,
 };
 use josekit::{
@@ -13,7 +10,7 @@ use josekit::{
     jwt,
     jwt::JwtPayload,
 };
-use serde_json::{json, to_value};
+use serde_json::json;
 use uuid::Uuid;
 
 use crate::openid_connect::{
@@ -60,7 +57,6 @@ pub(super) struct SignImplicitAccessTokenInput<'a> {
     pub scope: &'a str,
     /// `jti`: the access token's Global ID.
     pub token_id: &'a str,
-    pub claims: Option<&'a ClaimsRequest>,
     pub auth_time: i64,
     pub acr: Option<&'a str>,
     pub amr: &'a [String],
@@ -332,11 +328,6 @@ impl AuthorizeService {
                 AuthorizeErrorCode::SerializeCodeFailed,
             ))?;
         payload
-            .set_claim(JwtClaimNames::TOKEN_USE, Some(json!(TokenUse::AccessToken)))
-            .map_err(AppError::map_source(
-                AuthorizeErrorCode::SerializeCodeFailed,
-            ))?;
-        payload
             .set_claim(JwtClaimNames::AUTH_TIME, Some(json!(input.auth_time)))
             .map_err(AppError::map_source(
                 AuthorizeErrorCode::SerializeCodeFailed,
@@ -353,19 +344,6 @@ impl AuthorizeService {
             .map_err(AppError::map_source(
                 AuthorizeErrorCode::SerializeCodeFailed,
             ))?;
-        if let Some(claims_value) = input.claims {
-            payload
-                .set_claim(
-                    "claims",
-                    Some(to_value(claims_value).map_err(AppError::map_source(
-                        AuthorizeErrorCode::SerializeCodeFailed,
-                    ))?),
-                )
-                .map_err(AppError::map_source(
-                    AuthorizeErrorCode::SerializeCodeFailed,
-                ))?;
-        }
-
         let signer: Box<dyn JwsSigner> = build_signer_for_alg(input.private_key_pem, input.alg)?;
         jwt::encode_with_signer(&payload, &header, &*signer).map_err(AppError::map_source(
             AuthorizeErrorCode::SerializeCodeFailed,

@@ -379,6 +379,7 @@ impl TokenService {
                         .map(|oid| oid.to_string()),
                     refresh_token_oid: Some(refresh_record.oid.to_string()),
                     client_authentication_mode: Some(issued_mode),
+                    claims: None,
                     management: refresh_data.management.clone(),
                 }),
                 Utc::now() + Duration::hours(1),
@@ -407,12 +408,9 @@ impl TokenService {
                 user: Some(&user),
                 protected_session_id: protected_session_id.as_deref(),
                 scope: &scope,
-                claims: None,
                 auth_time: refresh_data.auth_time,
                 acr: session_acr.as_deref(),
                 amr: &session_amr,
-                management: shared::management_snapshot(refresh_data.management.as_ref()),
-                business: shared::business_snapshot(refresh_data.management.as_ref()),
             })
             .await?;
         // A refresh never turns a plain OAuth grant into an OIDC one: the

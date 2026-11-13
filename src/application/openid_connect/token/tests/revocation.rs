@@ -194,6 +194,7 @@ async fn signed_access_token_revokes_only_its_record() {
                 refresh_token_oid: None,
                 device_authorization_oid: None,
                 client_authentication_mode: None,
+                claims: None,
                 management: None,
             }),
             Utc::now() + Duration::hours(1),
@@ -226,12 +227,9 @@ async fn signed_access_token_revokes_only_its_record() {
             user: None,
             protected_session_id: None,
             scope: "openid",
-            claims: None,
             auth_time: None,
             acr: None,
             amr: &[],
-            management: None,
-            business: None,
         })
         .await
         .unwrap();

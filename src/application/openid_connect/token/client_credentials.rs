@@ -12,7 +12,6 @@ use super::{exchange::issuance_result, signing::SignAccessTokenInput};
 use crate::{
     domain::openid_connect::TokenEndpointAuthMethod,
     observability::{BusinessEvent, EventValue},
-    openid_connect::rbac as shared,
 };
 
 use super::*;
@@ -191,6 +190,7 @@ impl TokenService {
                     refresh_token_oid: None,
                     device_authorization_oid: None,
                     client_authentication_mode: Some(ClientAuthenticationMode::Confidential),
+                    claims: None,
                     management: authorization_snapshot.clone(),
                 }),
                 Utc::now() + Duration::hours(1),
@@ -216,12 +216,9 @@ impl TokenService {
                 user: None,
                 protected_session_id: None,
                 scope: &scope,
-                claims: None,
                 auth_time: None,
                 acr: None,
                 amr: &[],
-                management: shared::management_snapshot(authorization_snapshot.as_ref()),
-                business: shared::business_snapshot(authorization_snapshot.as_ref()),
             })
             .await?;
         Ok(TokenResponse {

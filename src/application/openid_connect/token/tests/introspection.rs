@@ -47,6 +47,7 @@ async fn signed_access_token_returns_claims_and_tampering_is_inactive() {
                 refresh_token_oid: None,
                 device_authorization_oid: None,
                 client_authentication_mode: None,
+                claims: None,
                 management: None,
             }),
             Utc::now() + Duration::hours(1),
@@ -79,12 +80,9 @@ async fn signed_access_token_returns_claims_and_tampering_is_inactive() {
             user: None,
             protected_session_id: None,
             scope: "openid",
-            claims: None,
             auth_time: None,
             acr: None,
             amr: &[],
-            management: None,
-            business: None,
         })
         .await
         .unwrap();
@@ -221,6 +219,7 @@ async fn machine_access_token_introspects_with_the_client_subject() {
                 refresh_token_oid: None,
                 device_authorization_oid: None,
                 client_authentication_mode: None,
+                claims: None,
                 management: None,
             }),
             Utc::now() + Duration::hours(1),
@@ -254,12 +253,9 @@ async fn machine_access_token_introspects_with_the_client_subject() {
             user: None,
             protected_session_id: None,
             scope: "account.read",
-            claims: None,
             auth_time: None,
             acr: None,
             amr: &[],
-            management: None,
-            business: None,
         })
         .await
         .unwrap();

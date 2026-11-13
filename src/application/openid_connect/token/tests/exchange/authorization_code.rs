@@ -877,6 +877,71 @@ async fn exchange_authorization_code_signs_and_validates_supported_default_algs(
 }
 
 #[tokio::test]
+async fn claims_request_reaches_userinfo_from_the_record_and_not_the_jwt() {
+    let repo = Arc::new(mock_client_auth_repo());
+    let user_oid = Uuid::new_v4();
+    let key = key_for_algorithm("RS256");
+    let KeyData::Asymmetric(key_data) = &key.data else {
+        unreachable!();
+    };
+    let public_key = key_data.public_key.clone();
+    let service = build_token_service_with_key(repo.clone(), key.clone(), user_oid);
+    let claims_request: identity_domain::openid_connect::ClaimsRequest =
+        serde_json::from_value(json!({"userinfo": {"email": {"essential": true}}})).unwrap();
+
+    let record = repo
+        .create(
+            Uuid::nil(),
+            ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
+                resources: Vec::new(),
+                scope: "openid".to_owned(),
+                nonce: None,
+                code_challenge: Some(s256_challenge("verifier-claims")),
+                code_challenge_method: Some("S256".parse().unwrap()),
+                user_oid: user_oid.to_string(),
+                session_oid: SessionOid::from(Uuid::new_v4()),
+                protected_session_id: None,
+                acr: None,
+                amr: vec![],
+                auth_time: None,
+                redirect_uri: "https://client.example.com/callback".to_owned(),
+                redirect_uri_was_supplied: true,
+                management: None,
+                claims: Some(claims_request.clone()),
+            }),
+            Utc::now() + Duration::minutes(10),
+        )
+        .await
+        .unwrap();
+
+    let result = service
+        .exchange_authorization_code(AuthorizationCodeGrantParams {
+            resources: Vec::new(),
+            code: STANDARD.encode(record.oid.as_bytes()),
+            redirect_uri: Some("https://client.example.com/callback".to_owned()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
+            client_secret: Some("secret-123".to_owned()),
+            client_secret_basic: true,
+            client_assertion_type: None,
+            client_assertion: None,
+            code_verifier: Some("verifier-claims".to_owned()),
+        })
+        .await
+        .unwrap();
+
+    let access_payload = decode_jwt_with_alg(&result.access_token, &public_key, "RS256");
+    assert!(access_payload.claim("claims").is_none());
+
+    let validated = user_info_service_with_key(repo.clone(), key, user_oid)
+        .validate_access_token(&result.access_token)
+        .await
+        .unwrap();
+    assert_eq!(validated.claims, Some(claims_request));
+}
+
+#[tokio::test]
 async fn exchange_authorization_code_uses_key_jwk_oid_for_signed_token_headers() {
     let repo = Arc::new(mock_client_auth_repo());
     let user_oid = Uuid::new_v4();
@@ -1233,6 +1298,7 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
                     refresh_token_oid: None,
                     device_authorization_oid: None,
                     client_authentication_mode: Some(ClientAuthenticationMode::Confidential),
+                    claims: None,
                     management: None,
                 }),
                 Utc::now() + Duration::hours(1),
@@ -1264,12 +1330,9 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
                 user: Some(&user),
                 protected_session_id: Some(&Uuid::new_v4().to_string()),
                 scope: "openid profile",
-                claims: None,
                 auth_time: None,
                 acr: None,
                 amr: &["pwd".to_owned()],
-                management: None,
-                business: None,
             })
             .await
             .unwrap();

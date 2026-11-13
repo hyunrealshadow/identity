@@ -482,6 +482,10 @@ pub struct AccessTokenData {
     pub device_authorization_oid: Option<String>,
     #[serde(default)]
     pub client_authentication_mode: Option<ClientAuthenticationMode>,
+    /// OIDC `claims` request parameter the token was issued for. UserInfo
+    /// honors its `userinfo` member; it is never copied into the JWT.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub claims: Option<ClaimsRequest>,
     /// Issuance authorization snapshot carried by the token. Absent for pure
     /// self-service and ordinary legacy machine access.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -652,6 +656,7 @@ mod tests {
             refresh_token_oid: None,
             device_authorization_oid: None,
             client_authentication_mode: None,
+            claims: None,
             management: None,
         };
         assert!(data.principal.is_machine());

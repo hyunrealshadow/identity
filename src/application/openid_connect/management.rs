@@ -6,7 +6,6 @@
 //! machine-management grant or client-management switch.
 
 use std::sync::Arc;
-use uuid::Uuid;
 
 use identity_domain::{
     auth::ACR_AAL2,
@@ -14,10 +13,8 @@ use identity_domain::{
         ManagementAuthorityRepository, authority::UserPermissionAuthority, catalog::ManagementScope,
     },
     client_authorization::{AccessTokenPrincipal, ManagementAuthorizationSnapshotData},
-    openid_connect::{API_RESOURCE, OpenIdConnectClient, ScopeSet, model::claim::JwtClaimNames},
+    openid_connect::{API_RESOURCE, OpenIdConnectClient, ScopeSet},
 };
-use josekit::jwt;
-use serde_json::{Value, from_value};
 
 use crate::{
     application::openid_connect::provider::OpenIdProviderService,
@@ -115,81 +112,6 @@ pub(crate) async fn validate_management_authorization(
         return Err(invalid());
     }
 
-    Ok(())
-}
-
-const MANAGEMENT_CLAIM_NAMES: [&str; 5] = [
-    JwtClaimNames::MANAGEMENT_GRANT_OID,
-    JwtClaimNames::MANAGEMENT_GRANT_VERSION,
-    JwtClaimNames::MANAGEMENT_POLICY_VERSION,
-    JwtClaimNames::MANAGEMENT_CLIENT_POLICY_VERSION,
-    JwtClaimNames::MANAGEMENT_PERMISSIONS,
-];
-
-#[must_use]
-pub(crate) fn has_management_claims(payload: &jwt::JwtPayload) -> bool {
-    MANAGEMENT_CLAIM_NAMES
-        .iter()
-        .any(|name| payload.claim(name).is_some())
-}
-
-pub(crate) fn signed_management_snapshot(
-    payload: &jwt::JwtPayload,
-) -> Result<Option<ManagementAuthorizationSnapshotData>, AppError> {
-    if !has_management_claims(payload) {
-        return Ok(None);
-    }
-    let invalid = || AppError::from_code(OpenIdConnectErrorCode::InvalidToken);
-    // The grant is the user; persisted snapshots keep the internal UUID.
-    let grant_oid = payload
-        .claim(JwtClaimNames::MANAGEMENT_GRANT_OID)
-        .and_then(Value::as_str)
-        .and_then(|value| {
-            identity_domain::openid_connect::identifier::parse_user_subject(value).ok()
-        })
-        .ok_or_else(invalid)?
-        .to_string();
-    let grant_version = payload
-        .claim(JwtClaimNames::MANAGEMENT_GRANT_VERSION)
-        .and_then(Value::as_str)
-        .and_then(|value| Uuid::parse_str(value).ok())
-        .filter(|value| !value.is_nil())
-        .ok_or_else(invalid)?;
-    let policy_version = payload
-        .claim(JwtClaimNames::MANAGEMENT_POLICY_VERSION)
-        .and_then(Value::as_str)
-        .and_then(|value| Uuid::parse_str(value).ok())
-        .filter(|value| !value.is_nil())
-        .ok_or_else(invalid)?;
-    let permissions_value = payload
-        .claim(JwtClaimNames::MANAGEMENT_PERMISSIONS)
-        .cloned()
-        .ok_or_else(invalid)?;
-    let permissions = from_value::<Vec<String>>(permissions_value).map_err(|_| invalid())?;
-    let client_policy_version = payload
-        .claim(JwtClaimNames::MANAGEMENT_CLIENT_POLICY_VERSION)
-        .and_then(Value::as_str)
-        .and_then(|value| Uuid::parse_str(value).ok())
-        .filter(|value| !value.is_nil())
-        .ok_or_else(invalid)?;
-    Ok(Some(ManagementAuthorizationSnapshotData {
-        grant_oid,
-        grant_version,
-        policy_version,
-        permissions,
-        client_policy_version,
-    }))
-}
-
-pub(crate) fn validate_signed_management_snapshot(
-    persisted: &ManagementAuthorizationSnapshotData,
-    payload: &jwt::JwtPayload,
-) -> Result<(), AppError> {
-    let signed = signed_management_snapshot(payload)?
-        .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
-    if &signed != persisted {
-        return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
-    }
     Ok(())
 }
 

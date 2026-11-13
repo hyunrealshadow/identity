@@ -17,9 +17,8 @@ through discovery and depend on the active keys and client metadata.
 Object identifiers leave the service as Global IDs: unpadded base64url of
 `<Type>:` followed by the 16 UUID bytes. GraphQL `ID` values, the OAuth
 `client_id`, a public `sub` (`User`, or `Client` for machine tokens), access
-and logout token `jti` values, `management_grant_oid` (`User`), JWK `kid` values
-(`KeyJwk`), and Passkey challenge IDs all use this form; raw UUIDs are
-rejected. Version claims are optimistic-lock tokens and stay UUIDs. Pairwise subjects
+and logout token `jti` values, JWK `kid` values (`KeyJwk`), and Passkey
+challenge IDs all use this form; raw UUIDs are rejected. Pairwise subjects
 remain unlinkable hashes. `sid` is not a Global ID: it is a purpose-bound,
 data-protected session handle that browsers also present as a credential.
 Storage, internal records, and telemetry keep plain UUIDs; conversion happens
@@ -106,6 +105,16 @@ authorization relation rather than the browser session that approved it.
 User-code lookup does not currently have a dedicated rate limiter.
 
 ### Token claims
+
+Access tokens are RFC 9068 JWTs (`typ: at+jwt`) carrying `iss`, `sub`, `aud`,
+`exp`, `iat`, `jti`, `client_id`, `scope`, and, for user tokens, the OIDC
+authentication claims `sid`, `auth_time`, `acr`, and `amr`. Authorization
+snapshots used for revocation stay server-side, keyed by `jti`: Identity
+checks them against live authorization on every GraphQL, UserInfo, and
+introspection request. The OIDC `claims` request parameter is likewise kept
+with the token record for UserInfo rather than copied into the JWT. External
+resource servers should rely on `scope`,
+`aud`, and `client_id`, and use introspection when they need live state.
 
 Per-client settings `include_scoped_claims_in_id_token` and
 `include_scoped_claims_in_access_token` default to `false`. Enabling them adds

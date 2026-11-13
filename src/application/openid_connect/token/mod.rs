@@ -26,7 +26,7 @@ use crate::{
         openid_connect::{
             GrantType, OpenIdConnectClient, OpenIdConnectClientRepository,
             OpenIdConnectCredentialRepository, ScopeSet,
-            model::claim::{JwtClaimNames, JwtTokenType, TokenUse},
+            model::claim::{JwtClaimNames, JwtTokenType},
         },
         rbac::RbacAuthorizationRepository,
         user::{User, UserOid, repository::UserRepository},

@@ -12,7 +12,7 @@ use crate::{
         key::{JwaSigningAlgorithm, JwkAlgorithm, KeyData},
         openid_connect::{
             OpenIdConnectClientMetadata, TokenEndpointAuthMethod,
-            model::claim::{JwtClaimNames, JwtTokenType, TokenUse},
+            model::claim::{JwtClaimNames, JwtTokenType},
         },
     },
     openid_connect::jose::asymmetric_verifier_from_pem,
@@ -300,11 +300,6 @@ impl TokenService {
                 .and_then(|value| value.as_str()),
             Some(JwtTokenType::ACCESS_TOKEN | JwtTokenType::ACCESS_TOKEN_FULL)
         ) || payload.issuer() != Some(self.provider_service.issuer()?.as_str())
-            || payload
-                .claim(JwtClaimNames::TOKEN_USE)
-                .and_then(|value| value.as_str())
-                .and_then(|value| value.parse::<TokenUse>().ok())
-                != Some(TokenUse::AccessToken)
         {
             return Ok(None);
         }

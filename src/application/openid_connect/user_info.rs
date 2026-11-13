@@ -47,16 +47,13 @@ use crate::{
         openid_connect::{
             ClaimsRequest, OpenIdConnectClientRepository, OpenIdConnectCredentialRepository,
             ScopeSet,
-            model::claim::{JwtClaimNames, JwtTokenType, TokenUse},
+            model::claim::{JwtClaimNames, JwtTokenType},
         },
         rbac::RbacAuthorizationRepository,
         user::{UserOid, repository::UserRepository},
     },
     openid_connect::{
-        management::{
-            ManagementLivePorts, has_management_claims, validate_management_authorization,
-            validate_signed_management_snapshot,
-        },
+        management::{ManagementLivePorts, validate_management_authorization},
         rbac as shared,
     },
 };
@@ -420,15 +417,6 @@ impl UserInfoService {
             .and_then(|v| v.as_str())
             .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
 
-        let token_use = payload
-            .claim(JwtClaimNames::TOKEN_USE)
-            .and_then(|v| v.as_str())
-            .and_then(|value| value.parse::<TokenUse>().ok())
-            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
-        if token_use != TokenUse::AccessToken {
-            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
-        }
-
         let jti = payload
             .jwt_id()
             .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
@@ -482,16 +470,6 @@ impl UserInfoService {
             }
         };
         Span::current().record("principal", principal.as_str());
-
-        // A signed principal claim is mandatory for new tokens but legacy
-        // tokens without it remain human tokens by serde default.
-        if let Some(signed_principal) = payload
-            .claim(JwtClaimNames::PRINCIPAL_KIND)
-            .and_then(|value| value.as_str())
-            && signed_principal != principal.as_str()
-        {
-            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
-        }
 
         // Live client state applies to every token, not only management ones.
         let live_client = self
@@ -608,7 +586,6 @@ impl UserInfoService {
         if management {
             let persisted = persisted_management
                 .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
-            validate_signed_management_snapshot(persisted, &payload)?;
             validate_management_authorization(
                 ManagementLivePorts {
                     binding_repo: self.management_authority_repo.as_ref(),
@@ -621,10 +598,6 @@ impl UserInfoService {
                 principal,
             )
             .await?;
-        } else if has_management_claims(&payload) {
-            // Signed management claims without a persisted management snapshot
-            // are a tampering signal.
-            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
         }
 
         let resource_is_rbac = if resource_audience.is_empty() {
@@ -636,7 +609,6 @@ impl UserInfoService {
                 .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?
         };
         if let Some(persisted) = persisted_business {
-            shared::validate_signed_business_snapshot(persisted, &payload)?;
             shared::validate_business_authorization(
                 shared::BusinessLivePorts {
                     repository: self.rbac_authorization_repo.as_ref(),
@@ -653,10 +625,6 @@ impl UserInfoService {
                 },
             )
             .await?;
-        } else if shared::has_business_claims(&payload) {
-            // Signed business claims without a persisted snapshot are a
-            // tampering signal.
-            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
         } else if resource_is_rbac {
             // A token for a resource that now uses RBAC must carry a business
             // snapshot. This invalidates legacy tokens across a policy switch.
@@ -664,12 +632,7 @@ impl UserInfoService {
         }
         Span::current().record("management", management);
 
-        let claims = payload
-            .claim("claims")
-            .cloned()
-            .map(from_value)
-            .transpose()
-            .map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+        let claims = access_token_data.claims.clone();
 
         let auth_time = payload
             .claim(JwtClaimNames::AUTH_TIME)
@@ -779,156 +742,4 @@ fn build_user_info_signer(
     alg: JwaSigningAlgorithm,
 ) -> Result<Box<dyn JwsSigner>, AppError> {
     asymmetric_signer_from_pem(alg.as_str(), private_key_pem.as_bytes()).map_err(AppError::internal)
-}
-
-#[cfg(test)]
-mod tests {
-    use josekit::{jwt, jwt::JwtPayload};
-    use serde_json::json;
-    use uuid::Uuid;
-
-    use crate::openid_connect::management::{
-        has_management_claims, signed_management_snapshot, validate_signed_management_snapshot,
-    };
-
-    use super::JwtClaimNames;
-
-    const GRANT_VERSION: &str = "22222222-2222-2222-2222-222222222222";
-    const POLICY_VERSION: &str = "33333333-3333-3333-3333-333333333333";
-    const CLIENT_POLICY_VERSION: &str = "44444444-4444-4444-4444-444444444444";
-
-    fn management_payload() -> jwt::JwtPayload {
-        let mut payload = JwtPayload::new();
-        payload
-            .set_claim(
-                JwtClaimNames::MANAGEMENT_GRANT_OID,
-                Some(json!(
-                    identity_domain::openid_connect::identifier::user_subject(
-                        Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap()
-                    )
-                )),
-            )
-            .unwrap();
-        payload
-            .set_claim(
-                JwtClaimNames::MANAGEMENT_GRANT_VERSION,
-                Some(json!(GRANT_VERSION)),
-            )
-            .unwrap();
-        payload
-            .set_claim(
-                JwtClaimNames::MANAGEMENT_POLICY_VERSION,
-                Some(json!(POLICY_VERSION)),
-            )
-            .unwrap();
-        payload
-            .set_claim(
-                JwtClaimNames::MANAGEMENT_CLIENT_POLICY_VERSION,
-                Some(json!(CLIENT_POLICY_VERSION)),
-            )
-            .unwrap();
-        payload
-            .set_claim(
-                JwtClaimNames::MANAGEMENT_PERMISSIONS,
-                Some(json!(["management.user.read"])),
-            )
-            .unwrap();
-        payload
-    }
-
-    #[test]
-    fn absolute_management_claims_round_trip_through_the_validator_parser() {
-        let payload = management_payload();
-        let snapshot = signed_management_snapshot(&payload).unwrap().unwrap();
-        assert_eq!(
-            snapshot.grant_version,
-            Uuid::parse_str(GRANT_VERSION).unwrap()
-        );
-        assert_eq!(
-            snapshot.policy_version,
-            Uuid::parse_str(POLICY_VERSION).unwrap()
-        );
-        assert_eq!(
-            snapshot.client_policy_version,
-            Uuid::parse_str(CLIENT_POLICY_VERSION).unwrap()
-        );
-        assert_eq!(
-            snapshot.permissions,
-            vec!["management.user.read".to_owned()]
-        );
-        assert!(has_management_claims(&payload));
-    }
-
-    #[test]
-    fn signed_grant_is_a_user_global_id_and_raw_uuid_is_rejected() {
-        let persisted = signed_management_snapshot(&management_payload())
-            .unwrap()
-            .unwrap();
-        assert_eq!(persisted.grant_oid, "11111111-1111-1111-1111-111111111111");
-
-        let mut raw = management_payload();
-        raw.set_claim(
-            JwtClaimNames::MANAGEMENT_GRANT_OID,
-            Some(json!("11111111-1111-1111-1111-111111111111")),
-        )
-        .unwrap();
-        assert!(signed_management_snapshot(&raw).is_err());
-    }
-
-    #[test]
-    fn signed_snapshot_must_match_oid_version_and_client_policy() {
-        let persisted = signed_management_snapshot(&management_payload())
-            .unwrap()
-            .unwrap();
-        validate_signed_management_snapshot(&persisted, &management_payload()).unwrap();
-
-        let mut changed_oid = management_payload();
-        changed_oid
-            .set_claim(
-                JwtClaimNames::MANAGEMENT_GRANT_OID,
-                Some(json!(
-                    identity_domain::openid_connect::identifier::user_subject(
-                        Uuid::parse_str("22222222-2222-2222-2222-222222222222").unwrap()
-                    )
-                )),
-            )
-            .unwrap();
-        assert!(validate_signed_management_snapshot(&persisted, &changed_oid).is_err());
-
-        let mut changed_version = management_payload();
-        changed_version
-            .set_claim(
-                JwtClaimNames::MANAGEMENT_GRANT_VERSION,
-                Some(json!("55555555-5555-5555-5555-555555555555")),
-            )
-            .unwrap();
-        assert!(validate_signed_management_snapshot(&persisted, &changed_version).is_err());
-
-        let mut changed_client_policy = management_payload();
-        changed_client_policy
-            .set_claim(
-                JwtClaimNames::MANAGEMENT_CLIENT_POLICY_VERSION,
-                Some(json!("66666666-6666-6666-6666-666666666666")),
-            )
-            .unwrap();
-        assert!(validate_signed_management_snapshot(&persisted, &changed_client_policy).is_err());
-    }
-
-    #[test]
-    fn partial_management_claims_fail_closed() {
-        // JwtPayload has no remove; a new payload with one claim is enough.
-        let mut partial = JwtPayload::new();
-        partial
-            .set_claim(
-                JwtClaimNames::MANAGEMENT_GRANT_VERSION,
-                Some(json!(GRANT_VERSION)),
-            )
-            .unwrap();
-        assert!(signed_management_snapshot(&partial).is_err());
-        assert!(
-            signed_management_snapshot(&JwtPayload::new())
-                .unwrap()
-                .is_none()
-        );
-    }
 }

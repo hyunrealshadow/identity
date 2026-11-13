@@ -344,12 +344,9 @@ impl TokenService {
                 // Device tokens have no browser session and therefore no sid.
                 protected_session_id: None,
                 scope: &scope_string,
-                claims: None,
                 auth_time: approval.auth_time,
                 acr: approval.acr.as_deref(),
                 amr: &approval.amr,
-                management: None,
-                business: None,
             })
             .await?;
 
@@ -407,6 +404,7 @@ impl TokenService {
                 refresh_token_oid: None,
                 device_authorization_oid: Some(device_authorization_oid.to_string()),
                 client_authentication_mode: Some(client_authentication_mode),
+                claims: None,
                 management: None,
             }),
             expires_at: now + Duration::hours(1),

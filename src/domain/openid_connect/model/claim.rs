@@ -57,17 +57,6 @@ impl JwtClaimNames {
     pub const GROUPS: &'static str = "groups";
     pub const ENTITLEMENTS: &'static str = "entitlements";
 
-    // Custom Claims (non-standard, application-specific)
-    pub const TOKEN_USE: &'static str = "token_use";
-    /// Explicit access-token principal kind (`user` or `client`). Machine
-    /// tokens never claim a user subject.
-    pub const PRINCIPAL_KIND: &'static str = "principal_kind";
-    pub const MANAGEMENT_GRANT_OID: &'static str = "management_grant_oid";
-    pub const MANAGEMENT_GRANT_VERSION: &'static str = "management_grant_version";
-    pub const MANAGEMENT_POLICY_VERSION: &'static str = "management_policy_version";
-    pub const MANAGEMENT_CLIENT_POLICY_VERSION: &'static str = "management_client_policy_version";
-    pub const MANAGEMENT_PERMISSIONS: &'static str = "management_permissions";
-
     // JWS/JWK Header Parameters
     pub const ALG: &'static str = "alg";
     pub const TYP: &'static str = "typ";
@@ -101,32 +90,6 @@ impl TokenTypeIdentifiers {
     pub const JWT: &'static str = "urn:ietf:params:oauth:token-type:jwt";
     pub const SAML1: &'static str = "urn:ietf:params:oauth:token-type:saml1";
     pub const SAML2: &'static str = "urn:ietf:params:oauth:token-type:saml2";
-}
-
-/// Custom token use values for internal token type identification.
-///
-/// Note: This is a non-standard custom claim, not defined by RFC 8693.
-/// RFC 8693 defines token type identifiers as URIs used in protocol parameters,
-/// not as JWT claims. This custom claim is used internally to distinguish
-/// token types within the application.
-#[derive(
-    Debug,
-    Clone,
-    Copy,
-    PartialEq,
-    Eq,
-    serde::Serialize,
-    serde::Deserialize,
-    strum::Display,
-    strum::AsRefStr,
-    strum::EnumString,
-)]
-#[serde(rename_all = "snake_case")]
-#[strum(serialize_all = "snake_case")]
-pub enum TokenUse {
-    AccessToken,
-    RefreshToken,
-    IdToken,
 }
 
 pub struct StandardScopes;

@@ -471,6 +471,7 @@ impl TokenService {
                     refresh_token_oid: None,
                     device_authorization_oid: None,
                     client_authentication_mode: Some(client_authentication_mode),
+                    claims: data.claims.clone(),
                     management: data.management.clone(),
                 }),
                 Utc::now() + Duration::hours(1),
@@ -499,12 +500,9 @@ impl TokenService {
                 user: Some(&user),
                 protected_session_id: Some(&protected_session_id),
                 scope: &selection.scope,
-                claims: data.claims.as_ref(),
                 auth_time: data.auth_time,
                 acr: session_acr.as_deref(),
                 amr: &session_amr,
-                management: management_snapshot,
-                business: business_snapshot,
             })
             .await?;
         let id_token = if issue_id_token {

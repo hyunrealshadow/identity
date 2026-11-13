@@ -609,6 +609,7 @@ mod tests {
             refresh_token_oid: None,
             device_authorization_oid: None,
             client_authentication_mode: None,
+            claims: None,
             management: None,
         });
         assert_eq!(subject_user_oid(&machine).unwrap(), None);

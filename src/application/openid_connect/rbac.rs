@@ -22,17 +22,10 @@ use identity_domain::{
     user::UserOid,
 };
 
-use josekit::jwt;
-use serde_json::{Value, from_value, to_value};
-
 use crate::{
     application::openid_connect::provider::OpenIdProviderService,
     error::{AppError, codes::openid_connect::OpenIdConnectErrorCode},
 };
-
-/// Signed JWT claim carrying the exact business snapshot. Management uses its
-/// own explicit claim set; the two are never combined in one credential.
-pub(crate) const RBAC_CLAIM: &str = "rbac";
 
 #[must_use]
 pub(crate) fn business_snapshot(
@@ -46,39 +39,6 @@ pub(crate) fn management_snapshot(
     snapshot: Option<&AuthorizationSnapshotData>,
 ) -> Option<&ManagementAuthorizationSnapshotData> {
     snapshot.and_then(AuthorizationSnapshotData::as_management)
-}
-
-#[must_use]
-pub(crate) fn has_business_claims(payload: &jwt::JwtPayload) -> bool {
-    payload.claim(RBAC_CLAIM).is_some()
-}
-
-pub(crate) fn signed_business_snapshot(
-    payload: &jwt::JwtPayload,
-) -> Result<Option<BusinessAuthorizationSnapshotData>, AppError> {
-    let Some(value) = payload.claim(RBAC_CLAIM).cloned() else {
-        return Ok(None);
-    };
-    from_value::<BusinessAuthorizationSnapshotData>(value)
-        .map(Some)
-        .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))
-}
-
-pub(crate) fn validate_signed_business_snapshot(
-    persisted: &BusinessAuthorizationSnapshotData,
-    payload: &jwt::JwtPayload,
-) -> Result<(), AppError> {
-    let signed = signed_business_snapshot(payload)?
-        .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
-    if &signed != persisted {
-        return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
-    }
-    Ok(())
-}
-
-#[must_use]
-pub(crate) fn signed_business_claim(snapshot: &BusinessAuthorizationSnapshotData) -> Option<Value> {
-    to_value(snapshot).ok()
 }
 
 /// Scope names that are neither protocol controls nor account/session
@@ -246,38 +206,9 @@ pub(crate) async fn validate_business_authorization(
 
 #[cfg(test)]
 mod tests {
-    use identity_domain::{
-        client_authorization::{
-            BusinessAuthorizationSnapshotData, BusinessBindingSnapshotData,
-            BusinessRoleSnapshotData,
-        },
-        openid_connect::ScopeSet,
-    };
-    use josekit::jwt::JwtPayload;
-    use serde_json::{Value, json};
-    use uuid::Uuid;
+    use identity_domain::openid_connect::ScopeSet;
 
-    use super::{
-        RBAC_CLAIM, business_scope_names, clip_scope, has_business_claims,
-        signed_business_snapshot, validate_signed_business_snapshot,
-    };
-
-    fn snapshot() -> BusinessAuthorizationSnapshotData {
-        BusinessAuthorizationSnapshotData {
-            resource_oid: "11111111-1111-1111-1111-111111111111".to_owned(),
-            resource_uri: "https://api.example.test".to_owned(),
-            policy_version: Uuid::new_v4(),
-            user_oid: Some("22222222-2222-2222-2222-222222222222".to_owned()),
-            user_authorization_version: Some(Uuid::new_v4()),
-            bindings: vec![BusinessBindingSnapshotData {
-                binding_oid: "33333333-3333-3333-3333-333333333333".to_owned(),
-                role_oid: "44444444-4444-4444-4444-444444444444".to_owned(),
-            }],
-            roles: vec![BusinessRoleSnapshotData {
-                role_oid: "44444444-4444-4444-4444-444444444444".to_owned(),
-            }],
-        }
-    }
+    use super::{business_scope_names, clip_scope};
 
     #[test]
     fn business_scope_and_protocol_controls_are_separated() {
@@ -291,22 +222,5 @@ mod tests {
             clip_scope(&scope, &["orders.read".to_owned()].into_iter().collect()),
             "openid profile orders.read"
         );
-    }
-
-    #[test]
-    fn signed_business_claim_round_trips_and_rejects_tampering() {
-        let data = snapshot();
-        let mut payload = JwtPayload::new();
-        payload.set_claim(RBAC_CLAIM, Some(json!(data))).unwrap();
-        assert!(has_business_claims(&payload));
-        let signed = signed_business_snapshot(&payload).unwrap().unwrap();
-        assert_eq!(signed, data);
-        validate_signed_business_snapshot(&data, &payload).unwrap();
-
-        let mut changed = JwtPayload::new();
-        changed
-            .set_claim(RBAC_CLAIM, Some(Value::Object(Default::default())))
-            .unwrap();
-        assert!(validate_signed_business_snapshot(&data, &changed).is_err());
     }
 }

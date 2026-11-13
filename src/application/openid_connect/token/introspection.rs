@@ -15,10 +15,7 @@ use crate::{
     error::{AppError, codes::token::TokenErrorCode},
     openid_connect::{
         jwt_checks::validate_required_exp_and_optional_window,
-        management::{
-            ManagementLivePorts, has_management_claims, validate_management_authorization,
-            validate_signed_management_snapshot,
-        },
+        management::{ManagementLivePorts, validate_management_authorization},
         rbac as shared,
     },
 };
@@ -227,11 +224,6 @@ impl TokenService {
             let Some(persisted) = persisted_management else {
                 return Ok(json!({"active": false}));
             };
-            if let Some(payload) = jwt_payload.as_ref()
-                && validate_signed_management_snapshot(persisted, payload).is_err()
-            {
-                return Ok(json!({"active": false}));
-            }
             let live_client = self
                 .client_repo
                 .find_by_oid(client.client().oid)
@@ -256,8 +248,6 @@ impl TokenService {
             {
                 return Ok(json!({"active": false}));
             }
-        } else if jwt_payload.as_ref().is_some_and(has_management_claims) {
-            return Ok(json!({"active": false}));
         }
 
         let audience = if let Some(payload) = jwt_payload.as_ref() {
@@ -285,11 +275,6 @@ impl TokenService {
                 .await
                 .map_err(AppError::map_source(TokenErrorCode::ClientLookupFailed))?;
         if let Some(persisted) = persisted_business {
-            if let Some(payload) = jwt_payload.as_ref()
-                && shared::validate_signed_business_snapshot(persisted, payload).is_err()
-            {
-                return Ok(json!({"active": false}));
-            }
             let live_client = self
                 .client_repo
                 .find_by_oid(client.client().oid)
@@ -318,11 +303,6 @@ impl TokenService {
             {
                 return Ok(json!({"active": false}));
             }
-        } else if jwt_payload
-            .as_ref()
-            .is_some_and(shared::has_business_claims)
-        {
-            return Ok(json!({"active": false}));
         } else if resource_is_rbac {
             // A legacy token for a resource that now uses RBAC has no original
             // business snapshot and must not remain active.

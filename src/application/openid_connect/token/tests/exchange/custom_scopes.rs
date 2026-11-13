@@ -101,6 +101,50 @@ async fn custom_scopes_round_trip_through_code_tokens_and_narrowed_refresh() {
     )
     .unwrap();
     assert_eq!(payload["scope"], response.scope);
+    // The authorization snapshot stays server-side; the JWT carries only
+    // RFC 9068 and OIDC authentication claims.
+    let mut claim_names = payload
+        .as_object()
+        .unwrap()
+        .keys()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    claim_names.sort_unstable();
+    assert_eq!(
+        claim_names,
+        [
+            "amr",
+            "aud",
+            "client_id",
+            "exp",
+            "iat",
+            "iss",
+            "jti",
+            "scope",
+            "sid",
+            "sub"
+        ]
+    );
+    let access_token_oid = identity_domain::openid_connect::identifier::parse_access_token_id(
+        payload["jti"].as_str().unwrap(),
+    )
+    .unwrap();
+    let ClientAuthorizationData::AccessToken(access_token_data) = repo
+        .find_by_oid(access_token_oid)
+        .await
+        .unwrap()
+        .unwrap()
+        .data
+    else {
+        panic!("jti must identify an access token record");
+    };
+    assert!(
+        access_token_data
+            .management
+            .as_ref()
+            .and_then(|snapshot| snapshot.as_business())
+            .is_some()
+    );
     let refresh = RefreshTokenGrantParams {
         resources: vec!["urn:orders".into()],
         refresh_token: response.refresh_token.unwrap(),

@@ -125,6 +125,7 @@ impl AuthorizeService {
                         refresh_token_oid: None,
                         device_authorization_oid: None,
                         client_authentication_mode: Some(front_channel_token_mode(&client)),
+                        claims: claims.clone(),
                         management: None,
                     },
                 )
@@ -144,7 +145,6 @@ impl AuthorizeService {
                     token_id: &identity_domain::openid_connect::identifier::access_token_id(
                         token_oid,
                     ),
-                    claims: claims.as_ref(),
                     auth_time: auth_time_val,
                     acr: authentication.acr,
                     amr: authentication.amr,
@@ -284,6 +284,7 @@ impl AuthorizeService {
                         refresh_token_oid: None,
                         device_authorization_oid: None,
                         client_authentication_mode: Some(front_channel_token_mode(&client)),
+                        claims: claims.clone(),
                         management: None,
                     },
                 )
@@ -303,7 +304,6 @@ impl AuthorizeService {
                     token_id: &identity_domain::openid_connect::identifier::access_token_id(
                         token_oid,
                     ),
-                    claims: claims.as_ref(),
                     auth_time: auth_time_val,
                     acr: authentication.acr,
                     amr: authentication.amr,
