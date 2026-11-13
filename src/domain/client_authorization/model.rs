@@ -8,11 +8,10 @@ use uuid::Uuid;
 use crate::{
     auth::model::SessionOid,
     authorization::{
-        administrator::AdministratorBinding,
         authority::UserPermissionAuthority,
-        catalog::{AdministratorRole, ManagementScope},
+        catalog::ManagementScope,
         ids::{AuthorizationVersion, PolicyVersion},
-        snapshot::{ManagementAuthorizationSnapshot, ManagementGrantKind},
+        snapshot::ManagementAuthorizationSnapshot,
     },
     client::model::ClientOid,
     openid_connect::{
@@ -103,107 +102,25 @@ impl AccessTokenPrincipal {
     }
 }
 
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum ManagementGrantKindData {
-    /// Historical only; decodable so old records can be inspected but rejected
-    /// by every live validation path after the unified-RBAC cutover.
-    AdministratorBinding,
-    UserRbac,
-}
-
-impl From<ManagementGrantKind> for ManagementGrantKindData {
-    fn from(value: ManagementGrantKind) -> Self {
-        match value {
-            ManagementGrantKind::AdministratorBinding => Self::AdministratorBinding,
-            ManagementGrantKind::UserRbac => Self::UserRbac,
-        }
-    }
-}
-
-impl From<ManagementGrantKindData> for ManagementGrantKind {
-    fn from(value: ManagementGrantKindData) -> Self {
-        match value {
-            ManagementGrantKindData::AdministratorBinding => Self::AdministratorBinding,
-            ManagementGrantKindData::UserRbac => Self::UserRbac,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "snake_case")]
-pub enum AdministratorRoleData {
-    Owner,
-    Admin,
-    Viewer,
-}
-
-impl From<AdministratorRole> for AdministratorRoleData {
-    fn from(value: AdministratorRole) -> Self {
-        match value {
-            AdministratorRole::Owner => Self::Owner,
-            AdministratorRole::Admin => Self::Admin,
-            AdministratorRole::Viewer => Self::Viewer,
-        }
-    }
-}
-
-impl From<AdministratorRoleData> for AdministratorRole {
-    fn from(value: AdministratorRoleData) -> Self {
-        match value {
-            AdministratorRoleData::Owner => Self::Owner,
-            AdministratorRoleData::Admin => Self::Admin,
-            AdministratorRoleData::Viewer => Self::Viewer,
-        }
-    }
-}
-
 /// Serializable, non-reusable management authorization snapshot carried by
-/// codes and tokens. It mirrors the foundation snapshot without treating role
-/// or permission names as identity: for current grant kinds `grant_version`
+/// codes and tokens. It mirrors the foundation snapshot without treating
+/// permission names as identity: `grant_oid` is the user, `grant_version`
 /// carries the derived grant-authority fingerprint, and
 /// `client_policy_version` carries the derived client-authority fingerprint.
 /// Neither field is a record optimistic-lock version.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct ManagementAuthorizationSnapshotData {
-    pub grant_kind: ManagementGrantKindData,
     pub grant_oid: String,
     pub grant_version: Uuid,
     pub policy_version: Uuid,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub role: Option<AdministratorRoleData>,
     #[serde(default)]
     pub permissions: Vec<String>,
     pub client_policy_version: Uuid,
 }
 
 impl ManagementAuthorizationSnapshotData {
-    #[must_use]
-    pub fn for_administrator_binding(
-        binding: &AdministratorBinding,
-        permissions: impl IntoIterator<Item = ManagementScope>,
-        policy_version: PolicyVersion,
-        client_policy_version: PolicyVersion,
-    ) -> Self {
-        let mut permissions = permissions
-            .into_iter()
-            .map(|scope| scope.name().to_owned())
-            .collect::<Vec<_>>();
-        permissions.sort_unstable();
-        Self {
-            grant_kind: ManagementGrantKindData::AdministratorBinding,
-            grant_oid: binding.oid.0.to_string(),
-            grant_version: binding.version.as_uuid(),
-            policy_version: policy_version.as_uuid(),
-            role: Some(binding.role.into()),
-            permissions,
-            client_policy_version: client_policy_version.as_uuid(),
-        }
-    }
-
     /// Current human snapshot: user OID identity, whole-user authorization
-    /// generation and the exact effective permission set. No role name is
-    /// carried.
+    /// generation and the exact effective permission set.
     #[must_use]
     pub fn for_user_permission_authority(
         authority: &UserPermissionAuthority,
@@ -217,11 +134,9 @@ impl ManagementAuthorizationSnapshotData {
             .collect::<Vec<_>>();
         permissions.sort_unstable();
         Self {
-            grant_kind: ManagementGrantKindData::UserRbac,
             grant_oid: authority.user_oid.0.to_string(),
             grant_version: authority.version.as_uuid(),
             policy_version: policy_version.as_uuid(),
-            role: None,
             permissions,
             client_policy_version: client_policy_version.as_uuid(),
         }
@@ -244,19 +159,10 @@ impl ManagementAuthorizationSnapshotData {
                 ));
             }
         }
-        let role = self.role.map(AdministratorRole::from);
-        if self.grant_kind == ManagementGrantKindData::AdministratorBinding && role.is_none() {
-            return Err(ManagementSnapshotDataError::MissingRole);
-        }
-        if matches!(self.grant_kind, ManagementGrantKindData::UserRbac) && role.is_some() {
-            return Err(ManagementSnapshotDataError::UnexpectedRole);
-        }
         Ok(ManagementAuthorizationSnapshot {
-            grant_kind: self.grant_kind.into(),
             grant_oid,
             grant_fingerprint: AuthorizationVersion::from_uuid(self.grant_version),
             policy_version: PolicyVersion::from_uuid(self.policy_version),
-            role,
             permissions,
         })
     }
@@ -283,10 +189,6 @@ pub enum ManagementSnapshotDataError {
     InvalidPermission(String),
     #[error("management snapshot contains a duplicate permission: {0}")]
     DuplicatePermission(String),
-    #[error("an administrator snapshot must carry its role")]
-    MissingRole,
-    #[error("a client management snapshot must not carry a human role")]
-    UnexpectedRole,
 }
 
 /// Serializable business RBAC binding source. The binding OID is the grant
@@ -713,11 +615,11 @@ pub struct ClientAuthorization {
 #[cfg(test)]
 mod tests {
     use super::SelectionSource::{AccountPicker, Auto, FreshLogin, Reauthentication};
-    use crate::{authorization::snapshot::ManagementGrantKind, user::UserOid};
+    use crate::user::UserOid;
 
     use super::{
         AccessTokenPrincipal, AuthorizationSnapshotData, BusinessAuthorizationSnapshotData,
-        ManagementAuthorizationSnapshotData, ManagementGrantKindData,
+        ManagementAuthorizationSnapshotData,
     };
     use uuid::Uuid;
 
@@ -760,11 +662,9 @@ mod tests {
     #[test]
     fn authorization_snapshot_data_preserves_management_and_business_wire_shapes() {
         let management = super::ManagementAuthorizationSnapshotData {
-            grant_kind: ManagementGrantKindData::UserRbac,
             grant_oid: "11111111-1111-1111-1111-111111111111".to_owned(),
             grant_version: Uuid::new_v4(),
             policy_version: Uuid::new_v4(),
-            role: None,
             permissions: vec!["management.user.read".to_owned()],
             client_policy_version: Uuid::new_v4(),
         };
@@ -881,17 +781,13 @@ mod tests {
             PolicyVersion::new(),
             client_policy,
         );
-        assert_eq!(data.grant_kind, ManagementGrantKindData::UserRbac);
         assert_eq!(data.grant_oid, user.0.to_string());
         assert_eq!(data.grant_version, grant_version.as_uuid());
-        assert_eq!(data.role, None);
         assert_eq!(data.client_policy_version, client_policy.as_uuid());
 
-        let encoded = serde_json::to_value(&data).unwrap();
-        assert_eq!(encoded["grant_kind"], serde_json::json!("user_rbac"));
         let snapshot = data.to_snapshot().unwrap();
         assert_eq!(snapshot.permissions.len(), 2);
-        assert_eq!(snapshot.grant_kind, ManagementGrantKind::UserRbac);
+        assert_eq!(snapshot.grant_oid, user.0);
     }
 
     #[test]

@@ -8,11 +8,11 @@ use identity_application::{
         ScopeRecord,
     },
 };
+use identity_domain::global_id::GlobalId;
 use identity_domain::{
     authorization::ManagementScope,
     rbac::{ResourceOid, RoleOid},
 };
-use identity_infrastructure::graphql::id::{GlobalId, GlobalIdType};
 use uuid::Uuid;
 
 use super::super::{
@@ -33,14 +33,10 @@ use crate::graphql::schema::{
 };
 use async_graphql::connection::Connection;
 
-pub(crate) struct ScopeGlobalId;
-
-impl GlobalIdType for ScopeGlobalId {
-    const TYPE_NAME: &'static str = "Scope";
-}
+pub(crate) use identity_domain::global_id::kind::Scope as ScopeGlobalId;
 
 pub(crate) fn scope_global_id(oid: ScopeOid) -> ID {
-    GlobalId::<ScopeGlobalId>::new(oid.0).into()
+    ID(GlobalId::<ScopeGlobalId>::new(oid.0).encode())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]

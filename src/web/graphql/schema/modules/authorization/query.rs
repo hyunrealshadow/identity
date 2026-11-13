@@ -19,7 +19,7 @@ pub(crate) struct AuthorizationQuery;
 impl AuthorizationQuery {
     /// Effective permissions for the current principal. This field only needs
     /// a valid principal: it never requires a management scope, never accepts a
-    /// target user and never grants a role or scope by itself.
+    /// target user and never grants a scope by itself.
     #[graphql(directive = access::apply(AccessPolicy::authenticated()))]
     async fn effective_permissions(&self, ctx: &Context<'_>) -> Result<EffectivePermissions> {
         let request = request_context(ctx)?;
@@ -29,7 +29,6 @@ impl AuthorizationQuery {
                 .await
                 .map_err(|error| app_error(ctx, error))?,
             None => EffectivePermissionsView {
-                role: None,
                 requestable_scopes: Vec::new(),
                 effective_scopes: Vec::new(),
             },
@@ -58,7 +57,6 @@ impl AuthorizationQuery {
             .and_then(|auth_time| DateTime::<Utc>::from_timestamp(auth_time, 0));
 
         Ok(EffectivePermissions {
-            role: view.role.map(|role| role.as_str().to_owned()),
             requestable_scopes: view.requestable_scopes,
             granted_scopes,
             effective_scopes: view.effective_scopes,
@@ -74,7 +72,6 @@ impl AuthorizationQuery {
 
 #[derive(SimpleObject)]
 pub(crate) struct EffectivePermissions {
-    role: Option<String>,
     requestable_scopes: Vec<String>,
     granted_scopes: Vec<String>,
     effective_scopes: Vec<String>,

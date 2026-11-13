@@ -180,7 +180,7 @@ impl DynamicClientRegistrationService {
             }
             AppError::from_code(RegistrationErrorCode::ClientCreateFailed).with_source(error)
         })?;
-        response.client_id = client_id.to_string();
+        response.client_id = identity_domain::openid_connect::identifier::client_id(client_id);
         response.registration_client_uri = Some(registration_client_uri(issuer, client_id)?);
         self.record_client_change("client.registered", client_id, "success");
         Ok(response)
@@ -612,7 +612,7 @@ impl DynamicClientRegistrationService {
         Ok((
             registration,
             DynamicClientRegistrationResponse {
-                client_id: client_id.to_string(),
+                client_id: identity_domain::openid_connect::identifier::client_id(client_id),
                 registration_access_token: Some(registration_access_token),
                 registration_client_uri: Some(registration_client_uri),
                 client_secret,
@@ -686,9 +686,10 @@ impl DynamicClientRegistrationService {
                 RegistrationErrorCode::InvalidClientMetadata,
             ));
         }
-        let client_oid = Uuid::parse_str(client_id).map_err(|_| {
-            AppError::from_code(RegistrationErrorCode::InvalidRegistrationAccessToken)
-        })?;
+        let client_oid = identity_domain::openid_connect::identifier::parse_client_id(client_id)
+            .map_err(|_| {
+                AppError::from_code(RegistrationErrorCode::InvalidRegistrationAccessToken)
+            })?;
         let existing = self
             .repo
             .find_by_registration_access_token(client_oid, registration_access_token)
@@ -830,7 +831,7 @@ impl DynamicClientRegistrationService {
                 _ => AppError::from_code(RegistrationErrorCode::ClientUpdateFailed)
                     .with_source(error),
             })?;
-        response.client_id = client_oid.to_string();
+        response.client_id = identity_domain::openid_connect::identifier::client_id(client_oid);
         response.registration_client_uri = Some(registration_client_uri(issuer, client_oid)?);
         response.registration_access_token = Some(registration_access_token.to_owned());
         self.record_client_change("client.updated", client_oid, "success");
@@ -918,9 +919,10 @@ impl DynamicClientRegistrationService {
             ));
         }
 
-        let client_oid = Uuid::parse_str(client_id).map_err(|_| {
-            AppError::from_code(RegistrationErrorCode::InvalidRegistrationAccessToken)
-        })?;
+        let client_oid = identity_domain::openid_connect::identifier::parse_client_id(client_id)
+            .map_err(|_| {
+                AppError::from_code(RegistrationErrorCode::InvalidRegistrationAccessToken)
+            })?;
         let client = self
             .repo
             .find_by_registration_access_token(client_oid, registration_access_token)
@@ -947,9 +949,10 @@ impl DynamicClientRegistrationService {
             ));
         }
 
-        let client_oid = Uuid::parse_str(client_id).map_err(|_| {
-            AppError::from_code(RegistrationErrorCode::InvalidRegistrationAccessToken)
-        })?;
+        let client_oid = identity_domain::openid_connect::identifier::parse_client_id(client_id)
+            .map_err(|_| {
+                AppError::from_code(RegistrationErrorCode::InvalidRegistrationAccessToken)
+            })?;
         let client = self
             .repo
             .find_by_registration_access_token(client_oid, registration_access_token)

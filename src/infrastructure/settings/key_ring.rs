@@ -14,7 +14,6 @@ use identity_domain::{
 };
 use sea_orm::DatabaseConnection;
 use tracing::info_span;
-use uuid::Uuid;
 
 use crate::{
     crypto::signing_algorithm::SigningAlgorithmDetectorImpl,
@@ -68,7 +67,7 @@ impl CachedRuntimeKeyRingProvider {
             };
 
             signing_key = Some(RuntimeSigningKey {
-                key_id: Uuid::from(binding.oid).to_string(),
+                key_id: identity_domain::openid_connect::identifier::key_id(binding.oid),
                 private_key_pem: data.private_key.clone(),
                 algorithm,
             });

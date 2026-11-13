@@ -1,14 +1,10 @@
 use async_graphql::{ID, Object};
 use chrono::{DateTime, Utc};
 use identity_domain::auth::{SessionOid, model::Session};
-use identity_infrastructure::graphql::id::{GlobalId, GlobalIdType};
+use identity_domain::global_id::GlobalId;
 use uuid::Uuid;
 
-pub(crate) struct SessionGlobalId;
-
-impl GlobalIdType for SessionGlobalId {
-    const TYPE_NAME: &'static str = "Session";
-}
+pub(crate) use identity_domain::global_id::kind::Session as SessionGlobalId;
 
 pub(crate) struct SessionNode {
     id: ID,
@@ -22,7 +18,7 @@ impl SessionNode {
     /// none, so no session is reported as current.
     pub(crate) fn new(session: Session, current_session_oid: Option<SessionOid>) -> Self {
         Self {
-            id: GlobalId::<SessionGlobalId>::new(Uuid::from(session.oid)).into(),
+            id: ID(GlobalId::<SessionGlobalId>::new(Uuid::from(session.oid)).encode()),
             current: current_session_oid == Some(session.oid),
             session,
         }
@@ -138,7 +134,7 @@ impl RevokeOtherSessionsPayload {
 mod tests {
     use chrono::Utc;
     use identity_domain::auth::{SessionOid, SessionStatus, model::Session};
-    use identity_infrastructure::graphql::id::GlobalId;
+    use identity_domain::global_id::GlobalId;
     use uuid::Uuid;
 
     use super::{SessionGlobalId, SessionNode};

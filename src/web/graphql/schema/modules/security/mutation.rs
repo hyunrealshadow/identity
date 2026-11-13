@@ -1,16 +1,16 @@
 use crate::graphql::schema::access::{AccessPolicy, access};
-use async_graphql::{Context, Object, Result};
+use async_graphql::{Context, ID, Object, Result};
 use identity_application::error::{codes::graphql::GraphqlErrorCode, params::ErrorParams};
+use identity_domain::global_id::{GlobalId, kind};
 use identity_domain::{
     openid_connect::ApiScope,
     user::{MfaMethod, repository::UserProfilePatch},
 };
-use uuid::Uuid;
 
 use super::types::{
     BeginTotpEnrollmentPayload, ChangePasswordInput, ChangePasswordPayload,
-    ChangeTotpEnrollmentAlgorithmInput, ConfirmTotpEnrollmentInput, RecoveryCodeEnrollmentPayload,
-    RecoveryCodesPayload, TotpChangedPayload,
+    ChangeTotpEnrollmentAlgorithmInput, ConfirmTotpEnrollmentInput, PasskeyGlobalId,
+    RecoveryCodeEnrollmentPayload, RecoveryCodesPayload, TotpChangedPayload,
 };
 use crate::graphql::schema::{
     authorization::{
@@ -141,7 +141,7 @@ impl SecurityMutation {
     async fn finish_passkey_registration(
         &self,
         ctx: &Context<'_>,
-        #[graphql(validator(chars_max_length = 128))] challenge_id: String,
+        challenge_id: ID,
         #[graphql(validator(chars_max_length = 255))] name: String,
         credential: async_graphql::Json<serde_json::Value>,
     ) -> Result<bool> {
@@ -153,13 +153,15 @@ impl SecurityMutation {
                 ErrorParams::new(),
             )
         })?;
-        let challenge = Uuid::parse_str(&challenge_id).map_err(|_| {
-            coded_error(
-                ctx,
-                GraphqlErrorCode::InvalidPasskeyChallenge,
-                ErrorParams::new(),
-            )
-        })?;
+        let challenge = GlobalId::<kind::PasskeyChallenge>::decode(challenge_id.as_str())
+            .map_err(|_| {
+                coded_error(
+                    ctx,
+                    GraphqlErrorCode::InvalidPasskeyChallenge,
+                    ErrorParams::new(),
+                )
+            })?
+            .oid();
         request
             .state
             .services()
@@ -181,15 +183,11 @@ impl SecurityMutation {
         directive = access::apply(ScopeGuard::policy(ApiScope::AccountUpdate)),
         directive = access::apply(AccessPolicy::account_security())
     )]
-    async fn delete_passkey(
-        &self,
-        ctx: &Context<'_>,
-        #[graphql(validator(chars_max_length = 128))] id: String,
-    ) -> Result<bool> {
+    async fn delete_passkey(&self, ctx: &Context<'_>, id: ID) -> Result<bool> {
         let request = request_context(ctx)?;
-        let id = Uuid::parse_str(&id).map_err(|_| {
-            coded_error(ctx, GraphqlErrorCode::InvalidPasskeyId, ErrorParams::new())
-        })?;
+        let id = GlobalId::<PasskeyGlobalId>::decode(id.as_str())
+            .map_err(|_| coded_error(ctx, GraphqlErrorCode::InvalidPasskeyId, ErrorParams::new()))?
+            .oid();
         request
             .state
             .services()

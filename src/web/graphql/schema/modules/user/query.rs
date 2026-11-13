@@ -7,8 +7,8 @@ use identity_application::{
     authorization::ManagementTarget,
     error::{codes::graphql::GraphqlErrorCode, params::ErrorParams},
 };
+use identity_domain::global_id::GlobalId;
 use identity_domain::{authorization::ManagementScope, user::UserOid};
-use identity_infrastructure::graphql::id::GlobalId;
 
 use super::{
     cursor::UserConnectionCursor,
@@ -94,7 +94,7 @@ impl UserManagementQuery {
 }
 
 pub(super) fn decode_user_oid(ctx: &Context<'_>, id: &ID) -> Result<UserOid> {
-    let oid = GlobalId::<UserGlobalId>::try_from(id)
+    let oid = GlobalId::<UserGlobalId>::decode(id.as_str())
         .map_err(|_| coded_error(ctx, GraphqlErrorCode::InvalidGlobalId, ErrorParams::new()))?
         .oid();
     Ok(UserOid(oid))

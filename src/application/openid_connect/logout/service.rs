@@ -217,7 +217,8 @@ impl LogoutService {
 
         let client_id = client_id
             .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::IdTokenHintRequired))?;
-        let client_oid = Uuid::parse_str(&client_id).map_err(AppError::map_source(
+        let client_oid = identity_domain::openid_connect::identifier::parse_client_id(&client_id)
+            .map_err(AppError::map_source(
             OpenIdConnectErrorCode::LogoutClientInvalid,
         ))?;
 
@@ -472,7 +473,7 @@ impl LogoutService {
                 };
 
                 return Ok((
-                    Uuid::from(binding.oid).to_string(),
+                    identity_domain::openid_connect::identifier::key_id(binding.oid),
                     data.private_key.clone(),
                     alg,
                 ));
@@ -498,9 +499,13 @@ impl LogoutService {
         let now = SystemTime::now();
         let mut payload = JwtPayload::new();
         payload.set_issuer(issuer.as_str());
-        payload.set_audience(vec![audience.to_string()]);
+        payload.set_audience(vec![
+            identity_domain::openid_connect::identifier::client_id(audience),
+        ]);
         payload.set_issued_at(&now);
-        payload.set_jwt_id(Uuid::new_v4().to_string());
+        payload.set_jwt_id(
+            identity_domain::openid_connect::identifier::logout_token_id(Uuid::new_v4()),
+        );
         if let Some(protected_session_id) = protected_session_id {
             payload
                 .set_claim("sid", Some(json!(protected_session_id)))

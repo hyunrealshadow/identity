@@ -139,7 +139,10 @@ async fn records<C: ConnectionTrait>(
                             algorithms.push(algorithm.clone());
                         }
                     }
-                    let key_ids = bound.iter().map(|(_, oid)| oid.to_string()).collect();
+                    let key_ids = bound
+                        .iter()
+                        .map(|(_, oid)| identity_domain::openid_connect::identifier::key_id(*oid))
+                        .collect();
                     (algorithms, key_ids, data.certificate.is_some())
                 }
             };

@@ -33,10 +33,20 @@ async fn parse_request_object_payload_preserves_registered_claims() {
         &private_key,
         [
             ("response_type", json!("code")),
-            ("client_id", json!(TEST_CLIENT_ID)),
+            (
+                "client_id",
+                json!(identity_domain::openid_connect::identifier::client_id(
+                    TEST_CLIENT_ID
+                )),
+            ),
             ("redirect_uri", json!("https://client.example.com/callback")),
             ("scope", json!("openid profile")),
-            ("iss", json!(TEST_CLIENT_ID)),
+            (
+                "iss",
+                json!(identity_domain::openid_connect::identifier::client_id(
+                    TEST_CLIENT_ID
+                )),
+            ),
             ("aud", json!("https://identity.example.com/")),
             ("exp", json!(now + 300)),
             ("nbf", json!(now - 10)),
@@ -48,7 +58,12 @@ async fn parse_request_object_payload_preserves_registered_claims() {
         .await
         .unwrap();
 
-    assert_eq!(parsed["iss"], json!(TEST_CLIENT_ID));
+    assert_eq!(
+        parsed["iss"],
+        json!(identity_domain::openid_connect::identifier::client_id(
+            TEST_CLIENT_ID
+        ))
+    );
     assert_eq!(parsed["aud"], json!("https://identity.example.com/"));
     assert_eq!(parsed["exp"], json!(now + 300));
     assert_eq!(parsed["nbf"], json!(now - 10));
@@ -56,7 +71,12 @@ async fn parse_request_object_payload_preserves_registered_claims() {
         let nested = signed_request_object(
             &private_key,
             [
-                ("client_id", json!(TEST_CLIENT_ID)),
+                (
+                    "client_id",
+                    json!(identity_domain::openid_connect::identifier::client_id(
+                        TEST_CLIENT_ID
+                    )),
+                ),
                 (forbidden, json!("nested")),
             ],
         );
@@ -156,7 +176,12 @@ async fn parse_rsa_encrypted_signed_request_object() {
     let inner = signed_request_object(
         &client_private_key,
         [
-            ("client_id", json!(TEST_CLIENT_ID)),
+            (
+                "client_id",
+                json!(identity_domain::openid_connect::identifier::client_id(
+                    TEST_CLIENT_ID
+                )),
+            ),
             ("scope", json!("openid profile")),
             ("state", json!("encrypted-state")),
         ],
@@ -174,7 +199,10 @@ async fn parse_rsa_encrypted_signed_request_object() {
         .await
         .unwrap();
 
-    assert_eq!(parsed["client_id"], TEST_CLIENT_ID.to_string());
+    assert_eq!(
+        parsed["client_id"],
+        identity_domain::openid_connect::identifier::client_id(TEST_CLIENT_ID)
+    );
     assert_eq!(parsed["scope"], "openid profile");
     assert_eq!(parsed["state"], "encrypted-state");
 }
@@ -201,7 +229,12 @@ async fn parse_ecdh_encrypted_signed_request_object() {
     let inner = signed_request_object(
         &client_private_key,
         [
-            ("client_id", json!(TEST_CLIENT_ID)),
+            (
+                "client_id",
+                json!(identity_domain::openid_connect::identifier::client_id(
+                    TEST_CLIENT_ID
+                )),
+            ),
             ("scope", json!("openid")),
             ("state", json!("ecdh-state")),
         ],
@@ -288,7 +321,12 @@ async fn parse_encrypted_request_object_rejects_unknown_kid() {
     let inner = signed_request_object(
         &client_private_key,
         [
-            ("client_id", json!(TEST_CLIENT_ID)),
+            (
+                "client_id",
+                json!(identity_domain::openid_connect::identifier::client_id(
+                    TEST_CLIENT_ID
+                )),
+            ),
             ("scope", json!("openid")),
         ],
     );

@@ -351,7 +351,10 @@ pub(super) async fn id_token_key_selection_uses_client_algorithm_and_published_b
         )]))
         .await
         .unwrap();
-    assert_eq!(kid, Uuid::from(ec_binding.oid).to_string());
+    assert_eq!(
+        kid,
+        identity_domain::openid_connect::identifier::key_id(ec_binding.oid)
+    );
     assert_eq!(alg.as_str(), "ES256");
     let (_, _, fallback_alg) = service
         .load_configured_signing_key(Some(&[

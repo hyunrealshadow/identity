@@ -54,7 +54,12 @@ async fn validate_request_supports_request_parameter() {
         [
             ("response_type", json!("code")),
             ("response_mode", json!("form_post")),
-            ("client_id", json!(TEST_CLIENT_ID)),
+            (
+                "client_id",
+                json!(identity_domain::openid_connect::identifier::client_id(
+                    TEST_CLIENT_ID
+                )),
+            ),
             ("redirect_uri", json!("https://client.example.com/callback")),
             ("scope", json!("openid profile")),
             ("state", json!("state-123")),
@@ -64,7 +69,7 @@ async fn validate_request_supports_request_parameter() {
 
     let params = AuthorizationRequestParams {
         resources: Vec::new(),
-        client_id: TEST_CLIENT_ID.to_string(),
+        client_id: identity_domain::openid_connect::identifier::client_id(TEST_CLIENT_ID),
         response_type: String::new(),
         redirect_uri: String::new(),
         scope: String::new(),
@@ -95,7 +100,12 @@ async fn validate_request_supports_request_parameter_without_outer_client_id() {
         &private_key,
         [
             ("response_type", json!("code")),
-            ("client_id", json!(TEST_CLIENT_ID)),
+            (
+                "client_id",
+                json!(identity_domain::openid_connect::identifier::client_id(
+                    TEST_CLIENT_ID
+                )),
+            ),
             ("redirect_uri", json!("https://client.example.com/callback")),
             ("scope", json!("openid profile")),
             ("state", json!("state-456")),
@@ -127,7 +137,12 @@ async fn validate_request_rejects_mismatched_request_object_field() {
         &private_key,
         [
             ("response_type", json!("code")),
-            ("client_id", json!(TEST_CLIENT_ID)),
+            (
+                "client_id",
+                json!(identity_domain::openid_connect::identifier::client_id(
+                    TEST_CLIENT_ID
+                )),
+            ),
             ("redirect_uri", json!("https://client.example.com/callback")),
             ("scope", json!("openid email")),
         ],

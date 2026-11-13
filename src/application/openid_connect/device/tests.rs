@@ -259,7 +259,9 @@ fn accepting_device_repo() -> (
 fn params(client_secret: Option<&str>, scope: Option<&str>) -> DeviceAuthorizationParams {
     DeviceAuthorizationParams {
         resources: Vec::new(),
-        client_id: Some(CLIENT_ID.to_string()),
+        client_id: Some(identity_domain::openid_connect::identifier::client_id(
+            CLIENT_ID,
+        )),
         client_secret: client_secret.map(str::to_owned),
         client_secret_basic: true,
         client_assertion_type: None,
@@ -386,8 +388,12 @@ fn sign_assertion_with_audience(private_key: &str, client_id: Uuid, audience: &s
     header.set_token_type("JWT");
     let mut payload = JwtPayload::new();
     let now = SystemTime::now();
-    payload.set_issuer(client_id.to_string());
-    payload.set_subject(client_id.to_string());
+    payload.set_issuer(identity_domain::openid_connect::identifier::client_id(
+        client_id,
+    ));
+    payload.set_subject(identity_domain::openid_connect::identifier::client_id(
+        client_id,
+    ));
     payload.set_audience(vec![audience]);
     payload.set_issued_at(&now);
     payload.set_expires_at(&(now + TimeDuration::from_secs(300)));

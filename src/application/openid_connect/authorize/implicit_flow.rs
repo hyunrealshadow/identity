@@ -92,7 +92,7 @@ impl AuthorizeService {
 
         let issuer = self.provider_service.issuer()?;
         let (signing_key_id, signing_key_pem, signing_alg) = self.load_signing_key_impl().await?;
-        let audience = client_id.to_string();
+        let audience = identity_domain::openid_connect::identifier::client_id(client_id);
         let auth_time_val = authentication
             .auth_time
             .unwrap_or_else(|| Utc::now().timestamp());
@@ -138,10 +138,12 @@ impl AuthorizeService {
                     issuer: &issuer,
                     audience: access_token_audience,
                     client_id: &audience,
-                    user_oid: &user_oid.to_string(),
+                    user_oid: &identity_domain::openid_connect::identifier::user_subject(user_oid),
                     protected_session_id,
                     scope: &request.scope,
-                    token_id: &token_oid.to_string(),
+                    token_id: &identity_domain::openid_connect::identifier::access_token_id(
+                        token_oid,
+                    ),
                     claims: claims.as_ref(),
                     auth_time: auth_time_val,
                     acr: authentication.acr,
@@ -249,7 +251,7 @@ impl AuthorizeService {
 
         let issuer = self.provider_service.issuer()?;
         let (signing_key_id, signing_key_pem, signing_alg) = self.load_signing_key_impl().await?;
-        let audience = client_id.to_string();
+        let audience = identity_domain::openid_connect::identifier::client_id(client_id);
         let scope = ScopeSet::parse(&request.scope)
             .map_err(AppError::map_source(AuthorizeErrorCode::ScopeInvalid))?;
         let access_token_audience = if scope.has_api_scopes() {
@@ -295,10 +297,12 @@ impl AuthorizeService {
                     issuer: &issuer,
                     audience: access_token_audience,
                     client_id: &audience,
-                    user_oid: &user_oid.to_string(),
+                    user_oid: &identity_domain::openid_connect::identifier::user_subject(user_oid),
                     protected_session_id,
                     scope: &request.scope,
-                    token_id: &token_oid.to_string(),
+                    token_id: &identity_domain::openid_connect::identifier::access_token_id(
+                        token_oid,
+                    ),
                     claims: claims.as_ref(),
                     auth_time: auth_time_val,
                     acr: authentication.acr,

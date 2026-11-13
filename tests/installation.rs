@@ -105,7 +105,7 @@ async fn installation_persists_same_origin_console_path_and_bootstraps_both_work
         assert_eq!(response.status_code, Some(StatusCode::OK));
         let console: Value = response.take_json().await.unwrap();
         let console_oid = read_setting::<ConsoleClientIdSetting, _>(&db).await.unwrap().unwrap();
-        assert_eq!(console["clientId"], console_oid.to_string());
+        assert_eq!(console["clientId"], identity_domain::openid_connect::identifier::client_id(console_oid));
         assert_eq!(console["redirectUri"], "https://identity.example.test/console/callback");
         assert_eq!(console["postLogoutRedirectUri"], "https://identity.example.test/console/signed-out");
         assert_eq!(console["accountUrl"], "https://identity.example.test/account");

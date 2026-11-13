@@ -1,9 +1,8 @@
 use std::sync::Arc;
 
 use chrono::{DateTime, Utc};
-use identity_domain::openid_connect::{LoginRotationPolicy, LoginRuntimeRepository};
+use identity_domain::openid_connect::{LoginRotationPolicy, LoginRuntimeRepository, identifier};
 use serde::Serialize;
-use uuid::Uuid;
 
 use crate::{
     error::AppError,
@@ -15,12 +14,20 @@ pub struct RuntimeConfigurationResponse {
     pub version: i64,
     pub oauth_client: OAuthClientRuntimeConfiguration,
     pub refresh_after: u64,
-    pub applications: AppSettings,
+    pub applications: ApplicationOrigins,
+}
+
+/// Public origins Login needs; installation client OIDs stay server side.
+#[derive(Debug, Clone, Serialize)]
+pub struct ApplicationOrigins {
+    pub domain: Option<String>,
+    pub login_domain: Option<String>,
+    pub console_domain: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
 pub struct OAuthClientRuntimeConfiguration {
-    pub client_id: Uuid,
+    pub client_id: String,
     pub client_secret: String,
     pub generation: i64,
     pub expires_at: DateTime<Utc>,
@@ -58,10 +65,15 @@ impl LoginRuntimeService {
             return Ok(None);
         };
         let applications = self.settings.snapshot().section::<AppSettings>();
+        let applications = ApplicationOrigins {
+            domain: applications.domain,
+            login_domain: applications.login_domain,
+            console_domain: applications.console_domain,
+        };
         Ok(Some(RuntimeConfigurationResponse {
             version: 1,
             oauth_client: OAuthClientRuntimeConfiguration {
-                client_id: config.client_oid,
+                client_id: identifier::client_id(config.client_oid),
                 client_secret: config.client_secret,
                 generation: config.generation,
                 expires_at: config.secret_expires_at,
@@ -140,7 +152,10 @@ mod tests {
         let service = service(Arc::clone(&repository), settings);
 
         let config = service.runtime_config().await.unwrap().unwrap();
-        assert_eq!(config.oauth_client.client_id, client_oid);
+        assert_eq!(
+            config.oauth_client.client_id,
+            identity_domain::openid_connect::identifier::client_id(client_oid)
+        );
         assert_eq!(service.maintain().await.unwrap(), 1);
         assert_eq!(*repository.config_ids.lock().unwrap(), vec![client_oid]);
         assert_eq!(*repository.rotation_count.lock().unwrap(), 1);

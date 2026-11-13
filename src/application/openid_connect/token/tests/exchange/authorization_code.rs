@@ -66,7 +66,9 @@ async fn expired_authorization_code_has_a_distinct_error() {
             resources: Vec::new(),
             code: STANDARD.encode(record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_owned()),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_owned()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -137,7 +139,9 @@ async fn oauth20_client_may_omit_token_redirect_when_authorization_omitted_it() 
                 resources: Vec::new(),
                 code: STANDARD.encode(record.oid.as_bytes()),
                 redirect_uri: None,
-                client_id: Some(Uuid::nil().to_string()),
+                client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                    Uuid::nil()
+                )),
                 client_secret: Some("secret-123".to_owned()),
                 client_secret_basic: true,
                 client_assertion_type: None,
@@ -186,7 +190,9 @@ async fn oidc10_single_redirect_client_may_omit_token_redirect() {
                 resources: Vec::new(),
                 code: STANDARD.encode(record.oid.as_bytes()),
                 redirect_uri: None,
-                client_id: Some(Uuid::nil().to_string()),
+                client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                    Uuid::nil()
+                )),
                 client_secret: Some("secret-123".to_owned()),
                 client_secret_basic: true,
                 client_assertion_type: None,
@@ -236,7 +242,9 @@ async fn exchange_authorization_code_revokes_code_after_success() {
             resources: Vec::new(),
             code,
             redirect_uri: Some("https://client.example.com/callback".to_string()),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_string()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -252,8 +260,14 @@ async fn exchange_authorization_code_revokes_code_after_success() {
     let (access_payload, _) = jwt::decode_with_verifier(&result.access_token, &verifier).unwrap();
     let (id_payload, _) =
         jwt::decode_with_verifier(result.id_token.as_ref().unwrap(), &verifier).unwrap();
-    assert_eq!(access_payload.subject().unwrap(), user_oid.to_string());
-    assert_eq!(id_payload.subject().unwrap(), user_oid.to_string());
+    assert_eq!(
+        access_payload.subject().unwrap(),
+        identity_domain::openid_connect::identifier::user_subject(user_oid)
+    );
+    assert_eq!(
+        id_payload.subject().unwrap(),
+        identity_domain::openid_connect::identifier::user_subject(user_oid)
+    );
     assert_eq!(
         id_payload.claim(JwtClaimNames::NONCE).unwrap(),
         &json!("nonce-123")
@@ -264,7 +278,9 @@ async fn exchange_authorization_code_revokes_code_after_success() {
     );
     assert_eq!(
         id_payload.claim(JwtClaimNames::AZP).unwrap(),
-        &json!(Uuid::nil().to_string())
+        &json!(identity_domain::openid_connect::identifier::client_id(
+            Uuid::nil()
+        ))
     );
     assert_eq!(
         id_payload.claim(JwtClaimNames::AMR).unwrap(),
@@ -324,7 +340,9 @@ async fn exchange_authorization_code_without_openid_issues_no_id_token() {
             resources: Vec::new(),
             code: STANDARD.encode(record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_string()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -377,7 +395,9 @@ async fn exchange_authorization_code_keeps_email_scope_claims_out_of_id_token() 
             resources: Vec::new(),
             code: STANDARD.encode(record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_string()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -431,7 +451,9 @@ async fn scoped_claims_client_includes_profile_email_claims_in_code_flow_id_toke
             resources: Vec::new(),
             code: STANDARD.encode(record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_string()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -450,7 +472,10 @@ async fn scoped_claims_client_includes_profile_email_claims_in_code_flow_id_toke
 
     // profile + email scope → scoped standard claims present (scope-driven, no
     // claims_request needed). sub stays the raw user oid (public subject type).
-    assert_eq!(id_payload.subject().unwrap(), user_oid.to_string());
+    assert_eq!(
+        id_payload.subject().unwrap(),
+        identity_domain::openid_connect::identifier::user_subject(user_oid)
+    );
     assert_eq!(
         id_payload.claim(JwtClaimNames::NAME).unwrap(),
         &json!("Alg User")
@@ -505,7 +530,9 @@ async fn scoped_claims_client_omits_claims_outside_granted_scope_in_code_flow_id
             resources: Vec::new(),
             code: STANDARD.encode(record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_string()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -561,7 +588,9 @@ async fn exchange_authorization_code_rejects_invalid_pkce_verifier() {
             resources: Vec::new(),
             code,
             redirect_uri: Some("https://client.example.com/callback".to_string()),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_string()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -641,7 +670,9 @@ async fn exchange_authorization_code_rejects_reused_code() {
             resources: Vec::new(),
             code: code.clone(),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_string()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -660,7 +691,9 @@ async fn exchange_authorization_code_rejects_reused_code() {
             resources: Vec::new(),
             code,
             redirect_uri: Some("https://client.example.com/callback".to_string()),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_string()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -671,12 +704,15 @@ async fn exchange_authorization_code_rejects_reused_code() {
 
     assert_eq!(result.unwrap_err().code(), 24052);
     assert!(
-        repo.find_by_oid(Uuid::parse_str(&access_token_jti).unwrap())
-            .await
-            .unwrap()
-            .unwrap()
-            .revoked_at
-            .is_some()
+        repo.find_by_oid(
+            identity_domain::openid_connect::identifier::parse_access_token_id(&access_token_jti)
+                .unwrap()
+        )
+        .await
+        .unwrap()
+        .unwrap()
+        .revoked_at
+        .is_some()
     );
     let user_info_service = UserInfoService::new(
         Arc::new(InMemoryUserRepository { user }),
@@ -735,7 +771,9 @@ async fn exchange_authorization_code_returns_refresh_token_for_offline_access() 
             resources: Vec::new(),
             code: STANDARD.encode(record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_string()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -804,7 +842,9 @@ async fn exchange_authorization_code_signs_and_validates_supported_default_algs(
                 resources: Vec::new(),
                 code: STANDARD.encode(record.oid.as_bytes()),
                 redirect_uri: Some("https://client.example.com/callback".to_string()),
-                client_id: Some(Uuid::nil().to_string()),
+                client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                    Uuid::nil(),
+                )),
                 client_secret: Some("secret-123".to_string()),
                 client_secret_basic: true,
                 client_assertion_type: None,
@@ -816,8 +856,14 @@ async fn exchange_authorization_code_signs_and_validates_supported_default_algs(
 
         let access_payload = decode_jwt_with_alg(&result.access_token, &public_key, alg);
         let id_payload = decode_jwt_with_alg(result.id_token.as_ref().unwrap(), &public_key, alg);
-        assert_eq!(access_payload.subject().unwrap(), user_oid.to_string());
-        assert_eq!(id_payload.subject().unwrap(), user_oid.to_string());
+        assert_eq!(
+            access_payload.subject().unwrap(),
+            identity_domain::openid_connect::identifier::user_subject(user_oid)
+        );
+        assert_eq!(
+            id_payload.subject().unwrap(),
+            identity_domain::openid_connect::identifier::user_subject(user_oid)
+        );
         assert_eq!(
             id_payload.claim(JwtClaimNames::AT_HASH).unwrap(),
             &json!(expected_at_hash_for_alg(&result.access_token, alg))
@@ -914,7 +960,9 @@ async fn exchange_authorization_code_uses_key_jwk_oid_for_signed_token_headers()
             resources: Vec::new(),
             code: STANDARD.encode(record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_string()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -934,13 +982,13 @@ async fn exchange_authorization_code_uses_key_jwk_oid_for_signed_token_headers()
         access_header
             .claim(JwtClaimNames::KID)
             .and_then(|value| value.as_str()),
-        Some(binding_oid.to_string().as_str())
+        Some(identity_domain::openid_connect::identifier::key_id(binding_oid).as_str())
     );
     assert_eq!(
         id_header
             .claim(JwtClaimNames::KID)
             .and_then(|value| value.as_str()),
-        Some(binding_oid.to_string().as_str())
+        Some(identity_domain::openid_connect::identifier::key_id(binding_oid).as_str())
     );
 }
 
@@ -969,7 +1017,7 @@ async fn authorization_and_refresh_use_client_algorithm_for_access_token() {
         rsa_binding.clone(),
     ]));
 
-    let expected_kid = Uuid::from(rsa_binding.oid).to_string();
+    let expected_kid = identity_domain::openid_connect::identifier::key_id(rsa_binding.oid);
     for scope in ["openid offline_access profile", "offline_access profile"] {
         let has_openid = scope.split_whitespace().any(|value| value == "openid");
         let record = repo
@@ -1002,7 +1050,9 @@ async fn authorization_and_refresh_use_client_algorithm_for_access_token() {
                 resources: Vec::new(),
                 code: STANDARD.encode(record.oid.as_bytes()),
                 redirect_uri: Some("https://client.example.com/callback".to_owned()),
-                client_id: Some(Uuid::nil().to_string()),
+                client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                    Uuid::nil(),
+                )),
                 client_secret: Some("secret-123".to_owned()),
                 client_secret_basic: true,
                 client_assertion_type: None,
@@ -1016,7 +1066,9 @@ async fn authorization_and_refresh_use_client_algorithm_for_access_token() {
                 resources: Vec::new(),
                 scope: None,
                 refresh_token: issued.refresh_token.clone().unwrap(),
-                client_id: Some(Uuid::nil().to_string()),
+                client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                    Uuid::nil(),
+                )),
                 client_secret: Some("secret-123".to_owned()),
                 client_secret_basic: true,
                 client_assertion_type: None,
@@ -1089,7 +1141,9 @@ async fn scoped_user_claims_in_access_token_are_opt_in_for_code_and_refresh() {
                 resources: Vec::new(),
                 code: STANDARD.encode(record.oid.as_bytes()),
                 redirect_uri: Some("https://client.example.com/callback".to_owned()),
-                client_id: Some(Uuid::nil().to_string()),
+                client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                    Uuid::nil(),
+                )),
                 client_secret: Some("secret-123".to_owned()),
                 client_secret_basic: true,
                 client_assertion_type: None,
@@ -1103,7 +1157,9 @@ async fn scoped_user_claims_in_access_token_are_opt_in_for_code_and_refresh() {
                 resources: Vec::new(),
                 scope: None,
                 refresh_token: issued.refresh_token.clone().unwrap(),
-                client_id: Some(Uuid::nil().to_string()),
+                client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                    Uuid::nil(),
+                )),
                 client_secret: Some("secret-123".to_owned()),
                 client_secret_basic: true,
                 client_assertion_type: None,
@@ -1119,7 +1175,10 @@ async fn scoped_user_claims_in_access_token_are_opt_in_for_code_and_refresh() {
                     .unwrap(),
             )
             .unwrap();
-            assert_eq!(access_claims["sub"], user_oid.to_string());
+            assert_eq!(
+                access_claims["sub"],
+                identity_domain::openid_connect::identifier::user_subject(user_oid)
+            );
             assert_eq!(access_claims["name"], "A");
             if has_email {
                 assert_eq!(access_claims["email"], "a@example.com");
@@ -1190,14 +1249,16 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
         let access_token = service
             .sign_access_token(SignAccessTokenInput {
                 resources: &[],
-                token_id: &access_record.oid.to_string(),
+                token_id: &identity_domain::openid_connect::identifier::access_token_id(
+                    access_record.oid,
+                ),
                 key_id: &key_id,
                 private_key_pem: &private_key,
                 alg: alg.parse().unwrap(),
                 issuer: &issuer,
-                audience: &Uuid::nil().to_string(),
-                client_id: &Uuid::nil().to_string(),
-                subject: &user_oid.to_string(),
+                audience: &identity_domain::openid_connect::identifier::client_id(Uuid::nil()),
+                client_id: &identity_domain::openid_connect::identifier::client_id(Uuid::nil()),
+                subject: &identity_domain::openid_connect::identifier::user_subject(user_oid),
                 principal: AccessTokenPrincipal::User,
                 client: &client,
                 user: Some(&user),
@@ -1218,7 +1279,7 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
                 private_key_pem: &private_key,
                 alg: alg.parse().unwrap(),
                 issuer: &issuer,
-                audience: &Uuid::nil().to_string(),
+                audience: &identity_domain::openid_connect::identifier::client_id(Uuid::nil()),
                 client: &client,
                 user: &user,
                 scope: "openid profile",
@@ -1234,7 +1295,10 @@ async fn ps_algorithms_sign_tokens_and_validate_userinfo() {
 
         let access_payload = decode_jwt_with_alg(&access_token, &public_key, alg);
         let id_payload = decode_jwt_with_alg(&id_token, &public_key, alg);
-        assert_eq!(access_payload.subject().unwrap(), user_oid.to_string());
+        assert_eq!(
+            access_payload.subject().unwrap(),
+            identity_domain::openid_connect::identifier::user_subject(user_oid)
+        );
         assert_eq!(
             access_payload.claim(JwtClaimNames::AMR).unwrap(),
             &json!(["pwd"])
@@ -1293,7 +1357,9 @@ async fn successful_exchange_emits_consumption_and_issuance_events() {
             resources: Vec::new(),
             code: STANDARD.encode(record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_owned()),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_owned()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -1355,7 +1421,9 @@ async fn failed_exchange_emits_a_single_rejected_issuance_event() {
             resources: Vec::new(),
             code: STANDARD.encode(code_oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_owned()),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_owned()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -1460,7 +1528,9 @@ async fn code_exchange_inherits_global_oauth_version_and_honors_client_override(
                 resources: Vec::new(),
                 code: STANDARD.encode(record.oid.as_bytes()),
                 redirect_uri: None,
-                client_id: Some(Uuid::nil().to_string()),
+                client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                    Uuid::nil(),
+                )),
                 client_secret: Some("secret-123".to_owned()),
                 client_secret_basic: true,
                 client_assertion_type: None,

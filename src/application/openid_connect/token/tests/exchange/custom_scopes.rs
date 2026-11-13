@@ -79,7 +79,9 @@ async fn custom_scopes_round_trip_through_code_tokens_and_narrowed_refresh() {
             resources: vec!["urn:orders".into()],
             code: STANDARD.encode(record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".into()),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".into()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -103,7 +105,9 @@ async fn custom_scopes_round_trip_through_code_tokens_and_narrowed_refresh() {
         resources: vec!["urn:orders".into()],
         refresh_token: response.refresh_token.unwrap(),
         scope: Some("orders.read".into()),
-        client_id: Some(Uuid::nil().to_string()),
+        client_id: Some(identity_domain::openid_connect::identifier::client_id(
+            Uuid::nil(),
+        )),
         client_secret: Some("secret-123".into()),
         client_secret_basic: true,
         client_assertion_type: None,

@@ -5,6 +5,7 @@ pub mod authorization;
 pub mod client;
 pub mod client_authorization;
 pub mod data_protection;
+pub mod global_id;
 pub mod instance_overview;
 pub mod key;
 pub mod openid_connect;

@@ -69,7 +69,6 @@ function bootstrap(permissions: {
   return {
     data: {
       effectivePermissions: {
-        role: null,
         grantedScopes: [],
         ...permissions,
       },

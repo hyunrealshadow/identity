@@ -167,7 +167,7 @@ describe('useGraphQL with generated access metadata', () => {
     let result: GraphQLResult<unknown> | undefined
     await act(async () => {
       result = await requestApi?.(
-        'query Q($include: Boolean!) { effectivePermissions @include(if: $include) { role } }',
+        'query Q($include: Boolean!) { effectivePermissions @include(if: $include) { requestableScopes } }',
         {},
       )
     })
@@ -183,7 +183,7 @@ describe('useGraphQL with generated access metadata', () => {
       new Response(
         JSON.stringify({
           data: {
-            effectivePermissions: { role: null, requestableScopes: [] },
+            effectivePermissions: { requestableScopes: [] },
             instanceInfo: { name: 'Identity' },
           },
           errors: [],
@@ -197,7 +197,7 @@ describe('useGraphQL with generated access metadata', () => {
     let result: GraphQLResult<unknown> | undefined
     await act(async () => {
       result = await requestApi?.(
-        'query ConsoleBootstrap { effectivePermissions { role requestableScopes } instanceInfo { name } }',
+        'query ConsoleBootstrap { effectivePermissions { requestableScopes } instanceInfo { name } }',
         {},
       )
     })

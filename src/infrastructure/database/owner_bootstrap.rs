@@ -10,8 +10,8 @@ use identity_application::{
     setting::InstallationSettings,
 };
 use identity_domain::{
-    authorization::{GrantReason, RequestId, catalog::AdministratorRole},
-    rbac::{GroupMembershipOid, built_in_group_oid},
+    authorization::{GrantReason, RequestId},
+    rbac::{GroupMembershipOid, GroupOid, OWNER_PRESET},
     user::UserOid,
 };
 use sea_orm::{
@@ -71,7 +71,7 @@ pub async fn bootstrap_owner(
             .with_param("current_version", target_version.to_string()));
     }
 
-    let owner_group_id = built_in_group_id(&transaction, AdministratorRole::Owner).await?;
+    let owner_group_id = built_in_group_id(&transaction, OWNER_PRESET.group_oid).await?;
 
     let membership_oid = GroupMembershipOid::new();
     let record = transaction
@@ -115,9 +115,9 @@ pub async fn bootstrap_owner(
 
 async fn built_in_group_id(
     transaction: &DatabaseTransaction,
-    role: AdministratorRole,
+    group_oid: GroupOid,
 ) -> Result<i64, AppError> {
-    let oid = built_in_group_oid(role).0;
+    let oid = group_oid.0;
     let row = transaction
         .query_one_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,

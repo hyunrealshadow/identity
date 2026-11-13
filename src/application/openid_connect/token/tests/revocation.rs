@@ -13,7 +13,9 @@ use super::*;
 fn request(token: String) -> TokenRevocationParams {
     TokenRevocationParams {
         token,
-        client_id: Some(Uuid::nil().to_string()),
+        client_id: Some(identity_domain::openid_connect::identifier::client_id(
+            Uuid::nil(),
+        )),
         client_secret: Some("secret-123".to_owned()),
         client_secret_basic: true,
         client_assertion_type: None,
@@ -200,8 +202,8 @@ async fn signed_access_token_revokes_only_its_record() {
         .unwrap();
     let issuer = service.provider_service.issuer().unwrap();
     let (key_id, private_key_pem, alg) = service.load_signing_key().await.unwrap();
-    let token_id = record.oid.to_string();
-    let client_id = Uuid::nil().to_string();
+    let token_id = identity_domain::openid_connect::identifier::access_token_id(record.oid);
+    let client_id = identity_domain::openid_connect::identifier::client_id(Uuid::nil());
     let client = service
         .client_repo
         .find_by_oid(Uuid::nil())
@@ -218,7 +220,7 @@ async fn signed_access_token_revokes_only_its_record() {
             issuer: &issuer,
             audience: &client_id,
             client_id: &client_id,
-            subject: &user_oid.to_string(),
+            subject: &identity_domain::openid_connect::identifier::user_subject(user_oid),
             principal: AccessTokenPrincipal::User,
             client: &client,
             user: None,

@@ -420,11 +420,21 @@ async fn register_maps_supported_client_metadata_and_generates_secret() {
         .await
         .unwrap();
 
-    assert_eq!(response.client_id, "11111111-1111-1111-1111-111111111111");
+    assert_eq!(
+        response.client_id,
+        identity_domain::openid_connect::identifier::client_id(
+            Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap()
+        )
+    );
     assert!(response.registration_access_token.is_some());
     assert_eq!(
         response.registration_client_uri.unwrap().as_str(),
-        "https://identity.example.com/oauth2/clients/11111111-1111-1111-1111-111111111111"
+        format!(
+            "https://identity.example.com/oauth2/clients/{}",
+            identity_domain::openid_connect::identifier::client_id(
+                Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap()
+            )
+        )
     );
     assert_eq!(response.client_name.as_deref(), Some("Example RP"));
     assert_eq!(
@@ -721,7 +731,10 @@ async fn delete_removes_client_found_by_registration_access_token() {
     );
 
     service
-        .delete(&client_oid.to_string(), "registration-token")
+        .delete(
+            &identity_domain::openid_connect::identifier::client_id(client_oid),
+            "registration-token",
+        )
         .await
         .unwrap();
 
@@ -742,7 +755,10 @@ async fn delete_rejects_built_in_client() {
     );
 
     let error = service
-        .delete(&client_oid.to_string(), "registration-token")
+        .delete(
+            &identity_domain::openid_connect::identifier::client_id(client_oid),
+            "registration-token",
+        )
         .await
         .unwrap_err();
 
@@ -1168,21 +1184,24 @@ async fn update_replaces_metadata_preserves_identity_and_rejects_managed_fields(
         Arc::new(repo),
     );
     let request = from_value::<DynamicClientUpdateRequest>(json!({
-        "client_id": client_oid.to_string(), "client_secret": "old-secret",
+        "client_id": identity_domain::openid_connect::identifier::client_id(client_oid), "client_secret": "old-secret",
         "client_name": "Updated Client", "redirect_uris": ["https://rp.example.com/new"],
         "require_pushed_authorization_requests": true
     }))
     .unwrap();
     let response = service
         .update(
-            &client_oid.to_string(),
+            &identity_domain::openid_connect::identifier::client_id(client_oid),
             "registration-token",
             request,
             &issuer(),
         )
         .await
         .unwrap();
-    assert_eq!(response.client_id, client_oid.to_string());
+    assert_eq!(
+        response.client_id,
+        identity_domain::openid_connect::identifier::client_id(client_oid)
+    );
     assert_eq!(response.require_pushed_authorization_requests, Some(true));
     assert_eq!(
         response.registration_access_token.as_deref(),
@@ -1194,13 +1213,13 @@ async fn update_replaces_metadata_preserves_identity_and_rejects_managed_fields(
         "client_secret_expires_at",
         "client_id_issued_at",
     ] {
-        let mut body = json!({"client_id": client_oid.to_string(), "redirect_uris": ["https://rp.example.com/new"]});
+        let mut body = json!({"client_id": identity_domain::openid_connect::identifier::client_id(client_oid), "redirect_uris": ["https://rp.example.com/new"]});
         body[field] = Value::Null;
         let request = from_value(body).unwrap();
         assert_eq!(
             service
                 .update(
-                    &client_oid.to_string(),
+                    &identity_domain::openid_connect::identifier::client_id(client_oid),
                     "registration-token",
                     request,
                     &issuer()
@@ -1211,11 +1230,11 @@ async fn update_replaces_metadata_preserves_identity_and_rejects_managed_fields(
             25009
         );
     }
-    let request = from_value(json!({"client_id": Uuid::new_v4().to_string()})).unwrap();
+    let request = from_value(json!({"client_id": identity_domain::openid_connect::identifier::client_id(Uuid::new_v4())})).unwrap();
     assert_eq!(
         service
             .update(
-                &client_oid.to_string(),
+                &identity_domain::openid_connect::identifier::client_id(client_oid),
                 "registration-token",
                 request,
                 &issuer()
@@ -1284,7 +1303,7 @@ async fn update_preserves_delegated_api_scopes_and_rejects_client_credentials_es
     )
     .with_credential_repository(Arc::new(credential_repo));
     let request = from_value::<DynamicClientUpdateRequest>(json!({
-        "client_id": client_oid.to_string(),
+        "client_id": identity_domain::openid_connect::identifier::client_id(client_oid),
         "client_name": "Renamed Delegated Client",
         "redirect_uris": ["https://rp.example.com/callback"],
         "scope": "openid orders.read",
@@ -1293,7 +1312,7 @@ async fn update_preserves_delegated_api_scopes_and_rejects_client_credentials_es
     .unwrap();
     let error = service
         .update(
-            &client_oid.to_string(),
+            &identity_domain::openid_connect::identifier::client_id(client_oid),
             "registration-token",
             request,
             &issuer(),
@@ -1304,14 +1323,14 @@ async fn update_preserves_delegated_api_scopes_and_rejects_client_credentials_es
     assert!(captured.lock().unwrap().is_none());
 
     let request = from_value::<DynamicClientUpdateRequest>(json!({
-        "client_id": client_oid.to_string(),
+        "client_id": identity_domain::openid_connect::identifier::client_id(client_oid),
         "client_name": "Renamed Delegated Client",
         "redirect_uris": ["https://rp.example.com/callback"]
     }))
     .unwrap();
     let response = service
         .update(
-            &client_oid.to_string(),
+            &identity_domain::openid_connect::identifier::client_id(client_oid),
             "registration-token",
             request,
             &issuer(),
@@ -1388,10 +1407,10 @@ async fn update_keeps_secret_material_and_real_expiry_when_auth_method_is_unchan
 
     let response = service
         .update(
-            &client_oid.to_string(),
+            &identity_domain::openid_connect::identifier::client_id(client_oid),
             "registration-token",
             from_value(json!({
-                "client_id": client_oid.to_string(),
+                "client_id": identity_domain::openid_connect::identifier::client_id(client_oid),
                 "client_secret": "old-secret",
                 "client_name": "Renamed Client",
                 "redirect_uris": ["https://rp.example.com/callback"],
@@ -1448,10 +1467,10 @@ async fn update_without_current_secret_preserves_active_secret_and_leaves_valida
 
     let response = service
         .update(
-            &client_oid.to_string(),
+            &identity_domain::openid_connect::identifier::client_id(client_oid),
             "registration-token",
             from_value(json!({
-                "client_id": client_oid.to_string(),
+                "client_id": identity_domain::openid_connect::identifier::client_id(client_oid),
                 "client_name": "Renamed Client",
                 "redirect_uris": ["https://rp.example.com/callback"],
                 "token_endpoint_auth_method": "client_secret_post"
@@ -1511,10 +1530,10 @@ async fn update_without_current_secret_preserves_active_secret_and_leaves_valida
     .with_credential_repository(Arc::new(rejecting_credential_repo));
     let error = rejecting_service
         .update(
-            &client_oid.to_string(),
+            &identity_domain::openid_connect::identifier::client_id(client_oid),
             "registration-token",
             from_value(json!({
-                "client_id": client_oid.to_string(),
+                "client_id": identity_domain::openid_connect::identifier::client_id(client_oid),
                 "client_secret": "wrong-secret",
                 "client_name": "Renamed Client",
                 "redirect_uris": ["https://rp.example.com/callback"],
@@ -1635,10 +1654,10 @@ async fn update_fails_closed_when_existing_secret_material_cannot_be_identified(
 
     let error = service
         .update(
-            &client_oid.to_string(),
+            &identity_domain::openid_connect::identifier::client_id(client_oid),
             "registration-token",
             from_value(json!({
-                "client_id": client_oid.to_string(),
+                "client_id": identity_domain::openid_connect::identifier::client_id(client_oid),
                 "client_name": "Renamed Client",
                 "redirect_uris": ["https://rp.example.com/callback"],
                 "token_endpoint_auth_method": "client_secret_basic"

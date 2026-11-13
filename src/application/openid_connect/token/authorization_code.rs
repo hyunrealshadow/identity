@@ -2,9 +2,7 @@ use chrono::{Duration, Utc};
 use identity_domain::{
     auth,
     auth::ACR_AAL2,
-    client_authorization::{
-        AccessTokenPrincipal, ClientAuthenticationMode, ManagementGrantKindData,
-    },
+    client_authorization::{AccessTokenPrincipal, ClientAuthenticationMode},
     openid_connect::{API_RESOURCE, CodeChallengeMethod, OAuthProtocolVersion, ScopeSet},
 };
 use tracing::{Span, debug, field::display};
@@ -164,9 +162,7 @@ impl TokenService {
             // snapshot. Anything missing fails closed.
             let snapshot_data = management_snapshot
                 .ok_or_else(|| AppError::from_code(TokenErrorCode::AuthCodeInvalid))?;
-            if !code_scope.has_management_scopes()
-                || snapshot_data.grant_kind != ManagementGrantKindData::UserRbac
-            {
+            if !code_scope.has_management_scopes() {
                 return Err(AppError::from_code(TokenErrorCode::AuthCodeInvalid));
             }
             if code_scope.contains_offline_access() {
@@ -458,7 +454,8 @@ impl TokenService {
             } else {
                 audience.as_str()
             };
-        let client_id_str = record.client_oid.to_string();
+        let client_id_str =
+            identity_domain::openid_connect::identifier::client_id(record.client_oid);
         let access_token_record = self
             .client_authorization_repo
             .create(
@@ -487,14 +484,16 @@ impl TokenService {
         let access_token = self
             .sign_access_token(SignAccessTokenInput {
                 resources: &selection.resources,
-                token_id: &access_token_record.oid.to_string(),
+                token_id: &identity_domain::openid_connect::identifier::access_token_id(
+                    access_token_record.oid,
+                ),
                 key_id: &signing_key_id,
                 private_key_pem: &signing_key_pem,
                 alg: signing_alg,
                 issuer: &issuer,
                 audience: access_token_audience,
                 client_id: &client_id_str,
-                subject: &data.user_oid,
+                subject: &identity_domain::openid_connect::identifier::user_subject(user_oid),
                 principal: AccessTokenPrincipal::User,
                 client: &authenticated_client,
                 user: Some(&user),

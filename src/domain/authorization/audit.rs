@@ -20,8 +20,6 @@ pub enum AuditSubjectKind {
     Resource,
     Role,
     Permission,
-    Binding,
-    ClientGrant,
     Setting,
     Session,
     System,
@@ -36,8 +34,6 @@ impl AuditSubjectKind {
             Self::Resource => "resource",
             Self::Role => "role",
             Self::Permission => "permission",
-            Self::Binding => "administrator_binding",
-            Self::ClientGrant => "client_management_grant",
             Self::Setting => "setting",
             Self::Session => "session",
             Self::System => "system",
@@ -136,8 +132,8 @@ mod tests {
     fn audit_context_keeps_request_and_trace_identifiers_distinct() {
         let context = AuthorizationAuditContext::new(
             AuditSubject::new(AuditSubjectKind::User, Uuid::new_v4()),
-            "administrator.binding.revoke",
-            AuditSubject::new(AuditSubjectKind::Binding, Uuid::new_v4()),
+            "rbac.role.update",
+            AuditSubject::new(AuditSubjectKind::Role, Uuid::new_v4()),
             "owner cleanup",
             RequestId::new("request-1").unwrap(),
             None,

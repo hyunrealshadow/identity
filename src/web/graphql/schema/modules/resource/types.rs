@@ -9,8 +9,8 @@ use identity_application::{
         ApiResourceRecord, ResourceFilter as ApplicationFilter, ResourceOrder as RbacResourceOrder,
     },
 };
+use identity_domain::global_id::GlobalId;
 use identity_domain::{authorization::ManagementScope, rbac::ResourceOid};
-use identity_infrastructure::graphql::id::{GlobalId, GlobalIdType};
 use uuid::Uuid;
 
 use super::super::{
@@ -23,14 +23,10 @@ use super::super::{
 };
 use crate::graphql::schema::{authorization::request_context, management_guard::ManagementGuard};
 
-pub(crate) struct ResourceGlobalId;
-
-impl GlobalIdType for ResourceGlobalId {
-    const TYPE_NAME: &'static str = "Resource";
-}
+pub(crate) use identity_domain::global_id::kind::Resource as ResourceGlobalId;
 
 pub(crate) fn resource_global_id(oid: ResourceOid) -> ID {
-    GlobalId::<ResourceGlobalId>::new(oid.0).into()
+    ID(GlobalId::<ResourceGlobalId>::new(oid.0).encode())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]

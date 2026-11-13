@@ -62,12 +62,10 @@ impl JwtClaimNames {
     /// Explicit access-token principal kind (`user` or `client`). Machine
     /// tokens never claim a user subject.
     pub const PRINCIPAL_KIND: &'static str = "principal_kind";
-    pub const MANAGEMENT_GRANT_KIND: &'static str = "management_grant_kind";
     pub const MANAGEMENT_GRANT_OID: &'static str = "management_grant_oid";
     pub const MANAGEMENT_GRANT_VERSION: &'static str = "management_grant_version";
     pub const MANAGEMENT_POLICY_VERSION: &'static str = "management_policy_version";
     pub const MANAGEMENT_CLIENT_POLICY_VERSION: &'static str = "management_client_policy_version";
-    pub const MANAGEMENT_ROLE: &'static str = "management_role";
     pub const MANAGEMENT_PERMISSIONS: &'static str = "management_permissions";
 
     // JWS/JWK Header Parameters

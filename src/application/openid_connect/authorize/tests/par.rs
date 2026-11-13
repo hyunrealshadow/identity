@@ -55,7 +55,7 @@ impl MemoryPar {
 }
 fn front(uri: &str) -> AuthorizationRequestParams {
     AuthorizationRequestParams {
-        client_id: TEST_CLIENT_ID.to_string(),
+        client_id: identity_domain::openid_connect::identifier::client_id(TEST_CLIENT_ID),
         request_uri: Some(uri.to_owned()),
         ..Default::default()
     }
@@ -153,7 +153,7 @@ async fn pushed_requests_preserve_resources_and_are_client_bound_expiring_and_si
     assert!(response.request_uri.starts_with(PAR_REQUEST_URI_PREFIX));
     assert_eq!(response.expires_in, 90);
     let mut other = front(&response.request_uri);
-    other.client_id = Uuid::new_v4().to_string();
+    other.client_id = identity_domain::openid_connect::identifier::client_id(Uuid::new_v4());
     assert!(authorize.validate_request(other).await.is_err());
     let mut tampered = front(&response.request_uri);
     tampered.scope = "openid email".to_owned();
@@ -278,7 +278,12 @@ async fn par_signed_request_objects_must_identify_the_authenticated_client() {
     let (private, public) = signing_keypair();
     let authorize = authorize_service_with_public_key(public);
     let fields = [
-        ("client_id", json!(TEST_CLIENT_ID)),
+        (
+            "client_id",
+            json!(identity_domain::openid_connect::identifier::client_id(
+                TEST_CLIENT_ID
+            )),
+        ),
         ("response_type", json!("code")),
         ("scope", json!("openid")),
         ("state", json!("signed-state")),
@@ -288,7 +293,7 @@ async fn par_signed_request_objects_must_identify_the_authenticated_client() {
     ];
     let signed = signed_request_object(&private, fields.clone());
     let request = AuthorizationRequestParams {
-        client_id: TEST_CLIENT_ID.to_string(),
+        client_id: identity_domain::openid_connect::identifier::client_id(TEST_CLIENT_ID),
         request: Some(signed),
         ..Default::default()
     };
@@ -297,7 +302,7 @@ async fn par_signed_request_objects_must_identify_the_authenticated_client() {
     fields[0].1 = json!(Uuid::new_v4().to_string());
     let other = signed_request_object(&private, fields);
     let request = AuthorizationRequestParams {
-        client_id: TEST_CLIENT_ID.to_string(),
+        client_id: identity_domain::openid_connect::identifier::client_id(TEST_CLIENT_ID),
         request: Some(other),
         ..Default::default()
     };

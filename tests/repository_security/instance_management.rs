@@ -313,7 +313,7 @@ async fn postgres_signing_key_rotation_publishes_new_key_ids() {
                 .successor
                 .key_ids
                 .iter()
-                .all(|kid| Uuid::parse_str(kid).is_ok())
+                .all(|kid| identity_domain::openid_connect::identifier::parse_key_id(kid).is_ok())
         );
 
         // Another algorithm is added beside it; once it exists, the ES256

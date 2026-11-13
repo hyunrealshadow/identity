@@ -192,7 +192,7 @@ pub(in crate::authentication) async fn enrolled_passkey(
         Arc::new(FakeAuthenticator),
     ));
     (service, |options| {
-        json!({"challenge_id": options.challenge_id, "credential": {"uv": true}}).to_string()
+        json!({"challenge_id": identity_domain::global_id::encode::<identity_domain::global_id::kind::PasskeyChallenge>(options.challenge_id), "credential": {"uv": true}}).to_string()
     })
 }
 
@@ -207,7 +207,7 @@ async fn requires_user_verification_and_consumes_failed_assertions() {
             .authenticate(
                 user,
                 login,
-                &json!({"challenge_id":options.challenge_id,"credential":{"uv":false}}).to_string()
+                &json!({"challenge_id": identity_domain::global_id::encode::<identity_domain::global_id::kind::PasskeyChallenge>(options.challenge_id),"credential":{"uv":false}}).to_string()
             )
             .await
             .is_err()
@@ -217,7 +217,7 @@ async fn requires_user_verification_and_consumes_failed_assertions() {
             .authenticate(
                 user,
                 login,
-                &json!({"challenge_id":options.challenge_id,"credential":{"uv":true}}).to_string()
+                &json!({"challenge_id": identity_domain::global_id::encode::<identity_domain::global_id::kind::PasskeyChallenge>(options.challenge_id),"credential":{"uv":true}}).to_string()
             )
             .await
             .is_err()

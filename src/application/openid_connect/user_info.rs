@@ -248,7 +248,9 @@ impl UserInfoService {
         let issuer = self.provider_service.issuer()?;
         let now = SystemTime::now();
         payload.set_issuer(issuer.as_str());
-        payload.set_audience(vec![client.client().oid.to_string()]);
+        payload.set_audience(vec![
+            identity_domain::openid_connect::identifier::client_id(client.client().oid),
+        ]);
         payload.set_issued_at(&now);
 
         let signer = build_user_info_signer(&private_key, alg)?;
@@ -369,28 +371,13 @@ impl UserInfoService {
             .and_then(|value| value.parse::<JwaSigningAlgorithm>().ok())
             .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
 
-        let kid = header
-            .claim(JwtClaimNames::KID)
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_owned());
         let keys = self.key_service.list_available().await?;
 
         let mut verified_result = None;
-
-        if let Some(kid_str) = kid.as_deref()
-            && let Ok(kid_uuid) = Uuid::parse_str(kid_str)
-            && let Some(key) = keys.iter().find(|k| Uuid::from(k.oid) == kid_uuid)
-            && let Ok(result) = self.verify_jwt_with_key_and_alg(raw_token, key, alg)
-        {
-            verified_result = Some(result);
-        }
-
-        if verified_result.is_none() {
-            for key in &keys {
-                if let Ok(result) = self.verify_jwt_with_key_and_alg(raw_token, key, alg) {
-                    verified_result = Some(result);
-                    break;
-                }
+        for key in &keys {
+            if let Ok(result) = self.verify_jwt_with_key_and_alg(raw_token, key, alg) {
+                verified_result = Some(result);
+                break;
             }
         }
 
@@ -445,8 +432,9 @@ impl UserInfoService {
         let jti = payload
             .jwt_id()
             .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
-        let access_token_oid = Uuid::parse_str(jti)
-            .map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+        let access_token_oid =
+            identity_domain::openid_connect::identifier::parse_access_token_id(jti)
+                .map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
         let access_token_record = self
             .client_authorization_repo
             .find_by_oid(access_token_oid)
@@ -467,15 +455,20 @@ impl UserInfoService {
         let principal = access_token_data.principal;
         let user_oid = match principal {
             AccessTokenPrincipal::User => {
-                let user = Uuid::parse_str(sub)
+                let user = identity_domain::openid_connect::identifier::parse_user_subject(sub)
                     .map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
-                if access_token_data.user_oid.as_deref() != Some(sub) {
+                if access_token_data
+                    .user_oid
+                    .as_deref()
+                    .and_then(|oid| Uuid::parse_str(oid).ok())
+                    != Some(user)
+                {
                     return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
                 }
                 Some(UserOid(user))
             }
             AccessTokenPrincipal::Client => {
-                let subject = Uuid::parse_str(sub)
+                let subject = identity_domain::openid_connect::identifier::parse_client_id(sub)
                     .map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
                 if subject != access_token_record.client_oid
                     || access_token_data.user_oid.is_some()
@@ -537,7 +530,7 @@ impl UserInfoService {
                         let active = session.revoked_at.is_none()
                             && session.status == SessionStatus::ACTIVE
                             && session.expires_at.is_none_or(|expiry| expiry > now)
-                            && session.user_oid.to_string() == sub;
+                            && Uuid::from(session.user_oid) == Uuid::from(user_oid);
                         if !active {
                             return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken)
                                 .with_param("reason", "session is not active for the user"));
@@ -565,7 +558,11 @@ impl UserInfoService {
             .claim(JwtClaimNames::CLIENT_ID)
             .and_then(|value| value.as_str())
             .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
-        if client_id != access_token_record.client_oid.to_string() {
+        if client_id
+            != identity_domain::openid_connect::identifier::client_id(
+                access_token_record.client_oid,
+            )
+        {
             return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
         }
 
@@ -752,11 +749,9 @@ impl UserInfoService {
                 let KeyData::Asymmetric(data) = &key.data else {
                     continue;
                 };
-                let key_id = binding
-                    .jwk
-                    .key_id()
-                    .map(str::to_owned)
-                    .unwrap_or_else(|| Uuid::from(binding.oid).to_string());
+                let key_id = binding.jwk.key_id().map(str::to_owned).unwrap_or_else(|| {
+                    identity_domain::openid_connect::identifier::key_id(binding.oid)
+                });
                 return Ok((*alg, key_id, data.private_key.clone()));
             }
         }
@@ -788,7 +783,6 @@ fn build_user_info_signer(
 
 #[cfg(test)]
 mod tests {
-    use identity_domain::client_authorization::ManagementGrantKindData;
     use josekit::{jwt, jwt::JwtPayload};
     use serde_json::json;
     use uuid::Uuid;
@@ -807,14 +801,12 @@ mod tests {
         let mut payload = JwtPayload::new();
         payload
             .set_claim(
-                JwtClaimNames::MANAGEMENT_GRANT_KIND,
-                Some(json!("user_rbac")),
-            )
-            .unwrap();
-        payload
-            .set_claim(
                 JwtClaimNames::MANAGEMENT_GRANT_OID,
-                Some(json!("11111111-1111-1111-1111-111111111111")),
+                Some(json!(
+                    identity_domain::openid_connect::identifier::user_subject(
+                        Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap()
+                    )
+                )),
             )
             .unwrap();
         payload
@@ -836,9 +828,6 @@ mod tests {
             )
             .unwrap();
         payload
-            .set_claim(JwtClaimNames::MANAGEMENT_ROLE, Some(json!(null)))
-            .unwrap();
-        payload
             .set_claim(
                 JwtClaimNames::MANAGEMENT_PERMISSIONS,
                 Some(json!(["management.user.read"])),
@@ -851,7 +840,6 @@ mod tests {
     fn absolute_management_claims_round_trip_through_the_validator_parser() {
         let payload = management_payload();
         let snapshot = signed_management_snapshot(&payload).unwrap().unwrap();
-        assert_eq!(snapshot.grant_kind, ManagementGrantKindData::UserRbac);
         assert_eq!(
             snapshot.grant_version,
             Uuid::parse_str(GRANT_VERSION).unwrap()
@@ -872,6 +860,22 @@ mod tests {
     }
 
     #[test]
+    fn signed_grant_is_a_user_global_id_and_raw_uuid_is_rejected() {
+        let persisted = signed_management_snapshot(&management_payload())
+            .unwrap()
+            .unwrap();
+        assert_eq!(persisted.grant_oid, "11111111-1111-1111-1111-111111111111");
+
+        let mut raw = management_payload();
+        raw.set_claim(
+            JwtClaimNames::MANAGEMENT_GRANT_OID,
+            Some(json!("11111111-1111-1111-1111-111111111111")),
+        )
+        .unwrap();
+        assert!(signed_management_snapshot(&raw).is_err());
+    }
+
+    #[test]
     fn signed_snapshot_must_match_oid_version_and_client_policy() {
         let persisted = signed_management_snapshot(&management_payload())
             .unwrap()
@@ -882,7 +886,11 @@ mod tests {
         changed_oid
             .set_claim(
                 JwtClaimNames::MANAGEMENT_GRANT_OID,
-                Some(json!("22222222-2222-2222-2222-222222222222")),
+                Some(json!(
+                    identity_domain::openid_connect::identifier::user_subject(
+                        Uuid::parse_str("22222222-2222-2222-2222-222222222222").unwrap()
+                    )
+                )),
             )
             .unwrap();
         assert!(validate_signed_management_snapshot(&persisted, &changed_oid).is_err());
@@ -912,8 +920,8 @@ mod tests {
         let mut partial = JwtPayload::new();
         partial
             .set_claim(
-                JwtClaimNames::MANAGEMENT_GRANT_KIND,
-                Some(json!("administrator_binding")),
+                JwtClaimNames::MANAGEMENT_GRANT_VERSION,
+                Some(json!(GRANT_VERSION)),
             )
             .unwrap();
         assert!(signed_management_snapshot(&partial).is_err());

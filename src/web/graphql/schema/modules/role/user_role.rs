@@ -13,13 +13,13 @@ use identity_application::{
         UserRolePageRequest, UserRoleRecord,
     },
 };
+use identity_domain::global_id::GlobalId;
 use identity_domain::{
     authorization::ManagementScope,
     openid_connect::ApiScope,
     rbac::{GroupOid, RoleOid},
     user::UserOid,
 };
-use identity_infrastructure::graphql::id::GlobalId;
 use uuid::Uuid;
 
 use super::{
@@ -62,7 +62,7 @@ pub(crate) type RoleUserConnection =
     RelationConnection<UserNode, EmptyFields, RoleUserConnectionName, RoleUserEdgeName>;
 
 fn user_global_id(oid: UserOid) -> ID {
-    GlobalId::<UserGlobalId>::new(oid.0).into()
+    ID(GlobalId::<UserGlobalId>::new(oid.0).encode())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]

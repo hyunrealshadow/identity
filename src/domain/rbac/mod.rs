@@ -26,8 +26,8 @@ pub use boundary::{
     valid_scope_token, validate_business_scope_reference,
 };
 pub use builtin::{
-    BUILT_IN_GROUP_PREFIX, BUILT_IN_PERMISSION_PREFIX, BUILT_IN_ROLE_PREFIX, built_in_group_oid,
-    built_in_permission_oid, built_in_role_oid, deterministic_oid, is_built_in_permission_oid,
+    ADMIN_PRESET, BUILT_IN_PERMISSION_PREFIX, BUILT_IN_PRESETS, BuiltInPreset, OWNER_PRESET,
+    VIEWER_PRESET, built_in_permission_oid, deterministic_oid, is_built_in_permission_oid,
 };
 pub use group::{
     Group, GroupLifecycleError, GroupMembership, GroupRole, GroupValidationError,

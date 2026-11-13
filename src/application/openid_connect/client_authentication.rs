@@ -95,7 +95,7 @@ impl ClientAuthenticator {
     }
 
     async fn load_client(&self, client_id: &str) -> Result<OpenIdConnectClient, AppError> {
-        let client_oid = Uuid::parse_str(client_id)
+        let client_oid = identity_domain::openid_connect::identifier::parse_client_id(client_id)
             .map_err(AppError::map_source(TokenErrorCode::ClientIdInvalid))?;
 
         self.client_repo
@@ -128,7 +128,7 @@ impl ClientAuthenticator {
         client_id: &str,
         client_secret: &str,
     ) -> Result<Uuid, AppError> {
-        let client_oid = Uuid::parse_str(client_id)
+        let client_oid = identity_domain::openid_connect::identifier::parse_client_id(client_id)
             .map_err(AppError::map_source(TokenErrorCode::ClientIdInvalid))?;
         let client = self
             .client_repo
@@ -179,8 +179,9 @@ impl ClientAuthenticator {
         if let (Some(ClientAssertionType::JwtBearer), Some(assertion)) =
             (client_assertion_type, client_assertion)
         {
-            let client_oid = Uuid::parse_str(client_id)
-                .map_err(AppError::map_source(TokenErrorCode::ClientIdInvalid))?;
+            let client_oid =
+                identity_domain::openid_connect::identifier::parse_client_id(client_id)
+                    .map_err(AppError::map_source(TokenErrorCode::ClientIdInvalid))?;
             let client = self
                 .client_repo
                 .find_by_oid(client_oid)
@@ -224,8 +225,9 @@ impl ClientAuthenticator {
         }
 
         let Some(client_secret) = client_secret else {
-            let client_oid = Uuid::parse_str(client_id)
-                .map_err(AppError::map_source(TokenErrorCode::ClientIdInvalid))?;
+            let client_oid =
+                identity_domain::openid_connect::identifier::parse_client_id(client_id)
+                    .map_err(AppError::map_source(TokenErrorCode::ClientIdInvalid))?;
             let client = self
                 .client_repo
                 .find_by_oid(client_oid)
@@ -243,7 +245,7 @@ impl ClientAuthenticator {
             return Err(AppError::from_code(TokenErrorCode::ClientAuthRequired));
         };
 
-        let client_oid = Uuid::parse_str(client_id)
+        let client_oid = identity_domain::openid_connect::identifier::parse_client_id(client_id)
             .map_err(AppError::map_source(TokenErrorCode::ClientIdInvalid))?;
         let client = self
             .client_repo
@@ -316,7 +318,7 @@ impl ClientAuthenticator {
         client_id: &str,
         assertion: &str,
     ) -> Result<Uuid, AppError> {
-        let client_oid = Uuid::parse_str(client_id)
+        let client_oid = identity_domain::openid_connect::identifier::parse_client_id(client_id)
             .map_err(AppError::map_source(TokenErrorCode::ClientIdInvalid))?;
         let client = self
             .client_repo
@@ -336,7 +338,7 @@ impl ClientAuthenticator {
         client_id: &str,
         assertion: &str,
     ) -> Result<Uuid, AppError> {
-        let client_oid = Uuid::parse_str(client_id)
+        let client_oid = identity_domain::openid_connect::identifier::parse_client_id(client_id)
             .map_err(AppError::map_source(TokenErrorCode::ClientIdInvalid))?;
         let client = self
             .client_repo

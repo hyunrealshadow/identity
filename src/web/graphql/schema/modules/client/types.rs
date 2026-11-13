@@ -8,6 +8,7 @@ use identity_application::{
         ClientPlatform, ClientProtocolSettings, ClientRecord,
     },
 };
+use identity_domain::global_id::GlobalId;
 use identity_domain::{
     authorization::ManagementScope,
     client::model::ClientOid,
@@ -16,7 +17,6 @@ use identity_domain::{
         OpenIdConnectCredentialOid, OpenIdConnectCredentialType, TokenEndpointAuthMethod,
     },
 };
-use identity_infrastructure::graphql::id::{GlobalId, GlobalIdType};
 use uuid::Uuid;
 
 use super::{
@@ -34,25 +34,17 @@ use crate::graphql::schema::{
     authorization::request_context, error::app_error, management_guard::ManagementGuard,
 };
 
-pub(crate) struct ClientGlobalId;
-
-impl GlobalIdType for ClientGlobalId {
-    const TYPE_NAME: &'static str = "Client";
-}
+pub(crate) use identity_domain::global_id::kind::Client as ClientGlobalId;
 
 pub(crate) fn client_global_id(oid: ClientOid) -> ID {
-    GlobalId::<ClientGlobalId>::new(oid).into()
+    ID(GlobalId::<ClientGlobalId>::new(oid).encode())
 }
 
 pub(crate) fn decode_client_oid(ctx: &Context<'_>, id: &ID) -> GraphqlResult<ClientOid> {
     decode_oid::<ClientGlobalId>(ctx, id)
 }
 
-pub(crate) struct ClientCredentialGlobalId;
-
-impl GlobalIdType for ClientCredentialGlobalId {
-    const TYPE_NAME: &'static str = "ClientCredential";
-}
+pub(crate) use identity_domain::global_id::kind::ClientCredential as ClientCredentialGlobalId;
 
 pub(crate) fn decode_credential_oid(
     ctx: &Context<'_>,
@@ -249,7 +241,7 @@ pub(crate) struct ClientCredentialNode {
 impl ClientCredentialNode {
     pub(crate) fn new(record: ClientCredentialRecord) -> Self {
         Self {
-            id: GlobalId::<ClientCredentialGlobalId>::new(record.oid).into(),
+            id: ID(GlobalId::<ClientCredentialGlobalId>::new(record.oid).encode()),
             record,
         }
     }
@@ -313,13 +305,9 @@ impl ClientNode {
 
 #[Object(name = "Client")]
 impl ClientNode {
+    /// Also the OAuth `client_id` used in protocol requests.
     pub(crate) async fn id(&self) -> &ID {
         &self.id
-    }
-
-    /// The OAuth `client_id` used in protocol requests.
-    async fn client_id(&self) -> String {
-        self.record.oid.to_string()
     }
 
     /// Independent default name; viewers choose matching translations from `names`.

@@ -38,7 +38,7 @@ async fn par_accepts_issuer_token_and_par_assertion_audiences_without_weakening_
         }),
         vec![secret_credential(CLIENT_SECRET_JWT_SECRET)],
     );
-    let client_id = Uuid::nil().to_string();
+    let client_id = identity_domain::openid_connect::identifier::client_id(Uuid::nil());
     for audience in [
         "https://identity.example.com/",
         "https://identity.example.com/oauth2/token",
@@ -160,7 +160,7 @@ async fn authenticate_client_enforces_secret_transport_method() {
         }),
         vec![secret_credential("secret-123")],
     );
-    let client_id = "00000000-0000-0000-0000-000000000000";
+    let client_id = "Q2xpZW50OgAAAAAAAAAAAAAAAAAAAAA";
     assert!(
         basic
             .authenticate_client(client_id, Some("secret-123"), false, None, None)
@@ -190,13 +190,13 @@ async fn authenticate_client_secret_jwt_accepts_hs256_assertion() {
     );
     let assertion = build_client_secret_assertion(
         CLIENT_SECRET_JWT_SECRET,
-        "00000000-0000-0000-0000-000000000000",
+        "Q2xpZW50OgAAAAAAAAAAAAAAAAAAAAA",
         "https://identity.example.com/",
     );
 
     let result = service
         .authenticate_client(
-            "00000000-0000-0000-0000-000000000000",
+            "Q2xpZW50OgAAAAAAAAAAAAAAAAAAAAA",
             None,
             false,
             Some(ClientAssertionType::JwtBearer),
@@ -219,13 +219,13 @@ async fn authenticate_client_secret_jwt_uses_registered_signing_algorithm() {
     let assertion = build_client_secret_assertion_with_algorithm(
         CLIENT_SECRET_JWT_SECRET,
         "HS384",
-        "00000000-0000-0000-0000-000000000000",
+        "Q2xpZW50OgAAAAAAAAAAAAAAAAAAAAA",
         "https://identity.example.com/",
     );
 
     let result = service
         .authenticate_client(
-            "00000000-0000-0000-0000-000000000000",
+            "Q2xpZW50OgAAAAAAAAAAAAAAAAAAAAA",
             None,
             false,
             Some(ClientAssertionType::JwtBearer),
@@ -248,13 +248,13 @@ async fn authenticate_client_secret_jwt_rejects_unregistered_signing_algorithm()
     let assertion = build_client_secret_assertion_with_algorithm(
         CLIENT_SECRET_JWT_SECRET,
         "HS256",
-        "00000000-0000-0000-0000-000000000000",
+        "Q2xpZW50OgAAAAAAAAAAAAAAAAAAAAA",
         "https://identity.example.com/",
     );
 
     let error = service
         .authenticate_client(
-            "00000000-0000-0000-0000-000000000000",
+            "Q2xpZW50OgAAAAAAAAAAAAAAAAAAAAA",
             None,
             false,
             Some(ClientAssertionType::JwtBearer),
@@ -275,10 +275,10 @@ async fn authenticate_private_key_jwt_accepts_signed_assertion() {
         Arc::new(InMemoryClientRepository),
         vec![public_key_credential(public_key)],
     );
-    let assertion = sign_assertion(&private_key, "00000000-0000-0000-0000-000000000000", true);
+    let assertion = sign_assertion(&private_key, "Q2xpZW50OgAAAAAAAAAAAAAAAAAAAAA", true);
 
     let result = service
-        .authenticate_private_key_jwt("00000000-0000-0000-0000-000000000000", &assertion)
+        .authenticate_private_key_jwt("Q2xpZW50OgAAAAAAAAAAAAAAAAAAAAA", &assertion)
         .await;
 
     assert!(result.is_ok());
@@ -291,12 +291,12 @@ async fn authenticate_private_key_jwt_rejects_none_algorithm() {
     let mut header = JwsHeader::new();
     header.set_token_type("JWT");
     let mut payload = JwtPayload::new();
-    payload.set_issuer("00000000-0000-0000-0000-000000000000");
-    payload.set_subject("00000000-0000-0000-0000-000000000000");
+    payload.set_issuer("Q2xpZW50OgAAAAAAAAAAAAAAAAAAAAA");
+    payload.set_subject("Q2xpZW50OgAAAAAAAAAAAAAAAAAAAAA");
     let assertion = jwt::encode_unsecured(&payload, &header).unwrap();
 
     let error = service
-        .authenticate_private_key_jwt("00000000-0000-0000-0000-000000000000", &assertion)
+        .authenticate_private_key_jwt("Q2xpZW50OgAAAAAAAAAAAAAAAAAAAAA", &assertion)
         .await
         .unwrap_err();
 
@@ -315,7 +315,7 @@ async fn authenticate_private_key_jwt_rejects_wrong_subject() {
     let assertion = sign_assertion(&private_key, "11111111-1111-1111-1111-111111111111", true);
 
     let result = service
-        .authenticate_private_key_jwt("00000000-0000-0000-0000-000000000000", &assertion)
+        .authenticate_private_key_jwt("Q2xpZW50OgAAAAAAAAAAAAAAAAAAAAA", &assertion)
         .await;
 
     assert!(result.is_err());
@@ -344,13 +344,7 @@ async fn authenticate_client_rejects_unauthenticated_confidential_client() {
     let service = authenticator(Arc::new(InMemoryClientRepository), vec![]);
 
     let error = service
-        .authenticate_client(
-            "00000000-0000-0000-0000-000000000000",
-            None,
-            false,
-            None,
-            None,
-        )
+        .authenticate_client("Q2xpZW50OgAAAAAAAAAAAAAAAAAAAAA", None, false, None, None)
         .await
         .unwrap_err();
 
@@ -362,13 +356,7 @@ async fn authenticate_client_accepts_registered_public_client() {
     let service = authenticator(Arc::new(RegisteredPublicClientRepository), vec![]);
 
     let client_oid = service
-        .authenticate_client(
-            "00000000-0000-0000-0000-000000000000",
-            None,
-            false,
-            None,
-            None,
-        )
+        .authenticate_client("Q2xpZW50OgAAAAAAAAAAAAAAAAAAAAA", None, false, None, None)
         .await
         .unwrap();
 
@@ -381,7 +369,7 @@ async fn mixed_client_accepts_public_and_confidential_proofs_without_downgrade()
         Arc::new(MixedClientRepository),
         vec![secret_credential("secret-123")],
     );
-    let client_id = "00000000-0000-0000-0000-000000000000";
+    let client_id = "Q2xpZW50OgAAAAAAAAAAAAAAAAAAAAA";
     assert_eq!(
         service
             .authenticate_client(client_id, None, false, None, None)
@@ -415,7 +403,7 @@ async fn authenticate_client_rejects_secret_for_registered_public_client() {
 
     let error = service
         .authenticate_client(
-            "00000000-0000-0000-0000-000000000000",
+            "Q2xpZW50OgAAAAAAAAAAAAAAAAAAAAA",
             Some("secret-123"),
             true,
             None,
@@ -435,13 +423,7 @@ async fn authenticate_client_request_rejects_confidential_client_without_credent
     );
 
     let error = service
-        .authenticate_client_request(
-            "00000000-0000-0000-0000-000000000000",
-            None,
-            false,
-            None,
-            None,
-        )
+        .authenticate_client_request("Q2xpZW50OgAAAAAAAAAAAAAAAAAAAAA", None, false, None, None)
         .await
         .unwrap_err();
 
@@ -453,13 +435,7 @@ async fn authenticate_client_request_accepts_registered_public_client() {
     let service = authenticator(Arc::new(RegisteredPublicClientRepository), vec![]);
 
     let client = service
-        .authenticate_client_request(
-            "00000000-0000-0000-0000-000000000000",
-            None,
-            false,
-            None,
-            None,
-        )
+        .authenticate_client_request("Q2xpZW50OgAAAAAAAAAAAAAAAAAAAAA", None, false, None, None)
         .await
         .unwrap();
 
@@ -475,7 +451,7 @@ async fn authenticate_client_request_accepts_confidential_client_with_secret() {
 
     let client = service
         .authenticate_client_request(
-            "00000000-0000-0000-0000-000000000000",
+            "Q2xpZW50OgAAAAAAAAAAAAAAAAAAAAA",
             Some("secret-123"),
             true,
             None,
@@ -497,12 +473,12 @@ async fn authenticate_private_key_jwt_accepts_es256_signed_assertion() {
     let assertion = build_client_assertion_with_algorithm(
         &key.private_key,
         "ES256",
-        "00000000-0000-0000-0000-000000000000",
+        "Q2xpZW50OgAAAAAAAAAAAAAAAAAAAAA",
         "https://identity.example.com/",
     );
 
     let result = service
-        .authenticate_private_key_jwt("00000000-0000-0000-0000-000000000000", &assertion)
+        .authenticate_private_key_jwt("Q2xpZW50OgAAAAAAAAAAAAAAAAAAAAA", &assertion)
         .await;
 
     assert!(result.is_ok());
@@ -518,12 +494,12 @@ async fn authenticate_private_key_jwt_accepts_eddsa_signed_assertion() {
     let assertion = build_client_assertion_with_algorithm(
         &key.private_key,
         "EdDSA",
-        "00000000-0000-0000-0000-000000000000",
+        "Q2xpZW50OgAAAAAAAAAAAAAAAAAAAAA",
         "https://identity.example.com/",
     );
 
     let result = service
-        .authenticate_private_key_jwt("00000000-0000-0000-0000-000000000000", &assertion)
+        .authenticate_private_key_jwt("Q2xpZW50OgAAAAAAAAAAAAAAAAAAAAA", &assertion)
         .await;
 
     assert!(result.is_ok());
@@ -546,7 +522,7 @@ async fn public_flow_switch_blocks_none_but_preserves_confidential_authenticatio
             }),
             vec![secret_credential("secret-123")],
         );
-        let client_id = Uuid::nil().to_string();
+        let client_id = identity_domain::openid_connect::identifier::client_id(Uuid::nil());
         assert_eq!(
             service
                 .authenticate_client(&client_id, None, false, None, None)

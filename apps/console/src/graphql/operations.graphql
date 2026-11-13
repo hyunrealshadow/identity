@@ -1,6 +1,5 @@
 query ConsoleBootstrap {
   effectivePermissions {
-    role
     requestableScopes
     grantedScopes
     effectiveScopes

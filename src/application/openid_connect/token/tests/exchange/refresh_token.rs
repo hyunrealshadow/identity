@@ -62,7 +62,9 @@ async fn scoped_claims_client_includes_profile_email_claims_in_refreshed_id_toke
             resources: Vec::new(),
             code: STANDARD.encode(record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_string()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -77,7 +79,9 @@ async fn scoped_claims_client_includes_profile_email_claims_in_refreshed_id_toke
             resources: Vec::new(),
             scope: None,
             refresh_token: initial.refresh_token.unwrap(),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_string()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -90,7 +94,10 @@ async fn scoped_claims_client_includes_profile_email_claims_in_refreshed_id_toke
     let (id_payload, _) =
         jwt::decode_with_verifier(refreshed.id_token.as_ref().unwrap(), &verifier).unwrap();
 
-    assert_eq!(id_payload.subject().unwrap(), user_oid.to_string());
+    assert_eq!(
+        id_payload.subject().unwrap(),
+        identity_domain::openid_connect::identifier::user_subject(user_oid)
+    );
     assert_eq!(
         id_payload.claim(JwtClaimNames::NAME).unwrap(),
         &json!("Alg User")
@@ -138,7 +145,9 @@ async fn exchange_refresh_token_returns_new_access_token() {
             resources: Vec::new(),
             code: STANDARD.encode(refresh_record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_string()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -157,7 +166,9 @@ async fn exchange_refresh_token_returns_new_access_token() {
             resources: Vec::new(),
             scope: None,
             refresh_token: initial_refresh_token.clone(),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_string()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -188,7 +199,10 @@ async fn exchange_refresh_token_returns_new_access_token() {
     let access_payload = refreshed.access_token.split('.').nth(1).unwrap();
     let access_payload: Value =
         from_slice(&URL_SAFE_NO_PAD.decode(access_payload).unwrap()).unwrap();
-    let access_oid = Uuid::parse_str(access_payload["jti"].as_str().unwrap()).unwrap();
+    let access_oid = identity_domain::openid_connect::identifier::parse_access_token_id(
+        access_payload["jti"].as_str().unwrap(),
+    )
+    .unwrap();
     let access = repo.find_by_oid(access_oid).await.unwrap().unwrap();
     assert!(access.revoked_at.is_none());
 
@@ -197,7 +211,9 @@ async fn exchange_refresh_token_returns_new_access_token() {
             resources: Vec::new(),
             scope: None,
             refresh_token: initial_refresh_token,
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_string()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -244,7 +260,13 @@ async fn exchange_refresh_token_returns_new_access_token() {
         "token.issuance.result",
         "success",
         "access_token_oid",
-        EventValue::Text(initial_access["jti"].as_str().unwrap().to_owned()),
+        EventValue::Text(
+            identity_domain::openid_connect::identifier::parse_access_token_id(
+                initial_access["jti"].as_str().unwrap(),
+            )
+            .unwrap()
+            .to_string(),
+        ),
     );
     sink.assert_attribute(
         "token.issuance.result",
@@ -385,7 +407,9 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
             resources: Vec::new(),
             code: STANDARD.encode(refresh_record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_string()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -400,7 +424,9 @@ async fn exchange_refresh_token_accepts_protected_refresh_token_with_es256_signi
             resources: Vec::new(),
             scope: None,
             refresh_token: initial.refresh_token.unwrap(),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_string()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -537,7 +563,9 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
             resources: Vec::new(),
             code: STANDARD.encode(refresh_record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_string()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -568,7 +596,9 @@ async fn refresh_token_preserves_auth_time_from_original_authentication() {
             resources: Vec::new(),
             scope: None,
             refresh_token: initial_refresh_token,
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_string()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -656,7 +686,9 @@ async fn refresh_token_stores_none_auth_time_when_code_has_none() {
             resources: Vec::new(),
             code: STANDARD.encode(refresh_record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_string()),
             client_secret_basic: true,
             client_assertion_type: None,

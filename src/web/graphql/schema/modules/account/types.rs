@@ -6,8 +6,8 @@ use async_graphql::{
     connection::Connection,
 };
 use chrono::{DateTime, Utc};
+use identity_domain::global_id::GlobalId;
 use identity_domain::user::{User, UserTheme, repository::UserProfilePatch};
-use identity_infrastructure::graphql::id::{GlobalId, GlobalIdType};
 use tokio::sync::OnceCell;
 use uuid::Uuid;
 
@@ -33,11 +33,7 @@ use crate::graphql::schema::{
 use identity_application::authorization::ManagementTarget;
 use identity_domain::{authorization::ManagementScope, user::UserOid};
 
-pub(crate) struct UserGlobalId;
-
-impl GlobalIdType for UserGlobalId {
-    const TYPE_NAME: &'static str = "User";
-}
+pub(crate) use identity_domain::global_id::kind::User as UserGlobalId;
 
 pub(crate) struct UserNode {
     id: ID,
@@ -50,7 +46,7 @@ pub(crate) struct UserNode {
 }
 
 pub(crate) fn user_global_id(user: &User) -> ID {
-    GlobalId::<UserGlobalId>::new(Uuid::from(user.oid)).into()
+    ID(GlobalId::<UserGlobalId>::new(Uuid::from(user.oid)).encode())
 }
 
 impl From<User> for UserNode {

@@ -1,10 +1,11 @@
 //! Trusted built-in RBAC definitions.
 //!
-//! This seed is the version-controlled source for the built-in management
-//! scope associations, the owner/admin/viewer role presets and their matching
-//! groups. Runtime CRUD never edits these definitions. The seed:
+//! This seed writes the built-in management scopes and the built-in RBAC
+//! presets (`identity_domain::rbac::BUILT_IN_PRESETS`): ordinary roles with
+//! explicit permission sets and the groups that grant them. Runtime CRUD never
+//! edits these definitions. The seed:
 //!
-//! - derives identities only from the compiled management catalog;
+//! - derives scope identities only from the compiled management catalog;
 //! - resolves a preset by its internal OID and refuses to adopt a non-built-in
 //!   row that already occupies that identity;
 //! - keeps fixed role-scope and group-role relations exact;
@@ -15,12 +16,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use async_trait::async_trait;
 use identity_domain::{
-    authorization::catalog::{
-        AdministratorRole, ManagementScope, RETIRED_MANAGEMENT_SCOPE_NAMES, validate_catalog,
-    },
+    authorization::catalog::{ManagementScope, RETIRED_MANAGEMENT_SCOPE_NAMES, validate_catalog},
     rbac::{
-        LocalizedMetadata, LocalizedText, RolePermissionOid, built_in_group_oid,
-        built_in_permission_oid, built_in_role_oid,
+        ADMIN_PRESET, BUILT_IN_PRESETS, BuiltInPreset, LocalizedMetadata, LocalizedText,
+        OWNER_PRESET, RolePermissionOid, VIEWER_PRESET, built_in_permission_oid,
     },
 };
 use sea_orm::{
@@ -94,19 +93,12 @@ pub async fn ensure_built_in_rbac(transaction: &DatabaseTransaction) -> Result<(
         scope_ids.insert(scope, id);
     }
 
-    let mut role_ids: BTreeMap<AdministratorRole, i64> = BTreeMap::new();
-    for role in AdministratorRole::ALL {
-        let role_id = ensure_role(transaction, role).await?;
-        ensure_role_permissions(transaction, role_id, role, &scope_ids).await?;
-        role_ids.insert(role, role_id);
-    }
-
-    for role in AdministratorRole::ALL {
-        let role_id = *role_ids
-            .get(&role)
-            .ok_or_else(|| internal("built-in role id is missing"))?;
-        let group_id = ensure_group(transaction, role).await?;
-        ensure_group_role(transaction, group_id, role_id, built_in_group_oid(role).0).await?;
+    for preset in &BUILT_IN_PRESETS {
+        let text = preset_text(preset)?;
+        let role_id = ensure_role(transaction, preset, &text).await?;
+        ensure_role_permissions(transaction, role_id, preset, &scope_ids).await?;
+        let group_id = ensure_group(transaction, preset, &text).await?;
+        ensure_group_role(transaction, group_id, role_id, preset.group_oid.0).await?;
     }
 
     Ok(())
@@ -203,61 +195,67 @@ fn identity_conflict() -> AppError {
     AppError::from_code(RbacErrorCode::BuiltInIdentityConflict)
 }
 
-fn role_metadata(role: AdministratorRole) -> Result<LocalizedMetadata, AppError> {
-    let (name_en, name_zh, description_en, description_zh) = match role {
-        AdministratorRole::Owner => (
-            "Owner",
-            "所有者",
-            "Complete instance administration authority",
-            "完整的实例管理权限",
-        ),
-        AdministratorRole::Admin => (
-            "Administrator",
-            "管理员",
-            "Manages users, clients, resources and authorization within the instance",
-            "管理实例中的用户、客户端、资源和授权",
-        ),
-        AdministratorRole::Viewer => (
-            "Viewer",
-            "查看者",
-            "Read-only access to instance management views",
-            "只读访问实例管理视图",
-        ),
-    };
-    LocalizedMetadata::canonicalize(
-        vec![
-            LocalizedText::new("en-US", name_en),
-            LocalizedText::new("zh-CN", name_zh),
-        ],
-        vec![
-            LocalizedText::new("en-US", description_en),
-            LocalizedText::new("zh-CN", description_zh),
-        ],
-    )
-    .map_err(AppError::internal)
+/// Display text of one built-in preset's role and group.
+struct PresetText {
+    role: [&'static str; 4],
+    group: [&'static str; 4],
 }
 
-fn group_metadata(role: AdministratorRole) -> Result<LocalizedMetadata, AppError> {
-    let (name_en, name_zh, description_en, description_zh) = match role {
-        AdministratorRole::Owner => (
-            "Owners",
-            "所有者",
-            "Grants the Owner role",
-            "授予所有者角色",
-        ),
-        AdministratorRole::Admin => (
-            "Administrators",
-            "管理员",
-            "Grants the Administrator role",
-            "授予管理员角色",
-        ),
-        AdministratorRole::Viewer => (
-            "Viewers",
-            "查看者",
-            "Grants the Viewer role",
-            "授予查看者角色",
-        ),
-    };
+/// Default and Simplified Chinese name and description, in that order:
+/// `[name_en, name_zh, description_en, description_zh]`.
+fn preset_text(preset: &BuiltInPreset) -> Result<PresetText, AppError> {
+    if *preset == OWNER_PRESET {
+        Ok(PresetText {
+            role: [
+                "Owner",
+                "所有者",
+                "Complete instance administration authority",
+                "完整的实例管理权限",
+            ],
+            group: [
+                "Owners",
+                "所有者",
+                "Grants the Owner role",
+                "授予所有者角色",
+            ],
+        })
+    } else if *preset == ADMIN_PRESET {
+        Ok(PresetText {
+            role: [
+                "Administrator",
+                "管理员",
+                "Manages users, clients, resources and authorization within the instance",
+                "管理实例中的用户、客户端、资源和授权",
+            ],
+            group: [
+                "Administrators",
+                "管理员",
+                "Grants the Administrator role",
+                "授予管理员角色",
+            ],
+        })
+    } else if *preset == VIEWER_PRESET {
+        Ok(PresetText {
+            role: [
+                "Viewer",
+                "查看者",
+                "Read-only access to instance management views",
+                "只读访问实例管理视图",
+            ],
+            group: [
+                "Viewers",
+                "查看者",
+                "Grants the Viewer role",
+                "授予查看者角色",
+            ],
+        })
+    } else {
+        Err(internal("built-in preset has no display text"))
+    }
+}
+
+fn localized_metadata(text: [&'static str; 4]) -> Result<LocalizedMetadata, AppError> {
+    let [name_en, name_zh, description_en, description_zh] = text;
     LocalizedMetadata::canonicalize(
         vec![
             LocalizedText::new("en-US", name_en),
@@ -316,10 +314,11 @@ async fn ensure_scope_id(
 
 async fn ensure_role(
     transaction: &DatabaseTransaction,
-    role: AdministratorRole,
+    preset: &BuiltInPreset,
+    text: &PresetText,
 ) -> Result<i64, AppError> {
-    let oid = built_in_role_oid(role).0;
-    let metadata = role_metadata(role)?;
+    let oid = preset.role_oid.0;
+    let metadata = localized_metadata(text.role)?;
     let (names, descriptions, name, description) = metadata_values(&metadata)?;
     let description = description.unwrap_or_default();
     let row = transaction.query_one_raw(Statement::from_sql_and_values(DbBackend::Postgres,
@@ -365,12 +364,13 @@ async fn ensure_role(
 async fn ensure_role_permissions(
     transaction: &DatabaseTransaction,
     role_id: i64,
-    role: AdministratorRole,
+    preset: &BuiltInPreset,
     scope_ids: &BTreeMap<ManagementScope, i64>,
 ) -> Result<(), AppError> {
-    let desired: BTreeSet<i64> = ManagementScope::ALL
-        .into_iter()
-        .filter(|scope| scope.allows_role(role))
+    let desired: BTreeSet<i64> = preset
+        .permissions
+        .iter()
+        .copied()
         .map(|scope| {
             scope_ids
                 .get(&scope)
@@ -444,7 +444,7 @@ async fn ensure_role_permissions(
         transaction,
         "rbac.role.permissions.reconcile",
         "role",
-        built_in_role_oid(role).0,
+        preset.role_oid.0,
     )
     .await
     .map_err(AppError::internal)?;
@@ -494,10 +494,11 @@ ORDER BY user_id
 
 async fn ensure_group(
     transaction: &DatabaseTransaction,
-    role: AdministratorRole,
+    preset: &BuiltInPreset,
+    text: &PresetText,
 ) -> Result<i64, AppError> {
-    let oid = built_in_group_oid(role).0;
-    let metadata = group_metadata(role)?;
+    let oid = preset.group_oid.0;
+    let metadata = localized_metadata(text.group)?;
     let (names, descriptions, name, description) = metadata_values(&metadata)?;
     let row = transaction
         .query_one_raw(Statement::from_sql_and_values(

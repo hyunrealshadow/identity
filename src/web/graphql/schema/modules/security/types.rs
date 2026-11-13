@@ -1,6 +1,36 @@
-use async_graphql::{Enum, InputObject, Object};
-use identity_application::user::OtpAlgorithm;
+use async_graphql::{Enum, ID, InputObject, Object};
+use identity_application::user::{OtpAlgorithm, credential::StoredPasskey};
+use identity_domain::global_id::GlobalId;
 use identity_domain::user::MfaMethod;
+
+pub(crate) use identity_domain::global_id::kind::Passkey as PasskeyGlobalId;
+
+pub(crate) struct PasskeyNode {
+    id: ID,
+    name: String,
+}
+
+impl From<StoredPasskey> for PasskeyNode {
+    fn from(passkey: StoredPasskey) -> Self {
+        Self {
+            id: ID(GlobalId::<PasskeyGlobalId>::new(passkey.id).encode()),
+            name: passkey.data.name,
+        }
+    }
+}
+
+/// A Passkey registered to the authenticated account. Verifier material and
+/// the WebAuthn credential ID are never exposed.
+#[Object(name = "Passkey")]
+impl PasskeyNode {
+    pub(crate) async fn id(&self) -> &ID {
+        &self.id
+    }
+
+    async fn name(&self) -> &str {
+        &self.name
+    }
+}
 
 #[derive(async_graphql::SimpleObject)]
 pub(super) struct RecoveryCodeEnrollmentPayload {

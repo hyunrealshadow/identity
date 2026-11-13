@@ -6,21 +6,17 @@ use identity_application::{
     authorization::ManagementTarget,
     key::management::{ManagedKeyFilter, ManagedKeyStatus, ManagedKeyUse, ManagedKeyView},
 };
+use identity_domain::global_id::GlobalId;
 use identity_domain::{authorization::ManagementScope, key::KeyOid};
-use identity_infrastructure::graphql::id::{GlobalId, GlobalIdType};
 
 use crate::graphql::schema::{
     access::access, management_guard::ManagementGuard, modules::resource::support::decode_oid,
 };
 
-pub(crate) struct KeyGlobalId;
-
-impl GlobalIdType for KeyGlobalId {
-    const TYPE_NAME: &'static str = "Key";
-}
+pub(crate) use identity_domain::global_id::kind::Key as KeyGlobalId;
 
 fn key_global_id(oid: KeyOid) -> ID {
-    GlobalId::<KeyGlobalId>::new(oid.0).into()
+    ID(GlobalId::<KeyGlobalId>::new(oid.0).encode())
 }
 
 pub(crate) fn decode_key_oid(ctx: &Context<'_>, id: &ID) -> GraphqlResult<KeyOid> {
@@ -126,14 +122,14 @@ impl KeyNode {
     }
 
     /// How operators and relying parties identify the key: the `kid` of a
-    /// signing key's signing binding, or the key's own UUID.
+    /// signing key's signing binding, or the key's own Global ID.
     async fn key_id(&self) -> String {
         self.view
             .record
             .key_ids
             .first()
             .cloned()
-            .unwrap_or_else(|| self.view.record.oid.0.to_string())
+            .unwrap_or_else(|| GlobalId::<KeyGlobalId>::new(self.view.record.oid.0).encode())
     }
 
     #[graphql(name = "use")]

@@ -18,7 +18,9 @@ use super::*;
 fn request(token: String) -> TokenRevocationParams {
     TokenRevocationParams {
         token,
-        client_id: Some(Uuid::nil().to_string()),
+        client_id: Some(identity_domain::openid_connect::identifier::client_id(
+            Uuid::nil(),
+        )),
         client_secret: Some("secret-123".to_owned()),
         client_secret_basic: true,
         client_assertion_type: None,
@@ -53,8 +55,8 @@ async fn signed_access_token_returns_claims_and_tampering_is_inactive() {
         .unwrap();
     let issuer = service.provider_service.issuer().unwrap();
     let (key_id, private_key_pem, alg) = service.load_signing_key().await.unwrap();
-    let token_id = record.oid.to_string();
-    let client_id = Uuid::nil().to_string();
+    let token_id = identity_domain::openid_connect::identifier::access_token_id(record.oid);
+    let client_id = identity_domain::openid_connect::identifier::client_id(Uuid::nil());
     let client = service
         .client_repo
         .find_by_oid(Uuid::nil())
@@ -71,7 +73,7 @@ async fn signed_access_token_returns_claims_and_tampering_is_inactive() {
             issuer: &issuer,
             audience: &client_id,
             client_id: &client_id,
-            subject: &user_oid.to_string(),
+            subject: &identity_domain::openid_connect::identifier::user_subject(user_oid),
             principal: AccessTokenPrincipal::User,
             client: &client,
             user: None,
@@ -98,7 +100,10 @@ async fn signed_access_token_returns_claims_and_tampering_is_inactive() {
         .await
         .unwrap();
     assert_eq!(result["active"], true);
-    assert_eq!(result["sub"], user_oid.to_string());
+    assert_eq!(
+        result["sub"],
+        identity_domain::openid_connect::identifier::user_subject(user_oid)
+    );
     assert_eq!(result["aud"], json!(client_id));
     let payload = service
         .verified_access_token_payload(&token)
@@ -224,8 +229,8 @@ async fn machine_access_token_introspects_with_the_client_subject() {
         .unwrap();
     let issuer = service.provider_service.issuer().unwrap();
     let (key_id, private_key_pem, alg) = service.load_signing_key().await.unwrap();
-    let token_id = record.oid.to_string();
-    let client_id = Uuid::nil().to_string();
+    let token_id = identity_domain::openid_connect::identifier::access_token_id(record.oid);
+    let client_id = identity_domain::openid_connect::identifier::client_id(Uuid::nil());
     let resources = vec!["urn:identity:graphql".to_owned()];
     let client = service
         .client_repo

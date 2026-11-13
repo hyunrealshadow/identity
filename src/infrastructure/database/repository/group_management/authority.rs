@@ -1,7 +1,6 @@
 //! Transaction-scoped group authority and delegation-ceiling reads.
 //!
-//! Group writes never load a legacy administrator binding. The actor's current
-//! management permissions come from B's user-permission authority helper in the
+//! The actor's current management permissions come from B's user-permission authority helper in the
 //! same transaction; the delegation ceiling uses exactly those PRE-change
 //! permissions.
 

@@ -21,8 +21,8 @@ export const accountOperations = {
   'regenerate-recovery-codes': { authorization: 'elevated', document: `mutation RegenerateRecoveryCodes { regenerateRecoveryCodes { recoveryCodes } }` },
   'passkey-prepare': { authorization: 'elevated', document: `mutation PrepareMfaRecoveryCodes { prepareMfaRecoveryCodes { recoveryCodes enrollmentToken } }` },
   'passkey-begin': { authorization: 'elevated', document: `mutation BeginPasskeyRegistration($recoveryEnrollmentToken: String) { beginPasskeyRegistration(recoveryEnrollmentToken: $recoveryEnrollmentToken) }` },
-  'passkey-finish': { authorization: 'elevated', document: `mutation RegisterPasskey($id: String!, $name: String!, $credential: JSON!) { finishPasskeyRegistration(challengeId: $id, name: $name, credential: $credential) }` },
-  'passkey-delete': { authorization: 'elevated', document: `mutation DeletePasskey($id: String!) { deletePasskey(id: $id) }` },
+  'passkey-finish': { authorization: 'elevated', document: `mutation RegisterPasskey($id: ID!, $name: String!, $credential: JSON!) { finishPasskeyRegistration(challengeId: $id, name: $name, credential: $credential) }` },
+  'passkey-delete': { authorization: 'elevated', document: `mutation DeletePasskey($id: ID!) { deletePasskey(id: $id) }` },
 } as const
 
 export function accountOperation(action: string) {

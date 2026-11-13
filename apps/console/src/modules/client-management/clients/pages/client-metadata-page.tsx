@@ -61,7 +61,7 @@ export function ClientMetadataPage() {
           <SettingsGroup title={t('clientsMetadataSectionDiscovery')}>
             <MetadataRows
               entries={[
-                { label: 'clientsClientId', value: client?.clientId },
+                { label: 'clientsClientId', value: client?.id },
                 { label: 'clientsMetadataIssuer', value: metadata.data.issuer },
                 {
                   label: 'clientsMetadataOpenIdConfiguration',

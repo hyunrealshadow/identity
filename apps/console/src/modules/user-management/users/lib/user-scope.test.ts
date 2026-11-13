@@ -4,7 +4,6 @@ import { isCurrentUser, userManagementScope } from './user-scope'
 
 it('keeps write-only user capabilities separate from reading users', () => {
   const scope = userManagementScope({
-    role: null,
     effectiveScopes: [],
     grantedScopes: [],
     requestableScopes: ['management.user.create'],

@@ -969,7 +969,7 @@ async fn approve_code_id_token_hybrid_returns_fragment_with_code_and_id_token_ha
         header
             .claim(JwtClaimNames::KID)
             .and_then(|value| value.as_str()),
-        Some(binding_oid.to_string().as_str())
+        Some(identity_domain::openid_connect::identifier::key_id(binding_oid).as_str())
     );
     assert_eq!(
         payload.claim(JwtClaimNames::NONCE).and_then(|v| v.as_str()),
@@ -1090,7 +1090,7 @@ async fn approve_code_id_token_token_hybrid_returns_code_tokens_and_hashes() {
     let (payload, _) = jwt::decode_with_verifier(id_token, &verifier).unwrap();
     assert_eq!(
         payload.audience().unwrap(),
-        [TEST_CLIENT_ID.to_string().as_str()]
+        [identity_domain::openid_connect::identifier::client_id(TEST_CLIENT_ID).as_str()]
     );
     assert_eq!(
         payload.claim(JwtClaimNames::C_HASH).unwrap(),

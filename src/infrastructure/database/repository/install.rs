@@ -2,9 +2,8 @@ use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use chrono::Utc;
 use identity_domain::{
-    authorization::{RequestId, catalog::AdministratorRole},
-    rbac as identity_domain_rbac,
-    rbac::GroupMembershipOid,
+    authorization::RequestId,
+    rbac::{GroupMembershipOid, OWNER_PRESET},
     user::normalization::{normalize_email, normalize_username},
 };
 use rand::{RngExt, rng};
@@ -171,7 +170,7 @@ impl InstallRepository for InstallRepositoryImpl {
         // The first owner is the user explicitly created by this installation.
         // The membership is written in the same transaction as its credential
         // and initial settings, so a failed installation leaves neither behind.
-        let owner_group_oid = identity_domain_rbac::built_in_group_oid(AdministratorRole::Owner);
+        let owner_group_oid = OWNER_PRESET.group_oid;
         let owner_group = txn
             .query_one_raw(Statement::from_sql_and_values(
                 DbBackend::Postgres,

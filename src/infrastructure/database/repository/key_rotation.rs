@@ -181,7 +181,9 @@ pub(crate) async fn insert_key<C: ConnectionTrait>(
     for generated in jwks {
         let binding_oid = Uuid::new_v4();
         let mut jwk = generated.jwk;
-        jwk.set_key_id(binding_oid.to_string());
+        jwk.set_key_id(identity_domain::openid_connect::identifier::key_id(
+            binding_oid,
+        ));
         let jwk = to_value(jwk).map_err(|error| DbErr::Custom(error.to_string()))?;
         key_jwk::ActiveModel {
             oid: Set(binding_oid),

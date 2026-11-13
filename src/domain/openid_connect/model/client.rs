@@ -419,7 +419,7 @@ impl OpenIdConnectClient {
 
     pub fn subject_identifier(&self, user_oid: Uuid, issuer: &Url) -> String {
         match self.metadata.subject_type.unwrap_or(SubjectType::Public) {
-            SubjectType::Public => user_oid.to_string(),
+            SubjectType::Public => crate::openid_connect::identifier::user_subject(user_oid),
             SubjectType::Pairwise => {
                 let sector_identifier = self
                     .metadata

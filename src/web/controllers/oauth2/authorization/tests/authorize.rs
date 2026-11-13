@@ -28,7 +28,9 @@ async fn action_error_boundary_never_redirects_without_a_registered_client() {
     let mut depot = Depot::new();
     depot.insert_typed(state);
     depot.insert_typed(RawAuthorizeRequest {
-        client_id: Some(Uuid::nil().to_string()),
+        client_id: Some(identity_domain::openid_connect::identifier::client_id(
+            Uuid::nil(),
+        )),
         redirect_uri: Some("https://unregistered.example/callback".to_owned()),
         scope: Some("openid".to_owned()),
         ..Default::default()

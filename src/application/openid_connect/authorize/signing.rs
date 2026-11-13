@@ -54,9 +54,11 @@ pub(super) struct SignImplicitAccessTokenInput<'a> {
     pub issuer: &'a Url,
     pub audience: &'a str,
     pub client_id: &'a str,
+    /// Public subject identifier (`sub`) of the user.
     pub user_oid: &'a str,
     pub protected_session_id: &'a str,
     pub scope: &'a str,
+    /// `jti`: the access token's Global ID.
     pub token_id: &'a str,
     pub claims: Option<&'a ClaimsRequest>,
     pub auth_time: i64,
@@ -114,7 +116,7 @@ impl AuthorizeService {
                         .map_err(AppError::map_source(AuthorizeErrorCode::LoadRequestFailed))?
                     {
                         return Ok((
-                            Uuid::from(binding.oid).to_string(),
+                            identity_domain::openid_connect::identifier::key_id(binding.oid),
                             data.private_key.clone(),
                             JwsAlgorithm::Asymmetric(alg),
                         ));
@@ -162,7 +164,7 @@ impl AuthorizeService {
                 };
 
                 return Ok((
-                    Uuid::from(binding.oid).to_string(),
+                    identity_domain::openid_connect::identifier::key_id(binding.oid),
                     data.private_key.clone(),
                     alg,
                 ));

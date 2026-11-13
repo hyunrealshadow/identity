@@ -66,8 +66,12 @@ impl TokenService {
             let owner = payload
                 .claim("client_id")
                 .and_then(Value::as_str)
-                .and_then(|id| Uuid::parse_str(id).ok());
-            let oid = payload.jwt_id().and_then(|id| Uuid::parse_str(id).ok());
+                .and_then(|id| {
+                    identity_domain::openid_connect::identifier::parse_client_id(id).ok()
+                });
+            let oid = payload.jwt_id().and_then(|id| {
+                identity_domain::openid_connect::identifier::parse_access_token_id(id).ok()
+            });
             if owner != Some(client.client().oid) || oid.is_none() {
                 return Ok(json!({"active": false}));
             }
@@ -109,7 +113,10 @@ impl TokenService {
                         let Some(parsed) = Uuid::parse_str(user_oid).ok() else {
                             return Ok(json!({"active": false}));
                         };
-                        (user_oid.clone(), Some(parsed))
+                        (
+                            identity_domain::openid_connect::identifier::user_subject(parsed),
+                            Some(parsed),
+                        )
                     }
                     AccessTokenPrincipal::Client => {
                         // Machine tokens never expose a user subject or session.
@@ -119,7 +126,12 @@ impl TokenService {
                         {
                             return Ok(json!({"active": false}));
                         }
-                        (record.client_oid.to_string(), None)
+                        (
+                            identity_domain::openid_connect::identifier::client_id(
+                                record.client_oid,
+                            ),
+                            None,
+                        )
                     }
                 };
                 (
@@ -138,7 +150,7 @@ impl TokenService {
                 };
                 (
                     &data.scope,
-                    data.user_oid.clone(),
+                    identity_domain::openid_connect::identifier::user_subject(user_oid),
                     data.session_oid,
                     data.device_authorization_oid.as_deref(),
                     data.management.as_ref(),
@@ -175,7 +187,7 @@ impl TokenService {
                     session.revoked_at.is_none()
                         && session.status == SessionStatus::ACTIVE
                         && session.expires_at.is_none_or(|expiry| expiry > now)
-                        && session.user_oid.to_string() == subject
+                        && Some(Uuid::from(session.user_oid)) == user_oid
                 });
             if !active {
                 return Ok(json!({"active": false}));
@@ -317,10 +329,10 @@ impl TokenService {
             return Ok(json!({"active": false}));
         }
         let mut response = json!({
-            "active": true, "scope": scope, "client_id": record.client_oid.to_string(),
+            "active": true, "scope": scope, "client_id": identity_domain::openid_connect::identifier::client_id(record.client_oid),
             "sub": subject, "iss": self.provider_service.issuer()?.as_str(),
             "exp": record.expires_at.timestamp(), "iat": record.created_at.timestamp(),
-            "jti": record.oid.to_string()
+            "jti": identity_domain::openid_connect::identifier::access_token_id(record.oid)
         });
         if access {
             response["token_type"] = json!("Bearer");

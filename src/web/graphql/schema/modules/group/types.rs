@@ -12,12 +12,12 @@ use identity_application::{
         GroupRoleMutationResult, GroupRoleOrder as RbacGroupRoleOrder,
     },
 };
+use identity_domain::global_id::GlobalId;
 use identity_domain::{
     authorization::ManagementScope,
     rbac::{GroupOid, LocalizedText, RoleOid},
     user::UserOid,
 };
-use identity_infrastructure::graphql::id::{GlobalId, GlobalIdType};
 use uuid::Uuid;
 
 use super::super::{
@@ -39,18 +39,14 @@ use super::{
     query,
 };
 
-pub(crate) struct GroupGlobalId;
-
-impl GlobalIdType for GroupGlobalId {
-    const TYPE_NAME: &'static str = "Group";
-}
+pub(crate) use identity_domain::global_id::kind::Group as GroupGlobalId;
 
 pub(crate) fn group_global_id(oid: GroupOid) -> ID {
-    GlobalId::<GroupGlobalId>::new(oid.0).into()
+    ID(GlobalId::<GroupGlobalId>::new(oid.0).encode())
 }
 
 pub(crate) fn group_user_global_id(oid: UserOid) -> ID {
-    GlobalId::<UserGlobalId>::new(oid.0).into()
+    ID(GlobalId::<UserGlobalId>::new(oid.0).encode())
 }
 
 /// `Group.members`: user nodes with the membership facts on each edge.

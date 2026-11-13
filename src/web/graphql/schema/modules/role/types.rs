@@ -7,8 +7,8 @@ use identity_application::{
     authorization::ManagementTarget,
     rbac::{RoleFilter as RbacRoleFilter, RoleOrder as RbacRoleOrder, RoleRecord, ScopeOid},
 };
+use identity_domain::global_id::GlobalId;
 use identity_domain::{authorization::ManagementScope, rbac::RoleOid};
-use identity_infrastructure::graphql::id::{GlobalId, GlobalIdType};
 use uuid::Uuid;
 
 use super::super::{
@@ -32,14 +32,10 @@ use crate::graphql::schema::{
     authorization::request_context, connection::ConnectionTotal, management_guard::ManagementGuard,
 };
 
-pub(crate) struct RoleGlobalId;
-
-impl GlobalIdType for RoleGlobalId {
-    const TYPE_NAME: &'static str = "Role";
-}
+pub(crate) use identity_domain::global_id::kind::Role as RoleGlobalId;
 
 pub(crate) fn role_global_id(oid: RoleOid) -> ID {
-    GlobalId::<RoleGlobalId>::new(oid.0).into()
+    ID(GlobalId::<RoleGlobalId>::new(oid.0).encode())
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]

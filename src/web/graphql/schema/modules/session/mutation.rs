@@ -1,8 +1,8 @@
 use crate::graphql::schema::access::access;
 use async_graphql::{Context, ID, Object, Result};
 use identity_application::error::{codes::graphql::GraphqlErrorCode, params::ErrorParams};
+use identity_domain::global_id::GlobalId;
 use identity_domain::{auth::SessionOid, openid_connect::ApiScope};
-use identity_infrastructure::graphql::id::GlobalId;
 use tracing::warn;
 use uuid::Uuid;
 
@@ -29,7 +29,7 @@ impl SessionMutation {
         #[graphql(validator(chars_max_length = 255))] client_mutation_id: Option<String>,
     ) -> Result<RevokeSessionPayload> {
         let request = request_context(ctx)?;
-        let oid = GlobalId::<SessionGlobalId>::try_from(&id)
+        let oid = GlobalId::<SessionGlobalId>::decode(id.as_str())
             .map_err(|_| coded_error(ctx, GraphqlErrorCode::InvalidSessionId, ErrorParams::new()))?
             .oid();
         let session = request

@@ -1,3 +1,4 @@
+pub mod identifier;
 pub mod model;
 pub mod par;
 pub mod repository;

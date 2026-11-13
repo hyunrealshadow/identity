@@ -251,16 +251,27 @@ fn signed_id_token_hint_for_test(
     };
     let mut header = JwsHeader::new();
     header.set_token_type("JWT");
-    header.set_key_id(Uuid::from(signing.binding.oid).to_string());
+    header.set_key_id(identity_domain::openid_connect::identifier::key_id(
+        signing.binding.oid,
+    ));
     let now = SystemTime::now();
     let mut payload = JwtPayload::new();
     payload.set_issuer(issuer);
-    payload.set_subject(Uuid::new_v4().to_string());
-    payload.set_audience(vec![audience.to_string()]);
+    payload.set_subject(identity_domain::openid_connect::identifier::user_subject(
+        Uuid::new_v4(),
+    ));
+    payload.set_audience(vec![
+        identity_domain::openid_connect::identifier::client_id(audience),
+    ]);
     payload.set_issued_at(&now);
     payload.set_expires_at(&(now - Duration::from_secs(60)));
     payload
-        .set_claim("azp", Some(json!(audience.to_string())))
+        .set_claim(
+            "azp",
+            Some(json!(
+                identity_domain::openid_connect::identifier::client_id(audience)
+            )),
+        )
         .unwrap();
     let signer = RS256.signer_from_pem(key.private_key.as_bytes()).unwrap();
     jwt::encode_with_signer(&payload, &header, &signer).unwrap()
@@ -622,7 +633,7 @@ async fn builds_backchannel_logout_token_with_protected_sid() {
                     .and_then(|audience| audience.as_str())
             })
         }),
-        Some(client_oid.to_string().as_str())
+        Some(identity_domain::openid_connect::identifier::client_id(client_oid).as_str())
     );
     assert_eq!(
         payload.claim("sid").and_then(|value| value.as_str()),
@@ -710,7 +721,10 @@ async fn backchannel_logout_uses_subject_when_sid_is_unavailable_and_client_allo
     )
     .unwrap()
     .0;
-    assert_eq!(payload.subject(), Some(user_oid.to_string().as_str()));
+    assert_eq!(
+        payload.subject(),
+        Some(identity_domain::openid_connect::identifier::user_subject(user_oid).as_str())
+    );
     assert!(payload.claim("sid").is_none());
 }
 
@@ -842,7 +856,9 @@ async fn rejects_client_id_that_does_not_match_id_token_hint() {
                 "https://identity.example.com/",
                 hinted_client_oid,
             )),
-            client_id: Some(requested_client_oid.to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                requested_client_oid,
+            )),
             logout_hint: None,
             post_logout_redirect_uri: Some("https://rp.example.com/logout/callback".to_owned()),
             state: None,

@@ -203,7 +203,9 @@ impl TokenService {
             ),
             None => None,
         };
-        if authenticated_client_oid.to_string() != client_id {
+        if identity_domain::openid_connect::identifier::client_id(authenticated_client_oid)
+            != client_id
+        {
             return Err(AppError::from_code(
                 TokenErrorCode::RefreshTokenClientMismatch,
             ));
@@ -390,14 +392,16 @@ impl TokenService {
         let access_token = self
             .sign_access_token(SignAccessTokenInput {
                 resources: &selection.resources,
-                token_id: &access_token_record.oid.to_string(),
+                token_id: &identity_domain::openid_connect::identifier::access_token_id(
+                    access_token_record.oid,
+                ),
                 key_id: &signing_key_id,
                 private_key_pem: &signing_key_pem,
                 alg: signing_alg,
                 issuer: &issuer,
                 audience: access_token_audience,
                 client_id: &client_id,
-                subject: &refresh_data.user_oid,
+                subject: &identity_domain::openid_connect::identifier::user_subject(user_oid),
                 principal: AccessTokenPrincipal::User,
                 client: &authenticated_client,
                 user: Some(&user),

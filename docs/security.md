@@ -43,9 +43,11 @@ grant access to each other. Protocol scopes have no API-resource owner and
 cannot be added to a role as business permissions.
 
 Users obtain effective permissions through direct roles and user groups.
-Owner, Admin and Viewer are protected group/role presets, not a separate
-administrator-binding system. Custom roles may reference built-in management
-permissions; API admission uses permissions rather than role or group names.
+Owner, Admin and Viewer are seeded built-in roles and groups with fixed
+permission sets; they are ordinary RBAC definitions, and no code path checks
+for a preset by name or identity when authorizing. Custom roles may reference
+built-in management permissions; API admission uses permissions rather than
+role or group names.
 Built-in definitions are immutable. Intrinsic account and session self-service
 remains available to ordinary authenticated users.
 

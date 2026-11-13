@@ -64,7 +64,9 @@ async fn code_exchange_rejects_client_without_authorization_code_grant() {
             resources: Vec::new(),
             code: STANDARD.encode(record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_string()),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_string()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -123,7 +125,9 @@ async fn code_exchange_does_not_issue_unusable_refresh_token() {
             resources: Vec::new(),
             code: STANDARD.encode(record.oid.as_bytes()),
             redirect_uri: Some("https://client.example.com/callback".to_owned()),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_owned()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -161,7 +165,9 @@ async fn refresh_exchange_rejects_client_without_refresh_token_grant() {
             resources: Vec::new(),
             scope: None,
             refresh_token: STANDARD.encode(record.oid.as_bytes()),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_string()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -198,7 +204,9 @@ async fn grant_permission_is_checked_before_the_refresh_token_lookup() {
             resources: Vec::new(),
             scope: None,
             refresh_token: STANDARD.encode(Uuid::new_v4().as_bytes()),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_string()),
             client_secret_basic: true,
             client_assertion_type: None,

@@ -12,8 +12,9 @@ impl AuthorizeService {
         &self,
         request: ThirdPartyInitiatedLoginRequest,
     ) -> Result<Url, AppError> {
-        let client_id = Uuid::parse_str(request.client_id.trim())
-            .map_err(AppError::map_source(AuthorizeErrorCode::ClientIdInvalid))?;
+        let client_id =
+            identity_domain::openid_connect::identifier::parse_client_id(request.client_id.trim())
+                .map_err(AppError::map_source(AuthorizeErrorCode::ClientIdInvalid))?;
 
         let client = self
             .client_repo
@@ -34,7 +35,10 @@ impl AuthorizeService {
         {
             let mut query = redirect_uri.query_pairs_mut();
             query.append_pair("iss", issuer.as_str());
-            query.append_pair("client_id", client.client().oid.to_string().as_str());
+            query.append_pair(
+                "client_id",
+                &identity_domain::openid_connect::identifier::client_id(client.client().oid),
+            );
             if let Some(login_hint) = request.login_hint.as_deref() {
                 query.append_pair("login_hint", login_hint);
             }

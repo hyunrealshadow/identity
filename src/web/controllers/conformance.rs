@@ -18,7 +18,7 @@ pub fn routes() -> Router {
 
 #[derive(Debug, Serialize)]
 struct RotateKeysResponse {
-    key_oid: String,
+    key_id: String,
     algorithm: String,
 }
 
@@ -34,12 +34,13 @@ async fn rotate_keys(depot: &mut Depot, res: &mut Response) -> JsonWebResult<()>
         })
         .await?;
 
-    let key_oid = Uuid::from(key.oid).to_string();
+    let key_id =
+        identity_domain::global_id::encode::<identity_domain::global_id::kind::Key>(key.oid);
     render_json(
         res,
         StatusCode::OK,
         RotateKeysResponse {
-            key_oid,
+            key_id,
             algorithm: "RS256".to_owned(),
         },
     );

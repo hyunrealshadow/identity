@@ -26,8 +26,9 @@ impl AuthorizeService {
             if params != expected {
                 return Err(AppError::from_code(CommonErrorCode::InvalidRequest));
             }
-            let client_oid = Uuid::parse_str(&params.client_id)
-                .map_err(|_| AppError::from_code(AuthorizeErrorCode::RequestUriInvalid))?;
+            let client_oid =
+                identity_domain::openid_connect::identifier::parse_client_id(&params.client_id)
+                    .map_err(|_| AppError::from_code(AuthorizeErrorCode::RequestUriInvalid))?;
             let stored = self
                 .client_authorization_repo
                 .consume_pushed_authorization_request(

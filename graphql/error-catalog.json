@@ -2154,36 +2154,12 @@
     "module": "authorization.owner"
   },
   {
-    "code": 27009,
-    "kind": "not_found",
-    "fluentKey": "E27009",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "administrator.repository"
-  },
-  {
-    "code": 27010,
-    "kind": "conflict",
-    "fluentKey": "E27010",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "administrator.repository"
-  },
-  {
     "code": 27011,
     "kind": "not_found",
     "fluentKey": "E27011",
     "requiredParams": [],
     "optionalParams": [],
-    "module": "administrator.repository"
-  },
-  {
-    "code": 27012,
-    "kind": "conflict",
-    "fluentKey": "E27012",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "administrator.repository"
+    "module": "authorization.snapshot"
   },
   {
     "code": 27014,

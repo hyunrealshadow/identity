@@ -59,9 +59,9 @@ pub fn ensure_usable_owner_survives(
     Ok(())
 }
 
-/// Owner-target facts. High-risk changes to an owner require a human owner with
-/// recent AAL2; machine grants and lower administrator roles cannot perform
-/// them.
+/// Owner-target facts. High-risk changes to an owner require a human actor
+/// with full authorization-management permissions and recent AAL2; machine
+/// principals and users with narrower permissions cannot perform them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct OwnerTargetContext {
     pub target_is_owner: bool,

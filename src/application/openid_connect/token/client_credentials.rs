@@ -203,7 +203,7 @@ impl TokenService {
         let access_token = self
             .sign_access_token(SignAccessTokenInput {
                 resources: &resources,
-                token_id: &record.oid.to_string(),
+                token_id: &identity_domain::openid_connect::identifier::access_token_id(record.oid),
                 key_id: &key_id,
                 private_key_pem: &private_key_pem,
                 alg,

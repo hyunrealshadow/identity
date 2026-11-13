@@ -172,7 +172,7 @@ async fn device_grant_uses_client_algorithm_for_access_token() {
 
         let response = service.exchange_device_code(params()).await.unwrap();
         assert_eq!(response.id_token.is_some(), scope.contains("openid"));
-        let expected_kid = Uuid::from(rsa_binding.oid).to_string();
+        let expected_kid = identity_domain::openid_connect::identifier::key_id(rsa_binding.oid);
         for token in iter::once(&response.access_token).chain(response.id_token.iter()) {
             let header = jwt::decode_header(token).unwrap();
             assert_eq!(
@@ -278,7 +278,9 @@ fn params() -> DeviceCodeGrantParams {
     DeviceCodeGrantParams {
         resources: Vec::new(),
         device_code: DEVICE_CODE.to_owned(),
-        client_id: Some(Uuid::nil().to_string()),
+        client_id: Some(identity_domain::openid_connect::identifier::client_id(
+            Uuid::nil(),
+        )),
         client_secret: Some("secret-123".to_owned()),
         client_secret_basic: true,
         client_assertion_type: None,
@@ -464,8 +466,14 @@ async fn an_approved_request_issues_bound_tokens_and_rejects_replay() {
     assert_eq!(response.scope, "openid offline_access");
     let access_token = decode_unverified_payload(&response.access_token);
     assert_eq!(access_token["aud"], API_RESOURCE);
-    assert_eq!(access_token["sub"], Uuid::nil().to_string());
-    assert_eq!(access_token["client_id"], Uuid::nil().to_string());
+    assert_eq!(
+        access_token["sub"],
+        identity_domain::openid_connect::identifier::user_subject(Uuid::nil())
+    );
+    assert_eq!(
+        access_token["client_id"],
+        identity_domain::openid_connect::identifier::client_id(Uuid::nil())
+    );
     assert_eq!(access_token["auth_time"], 1_700_000_000);
     assert!(
         access_token.get("sid").is_none(),
@@ -474,7 +482,10 @@ async fn an_approved_request_issues_bound_tokens_and_rejects_replay() {
 
     let id_token = response.id_token.as_ref().unwrap();
     let id_claims = decode_unverified_payload(id_token);
-    assert_eq!(id_claims["aud"], Uuid::nil().to_string());
+    assert_eq!(
+        id_claims["aud"],
+        identity_domain::openid_connect::identifier::client_id(Uuid::nil())
+    );
     assert!(id_claims.get("sid").is_none());
 
     let stored = records.try_recv().unwrap();
@@ -749,7 +760,9 @@ async fn a_device_grant_without_openid_stays_plain_oauth_through_refresh() {
             resources: Vec::new(),
             scope: None,
             refresh_token: STANDARD.encode(oid.as_bytes()),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_owned()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -788,7 +801,9 @@ async fn refresh_cannot_add_openid_the_device_grant_never_requested() {
             resources: Vec::new(),
             scope: Some("openid offline_access".to_owned()),
             refresh_token: STANDARD.encode(oid.as_bytes()),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_owned()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -827,7 +842,9 @@ async fn refresh_may_narrow_the_granted_scope() {
             resources: Vec::new(),
             scope: Some("openid".to_owned()),
             refresh_token: STANDARD.encode(oid.as_bytes()),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_owned()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -889,7 +906,9 @@ async fn refreshing_a_device_token_requires_a_live_relation() {
             resources: Vec::new(),
             scope: None,
             refresh_token: STANDARD.encode(record.oid.as_bytes()),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_owned()),
             client_secret_basic: true,
             client_assertion_type: None,
@@ -952,7 +971,9 @@ async fn a_live_relation_allows_refreshing_a_device_token() {
             resources: Vec::new(),
             scope: None,
             refresh_token: STANDARD.encode(record.oid.as_bytes()),
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_owned()),
             client_secret_basic: true,
             client_assertion_type: None,

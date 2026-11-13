@@ -9,7 +9,21 @@ through discovery and depend on the active keys and client metadata.
 - [Client policy](#client-policy)
 - [Resource indicators](#resource-indicators-rfc-8707)
 - [Pushed authorization requests](#pushed-authorization-requests-rfc-9126)
+- [Identifiers](#identifiers)
 - [HTTP endpoints](#http-endpoints)
+
+## Identifiers
+
+Object identifiers leave the service as Global IDs: unpadded base64url of
+`<Type>:` followed by the 16 UUID bytes. GraphQL `ID` values, the OAuth
+`client_id`, a public `sub` (`User`, or `Client` for machine tokens), access
+and logout token `jti` values, `management_grant_oid` (`User`), JWK `kid` values
+(`KeyJwk`), and Passkey challenge IDs all use this form; raw UUIDs are
+rejected. Version claims are optimistic-lock tokens and stay UUIDs. Pairwise subjects
+remain unlinkable hashes. `sid` is not a Global ID: it is a purpose-bound,
+data-protected session handle that browsers also present as a credential.
+Storage, internal records, and telemetry keep plain UUIDs; conversion happens
+only at the service boundary.
 
 ## Client policy
 
@@ -178,8 +192,8 @@ never transfer one resource's grant to another resource.
 
 Requests must fit the client's exact scope IDs at the target resource. User
 requests are additionally limited by effective direct-role and group-role
-permissions; intrinsic account/session self-service does not require an
-administrator role. Machine requests use the client's own scope ceiling without
+permissions; intrinsic account/session self-service does not require any
+management permission. Machine requests use the client's own scope ceiling without
 human role membership, MFA or an extra client-management grant.
 
 Code and refresh exchanges cannot expand their original resource grant. JWT

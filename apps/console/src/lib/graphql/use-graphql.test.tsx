@@ -140,11 +140,11 @@ describe('useGraphQL automatic reauthentication', () => {
     let results: GraphQLResult<unknown>[] = []
     await act(async () => {
       const first = requestApi?.(
-        'query Q { effectivePermissions { role } }',
+        'query Q { effectivePermissions { requestableScopes } }',
         {},
       )
       const second = requestApi?.(
-        'query Q { effectivePermissions { role } }',
+        'query Q { effectivePermissions { requestableScopes } }',
         {},
       )
       results = await Promise.all([first!, second!])
@@ -186,7 +186,7 @@ describe('useGraphQL automatic reauthentication', () => {
     let result: GraphQLResult<unknown> | undefined
     await act(async () => {
       result = await requestApi?.(
-        'query Q { effectivePermissions { role } }',
+        'query Q { effectivePermissions { requestableScopes } }',
         {},
       )
     })
@@ -219,7 +219,7 @@ describe('useGraphQL automatic reauthentication', () => {
     let result: GraphQLResult<unknown> | undefined
     await act(async () => {
       result = await requestApi?.(
-        'query Q { effectivePermissions { role } }',
+        'query Q { effectivePermissions { requestableScopes } }',
         {},
       )
     })
@@ -332,7 +332,7 @@ describe('useGraphQL automatic reauthentication', () => {
     let result: GraphQLResult<unknown> | undefined
     await act(async () => {
       result = await requestApi?.(
-        'query Q { effectivePermissions { role } }',
+        'query Q { effectivePermissions { requestableScopes } }',
         {},
       )
     })
@@ -375,7 +375,7 @@ describe('useGraphQL automatic reauthentication', () => {
     let result: GraphQLResult<unknown> | undefined
     await act(async () => {
       result = await requestApi?.(
-        'query Q { effectivePermissions { role } }',
+        'query Q { effectivePermissions { requestableScopes } }',
         {},
       )
     })
@@ -398,7 +398,7 @@ describe('useGraphQL automatic reauthentication', () => {
       ),
     )
     renderProbe()
-    const pending = requestApi!('query Q { effectivePermissions { role } }', {})
+    const pending = requestApi!('query Q { effectivePermissions { requestableScopes } }', {})
     const refreshed = session()
     refreshed.accessToken = 'refreshed-access-token'
     setAuthSession(refreshed)
@@ -416,7 +416,7 @@ describe('useGraphQL automatic reauthentication', () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(
         JSON.stringify({
-          data: { effectivePermissions: { role: null } },
+          data: { effectivePermissions: { requestableScopes: [] } },
           errors: [],
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
@@ -428,7 +428,7 @@ describe('useGraphQL automatic reauthentication', () => {
     let result: GraphQLResult<unknown> | undefined
     await act(async () => {
       result = await requestApi?.(
-        'query Q { effectivePermissions { role } }',
+        'query Q { effectivePermissions { requestableScopes } }',
         {},
       )
     })
@@ -437,7 +437,7 @@ describe('useGraphQL automatic reauthentication', () => {
     expect(result?.data).not.toBeNull()
     expect(result?.failure).toBeUndefined()
     expect(mocks.preflightOperation).toHaveBeenCalledWith(
-      'query Q { effectivePermissions { role } }',
+      'query Q { effectivePermissions { requestableScopes } }',
       {},
       expect.objectContaining({
         scopes: ['openid', 'profile', 'email'],

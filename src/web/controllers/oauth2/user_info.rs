@@ -103,11 +103,9 @@ async fn validate_token(depot: &mut Depot) -> Result<(), UserinfoWebError> {
         .user_info()
         .validate_access_token(&token)
         .await?;
-    if !claims
-        .audience
-        .iter()
-        .any(|audience| audience == &claims.client_oid.to_string())
-    {
+    if !claims.audience.iter().any(|audience| {
+        *audience == identity_domain::openid_connect::identifier::client_id(claims.client_oid)
+    }) {
         return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken).into());
     }
     depot.insert_typed(claims);

@@ -13,7 +13,6 @@ use std::collections::BTreeSet;
 use async_trait::async_trait;
 use identity_domain::{
     authorization::{
-        ManagementGrantKind,
         audit::{
             AuditSubjectKind, AuthorizationAuditContext, AuthorizationAuditError,
             AuthorizationAuditJournal, AuthorizationAuditStorageError,
@@ -303,45 +302,35 @@ impl ManagementAuthorityRepository for AuthorizationRepositoryImpl {
         &self,
         snapshot: &ManagementAuthorizationSnapshot,
     ) -> Result<(), ManagementRepositoryError> {
-        match snapshot.grant_kind {
-            ManagementGrantKind::UserRbac => {
-                // Effective permissions, the derived authority fingerprint and
-                // the policy version must all come from one repeatable-read
-                // view; otherwise an old permission set could be paired with a
-                // freshly rotated fingerprint.
-                let txn = self.db.begin().await.map_err(storage)?;
-                txn.execute_raw(Statement::from_string(
-                    DbBackend::Postgres,
-                    "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ".to_owned(),
-                ))
-                .await
-                .map_err(storage)?;
-                let current =
-                    load_user_permission_authority(&txn, UserOid(snapshot.grant_oid)).await;
-                let result = match current {
-                    Ok(current) => snapshot::validate_user_permission_snapshot(
-                        snapshot,
-                        current.as_ref(),
-                        policy_fingerprint(),
-                    )
-                    .map_err(|_| ManagementRepositoryError::StaleSnapshot),
-                    Err(error) => Err(storage(error)),
-                };
-                match result {
-                    Ok(()) => {
-                        txn.commit().await.map_err(storage)?;
-                        Ok(())
-                    }
-                    Err(error) => {
-                        let _ = txn.rollback().await;
-                        Err(error)
-                    }
-                }
+        // Effective permissions, the derived authority fingerprint and
+        // the policy version must all come from one repeatable-read
+        // view; otherwise an old permission set could be paired with a
+        // freshly rotated fingerprint.
+        let txn = self.db.begin().await.map_err(storage)?;
+        txn.execute_raw(Statement::from_string(
+            DbBackend::Postgres,
+            "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ".to_owned(),
+        ))
+        .await
+        .map_err(storage)?;
+        let current = load_user_permission_authority(&txn, UserOid(snapshot.grant_oid)).await;
+        let result = match current {
+            Ok(current) => snapshot::validate_user_permission_snapshot(
+                snapshot,
+                current.as_ref(),
+                policy_fingerprint(),
+            )
+            .map_err(|_| ManagementRepositoryError::StaleSnapshot),
+            Err(error) => Err(storage(error)),
+        };
+        match result {
+            Ok(()) => {
+                txn.commit().await.map_err(storage)?;
+                Ok(())
             }
-            // Retired binding snapshots never validate through the current
-            // human authority port.
-            ManagementGrantKind::AdministratorBinding => {
-                Err(ManagementRepositoryError::StaleSnapshot)
+            Err(error) => {
+                let _ = txn.rollback().await;
+                Err(error)
             }
         }
     }

@@ -83,7 +83,9 @@ fn code_params(oid: Uuid) -> AuthorizationCodeGrantParams {
         resources: Vec::new(),
         code: STANDARD.encode(oid.as_bytes()),
         redirect_uri: Some("https://client.example.com/callback".to_owned()),
-        client_id: Some(Uuid::nil().to_string()),
+        client_id: Some(identity_domain::openid_connect::identifier::client_id(
+            Uuid::nil(),
+        )),
         client_secret: Some("secret-123".to_owned()),
         client_secret_basic: true,
         client_assertion_type: None,
@@ -178,7 +180,9 @@ fn refresh_params(oid: Uuid) -> RefreshTokenGrantParams {
         resources: Vec::new(),
         scope: None,
         refresh_token: STANDARD.encode(oid.as_bytes()),
-        client_id: Some(Uuid::nil().to_string()),
+        client_id: Some(identity_domain::openid_connect::identifier::client_id(
+            Uuid::nil(),
+        )),
         client_secret: Some("secret-123".to_owned()),
         client_secret_basic: true,
         client_assertion_type: None,

@@ -150,8 +150,8 @@ export function ClientDetailShell({ clientId }: { clientId: string }) {
           {client ? (
             <div className="flex min-w-0 items-center gap-1 text-muted-foreground">
               <span className="text-xs">{t('clientsClientId')}</span>
-              <code className="break-all text-xs">{client.clientId}</code>
-              <CopyButton value={client.clientId} label={t('clientsClientId')} />
+              <code className="break-all text-xs">{client.id}</code>
+              <CopyButton value={client.id} label={t('clientsClientId')} />
             </div>
           ) : loading ? (
             <Skeleton className="h-4 w-80 rounded-lg" />

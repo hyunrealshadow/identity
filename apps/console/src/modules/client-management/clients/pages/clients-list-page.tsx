@@ -233,8 +233,8 @@ export function ClientsListPage({ search }: { search: ClientsSearch }) {
                   label: t('clientsClientId'),
                   render: (client) => (
                     <div className="flex items-center gap-1">
-                      <code className="break-all text-xs">{client.clientId}</code>
-                      <CopyButton value={client.clientId} label={t('clientsClientId')} />
+                      <code className="break-all text-xs">{client.id}</code>
+                      <CopyButton value={client.id} label={t('clientsClientId')} />
                     </div>
                   ),
                 },

@@ -64,7 +64,6 @@ function permissions(
   aal2 = true,
 ): EffectivePermissions {
   return {
-    role: null,
     effectiveScopes: effective,
     requestableScopes: requestable,
     grantedScopes: [],

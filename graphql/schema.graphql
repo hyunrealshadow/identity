@@ -143,11 +143,10 @@ input ChangeTotpEnrollmentAlgorithmInput {
 }
 
 type Client implements Node {
+	"""
+	Also the OAuth `client_id` used in protocol requests.
+	"""
 	id: ID!
-	"""
-	The OAuth `client_id` used in protocol requests.
-	"""
-	clientId: String!
 	"""
 	Independent default name; viewers choose matching translations from `names`.
 	"""
@@ -596,7 +595,6 @@ type EffectivePermissionSource {
 }
 
 type EffectivePermissions {
-	role: String
 	requestableScopes: [String!]!
 	grantedScopes: [String!]!
 	effectiveScopes: [String!]!
@@ -913,7 +911,7 @@ type Key {
 	id: ID!
 	"""
 	How operators and relying parties identify the key: the `kid` of a
-	signing key's signing binding, or the key's own UUID.
+	signing key's signing binding, or the key's own Global ID.
 	"""
 	keyId: String!
 	use: KeyUse!
@@ -1045,8 +1043,8 @@ type MutationRoot {
 	prepareMfaRecoveryCodes: RecoveryCodeEnrollmentPayload! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
 	updatePreferredMfaMethod(method: PreferredMfaMethod!): Boolean! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
 	beginPasskeyRegistration(recoveryEnrollmentToken: String): JSON! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
-	finishPasskeyRegistration(challengeId: String!, name: String!, credential: JSON!): Boolean! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
-	deletePasskey(id: String!): Boolean! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
+	finishPasskeyRegistration(challengeId: ID!, name: String!, credential: JSON!): Boolean! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
+	deletePasskey(id: ID!): Boolean! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
 	changePassword(input: ChangePasswordInput!): ChangePasswordPayload! @access(policy: {scopes: ["password.change"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
 	beginTotpEnrollment(clientMutationId: String): BeginTotpEnrollmentPayload! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
 	confirmTotpEnrollment(input: ConfirmTotpEnrollmentInput!): RecoveryCodesPayload! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
@@ -1199,8 +1197,12 @@ type PageInfo {
 	endCursor: String
 }
 
-type PasskeyInfo {
-	id: String!
+"""
+A Passkey registered to the authenticated account. Verifier material and
+the WebAuthn credential ID are never exposed.
+"""
+type Passkey implements Node {
+	id: ID!
 	name: String!
 }
 
@@ -1253,7 +1255,7 @@ contributes its own business field; there is no `viewer` wrapper and no
 """
 type QueryRoot {
 	account: User @access(policy: {scopes: ["account.read"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
-	passkeys: [PasskeyInfo!]! @access(policy: {scopes: ["account.read"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
+	passkeys: [Passkey!]! @access(policy: {scopes: ["account.read"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
 	security: AccountSecurity! @access(policy: {scopes: ["account.read"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
 	sessions(after: String, before: String, first: Int, last: Int): SessionConnection! @access(policy: {scopes: ["session.read"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
 	node(id: ID!): Node @access(policy: {scopes: [], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
@@ -1278,7 +1280,7 @@ type QueryRoot {
 	"""
 	Effective permissions for the current principal. This field only needs
 	a valid principal: it never requires a management scope, never accepts a
-	target user and never grants a role or scope by itself.
+	target user and never grants a scope by itself.
 	"""
 	effectivePermissions: EffectivePermissions! @access(policy: {scopes: [], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: false})
 	group(id: ID!): Group @access(policy: {scopes: ["management.group.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})

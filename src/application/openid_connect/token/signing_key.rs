@@ -65,7 +65,7 @@ impl TokenService {
                         .map_err(AppError::map_source(TokenErrorCode::KeyListFailed))?
                     {
                         return Ok((
-                            Uuid::from(binding.oid).to_string(),
+                            identity_domain::openid_connect::identifier::key_id(binding.oid),
                             data.private_key.clone(),
                             JwsAlgorithm::Asymmetric(alg),
                         ));
@@ -125,7 +125,7 @@ impl TokenService {
                 };
 
                 return Ok((
-                    Uuid::from(binding.oid).to_string(),
+                    identity_domain::openid_connect::identifier::key_id(binding.oid),
                     data.private_key.clone(),
                     alg,
                 ));

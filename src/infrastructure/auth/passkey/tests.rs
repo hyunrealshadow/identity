@@ -196,7 +196,7 @@ impl Authenticator {
         signer.update(&auth).unwrap();
         signer.update(&Sha256::digest(&client)).unwrap();
         let signature = signer.sign_to_vec().unwrap();
-        json!({"challenge_id": options.challenge_id, "credential": {"id": URL_SAFE_NO_PAD.encode(&self.id), "rawId": URL_SAFE_NO_PAD.encode(&self.id), "type": "public-key", "clientExtensionResults": {}, "response": {"clientDataJSON": URL_SAFE_NO_PAD.encode(client), "authenticatorData": URL_SAFE_NO_PAD.encode(auth), "signature": URL_SAFE_NO_PAD.encode(signature), "userHandle": null}}}).to_string()
+        json!({"challenge_id": identity_domain::global_id::encode::<identity_domain::global_id::kind::PasskeyChallenge>(options.challenge_id), "credential": {"id": URL_SAFE_NO_PAD.encode(&self.id), "rawId": URL_SAFE_NO_PAD.encode(&self.id), "type": "public-key", "clientExtensionResults": {}, "response": {"clientDataJSON": URL_SAFE_NO_PAD.encode(client), "authenticatorData": URL_SAFE_NO_PAD.encode(auth), "signature": URL_SAFE_NO_PAD.encode(signature), "userHandle": null}}}).to_string()
     }
 }
 fn cbor_bytes(out: &mut Vec<u8>, bytes: &[u8]) {

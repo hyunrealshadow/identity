@@ -4,7 +4,6 @@ import { dashboardScope } from './dashboard-scope'
 
 it('selects authorized overview fields without reviving historical grants', () => {
   const scope = dashboardScope({
-    role: null,
     effectiveScopes: ['management.session.read'],
     requestableScopes: ['management.user.read'],
     grantedScopes: ['management.client.read', 'management.resource.read'],

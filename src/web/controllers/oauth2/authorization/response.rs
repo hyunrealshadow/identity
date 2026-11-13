@@ -2,7 +2,6 @@ use http::{HeaderMap, StatusCode, header::HeaderName};
 use identity_domain::openid_connect::{AuthorizationRequestData, ResponseType, ScopeSet};
 use salvo::{Depot, Request, Response, Writer, async_trait};
 use url::{Url, form_urlencoded::parse};
-use uuid::Uuid;
 
 use super::{
     error::{
@@ -249,7 +248,7 @@ async fn render_error(
         && let Some(client_oid) = resolved_raw
             .client_id
             .as_deref()
-            .and_then(|id| Uuid::parse_str(id).ok())
+            .and_then(|id| identity_domain::openid_connect::identifier::parse_client_id(id).ok())
         && let Some(client) = ctx
             .services()
             .oidc_client_repo()
@@ -272,7 +271,7 @@ async fn render_error(
         let client_oid = raw
             .client_id
             .as_deref()
-            .and_then(|cid| Uuid::parse_str(cid).ok());
+            .and_then(|cid| identity_domain::openid_connect::identifier::parse_client_id(cid).ok());
 
         if let Some(client_oid) = client_oid {
             let client = ctx

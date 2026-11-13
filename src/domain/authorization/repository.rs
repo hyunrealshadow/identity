@@ -12,7 +12,7 @@ use crate::{
         authority::{ClientScopeAuthority, UserPermissionAuthority},
         ids::{AuthorizationVersion, PolicyVersion},
         snapshot,
-        snapshot::{ManagementAuthorizationSnapshot, ManagementGrantKind},
+        snapshot::ManagementAuthorizationSnapshot,
     },
     client::model::ClientOid,
     user::UserOid,
@@ -36,8 +36,7 @@ pub trait ManagementAuthorityRepository: Send + Sync {
     /// Effective whole-user management permission authority.
     ///
     /// Adapters must compute the union of active direct-role and group-role
-    /// permissions and validate trusted built-in permission identities. There is
-    /// no fallback to legacy administrator bindings.
+    /// permissions and validate trusted built-in permission identities.
     async fn find_user_permission_authority(
         &self,
         user_oid: UserOid,
@@ -53,25 +52,17 @@ pub trait ManagementAuthorityRepository: Send + Sync {
     ) -> Result<Option<ClientScopeAuthority>, ManagementRepositoryError>;
 
     /// Validate an authorization snapshot against authoritative state. The
-    /// default method keeps callers from comparing only role/scope names.
+    /// default method keeps callers from comparing only scope names.
     async fn validate_snapshot(
         &self,
         snapshot: &ManagementAuthorizationSnapshot,
     ) -> Result<(), ManagementRepositoryError> {
-        match snapshot.grant_kind {
-            ManagementGrantKind::UserRbac => {
-                let current = self
-                    .find_user_permission_authority(UserOid(snapshot.grant_oid))
-                    .await?;
-                let policy = self.current_policy_version().await?;
-                snapshot::validate_user_permission_snapshot(snapshot, current.as_ref(), policy)
-                    .map_err(|_| ManagementRepositoryError::StaleSnapshot)
-            }
-            // The retired binding kind stays decodable but never validates.
-            ManagementGrantKind::AdministratorBinding => {
-                Err(ManagementRepositoryError::StaleSnapshot)
-            }
-        }
+        let current = self
+            .find_user_permission_authority(UserOid(snapshot.grant_oid))
+            .await?;
+        let policy = self.current_policy_version().await?;
+        snapshot::validate_user_permission_snapshot(snapshot, current.as_ref(), policy)
+            .map_err(|_| ManagementRepositoryError::StaleSnapshot)
     }
 }
 

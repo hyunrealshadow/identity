@@ -5,7 +5,6 @@ import type { EffectivePermissions } from '#/lib/workspace'
 import { rbacScope } from './rbac-scope'
 
 const snapshot: EffectivePermissions = {
-  role: null,
   effectiveScopes: [],
   requestableScopes: [],
   grantedScopes: [],

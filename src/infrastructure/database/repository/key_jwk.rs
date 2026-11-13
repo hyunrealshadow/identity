@@ -32,7 +32,7 @@ impl KeyJwkRepositoryImpl {
 }
 
 fn normalize_jwk_kid(mut jwk: PublicJwk, oid: Uuid) -> PublicJwk {
-    jwk.set_key_id(oid.to_string());
+    jwk.set_key_id(identity_domain::openid_connect::identifier::key_id(oid));
     jwk
 }
 
@@ -198,7 +198,10 @@ mod tests {
             binding_oid,
         );
 
-        assert_eq!(normalized.key_id(), Some(binding_oid.to_string().as_str()));
+        assert_eq!(
+            normalized.key_id(),
+            Some(identity_domain::openid_connect::identifier::key_id(binding_oid).as_str())
+        );
     }
 
     #[test]
@@ -222,7 +225,10 @@ mod tests {
         })
         .unwrap();
 
-        assert_eq!(binding.jwk.key_id(), Some(binding_oid.to_string().as_str()));
+        assert_eq!(
+            binding.jwk.key_id(),
+            Some(identity_domain::openid_connect::identifier::key_id(binding_oid).as_str())
+        );
     }
 
     #[test]
@@ -279,6 +285,9 @@ mod tests {
             .unwrap();
 
         assert_eq!(Uuid::from(binding.oid), binding_oid);
-        assert_eq!(binding.jwk.key_id(), Some(binding_oid.to_string().as_str()));
+        assert_eq!(
+            binding.jwk.key_id(),
+            Some(identity_domain::openid_connect::identifier::key_id(binding_oid).as_str())
+        );
     }
 }

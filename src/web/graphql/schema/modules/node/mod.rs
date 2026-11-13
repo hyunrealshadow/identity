@@ -5,6 +5,7 @@ use identity_application::{
     error::{codes::graphql::GraphqlErrorCode, params::ErrorParams},
     rbac::ScopeOid,
 };
+use identity_domain::global_id::DecodedGlobalId;
 use identity_domain::{
     auth::SessionOid,
     authorization::ManagementScope,
@@ -12,7 +13,6 @@ use identity_domain::{
     rbac::{GroupOid, ResourceOid, RoleOid},
     user::UserOid,
 };
-use identity_infrastructure::graphql::id::DecodedGlobalId;
 use uuid::Uuid;
 
 use super::{
@@ -37,6 +37,7 @@ use super::{
         integration as scope_integration,
         types::{ScopeGlobalId, ScopeNode},
     },
+    security::types::{PasskeyGlobalId, PasskeyNode},
     session::{SessionGlobalId, SessionNode},
     user::{
         access::{UserReadAccess, node_user_read_access},
@@ -83,11 +84,12 @@ enum Node {
     Role(Box<RoleNode>),
     Group(Box<GroupNode>),
     Client(Box<ClientNode>),
+    Passkey(Box<PasskeyNode>),
 }
 
 async fn load_node(ctx: &Context<'_>, id: &ID) -> Result<Option<Node>> {
     let request = request_context(ctx)?;
-    let decoded = DecodedGlobalId::try_from(id)
+    let decoded = DecodedGlobalId::decode(id.as_str())
         .map_err(|_| coded_error(ctx, GraphqlErrorCode::InvalidGlobalId, ErrorParams::new()))?;
     if decoded.is::<UserGlobalId>() {
         let oid = decoded
@@ -191,6 +193,23 @@ async fn load_node(ctx: &Context<'_>, id: &ID) -> Result<Option<Node>> {
             .await
             .map_err(|error| app_error(ctx, error))?;
         Ok(record.map(GroupNode::new).map(Box::new).map(Node::from))
+    } else if decoded.is::<PasskeyGlobalId>() {
+        let oid = decoded
+            .into_typed::<PasskeyGlobalId>()
+            .map_err(|_| coded_error(ctx, GraphqlErrorCode::InvalidGlobalId, ErrorParams::new()))?
+            .oid();
+        UserPrincipalGuard.check(ctx).await?;
+        ScopeGuard::new(ApiScope::AccountRead).check(ctx).await?;
+        let passkey = request
+            .state
+            .services()
+            .passkey()
+            .list(request.user_oid()?)
+            .await
+            .map_err(|error| app_error(ctx, error))?
+            .into_iter()
+            .find(|passkey| passkey.id == oid);
+        Ok(passkey.map(PasskeyNode::from).map(Box::new).map(Node::from))
     } else {
         Err(coded_error(
             ctx,

@@ -15,52 +15,23 @@ use std::{
 use uuid::Uuid;
 
 use crate::authorization::{
-    administrator::AdministratorBinding,
     authority::UserPermissionAuthority,
-    catalog::{AdministratorRole, ManagementScope},
-    ids::{AdministratorBindingOid, AuthorizationVersion, PolicyVersion},
+    catalog::ManagementScope,
+    ids::{AuthorizationVersion, PolicyVersion},
 };
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ManagementGrantKind {
-    /// Historical only. Existing snapshots remain decodable so history and
-    /// revocation records can be read, but they never authorize a runtime
-    /// operation after the unified-RBAC cutover.
-    AdministratorBinding,
-    /// Current human authority: the user's effective permissions and semantic
-    /// authorization dependencies, excluding record optimistic locks.
-    UserRbac,
-}
-
-/// Snapshot carried by an authorization credential. It intentionally does not
-/// treat role/permission names as identity; those fields only make audit and
-/// diagnostics explainable.
+/// Snapshot of a user's effective management permissions carried by an
+/// authorization credential. Permission names never act as identity; the
+/// grant is the user OID plus a semantic authority fingerprint.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ManagementAuthorizationSnapshot {
-    pub grant_kind: ManagementGrantKind,
     pub grant_oid: Uuid,
     pub grant_fingerprint: AuthorizationVersion,
     pub policy_version: PolicyVersion,
-    pub role: Option<AdministratorRole>,
     pub permissions: BTreeSet<ManagementScope>,
 }
 
 impl ManagementAuthorizationSnapshot {
-    #[must_use]
-    pub fn for_administrator_binding(
-        binding: &AdministratorBinding,
-        policy_version: PolicyVersion,
-    ) -> Self {
-        Self {
-            grant_kind: ManagementGrantKind::AdministratorBinding,
-            grant_oid: binding.oid.0,
-            grant_fingerprint: binding.version,
-            policy_version,
-            role: Some(binding.role),
-            permissions: BTreeSet::new(),
-        }
-    }
-
     /// Current human snapshot. The grant identity is the user OID; the
     /// fingerprint describes semantic authority and the permission set is exact.
     #[must_use]
@@ -69,11 +40,9 @@ impl ManagementAuthorizationSnapshot {
         policy_version: PolicyVersion,
     ) -> Self {
         Self {
-            grant_kind: ManagementGrantKind::UserRbac,
             grant_oid: authority.user_oid.0,
             grant_fingerprint: authority.version,
             policy_version,
-            role: None,
             permissions: authority.permissions.clone(),
         }
     }
@@ -83,12 +52,6 @@ impl ManagementAuthorizationSnapshot {
 pub enum SnapshotValidationError {
     #[error("authorization grant not found")]
     GrantNotFound,
-    #[error("authorization grant kind does not match the snapshot")]
-    GrantKindMismatch,
-    #[error("this authorization grant kind is historical and cannot authorize runtime access")]
-    RetiredGrantKind,
-    #[error("authorization grant is revoked or disabled")]
-    Tombstoned,
     #[error("authorization grant OID changed; a recreated grant cannot revive the snapshot")]
     OidMismatch { snapshot: Uuid, current: Uuid },
     #[error("authorization fingerprint mismatch; issued authority is no longer current")]
@@ -101,8 +64,6 @@ pub enum SnapshotValidationError {
         snapshot: PolicyVersion,
         current: PolicyVersion,
     },
-    #[error("authorization role no longer matches the snapshot")]
-    RoleMismatch,
     #[error("authorization permission set no longer matches the snapshot")]
     PermissionsMismatch,
 }
@@ -111,23 +72,6 @@ impl FmtDebug for SnapshotValidationError {
     fn fmt(&self, formatter: &mut Formatter<'_>) -> FmtResult {
         Display::fmt(self, formatter)
     }
-}
-
-/// Historical-only validation.
-///
-/// Administrator bindings no longer grant instance-management authority. The
-/// snapshot kind stays decodable so old revocation/audit records can be read,
-/// but every runtime validation fails closed instead of falling back to the
-/// retired authority source.
-pub fn validate_administrator_snapshot(
-    snapshot: &ManagementAuthorizationSnapshot,
-    _current: Option<&AdministratorBinding>,
-    _current_policy_version: PolicyVersion,
-) -> Result<(), SnapshotValidationError> {
-    if snapshot.grant_kind != ManagementGrantKind::AdministratorBinding {
-        return Err(SnapshotValidationError::GrantKindMismatch);
-    }
-    Err(SnapshotValidationError::RetiredGrantKind)
 }
 
 /// Validate the current whole-user permission snapshot against authoritative
@@ -139,9 +83,6 @@ pub fn validate_user_permission_snapshot(
     current: Option<&UserPermissionAuthority>,
     current_policy_version: PolicyVersion,
 ) -> Result<(), SnapshotValidationError> {
-    if snapshot.grant_kind != ManagementGrantKind::UserRbac {
-        return Err(SnapshotValidationError::GrantKindMismatch);
-    }
     let Some(current) = current else {
         return Err(SnapshotValidationError::GrantNotFound);
     };
@@ -163,50 +104,27 @@ pub fn validate_user_permission_snapshot(
             current: current_policy_version,
         });
     }
-    if snapshot.role.is_some() {
-        return Err(SnapshotValidationError::RoleMismatch);
-    }
     if snapshot.permissions != current.permissions {
         return Err(SnapshotValidationError::PermissionsMismatch);
     }
     Ok(())
 }
 
-/// Convenience helper used by bindings that only keep a reference snapshot.
-#[must_use]
-pub fn administrator_snapshot_oid(
-    snapshot: &ManagementAuthorizationSnapshot,
-) -> Option<AdministratorBindingOid> {
-    (snapshot.grant_kind == ManagementGrantKind::AdministratorBinding)
-        .then_some(AdministratorBindingOid(snapshot.grant_oid))
-}
-
 #[cfg(test)]
 mod tests {
-    use chrono::{TimeZone, Utc};
     use uuid::Uuid;
 
     use super::{
-        ManagementAuthorizationSnapshot, SnapshotValidationError, validate_administrator_snapshot,
-        validate_user_permission_snapshot,
+        ManagementAuthorizationSnapshot, SnapshotValidationError, validate_user_permission_snapshot,
     };
     use crate::{
         authorization::{
-            administrator::{AdministratorBinding, AdministratorRole, GrantMetadata, GrantReason},
             authority::UserPermissionAuthority,
             catalog::ManagementScope,
-            ids::{AdministratorBindingOid, AuthorizationVersion, PolicyVersion},
+            ids::{AuthorizationVersion, PolicyVersion},
         },
         user::UserOid,
     };
-
-    fn metadata() -> GrantMetadata {
-        GrantMetadata {
-            reason: GrantReason::new("snapshot test").unwrap(),
-            granted_by_user_oid: None,
-            granted_at: Utc.timestamp_opt(1_000, 0).single().unwrap(),
-        }
-    }
 
     #[test]
     fn changed_authority_fingerprint_is_rejected_even_when_permissions_are_unchanged() {
@@ -224,22 +142,6 @@ mod tests {
                 snapshot: issued,
                 current: current_version,
             })
-        );
-    }
-
-    #[test]
-    fn retired_administrator_binding_snapshot_never_validates() {
-        let binding = AdministratorBinding::new(
-            AdministratorBindingOid::new(),
-            UserOid(Uuid::new_v4()),
-            AdministratorRole::Owner,
-            metadata(),
-        );
-        let policy = PolicyVersion::new();
-        let snapshot = ManagementAuthorizationSnapshot::for_administrator_binding(&binding, policy);
-        assert_eq!(
-            validate_administrator_snapshot(&snapshot, Some(&binding), policy),
-            Err(SnapshotValidationError::RetiredGrantKind)
         );
     }
 

@@ -5,6 +5,7 @@ use chrono::{Duration, Utc};
 use identity_domain::auth::challenge::{
     AuthenticationChallenge, ChallengeBinding, ChallengeContext, ChallengeMethod, ChallengePurpose,
 };
+use identity_domain::global_id::{self, kind};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use uuid::Uuid;
@@ -57,14 +58,17 @@ pub trait PasskeyAuthenticator: Send + Sync {
     ) -> Result<VerifiedPasskey, AppError>;
 }
 
+/// `challenge_id` leaves the service as a `PasskeyChallenge` Global ID.
 #[derive(Serialize)]
 pub struct PasskeyOptions {
+    #[serde(serialize_with = "global_id::serialize_oid::<kind::PasskeyChallenge, _>")]
     pub challenge_id: Uuid,
     pub public_key: Value,
 }
 
 #[derive(Deserialize)]
 pub struct PasskeyAssertion {
+    #[serde(deserialize_with = "global_id::deserialize_oid::<kind::PasskeyChallenge, _>")]
     pub challenge_id: Uuid,
     pub credential: Value,
 }

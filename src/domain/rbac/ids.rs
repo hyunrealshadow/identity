@@ -1,8 +1,7 @@
 //! Stable identifiers for unified RBAC.
 //!
-//! These are intentionally distinct from management authorization OIDs even
-//! where both are UUIDs. A business role named `owner` still has a
-//! `RoleOid`, never an `AdministratorBindingOid`.
+//! Each kind is a distinct type even though all are UUIDs, so a role, group,
+//! membership or binding OID cannot be passed where another is expected.
 
 use std::fmt;
 

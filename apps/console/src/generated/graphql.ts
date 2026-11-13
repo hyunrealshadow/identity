@@ -563,14 +563,14 @@ export type UserStateInput = {
 export type ConsoleBootstrapQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type ConsoleBootstrapQuery = { effectivePermissions: { role: string | null, requestableScopes: Array<string>, grantedScopes: Array<string>, effectiveScopes: Array<string>, authentication: { acr: string | null, authTime: string | null, aal2: boolean, recent: boolean } }, instanceInfo: { name: string, environment: string, issuer: string, version: string } };
+export type ConsoleBootstrapQuery = { effectivePermissions: { requestableScopes: Array<string>, grantedScopes: Array<string>, effectiveScopes: Array<string>, authentication: { acr: string | null, authTime: string | null, aal2: boolean, recent: boolean } }, instanceInfo: { name: string, environment: string, issuer: string, version: string } };
 
 export type ConsoleAccountThemeQueryVariables = Exact<{ [key: string]: never; }>;
 
 
 export type ConsoleAccountThemeQuery = { account: { id: string, theme: string | null } | null };
 
-export type ConsoleClientFieldsFragment = { id: string, clientId: string, name: string, description: string, builtIn: boolean, enabled: boolean, postLogoutRedirectUris: Array<string>, grantTypes: Array<ClientGrantType>, allowPublicClientFlow: boolean, requirePushedAuthorizationRequests: boolean, skipConsent: boolean, corsEnabled: boolean, oauthVersion: ClientOAuthVersion | null, includeScopedClaimsInIdToken: boolean, includeScopedClaimsInAccessToken: boolean, corsOrigins: Array<string>, version: string, createdAt: string, updatedAt: string | null, names: Array<{ locale: string, value: string }>, descriptions: Array<{ locale: string, value: string }>, platforms: Array<{ platform: ClientPlatformType, redirectUris: Array<string> }> };
+export type ConsoleClientFieldsFragment = { id: string, name: string, description: string, builtIn: boolean, enabled: boolean, postLogoutRedirectUris: Array<string>, grantTypes: Array<ClientGrantType>, allowPublicClientFlow: boolean, requirePushedAuthorizationRequests: boolean, skipConsent: boolean, corsEnabled: boolean, oauthVersion: ClientOAuthVersion | null, includeScopedClaimsInIdToken: boolean, includeScopedClaimsInAccessToken: boolean, corsOrigins: Array<string>, version: string, createdAt: string, updatedAt: string | null, names: Array<{ locale: string, value: string }>, descriptions: Array<{ locale: string, value: string }>, platforms: Array<{ platform: ClientPlatformType, redirectUris: Array<string> }> };
 
 export type ConsoleClientsQueryVariables = Exact<{
   filter?: ClientFilter | null | undefined;
@@ -582,14 +582,14 @@ export type ConsoleClientsQueryVariables = Exact<{
 }>;
 
 
-export type ConsoleClientsQuery = { clients: { totalCount: number, pageInfo: { hasNextPage: boolean, hasPreviousPage: boolean, startCursor: string | null, endCursor: string | null }, edges: Array<{ cursor: string, node: { id: string, clientId: string, name: string, builtIn: boolean, enabled: boolean, version: string, createdAt: string, names: Array<{ locale: string, value: string }> } }> } };
+export type ConsoleClientsQuery = { clients: { totalCount: number, pageInfo: { hasNextPage: boolean, hasPreviousPage: boolean, startCursor: string | null, endCursor: string | null }, edges: Array<{ cursor: string, node: { id: string, name: string, builtIn: boolean, enabled: boolean, version: string, createdAt: string, names: Array<{ locale: string, value: string }> } }> } };
 
 export type ConsoleClientQueryVariables = Exact<{
   id: string | number;
 }>;
 
 
-export type ConsoleClientQuery = { client: { id: string, clientId: string, name: string, description: string, builtIn: boolean, enabled: boolean, postLogoutRedirectUris: Array<string>, grantTypes: Array<ClientGrantType>, allowPublicClientFlow: boolean, requirePushedAuthorizationRequests: boolean, skipConsent: boolean, corsEnabled: boolean, oauthVersion: ClientOAuthVersion | null, includeScopedClaimsInIdToken: boolean, includeScopedClaimsInAccessToken: boolean, corsOrigins: Array<string>, version: string, createdAt: string, updatedAt: string | null, names: Array<{ locale: string, value: string }>, descriptions: Array<{ locale: string, value: string }>, platforms: Array<{ platform: ClientPlatformType, redirectUris: Array<string> }> } | null };
+export type ConsoleClientQuery = { client: { id: string, name: string, description: string, builtIn: boolean, enabled: boolean, postLogoutRedirectUris: Array<string>, grantTypes: Array<ClientGrantType>, allowPublicClientFlow: boolean, requirePushedAuthorizationRequests: boolean, skipConsent: boolean, corsEnabled: boolean, oauthVersion: ClientOAuthVersion | null, includeScopedClaimsInIdToken: boolean, includeScopedClaimsInAccessToken: boolean, corsOrigins: Array<string>, version: string, createdAt: string, updatedAt: string | null, names: Array<{ locale: string, value: string }>, descriptions: Array<{ locale: string, value: string }>, platforms: Array<{ platform: ClientPlatformType, redirectUris: Array<string> }> } | null };
 
 export type ConsoleClientCredentialsQueryVariables = Exact<{
   id: string | number;
@@ -941,6 +941,7 @@ export type ConsoleAuthorizationLabelsQueryVariables = Exact<{
 export type ConsoleAuthorizationLabelsQuery = { nodes: Array<
     | { __typename: 'Client', id: string }
     | { __typename: 'Group', name: string, id: string, names: Array<{ locale: string, value: string }> }
+    | { __typename: 'Passkey', id: string }
     | { __typename: 'Resource', id: string }
     | { __typename: 'Role', name: string, description: string, id: string, names: Array<{ locale: string, value: string }> }
     | { __typename: 'Scope', code: string, name: string, description: string, id: string, names: Array<{ locale: string, value: string }>, descriptions: Array<{ locale: string, value: string }> }
@@ -1240,7 +1241,6 @@ export class TypedDocumentString<TResult, TVariables>
 export const ConsoleClientFieldsFragmentDoc = new TypedDocumentString(`
     fragment ConsoleClientFields on Client {
   id
-  clientId
   name
   description
   names {
@@ -1344,7 +1344,6 @@ export const ConsoleInstanceSettingsFieldsFragmentDoc = new TypedDocumentString(
 export const ConsoleBootstrapDocument = new TypedDocumentString(`
     query ConsoleBootstrap {
   effectivePermissions {
-    role
     requestableScopes
     grantedScopes
     effectiveScopes
@@ -1392,7 +1391,6 @@ export const ConsoleClientsDocument = new TypedDocumentString(`
       cursor
       node {
         id
-        clientId
         name
         names {
           locale
@@ -1415,7 +1413,6 @@ export const ConsoleClientDocument = new TypedDocumentString(`
 }
     fragment ConsoleClientFields on Client {
   id
-  clientId
   name
   description
   names {

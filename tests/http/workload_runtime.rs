@@ -75,7 +75,12 @@ async fn console_workload_fetches_only_its_public_configuration() {
         "https://login.example.com/console/signed-out"
     );
     assert_eq!(config["accountUrl"], "https://login.example.com/account");
-    assert_eq!(config["clientId"], CONSOLE_CLIENT_ID);
+    assert_eq!(
+        config["clientId"],
+        identity_domain::openid_connect::identifier::client_id(
+            uuid::Uuid::parse_str(CONSOLE_CLIENT_ID).unwrap()
+        )
+    );
     assert!(config.get("oauth_client").is_none());
     assert!(!config.to_string().contains("secret"));
 

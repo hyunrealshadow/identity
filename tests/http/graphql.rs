@@ -29,7 +29,6 @@ use identity_infrastructure::{
         client_openid_connect_platform::Model as ClientOpenIdConnectPlatformModel, key,
         resource::Model as ResourceModel, session::Model as SessionModel, setting, user,
     },
-    graphql::id::{GlobalId, GlobalIdType},
     services::AppServices,
     settings::AppRuntimeSettings,
     web::tera::{build_i18n, build_tera},
@@ -53,23 +52,10 @@ use identity_domain::{
 };
 use identity_web::graphql::router;
 
-struct UserGlobalId;
-
-impl GlobalIdType for UserGlobalId {
-    const TYPE_NAME: &'static str = "User";
-}
-
-struct ClientGlobalId;
-
-impl GlobalIdType for ClientGlobalId {
-    const TYPE_NAME: &'static str = "Client";
-}
-
-struct ResourceGlobalId;
-
-impl GlobalIdType for ResourceGlobalId {
-    const TYPE_NAME: &'static str = "Resource";
-}
+use identity_domain::global_id::{
+    GlobalId,
+    kind::{Client as ClientGlobalId, Resource as ResourceGlobalId, User as UserGlobalId},
+};
 
 struct GraphqlFixture {
     service: Service,
@@ -81,8 +67,7 @@ struct GraphqlFixture {
 /// The shared prelude (transport validation plus the handler's account lookup)
 /// is identical for every request. Management authority, effective permissions
 /// and node ownership are read only by the fields that need them, so those
-/// tails must be supplied per shape rather than guessed from a retired binding
-/// row.
+/// tails must be supplied per shape rather than guessed.
 #[derive(Clone, Copy)]
 enum FixtureTail {
     /// Ordinary self-service field that stops after the handler account lookup.
@@ -218,14 +203,13 @@ async fn graphql_http_returns_empty_management_permissions_for_an_ordinary_user(
     .await;
     let mut response = graphql_post(
         &fixture,
-        "query { effectivePermissions { role requestableScopes grantedScopes effectiveScopes authentication { acr authTime aal2 recent } } }",
+        "query { effectivePermissions { requestableScopes grantedScopes effectiveScopes authentication { acr authTime aal2 recent } } }",
     )
     .await;
 
     assert_eq!(response.status_code, Some(StatusCode::OK));
     let body: Value = response.take_json().await.unwrap();
     let permissions = &body["data"]["effectivePermissions"];
-    assert!(permissions["role"].is_null());
     assert_eq!(permissions["requestableScopes"], json!([]));
     assert_eq!(permissions["effectiveScopes"], json!([]));
     assert_eq!(permissions["grantedScopes"], json!([]));
@@ -710,16 +694,23 @@ fn access_token(
     let now = SystemTime::now();
     let mut header = JwsHeader::new();
     header.set_token_type(JwtTokenType::ACCESS_TOKEN);
-    header.set_key_id(key_oid.to_string());
+    header.set_key_id(identity_domain::openid_connect::identifier::key_id(key_oid));
     let mut payload = JwtPayload::new();
     payload.set_issuer("https://identity.example.com/");
-    payload.set_subject(user_oid.to_string());
+    payload.set_subject(identity_domain::openid_connect::identifier::user_subject(
+        user_oid,
+    ));
     payload.set_audience(vec![audience]);
     payload.set_issued_at(&now);
     payload.set_expires_at(&(now + TimeDuration::from_secs(3600)));
-    payload.set_jwt_id(token_oid.to_string());
+    payload.set_jwt_id(identity_domain::openid_connect::identifier::access_token_id(token_oid));
     payload
-        .set_claim(JwtClaimNames::CLIENT_ID, Some(json!(client_oid)))
+        .set_claim(
+            JwtClaimNames::CLIENT_ID,
+            Some(json!(
+                identity_domain::openid_connect::identifier::client_id(client_oid)
+            )),
+        )
         .unwrap();
     payload
         .set_claim(JwtClaimNames::SCOPE, Some(json!(scope)))

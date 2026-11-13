@@ -1,6 +1,5 @@
 fragment ConsoleClientFields on Client {
   id
-  clientId
   name
   description
   names {
@@ -59,7 +58,6 @@ query ConsoleClients(
       cursor
       node {
         id
-        clientId
         name
         names {
           locale

@@ -11,7 +11,7 @@ fn validate_request_object_claims_rejects_future_issued_at() {
     params.state = "state-123".to_string();
     let payload = json!({
         "response_type": "code",
-        "client_id": TEST_CLIENT_ID.to_string(),
+        "client_id": identity_domain::openid_connect::identifier::client_id(TEST_CLIENT_ID),
         "redirect_uri": "https://client.example.com/callback",
         "scope": "openid profile",
         "state": "state-123",
@@ -33,7 +33,7 @@ fn validate_request_object_claims_rejects_client_id_mismatch() {
     let params = AuthorizationRequestParams {
         response_type: "code".to_string(),
         response_mode: None,
-        client_id: Uuid::nil().to_string(),
+        client_id: identity_domain::openid_connect::identifier::client_id(Uuid::nil()),
         redirect_uri: "https://client.example.com/callback".to_string(),
         scope: "openid profile".to_string(),
         resources: Vec::new(),
@@ -54,7 +54,7 @@ fn validate_request_object_claims_rejects_client_id_mismatch() {
         code_challenge_method: None,
     };
     let payload = json!({
-        "client_id": Uuid::new_v4().to_string(),
+        "client_id": identity_domain::openid_connect::identifier::client_id(Uuid::new_v4()),
         "redirect_uri": "https://client.example.com/callback"
     });
 
@@ -75,7 +75,7 @@ fn validate_request_object_claims_allows_redirect_uri_mismatch() {
     let params = AuthorizationRequestParams {
         response_type: "code".to_string(),
         response_mode: None,
-        client_id: Uuid::nil().to_string(),
+        client_id: identity_domain::openid_connect::identifier::client_id(Uuid::nil()),
         redirect_uri: "https://client.example.com/callback".to_string(),
         scope: "openid profile".to_string(),
         resources: Vec::new(),
@@ -96,7 +96,7 @@ fn validate_request_object_claims_allows_redirect_uri_mismatch() {
         code_challenge_method: None,
     };
     let payload = json!({
-        "client_id": Uuid::nil().to_string(),
+        "client_id": identity_domain::openid_connect::identifier::client_id(Uuid::nil()),
         "redirect_uri": "https://other.example.com/callback"
     });
 
@@ -114,7 +114,7 @@ fn validate_request_object_claims_rejects_issuer_mismatch() {
     let params = AuthorizationRequestParams {
         response_type: "code".to_string(),
         response_mode: None,
-        client_id: Uuid::nil().to_string(),
+        client_id: identity_domain::openid_connect::identifier::client_id(Uuid::nil()),
         redirect_uri: "https://client.example.com/callback".to_string(),
         scope: "openid profile".to_string(),
         resources: Vec::new(),
@@ -153,7 +153,7 @@ fn validate_request_object_claims_rejects_audience_mismatch() {
     let params = AuthorizationRequestParams {
         response_type: "code".to_string(),
         response_mode: None,
-        client_id: Uuid::nil().to_string(),
+        client_id: identity_domain::openid_connect::identifier::client_id(Uuid::nil()),
         redirect_uri: "https://client.example.com/callback".to_string(),
         scope: "openid profile".to_string(),
         resources: Vec::new(),
@@ -192,7 +192,7 @@ fn validate_request_object_claims_rejects_expired_request_object() {
     let params = AuthorizationRequestParams {
         response_type: "code".to_string(),
         response_mode: None,
-        client_id: Uuid::nil().to_string(),
+        client_id: identity_domain::openid_connect::identifier::client_id(Uuid::nil()),
         redirect_uri: "https://client.example.com/callback".to_string(),
         scope: "openid profile".to_string(),
         resources: Vec::new(),
@@ -230,7 +230,7 @@ fn validate_request_object_claims_rejects_future_not_before() {
     let params = AuthorizationRequestParams {
         response_type: "code".to_string(),
         response_mode: None,
-        client_id: Uuid::nil().to_string(),
+        client_id: identity_domain::openid_connect::identifier::client_id(Uuid::nil()),
         redirect_uri: "https://client.example.com/callback".to_string(),
         scope: "openid profile".to_string(),
         resources: Vec::new(),

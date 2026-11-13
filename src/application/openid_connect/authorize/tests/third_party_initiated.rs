@@ -18,7 +18,7 @@ async fn third_party_initiated_login_redirects_to_registered_initiate_login_uri(
 
     let redirect = service
         .third_party_initiated_login(ThirdPartyInitiatedLoginRequest {
-            client_id: TEST_CLIENT_ID.to_string(),
+            client_id: identity_domain::openid_connect::identifier::client_id(TEST_CLIENT_ID),
             login_hint: Some("alice@example.com".to_string()),
             target_link_uri: Some(Url::parse("https://rp.example.com/orders/123").unwrap()),
         })
@@ -36,7 +36,10 @@ async fn third_party_initiated_login_redirects_to_registered_initiate_login_uri(
         .collect::<HashMap<_, _>>();
     assert_eq!(query.get("foo").unwrap(), "bar");
     assert_eq!(query.get("iss").unwrap(), "https://identity.example.com/");
-    assert_eq!(query.get("client_id").unwrap(), &TEST_CLIENT_ID.to_string());
+    assert_eq!(
+        query.get("client_id").unwrap(),
+        &identity_domain::openid_connect::identifier::client_id(TEST_CLIENT_ID)
+    );
     assert_eq!(query.get("login_hint").unwrap(), "alice@example.com");
     assert_eq!(
         query.get("target_link_uri").unwrap(),
@@ -54,7 +57,7 @@ async fn third_party_initiated_login_requires_registered_initiate_login_uri() {
 
     let error = service
         .third_party_initiated_login(ThirdPartyInitiatedLoginRequest {
-            client_id: TEST_CLIENT_ID.to_string(),
+            client_id: identity_domain::openid_connect::identifier::client_id(TEST_CLIENT_ID),
             login_hint: None,
             target_link_uri: None,
         })

@@ -7,7 +7,6 @@ use identity_application::error::{
 };
 use identity_domain::{
     auth::{ACR_AAL2, acr_satisfies, authentication_is_fresh},
-    authorization::AdministratorRole,
     openid_connect::ApiScope,
 };
 
@@ -27,22 +26,19 @@ pub(super) fn request_context<'a>(ctx: &'a Context<'_>) -> Result<&'a RequestCon
     })
 }
 
-/// Result of the principal-specific effective-permission adapter.
-///
-/// `role` is the instance administrator role only when a real binding exists.
-/// The default adapter never grants a role or management scope.
+/// Result of the principal-specific effective-permission adapter. The default
+/// adapter never grants a management scope.
 pub(crate) struct EffectivePermissionsView {
-    pub role: Option<AdministratorRole>,
     pub requestable_scopes: Vec<String>,
     pub effective_scopes: Vec<String>,
 }
 
 /// Adapter port for the effective-permission repository lookup.
 ///
-/// The parent injects an implementation backed by the administrator binding
-/// repository when it becomes available. This module deliberately does not
-/// depend on `AppServices` internals: the absence of an injected provider means
-/// an ordinary self-service principal with no management role or scopes.
+/// The parent injects an implementation backed by the unified RBAC
+/// repository. This module deliberately does not depend on `AppServices`
+/// internals: the absence of an injected provider means an ordinary
+/// self-service principal with no management scopes.
 #[async_trait::async_trait]
 pub(crate) trait EffectivePermissionsProvider: Send + Sync {
     async fn effective_permissions(

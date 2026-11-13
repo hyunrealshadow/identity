@@ -2,7 +2,7 @@ use crate::graphql::schema::access::access;
 use async_graphql::{Context, Object, Result};
 use identity_domain::openid_connect::ApiScope;
 
-use super::types::AccountSecurity;
+use super::types::{AccountSecurity, PasskeyNode};
 use crate::graphql::schema::{
     authorization::{ScopeGuard, UserPrincipalGuard, request_context},
     error::app_error,
@@ -15,7 +15,7 @@ pub(crate) struct SecurityQuery;
 impl SecurityQuery {
     #[graphql(guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::AccountRead))",
         directive = access::apply(ScopeGuard::policy(ApiScope::AccountRead)))]
-    async fn passkeys(&self, ctx: &Context<'_>) -> Result<Vec<PasskeyInfo>> {
+    async fn passkeys(&self, ctx: &Context<'_>) -> Result<Vec<PasskeyNode>> {
         let request = request_context(ctx)?;
         let keys = request
             .state
@@ -24,13 +24,7 @@ impl SecurityQuery {
             .list(request.user_oid()?)
             .await
             .map_err(|error| app_error(ctx, error))?;
-        Ok(keys
-            .into_iter()
-            .map(|key| PasskeyInfo {
-                id: key.id.to_string(),
-                name: key.data.name,
-            })
-            .collect())
+        Ok(keys.into_iter().map(PasskeyNode::from).collect())
     }
 
     #[graphql(guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::AccountRead))",
@@ -59,10 +53,4 @@ impl SecurityQuery {
             request.user()?.preferred_mfa_method,
         ))
     }
-}
-
-#[derive(async_graphql::SimpleObject)]
-pub(super) struct PasskeyInfo {
-    id: String,
-    name: String,
 }

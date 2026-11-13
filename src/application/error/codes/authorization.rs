@@ -14,10 +14,7 @@ pub enum AuthorizationErrorCode {
     AuthorizationSnapshotExpired = 27006,
     LastOwnerProtected = 27007,
     OwnerTargetProtected = 27008,
-    BindingNotFound = 27009,
-    BindingAlreadyRevoked = 27010,
     GrantNotFound = 27011,
-    GrantAlreadyRevoked = 27012,
     DuplicatePermissionCode = 27014,
     ReservedManagementScope = 27015,
     InvalidManagementScope = 27016,
@@ -51,13 +48,11 @@ impl AppErrorCode for AuthorizationErrorCode {
             | Self::HumanOnlyManagementCapability
             | Self::MachineAssuranceNotAllowed => ErrorKind::Forbidden,
 
-            Self::LastOwnerProtected
-            | Self::BindingAlreadyRevoked
-            | Self::GrantAlreadyRevoked
-            | Self::DuplicatePermissionCode
-            | Self::VersionConflict => ErrorKind::Conflict,
+            Self::LastOwnerProtected | Self::DuplicatePermissionCode | Self::VersionConflict => {
+                ErrorKind::Conflict
+            }
 
-            Self::BindingNotFound | Self::GrantNotFound => ErrorKind::NotFound,
+            Self::GrantNotFound => ErrorKind::NotFound,
 
             Self::ReservedManagementScope
             | Self::InvalidManagementScope
@@ -81,10 +76,7 @@ impl AppErrorCode for AuthorizationErrorCode {
             Self::AuthorizationSnapshotExpired => 27006,
             Self::LastOwnerProtected => 27007,
             Self::OwnerTargetProtected => 27008,
-            Self::BindingNotFound => 27009,
-            Self::BindingAlreadyRevoked => 27010,
             Self::GrantNotFound => 27011,
-            Self::GrantAlreadyRevoked => 27012,
             Self::DuplicatePermissionCode => 27014,
             Self::ReservedManagementScope => 27015,
             Self::InvalidManagementScope => 27016,
@@ -191,36 +183,12 @@ pub const AUTHORIZATION_ERROR_INVENTORY: &[AuthorizationErrorCodeDefinition] = &
         "authorization.owner",
     ),
     entry(
-        AuthorizationErrorCode::BindingNotFound,
-        ErrorKind::NotFound,
-        "E27009",
-        &[],
-        &[],
-        "administrator.repository",
-    ),
-    entry(
-        AuthorizationErrorCode::BindingAlreadyRevoked,
-        ErrorKind::Conflict,
-        "E27010",
-        &[],
-        &[],
-        "administrator.repository",
-    ),
-    entry(
         AuthorizationErrorCode::GrantNotFound,
         ErrorKind::NotFound,
         "E27011",
         &[],
         &[],
-        "administrator.repository",
-    ),
-    entry(
-        AuthorizationErrorCode::GrantAlreadyRevoked,
-        ErrorKind::Conflict,
-        "E27012",
-        &[],
-        &[],
-        "administrator.repository",
+        "authorization.snapshot",
     ),
     entry(
         AuthorizationErrorCode::DuplicatePermissionCode,

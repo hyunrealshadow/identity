@@ -25,7 +25,7 @@ pub(super) fn params(scope: &str) -> AuthorizationRequestParams {
     AuthorizationRequestParams {
         response_type: "code".to_string(),
         response_mode: None,
-        client_id: TEST_CLIENT_ID.to_string(),
+        client_id: identity_domain::openid_connect::identifier::client_id(TEST_CLIENT_ID),
         redirect_uri: "https://client.example.com/callback".to_string(),
         scope: scope.to_string(),
         resources: Vec::new(),

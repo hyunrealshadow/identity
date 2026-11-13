@@ -20,7 +20,7 @@ fn request() -> AuthorizationRequestData {
         resources: Vec::new(),
         response_type: "code".parse().unwrap(),
         response_mode: None,
-        client_id: Uuid::nil().to_string(),
+        client_id: identity_domain::openid_connect::identifier::client_id(Uuid::nil()),
         redirect_uri: "https://client.example.com/callback".to_owned(),
         redirect_uri_was_supplied: true,
         scope: "openid".to_owned(),

@@ -25,6 +25,7 @@ use super::*;
 
 pub(super) struct SignAccessTokenInput<'a> {
     pub resources: &'a [String],
+    /// `jti`: the access token's Global ID.
     pub token_id: &'a str,
     pub key_id: &'a str,
     pub private_key_pem: &'a str,
@@ -134,16 +135,15 @@ impl TokenService {
             )
             .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
         if let Some(management) = input.management {
-            payload
-                .set_claim(
-                    JwtClaimNames::MANAGEMENT_GRANT_KIND,
-                    Some(json!(management.grant_kind)),
-                )
+            // The management grant is the user behind the token.
+            let grant_oid = Uuid::parse_str(&management.grant_oid)
                 .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
             payload
                 .set_claim(
                     JwtClaimNames::MANAGEMENT_GRANT_OID,
-                    Some(json!(management.grant_oid)),
+                    Some(json!(
+                        identity_domain::openid_connect::identifier::user_subject(grant_oid)
+                    )),
                 )
                 .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
             payload
@@ -163,9 +163,6 @@ impl TokenService {
                     JwtClaimNames::MANAGEMENT_CLIENT_POLICY_VERSION,
                     Some(json!(management.client_policy_version)),
                 )
-                .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
-            payload
-                .set_claim(JwtClaimNames::MANAGEMENT_ROLE, Some(json!(management.role)))
                 .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
             payload
                 .set_claim(
@@ -257,7 +254,11 @@ impl TokenService {
         payload
             .set_claim(
                 JwtClaimNames::AZP,
-                Some(json!(input.client.client().oid.to_string())),
+                Some(json!(
+                    identity_domain::openid_connect::identifier::client_id(
+                        input.client.client().oid
+                    )
+                )),
             )
             .map_err(AppError::map_source(TokenErrorCode::SignIdTokenFailed))?;
         payload

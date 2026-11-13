@@ -6,14 +6,10 @@ use std::env;
 
 fn main() {
     if env::args().nth(1).as_deref() == Some("--management-catalog") {
-        use identity_domain::authorization::{AdministratorRole, ManagementScope};
+        use identity_domain::authorization::ManagementScope;
         let catalog = ManagementScope::ALL.into_iter().map(|scope| {
             let definition = scope.definition();
-            let roles = [AdministratorRole::Viewer, AdministratorRole::Admin, AdministratorRole::Owner]
-                .into_iter().filter(|role| definition.allows_role(*role))
-                .map(|role| role.as_str()).collect::<Vec<_>>();
             serde_json::json!({"scope":definition.name,"action":definition.action,
-                "roles":roles,
                 "authentication":definition.human_authentication.as_str(),"machineAllowed":definition.m2m_allowed(),"reserved":definition.reserved})
         }).collect::<Vec<_>>();
         println!(

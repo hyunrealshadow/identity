@@ -233,7 +233,9 @@ async fn resource_selection_preserves_the_full_refresh_grant_and_rejects_expansi
         resources: vec![BILLING.to_owned()],
         code: STANDARD.encode(record.oid.as_bytes()),
         redirect_uri: Some("https://client.example.com/callback".to_owned()),
-        client_id: Some(Uuid::nil().to_string()),
+        client_id: Some(identity_domain::openid_connect::identifier::client_id(
+            Uuid::nil(),
+        )),
         client_secret: Some("secret-123".to_owned()),
         client_secret_basic: true,
         client_assertion_type: None,
@@ -267,7 +269,10 @@ async fn resource_selection_preserves_the_full_refresh_grant_and_rejects_expansi
     let (access, _) = jwt::decode_with_verifier(&initial.access_token, &verifier).unwrap();
     assert_eq!(access.audience().unwrap(), [ORDERS]);
     let (id, _) = jwt::decode_with_verifier(initial.id_token.as_ref().unwrap(), &verifier).unwrap();
-    assert_eq!(id.audience().unwrap(), [Uuid::nil().to_string().as_str()]);
+    assert_eq!(
+        id.audience().unwrap(),
+        [identity_domain::openid_connect::identifier::client_id(Uuid::nil()).as_str()]
+    );
     let refresh_token = initial.refresh_token.unwrap();
     let refresh_oid = Uuid::from_slice(&STANDARD.decode(&refresh_token).unwrap()).unwrap();
     let stored = repo.find_by_oid(refresh_oid).await.unwrap().unwrap();
@@ -281,7 +286,9 @@ async fn resource_selection_preserves_the_full_refresh_grant_and_rejects_expansi
         resources: vec![BILLING.to_owned()],
         refresh_token,
         scope: None,
-        client_id: Some(Uuid::nil().to_string()),
+        client_id: Some(identity_domain::openid_connect::identifier::client_id(
+            Uuid::nil(),
+        )),
         client_secret: Some("secret-123".to_owned()),
         client_secret_basic: true,
         client_assertion_type: None,
@@ -328,7 +335,9 @@ async fn resource_selection_preserves_the_full_refresh_grant_and_rejects_expansi
             resources: Vec::new(),
             refresh_token: STANDARD.encode(next_oid.as_bytes()),
             scope: None,
-            client_id: Some(Uuid::nil().to_string()),
+            client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                Uuid::nil(),
+            )),
             client_secret: Some("secret-123".to_owned()),
             client_secret_basic: true,
             client_assertion_type: None,

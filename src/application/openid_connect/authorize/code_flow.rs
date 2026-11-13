@@ -160,8 +160,12 @@ pub(super) fn session_state_for_authorize_response(
         AuthorizeErrorCode::StoredRedirectUriInvalid,
     ))?;
     let origin = redirect_uri.origin().ascii_serialization();
+    // The relying party recomputes this from its protocol `client_id`.
+    let client_oid = Uuid::parse_str(&request.client_id).map_err(AppError::map_source(
+        AuthorizeErrorCode::StoredClientIdInvalid,
+    ))?;
     Ok(calculate_session_state(
-        &request.client_id,
+        &identity_domain::openid_connect::identifier::client_id(client_oid),
         &origin,
         protected_session_id,
         protected_session_id,

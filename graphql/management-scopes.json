@@ -2,11 +2,6 @@
   {
     "scope": "management.user.read",
     "action": "user.read",
-    "roles": [
-      "viewer",
-      "admin",
-      "owner"
-    ],
     "authentication": "aal2",
     "machineAllowed": true,
     "reserved": true
@@ -14,10 +9,6 @@
   {
     "scope": "management.user.create",
     "action": "user.create",
-    "roles": [
-      "admin",
-      "owner"
-    ],
     "authentication": "aal2",
     "machineAllowed": true,
     "reserved": true
@@ -25,10 +16,6 @@
   {
     "scope": "management.user.update",
     "action": "user.update",
-    "roles": [
-      "admin",
-      "owner"
-    ],
     "authentication": "aal2",
     "machineAllowed": true,
     "reserved": true
@@ -36,10 +23,6 @@
   {
     "scope": "management.user.state",
     "action": "user.state",
-    "roles": [
-      "admin",
-      "owner"
-    ],
     "authentication": "aal2",
     "machineAllowed": true,
     "reserved": true
@@ -47,10 +30,6 @@
   {
     "scope": "management.user.revoke_access",
     "action": "user.revoke_access",
-    "roles": [
-      "admin",
-      "owner"
-    ],
     "authentication": "recent_aal2",
     "machineAllowed": true,
     "reserved": true
@@ -58,11 +37,6 @@
   {
     "scope": "management.session.read",
     "action": "session.read",
-    "roles": [
-      "viewer",
-      "admin",
-      "owner"
-    ],
     "authentication": "aal2",
     "machineAllowed": true,
     "reserved": true
@@ -70,10 +44,6 @@
   {
     "scope": "management.session.revoke",
     "action": "session.revoke",
-    "roles": [
-      "admin",
-      "owner"
-    ],
     "authentication": "aal2",
     "machineAllowed": true,
     "reserved": true
@@ -81,11 +51,6 @@
   {
     "scope": "management.credential.read",
     "action": "credential.read",
-    "roles": [
-      "viewer",
-      "admin",
-      "owner"
-    ],
     "authentication": "aal2",
     "machineAllowed": true,
     "reserved": true
@@ -93,10 +58,6 @@
   {
     "scope": "management.credential.revoke",
     "action": "credential.revoke",
-    "roles": [
-      "admin",
-      "owner"
-    ],
     "authentication": "recent_aal2",
     "machineAllowed": false,
     "reserved": true
@@ -104,10 +65,6 @@
   {
     "scope": "management.credential.reset",
     "action": "credential.reset",
-    "roles": [
-      "admin",
-      "owner"
-    ],
     "authentication": "recent_aal2",
     "machineAllowed": false,
     "reserved": true
@@ -115,11 +72,6 @@
   {
     "scope": "management.client.read",
     "action": "client.read",
-    "roles": [
-      "viewer",
-      "admin",
-      "owner"
-    ],
     "authentication": "aal2",
     "machineAllowed": true,
     "reserved": true
@@ -127,10 +79,6 @@
   {
     "scope": "management.client.create",
     "action": "client.create",
-    "roles": [
-      "admin",
-      "owner"
-    ],
     "authentication": "aal2",
     "machineAllowed": true,
     "reserved": true
@@ -138,10 +86,6 @@
   {
     "scope": "management.client.update",
     "action": "client.update",
-    "roles": [
-      "admin",
-      "owner"
-    ],
     "authentication": "aal2",
     "machineAllowed": true,
     "reserved": true
@@ -149,10 +93,6 @@
   {
     "scope": "management.client.state",
     "action": "client.state",
-    "roles": [
-      "admin",
-      "owner"
-    ],
     "authentication": "aal2",
     "machineAllowed": true,
     "reserved": true
@@ -160,10 +100,6 @@
   {
     "scope": "management.client.delete",
     "action": "client.delete",
-    "roles": [
-      "admin",
-      "owner"
-    ],
     "authentication": "recent_aal2",
     "machineAllowed": false,
     "reserved": true
@@ -171,10 +107,6 @@
   {
     "scope": "management.client.scope",
     "action": "client.scope",
-    "roles": [
-      "admin",
-      "owner"
-    ],
     "authentication": "aal2",
     "machineAllowed": true,
     "reserved": true
@@ -182,11 +114,6 @@
   {
     "scope": "management.client_credential.read",
     "action": "client_credential.read",
-    "roles": [
-      "viewer",
-      "admin",
-      "owner"
-    ],
     "authentication": "aal2",
     "machineAllowed": true,
     "reserved": true
@@ -194,10 +121,6 @@
   {
     "scope": "management.client_credential.create",
     "action": "client_credential.create",
-    "roles": [
-      "admin",
-      "owner"
-    ],
     "authentication": "recent_aal2",
     "machineAllowed": false,
     "reserved": true
@@ -205,10 +128,6 @@
   {
     "scope": "management.client_credential.rotate",
     "action": "client_credential.rotate",
-    "roles": [
-      "admin",
-      "owner"
-    ],
     "authentication": "recent_aal2",
     "machineAllowed": false,
     "reserved": true
@@ -216,10 +135,6 @@
   {
     "scope": "management.client_credential.revoke",
     "action": "client_credential.revoke",
-    "roles": [
-      "admin",
-      "owner"
-    ],
     "authentication": "recent_aal2",
     "machineAllowed": false,
     "reserved": true
@@ -227,11 +142,6 @@
   {
     "scope": "management.resource.read",
     "action": "resource.read",
-    "roles": [
-      "viewer",
-      "admin",
-      "owner"
-    ],
     "authentication": "aal2",
     "machineAllowed": true,
     "reserved": true
@@ -239,10 +149,6 @@
   {
     "scope": "management.resource.write",
     "action": "resource.write",
-    "roles": [
-      "admin",
-      "owner"
-    ],
     "authentication": "aal2",
     "machineAllowed": true,
     "reserved": true
@@ -250,11 +156,6 @@
   {
     "scope": "management.scope.read",
     "action": "scope.read",
-    "roles": [
-      "viewer",
-      "admin",
-      "owner"
-    ],
     "authentication": "aal2",
     "machineAllowed": true,
     "reserved": true
@@ -262,10 +163,6 @@
   {
     "scope": "management.scope.write",
     "action": "scope.write",
-    "roles": [
-      "admin",
-      "owner"
-    ],
     "authentication": "aal2",
     "machineAllowed": true,
     "reserved": true
@@ -273,11 +170,6 @@
   {
     "scope": "management.setting.read",
     "action": "setting.read",
-    "roles": [
-      "viewer",
-      "admin",
-      "owner"
-    ],
     "authentication": "aal2",
     "machineAllowed": true,
     "reserved": true
@@ -285,9 +177,6 @@
   {
     "scope": "management.setting.write",
     "action": "setting.write",
-    "roles": [
-      "owner"
-    ],
     "authentication": "recent_aal2",
     "machineAllowed": false,
     "reserved": true
@@ -295,11 +184,6 @@
   {
     "scope": "management.key.read",
     "action": "key.read",
-    "roles": [
-      "viewer",
-      "admin",
-      "owner"
-    ],
     "authentication": "aal2",
     "machineAllowed": true,
     "reserved": true
@@ -307,9 +191,6 @@
   {
     "scope": "management.key.create",
     "action": "key.create",
-    "roles": [
-      "owner"
-    ],
     "authentication": "recent_aal2",
     "machineAllowed": false,
     "reserved": true
@@ -317,9 +198,6 @@
   {
     "scope": "management.key.rotate",
     "action": "key.rotate",
-    "roles": [
-      "owner"
-    ],
     "authentication": "recent_aal2",
     "machineAllowed": false,
     "reserved": true
@@ -327,9 +205,6 @@
   {
     "scope": "management.key.revoke",
     "action": "key.revoke",
-    "roles": [
-      "owner"
-    ],
     "authentication": "recent_aal2",
     "machineAllowed": false,
     "reserved": true
@@ -337,11 +212,6 @@
   {
     "scope": "management.audit.read",
     "action": "audit.read",
-    "roles": [
-      "viewer",
-      "admin",
-      "owner"
-    ],
     "authentication": "aal2",
     "machineAllowed": true,
     "reserved": true
@@ -349,11 +219,6 @@
   {
     "scope": "management.permission.read",
     "action": "permission.read",
-    "roles": [
-      "viewer",
-      "admin",
-      "owner"
-    ],
     "authentication": "aal2",
     "machineAllowed": true,
     "reserved": true
@@ -361,10 +226,6 @@
   {
     "scope": "management.permission.write",
     "action": "permission.write",
-    "roles": [
-      "admin",
-      "owner"
-    ],
     "authentication": "recent_aal2",
     "machineAllowed": false,
     "reserved": true
@@ -372,11 +233,6 @@
   {
     "scope": "management.role.read",
     "action": "role.read",
-    "roles": [
-      "viewer",
-      "admin",
-      "owner"
-    ],
     "authentication": "aal2",
     "machineAllowed": true,
     "reserved": true
@@ -384,10 +240,6 @@
   {
     "scope": "management.role.write",
     "action": "role.write",
-    "roles": [
-      "admin",
-      "owner"
-    ],
     "authentication": "recent_aal2",
     "machineAllowed": false,
     "reserved": true
@@ -395,11 +247,6 @@
   {
     "scope": "management.role_assignment.read",
     "action": "role_assignment.read",
-    "roles": [
-      "viewer",
-      "admin",
-      "owner"
-    ],
     "authentication": "aal2",
     "machineAllowed": true,
     "reserved": true
@@ -407,10 +254,6 @@
   {
     "scope": "management.role_assignment.write",
     "action": "role_assignment.write",
-    "roles": [
-      "admin",
-      "owner"
-    ],
     "authentication": "recent_aal2",
     "machineAllowed": false,
     "reserved": true
@@ -418,11 +261,6 @@
   {
     "scope": "management.group.read",
     "action": "group.read",
-    "roles": [
-      "viewer",
-      "admin",
-      "owner"
-    ],
     "authentication": "aal2",
     "machineAllowed": true,
     "reserved": true
@@ -430,10 +268,6 @@
   {
     "scope": "management.group.write",
     "action": "group.write",
-    "roles": [
-      "admin",
-      "owner"
-    ],
     "authentication": "recent_aal2",
     "machineAllowed": false,
     "reserved": true
@@ -441,11 +275,6 @@
   {
     "scope": "management.group_membership.read",
     "action": "group_membership.read",
-    "roles": [
-      "viewer",
-      "admin",
-      "owner"
-    ],
     "authentication": "aal2",
     "machineAllowed": true,
     "reserved": true
@@ -453,10 +282,6 @@
   {
     "scope": "management.group_membership.write",
     "action": "group_membership.write",
-    "roles": [
-      "admin",
-      "owner"
-    ],
     "authentication": "recent_aal2",
     "machineAllowed": false,
     "reserved": true
@@ -464,11 +289,6 @@
   {
     "scope": "management.group_role.read",
     "action": "group_role.read",
-    "roles": [
-      "viewer",
-      "admin",
-      "owner"
-    ],
     "authentication": "aal2",
     "machineAllowed": true,
     "reserved": true
@@ -476,10 +296,6 @@
   {
     "scope": "management.group_role.write",
     "action": "group_role.write",
-    "roles": [
-      "admin",
-      "owner"
-    ],
     "authentication": "recent_aal2",
     "machineAllowed": false,
     "reserved": true
@@ -487,9 +303,6 @@
   {
     "scope": "management.permission.delegate",
     "action": "permission.delegate",
-    "roles": [
-      "owner"
-    ],
     "authentication": "recent_aal2",
     "machineAllowed": false,
     "reserved": true

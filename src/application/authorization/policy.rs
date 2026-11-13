@@ -18,10 +18,10 @@ use identity_domain::{
         actor::{ActorContext, ActorPrincipal, HumanAuthenticationContext},
         authority::{ClientScopeAuthority, UserPermissionAuthority},
         catalog,
-        catalog::{AdministratorRole, HumanAuthenticationRequirement, ManagementScope},
+        catalog::{HumanAuthenticationRequirement, ManagementScope},
         ids::{AuthorizationVersion, PolicyVersion},
         snapshot::{
-            ManagementAuthorizationSnapshot, ManagementGrantKind, SnapshotValidationError,
+            ManagementAuthorizationSnapshot, SnapshotValidationError,
             validate_user_permission_snapshot,
         },
     },
@@ -37,7 +37,6 @@ pub enum ManagementTargetKind {
     Client,
     Resource,
     Setting,
-    AdministratorBinding,
     Session,
 }
 
@@ -50,7 +49,6 @@ impl ManagementTargetKind {
             Self::Client => "client",
             Self::Resource => "resource",
             Self::Setting => "setting",
-            Self::AdministratorBinding => "administrator_binding",
             Self::Session => "session",
         }
     }
@@ -98,14 +96,6 @@ pub enum CurrentManagementAuthority {
 
 impl CurrentManagementAuthority {
     #[must_use]
-    pub fn kind(&self) -> Option<ManagementGrantKind> {
-        match self {
-            Self::UserPermissions(_) => Some(ManagementGrantKind::UserRbac),
-            Self::ClientScopes(_) => None,
-        }
-    }
-
-    #[must_use]
     pub fn oid(&self) -> Uuid {
         match self {
             Self::UserPermissions(authority) => authority.user_oid.0,
@@ -135,7 +125,6 @@ pub struct ManagementAuthorizationDecision {
     pub scope: ManagementScope,
     pub grant_oid: Uuid,
     pub grant_version: AuthorizationVersion,
-    pub role: Option<AdministratorRole>,
     pub required_authentication: HumanAuthenticationRequirement,
 }
 
@@ -147,21 +136,17 @@ pub enum ManagementAuthorizationError {
     InsufficientScope { required: ManagementScope },
     #[error("no current management grant authorizes this actor")]
     NoCurrentGrant,
-    #[error("the current management grant is revoked or disabled")]
-    GrantTombstoned,
     #[error("the machine client scope boundary is no longer authoritative")]
     ClientScopeBoundaryMismatch,
     #[error(
         "the management scope is human-only and cannot be used by a machine principal: {scope}"
     )]
     HumanOnlyCapability { scope: ManagementScope },
-    #[error("the user role is not eligible for this management scope: {role}")]
-    RoleNotAuthorized { role: AdministratorRole },
     #[error("the user does not have the required management permission: {permission}")]
     PermissionNotAuthorized { permission: ManagementScope },
     #[error("the management authorization snapshot is missing")]
     SnapshotMissing,
-    #[error("the management authorization snapshot has the wrong grant kind")]
+    #[error("the management authorization does not match the principal kind")]
     SnapshotKindMismatch,
     #[error("the management authorization snapshot is stale")]
     SnapshotStale {
@@ -177,12 +162,8 @@ pub enum ManagementAuthorizationError {
     SnapshotOidMismatch,
     #[error("the management authorization policy version changed")]
     SnapshotPolicyMismatch,
-    #[error("the management authorization role changed")]
-    SnapshotRoleMismatch,
     #[error("the management authorization permission set changed")]
     SnapshotPermissionsMismatch,
-    #[error("the management grant is expired or revoked")]
-    SnapshotExpired,
     #[error("this management scope requires AAL2 human authentication")]
     AuthenticationRequired {
         required: HumanAuthenticationRequirement,
@@ -277,7 +258,6 @@ pub fn evaluate_management_authority(
                 scope: request.required,
                 grant_oid: authority.user_oid.0,
                 grant_version: authority.version,
-                role: None,
                 required_authentication: definition.human_authentication,
             })
         }
@@ -321,7 +301,6 @@ pub fn evaluate_management_authority(
                 scope: request.required,
                 grant_oid: authority.client_oid,
                 grant_version: AuthorizationVersion::from_uuid(authority.boundary.as_uuid()),
-                role: None,
                 required_authentication: HumanAuthenticationRequirement::None,
             })
         }
@@ -344,12 +323,6 @@ fn validate_user_snapshot(
 fn map_snapshot_error(error: SnapshotValidationError) -> ManagementAuthorizationError {
     match error {
         SnapshotValidationError::GrantNotFound => ManagementAuthorizationError::NoCurrentGrant,
-        SnapshotValidationError::GrantKindMismatch => {
-            ManagementAuthorizationError::SnapshotKindMismatch
-        }
-        SnapshotValidationError::RetiredGrantKind | SnapshotValidationError::Tombstoned => {
-            ManagementAuthorizationError::SnapshotExpired
-        }
         SnapshotValidationError::OidMismatch { .. } => {
             ManagementAuthorizationError::SnapshotOidMismatch
         }
@@ -359,7 +332,6 @@ fn map_snapshot_error(error: SnapshotValidationError) -> ManagementAuthorization
         SnapshotValidationError::PolicyVersionMismatch { .. } => {
             ManagementAuthorizationError::SnapshotPolicyMismatch
         }
-        SnapshotValidationError::RoleMismatch => ManagementAuthorizationError::SnapshotRoleMismatch,
         SnapshotValidationError::PermissionsMismatch => {
             ManagementAuthorizationError::SnapshotPermissionsMismatch
         }

@@ -16,7 +16,9 @@ fn request(scope: &str) -> ClientCredentialsGrantParams {
     ClientCredentialsGrantParams {
         resources: Vec::new(),
         scope: Some(scope.to_owned()),
-        client_id: Some(Uuid::nil().to_string()),
+        client_id: Some(identity_domain::openid_connect::identifier::client_id(
+            Uuid::nil(),
+        )),
         client_secret: Some("secret-123".to_owned()),
         client_secret_basic: true,
         client_assertion_type: None,
@@ -75,7 +77,13 @@ async fn client_credentials_issues_only_access_token_for_assigned_api_scope() {
         "token.client_credentials.result",
         "success",
         "access_token_oid",
-        EventValue::Text(access["jti"].as_str().unwrap().to_owned()),
+        EventValue::Text(
+            identity_domain::openid_connect::identifier::parse_access_token_id(
+                access["jti"].as_str().unwrap(),
+            )
+            .unwrap()
+            .to_string(),
+        ),
     );
 }
 
@@ -152,7 +160,7 @@ async fn client_credentials_uses_client_id_token_algorithm_for_access_token() {
         header
             .claim(JwtClaimNames::KID)
             .and_then(|value| value.as_str()),
-        Some(Uuid::from(rsa_binding.oid).to_string().as_str())
+        Some(identity_domain::openid_connect::identifier::key_id(rsa_binding.oid).as_str())
     );
 }
 

@@ -60,7 +60,7 @@ impl ConsoleRuntimeService {
         Ok(Some(ConsoleRuntimeConfiguration {
             issuer: issuer.to_string(),
             graphql_url: endpoint(issuer.as_str(), "graphql")?,
-            client_id: client_id.to_string(),
+            client_id: identity_domain::openid_connect::identifier::client_id(client_id),
             redirect_uri: endpoint(&console, "callback")?,
             post_logout_redirect_uri: endpoint(&console, "signed-out")?,
             account_url: endpoint(&login, "account")?,
@@ -101,7 +101,10 @@ mod tests {
         for _ in 0..2 {
             let oid = Uuid::new_v4();
             app.console_client_id = Some(oid);
-            assert_eq!(runtime(&app).unwrap().client_id, oid.to_string());
+            assert_eq!(
+                runtime(&app).unwrap().client_id,
+                identity_domain::openid_connect::identifier::client_id(oid)
+            );
         }
     }
 }

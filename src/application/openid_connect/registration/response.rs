@@ -97,7 +97,11 @@ pub struct DynamicClientRegistrationResponse {
 
 pub(super) fn registration_client_uri(issuer: &Url, client_id: Uuid) -> Result<Url, AppError> {
     let base = issuer.as_str().trim_end_matches('/');
-    Url::parse(&format!("{base}/oauth2/clients/{client_id}")).map_err(AppError::map_source(
+    Url::parse(&format!(
+        "{base}/oauth2/clients/{}",
+        identity_domain::openid_connect::identifier::client_id(client_id)
+    ))
+    .map_err(AppError::map_source(
         RegistrationErrorCode::ClientLookupFailed,
     ))
 }
@@ -116,7 +120,7 @@ pub(super) fn response_from_client(
     let scope = (!client.assigned_scopes().is_empty()).then(|| client.assigned_scopes().join(" "));
 
     Ok(DynamicClientRegistrationResponse {
-        client_id: client.client().oid.to_string(),
+        client_id: identity_domain::openid_connect::identifier::client_id(client.client().oid),
         registration_access_token,
         registration_client_uri: Some(registration_client_uri(issuer, client.client().oid)?),
         client_secret: None,

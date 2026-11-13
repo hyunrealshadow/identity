@@ -159,11 +159,6 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "Boolean",
           "policies": []
         },
-        "clientId": {
-          "name": "clientId",
-          "returnType": "String",
-          "policies": []
-        },
         "corsEnabled": {
           "name": "corsEnabled",
           "returnType": "Boolean",
@@ -859,11 +854,6 @@ export const schemaMetadata: SchemaMetadata = {
         },
         "requestableScopes": {
           "name": "requestableScopes",
-          "returnType": "String",
-          "policies": []
-        },
-        "role": {
-          "name": "role",
           "returnType": "String",
           "policies": []
         }
@@ -2839,6 +2829,7 @@ export const schemaMetadata: SchemaMetadata = {
       "possibleTypes": [
         "Client",
         "Group",
+        "Passkey",
         "Resource",
         "Role",
         "Scope",
@@ -2880,14 +2871,16 @@ export const schemaMetadata: SchemaMetadata = {
         }
       }
     },
-    "PasskeyInfo": {
+    "Passkey": {
       "kind": "OBJECT",
-      "interfaces": [],
+      "interfaces": [
+        "Node"
+      ],
       "possibleTypes": [],
       "fields": {
         "id": {
           "name": "id",
-          "returnType": "String",
+          "returnType": "ID",
           "policies": []
         },
         "name": {
@@ -3182,7 +3175,7 @@ export const schemaMetadata: SchemaMetadata = {
         },
         "passkeys": {
           "name": "passkeys",
-          "returnType": "PasskeyInfo",
+          "returnType": "Passkey",
           "policies": [
             {
               "scopes": [

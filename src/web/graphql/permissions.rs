@@ -102,7 +102,6 @@ impl EffectivePermissionsProvider for LiveEffectivePermissions {
             .map(|scope| scope.name().to_owned())
             .collect();
         Ok(EffectivePermissionsView {
-            role: None,
             requestable_scopes: requestable
                 .iter()
                 .map(|scope| scope.name().to_owned())
@@ -114,7 +113,6 @@ impl EffectivePermissionsProvider for LiveEffectivePermissions {
 
 fn empty() -> EffectivePermissionsView {
     EffectivePermissionsView {
-        role: None,
         requestable_scopes: vec![],
         effective_scopes: vec![],
     }

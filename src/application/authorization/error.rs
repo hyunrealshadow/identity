@@ -4,9 +4,9 @@
 //! i18n layer. This module only selects the stable code and safe parameters.
 
 use identity_domain::authorization::{
-    administrator::GrantReasonError,
     catalog::{HumanAuthenticationRequirement, ManagementCatalogError, ManagementScopeError},
     owner::OwnerProtectionError,
+    reason::GrantReasonError,
     repository::ManagementRepositoryError,
     snapshot::SnapshotValidationError,
 };
@@ -25,9 +25,7 @@ impl From<ManagementAuthorizationError> for AppError {
             Error::MissingPrincipal => AppError::from_code(Code::MissingPrincipal),
             Error::InsufficientScope { required } => AppError::from_code(Code::InsufficientScope)
                 .with_param("required_scope", required.name()),
-            Error::NoCurrentGrant
-            | Error::RoleNotAuthorized { .. }
-            | Error::InconsistentAuthority => {
+            Error::NoCurrentGrant | Error::InconsistentAuthority => {
                 AppError::from_code(Code::ForbiddenManagementAuthority)
             }
             Error::ClientScopeBoundaryMismatch => {
@@ -41,9 +39,6 @@ impl From<ManagementAuthorizationError> for AppError {
                 AppError::from_code(Code::ForbiddenManagementAuthority)
                     .with_param("permission", permission.name())
             }
-            Error::GrantTombstoned | Error::SnapshotExpired => {
-                AppError::from_code(Code::AuthorizationSnapshotExpired)
-            }
             Error::SnapshotMissing => AppError::from_code(Code::AuthorizationSnapshotExpired),
             Error::SnapshotKindMismatch => {
                 AppError::from_code(Code::AuthorizationSnapshotOidMismatch)
@@ -54,9 +49,7 @@ impl From<ManagementAuthorizationError> for AppError {
             Error::SnapshotOidMismatch => {
                 AppError::from_code(Code::AuthorizationSnapshotOidMismatch)
             }
-            Error::SnapshotPolicyMismatch
-            | Error::SnapshotRoleMismatch
-            | Error::SnapshotPermissionsMismatch => {
+            Error::SnapshotPolicyMismatch | Error::SnapshotPermissionsMismatch => {
                 AppError::from_code(Code::AuthorizationSnapshotExpired)
             }
             Error::AuthenticationRequired { required } => {
@@ -127,18 +120,13 @@ impl From<SnapshotValidationError> for AppError {
             SnapshotValidationError::GrantNotFound => {
                 AppError::from_code(AuthorizationErrorCode::GrantNotFound)
             }
-            SnapshotValidationError::GrantKindMismatch
-            | SnapshotValidationError::OidMismatch { .. } => {
+            SnapshotValidationError::OidMismatch { .. } => {
                 AppError::from_code(AuthorizationErrorCode::AuthorizationSnapshotOidMismatch)
-            }
-            SnapshotValidationError::RetiredGrantKind | SnapshotValidationError::Tombstoned => {
-                AppError::from_code(AuthorizationErrorCode::AuthorizationSnapshotExpired)
             }
             SnapshotValidationError::VersionMismatch { .. } => {
                 AppError::from_code(AuthorizationErrorCode::AuthorizationVersionStale)
             }
             SnapshotValidationError::PolicyVersionMismatch { .. }
-            | SnapshotValidationError::RoleMismatch
             | SnapshotValidationError::PermissionsMismatch => {
                 AppError::from_code(AuthorizationErrorCode::AuthorizationSnapshotExpired)
             }

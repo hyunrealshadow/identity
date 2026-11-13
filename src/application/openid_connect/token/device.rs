@@ -328,14 +328,16 @@ impl TokenService {
         let access_token = self
             .sign_access_token(SignAccessTokenInput {
                 resources: &selection.resources,
-                token_id: &access_token_oid.to_string(),
+                token_id: &identity_domain::openid_connect::identifier::access_token_id(
+                    access_token_oid,
+                ),
                 key_id: &signing_key_id,
                 private_key_pem: &signing_key_pem,
                 alg: signing_alg,
                 issuer: &issuer,
                 audience: access_token_audience,
                 client_id,
-                subject: &approval.user_oid,
+                subject: &identity_domain::openid_connect::identifier::user_subject(user.oid),
                 principal: AccessTokenPrincipal::User,
                 client,
                 user: Some(user),

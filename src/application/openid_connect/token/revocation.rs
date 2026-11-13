@@ -28,8 +28,9 @@ impl TokenService {
             params.client_assertion.as_deref(),
         )?;
         if params.client_secret.is_none() && params.client_assertion.is_none() {
-            let client_oid = Uuid::parse_str(&client_id)
-                .map_err(AppError::map_source(TokenErrorCode::ClientIdInvalid))?;
+            let client_oid =
+                identity_domain::openid_connect::identifier::parse_client_id(&client_id)
+                    .map_err(AppError::map_source(TokenErrorCode::ClientIdInvalid))?;
             let client = self
                 .client_repo
                 .find_by_oid(client_oid)
@@ -225,12 +226,18 @@ impl TokenService {
             .and_then(|payload| {
                 payload
                     .jwt_id()
-                    .and_then(|value| Uuid::parse_str(value).ok())
+                    .and_then(|value| {
+                        identity_domain::openid_connect::identifier::parse_access_token_id(value)
+                            .ok()
+                    })
                     .zip(
                         payload
                             .claim(JwtClaimNames::CLIENT_ID)
                             .and_then(|value| value.as_str())
-                            .and_then(|value| Uuid::parse_str(value).ok()),
+                            .and_then(|value| {
+                                identity_domain::openid_connect::identifier::parse_client_id(value)
+                                    .ok()
+                            }),
                     )
             }))
     }
@@ -252,7 +259,9 @@ impl TokenService {
         let Some(kid) = header
             .claim(JwtClaimNames::KID)
             .and_then(|value| value.as_str())
-            .and_then(|value| Uuid::parse_str(value).ok())
+            .and_then(|value| {
+                identity_domain::openid_connect::identifier::parse_key_id(value).ok()
+            })
         else {
             return Ok(None);
         };

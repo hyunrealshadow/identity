@@ -52,8 +52,9 @@ impl AuthorizeService {
             Self::validate_required_params(&params)?;
         }
 
-        let client_id = Uuid::parse_str(&params.client_id)
-            .map_err(AppError::map_source(AuthorizeErrorCode::ClientIdInvalid))?;
+        let client_id =
+            identity_domain::openid_connect::identifier::parse_client_id(&params.client_id)
+                .map_err(AppError::map_source(AuthorizeErrorCode::ClientIdInvalid))?;
 
         let client = self
             .client_repo

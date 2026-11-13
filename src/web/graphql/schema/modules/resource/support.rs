@@ -18,11 +18,11 @@ use identity_application::{
     },
     rbac::RbacManagementAuthority,
 };
-use identity_domain::authorization::{ManagementScope, PolicyVersion};
-use identity_infrastructure::graphql::{
-    cursor::InvalidCursor,
-    id::{GlobalId, GlobalIdType},
+use identity_domain::{
+    authorization::{ManagementScope, PolicyVersion},
+    global_id::{GlobalId, GlobalIdType},
 };
+use identity_infrastructure::graphql::cursor::InvalidCursor;
 use uuid::Uuid;
 
 use crate::graphql::schema::{
@@ -103,7 +103,7 @@ pub(crate) fn page_args(
 }
 
 pub(crate) fn decode_oid<T: GlobalIdType>(ctx: &Context<'_>, id: &ID) -> Result<Uuid> {
-    GlobalId::<T>::try_from(id)
+    GlobalId::<T>::decode(id.as_str())
         .map(|id| id.oid())
         .map_err(|_| coded_error(ctx, GraphqlErrorCode::InvalidGlobalId, ErrorParams::new()))
 }

@@ -13,10 +13,7 @@ use identity_domain::{
     authorization::{
         ManagementAuthorityRepository, authority::UserPermissionAuthority, catalog::ManagementScope,
     },
-    client_authorization::{
-        AccessTokenPrincipal, AdministratorRoleData, ManagementAuthorizationSnapshotData,
-        ManagementGrantKindData,
-    },
+    client_authorization::{AccessTokenPrincipal, ManagementAuthorizationSnapshotData},
     openid_connect::{API_RESOURCE, OpenIdConnectClient, ScopeSet, model::claim::JwtClaimNames},
 };
 use josekit::jwt;
@@ -69,25 +66,16 @@ pub(crate) async fn validate_management_authorization(
     }
 
     let snapshot = persisted.to_snapshot().map_err(|_| invalid())?;
-    match persisted.grant_kind {
-        ManagementGrantKindData::UserRbac => {
-            if principal != AccessTokenPrincipal::User {
-                return Err(invalid());
-            }
-            let repository = ports.binding_repo.ok_or_else(|| {
-                invalid().with_param("reason", "user permission authority support unavailable")
-            })?;
-            repository
-                .validate_snapshot(&snapshot)
-                .await
-                .map_err(|_| invalid())?;
-        }
-        // Historical machine/binding snapshots remain decodable but never
-        // authorize new or continued access after the cutover.
-        _ => {
-            return Err(invalid());
-        }
+    if principal != AccessTokenPrincipal::User {
+        return Err(invalid());
     }
+    let repository = ports.binding_repo.ok_or_else(|| {
+        invalid().with_param("reason", "user permission authority support unavailable")
+    })?;
+    repository
+        .validate_snapshot(&snapshot)
+        .await
+        .map_err(|_| invalid())?;
 
     let client_fingerprint = ports
         .provider_service
@@ -130,13 +118,11 @@ pub(crate) async fn validate_management_authorization(
     Ok(())
 }
 
-const MANAGEMENT_CLAIM_NAMES: [&str; 7] = [
-    JwtClaimNames::MANAGEMENT_GRANT_KIND,
+const MANAGEMENT_CLAIM_NAMES: [&str; 5] = [
     JwtClaimNames::MANAGEMENT_GRANT_OID,
     JwtClaimNames::MANAGEMENT_GRANT_VERSION,
     JwtClaimNames::MANAGEMENT_POLICY_VERSION,
     JwtClaimNames::MANAGEMENT_CLIENT_POLICY_VERSION,
-    JwtClaimNames::MANAGEMENT_ROLE,
     JwtClaimNames::MANAGEMENT_PERMISSIONS,
 ];
 
@@ -154,17 +140,15 @@ pub(crate) fn signed_management_snapshot(
         return Ok(None);
     }
     let invalid = || AppError::from_code(OpenIdConnectErrorCode::InvalidToken);
-    let grant_kind = payload
-        .claim(JwtClaimNames::MANAGEMENT_GRANT_KIND)
-        .and_then(Value::as_str)
-        .ok_or_else(invalid)?;
-    let grant_kind = from_value::<ManagementGrantKindData>(Value::String(grant_kind.to_owned()))
-        .map_err(|_| invalid())?;
+    // The grant is the user; persisted snapshots keep the internal UUID.
     let grant_oid = payload
         .claim(JwtClaimNames::MANAGEMENT_GRANT_OID)
         .and_then(Value::as_str)
+        .and_then(|value| {
+            identity_domain::openid_connect::identifier::parse_user_subject(value).ok()
+        })
         .ok_or_else(invalid)?
-        .to_owned();
+        .to_string();
     let grant_version = payload
         .claim(JwtClaimNames::MANAGEMENT_GRANT_VERSION)
         .and_then(Value::as_str)
@@ -177,11 +161,6 @@ pub(crate) fn signed_management_snapshot(
         .and_then(|value| Uuid::parse_str(value).ok())
         .filter(|value| !value.is_nil())
         .ok_or_else(invalid)?;
-    let role_value = payload
-        .claim(JwtClaimNames::MANAGEMENT_ROLE)
-        .cloned()
-        .ok_or_else(invalid)?;
-    let role = from_value::<Option<AdministratorRoleData>>(role_value).map_err(|_| invalid())?;
     let permissions_value = payload
         .claim(JwtClaimNames::MANAGEMENT_PERMISSIONS)
         .cloned()
@@ -194,11 +173,9 @@ pub(crate) fn signed_management_snapshot(
         .filter(|value| !value.is_nil())
         .ok_or_else(invalid)?;
     Ok(Some(ManagementAuthorizationSnapshotData {
-        grant_kind,
         grant_oid,
         grant_version,
         policy_version,
-        role,
         permissions,
         client_policy_version,
     }))
