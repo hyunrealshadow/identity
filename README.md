@@ -77,12 +77,13 @@ in PowerShell, use `$env:NAME = "value"` for environment variables.
 
 ### 1. Start Identity
 
-Set your database connection and generate a workload token. Keep the token value
-available for the Login terminal.
+Set your database connection and generate one workload token for Login and a
+different one for Console. Keep each value available for its terminal.
 
 ```sh
 export DATABASE_URL='postgres://identity:replace-with-password@localhost:5432/identity'
 export IDENTITY_WORKLOAD_TOKEN="$(openssl rand -base64 32)"
+export IDENTITY_CONSOLE_WORKLOAD_TOKEN="$(openssl rand -base64 32)"
 
 cargo run --locked --bin identity
 ```

@@ -61,6 +61,11 @@ internal:
     login:
       static_tokens:
         - token: {{ get_env(name="IDENTITY_WORKLOAD_TOKEN") }}
+    # Console reads its public runtime configuration with its own credential;
+    # it must differ from Login's.
+    console:
+      static_tokens:
+        - environment: IDENTITY_CONSOLE_WORKLOAD_TOKEN
 
 # Worker Configuration
 workers:

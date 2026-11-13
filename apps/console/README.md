@@ -14,17 +14,22 @@ authenticated workload endpoint. The production image obtains this configuration
 at startup and writes `/run/identity-console/config.json`, served at `/console/config.json`
 with `Cache-Control: no-store`.
 
-Before starting local development, fetch the public configuration using a Console
-workload credential (the internal address and credential stay in the local shell):
+Before starting local development, fetch the public configuration using the
+Console workload credential. The development configuration reads it from
+`IDENTITY_CONSOLE_WORKLOAD_TOKEN`, which must be set when Identity starts and
+must differ from Login's `IDENTITY_WORKLOAD_TOKEN`. The internal address and
+credential stay in the local shell:
 
 ```sh
 curl --fail --silent --show-error \
-  --header "Authorization: Bearer $IDENTITY_WORKLOAD_TOKEN" \
-  "${IDENTITY_INTERNAL_API_URL%/}/internal/workloads/self/runtime-configuration" \
+  --cacert config/tls/server.crt \
+  --header "Authorization: Bearer $IDENTITY_CONSOLE_WORKLOAD_TOKEN" \
+  "${IDENTITY_INTERNAL_API_URL:-https://localhost:5151}/internal/workloads/self/runtime-configuration" \
   --output apps/console/public/config.json
 ```
 
-Use a trusted internal certificate, or supply its CA with `--cacert`. The fetched
+The development certificate in `config/tls/server.crt` is generated on first
+start; elsewhere use a trusted internal certificate or its CA. The fetched
 configuration contains public values only; it does not contain the workload token.
 
 The file is a snapshot: refetch it whenever this repository changes the scopes
