@@ -5,6 +5,8 @@
 //! 2. `POST /api/auth/login/select`     – select an existing session
 //! 3. `POST /api/auth/login/identifier` – validate identifier, create login
 //! 4. `POST /api/auth/login/challenge`  – verify credential, create session
+//! 5. `POST /api/auth/login/mfa-enrollment[/confirm]` – enroll a missing
+//!    second factor when the request requires AAL2
 
 use http::{HeaderMap, StatusCode};
 use identity_domain::auth::LoginStatus;
@@ -33,8 +35,10 @@ use crate::{
     views::auth::{
         AccountItem, ActiveAccountsResponse, ChallengeRequest, ChallengeResponse,
         IdentifierRequest, IdentifierResponse, LoginClientDisplay, LoginStatusResponse,
-        RestartLoginRequest, RestartLoginResponse, SelectAccountRequest, SelectAccountResponse,
-        SessionInfo, SwitchLoginRequest, SwitchLoginResponse, UserDisplayInfo,
+        MfaEnrollmentAlgorithmRequest, MfaEnrollmentConfirmRequest, MfaEnrollmentRequest,
+        MfaEnrollmentResponse, RestartLoginRequest, RestartLoginResponse, SelectAccountRequest,
+        SelectAccountResponse, SessionInfo, SwitchLoginRequest, SwitchLoginResponse,
+        UserDisplayInfo,
     },
 };
 
@@ -51,6 +55,14 @@ pub fn routes() -> Router {
         .push(Router::with_path("api/auth/login/passkey/options").post(passkey_options))
         .push(Router::with_path("api/auth/login/restart").post(restart_login))
         .push(Router::with_path("api/auth/login/switch").post(switch_login))
+        .push(Router::with_path("api/auth/login/mfa-enrollment").post(mfa_enrollment))
+        .push(
+            Router::with_path("api/auth/login/mfa-enrollment/algorithm")
+                .post(change_mfa_enrollment_algorithm),
+        )
+        .push(
+            Router::with_path("api/auth/login/mfa-enrollment/confirm").post(confirm_mfa_enrollment),
+        )
 }
 
 // ─── Handlers ────────────────────────────────────────────────────────────────
@@ -187,7 +199,9 @@ async fn login_status(
     let preferred_credential_type =
         login::preferred_credential_type(&login, &credential_types, mfa_preference);
     let credential_types = login::challenge_credential_types(&login, &credential_types);
-    let challenge_uri = if user.is_some()
+    let challenge_uri = if user.is_some() && login.status == LoginStatus::MFA_ENROLLMENT_REQUIRED {
+        Some(login_mfa_enrollment_uri(&id, ui_locales.as_deref()))
+    } else if user.is_some()
         && (stored_request_has_prompt(Some(&prompt), PromptValue::Login)
             || requires_reauthentication)
         && preferred_credential_type.is_some()
@@ -225,6 +239,15 @@ async fn login_status(
         },
     );
     Ok(())
+}
+
+fn login_mfa_enrollment_uri(login_id: &str, ui_locales: Option<&[String]>) -> String {
+    let mut query = Serializer::new(String::new());
+    query.append_pair("login_id", login_id);
+    if let Some(ui_locales) = ui_locales.filter(|values| !values.is_empty()) {
+        query.append_pair("ui_locales", &ui_locales.join(" "));
+    }
+    format!("/login/mfa-setup?{}", query.finish())
 }
 
 fn login_challenge_uri(
@@ -478,61 +501,193 @@ async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> 
                 },
             );
         }
-        ChallengeOutcome::Authenticated { session, .. } => {
-            let selected = build_selected_session_state(&ctx, &headers, session.oid).await?;
-            let login = ctx
-                .services()
-                .oidc_authorize()
-                .load_login_by_protected_id(&body.id)
-                .await?;
-            let is_device = ctx
-                .services()
-                .oidc_device_authorization()
-                .login_request(&login)
-                .await?
-                .is_some();
-            if is_device {
-                ctx.services()
-                    .oidc_device_authorization()
-                    .complete_login(&login, session.oid)
-                    .await?;
-            } else {
-                ctx.services()
-                    .oidc_authorize()
-                    .record_selection_by_login(
-                        &body.id,
-                        session.oid,
-                        session.user_oid,
-                        Some(selected.protected_session_id.clone()),
-                        SelectionSource::FreshLogin,
-                    )
-                    .await?;
-            }
-            let acr = session.acr.clone();
-            let continue_uri = Some(if is_device {
-                format!("/device?login_id={}", encode(&body.id))
-            } else {
-                protocol_continue_uri(&ctx, &body.id)?
-            });
-
+        ChallengeOutcome::MfaEnrollmentRequired { .. } => {
             render_json(
                 res,
-                StatusCode::CREATED,
+                StatusCode::OK,
                 ChallengeResponse {
                     preferred_credential_type: None,
-                    status: LoginStatus::Authenticated,
-                    session: Some(SessionInfo {
-                        id: selected.protected_session_id.clone(),
-                        expires_at: session.expires_at,
-                    }),
-                    acr,
-                    continue_uri,
-                    sessions: Some(selected.protected_session_ids),
+                    status: LoginStatus::MfaEnrollmentRequired,
+                    session: None,
+                    acr: None,
+                    continue_uri: None,
+                    sessions: None,
                 },
             );
         }
+        ChallengeOutcome::Authenticated { session, .. } => {
+            render_authenticated(&ctx, &headers, &body.id, &session, res).await?;
+        }
     }
     Ok(())
+}
+
+/// Record the established session on the interaction and answer with where
+/// the browser continues.
+async fn render_authenticated(
+    ctx: &crate::boot::AppState,
+    headers: &HeaderMap,
+    login_id: &str,
+    session: &identity_domain::auth::model::Session,
+    res: &mut Response,
+) -> JsonWebResult<()> {
+    let selected = build_selected_session_state(ctx, headers, session.oid).await?;
+    let login = ctx
+        .services()
+        .oidc_authorize()
+        .load_login_by_protected_id(login_id)
+        .await?;
+    let is_device = ctx
+        .services()
+        .oidc_device_authorization()
+        .login_request(&login)
+        .await?
+        .is_some();
+    if is_device {
+        ctx.services()
+            .oidc_device_authorization()
+            .complete_login(&login, session.oid)
+            .await?;
+    } else {
+        ctx.services()
+            .oidc_authorize()
+            .record_selection_by_login(
+                login_id,
+                session.oid,
+                session.user_oid,
+                Some(selected.protected_session_id.clone()),
+                SelectionSource::FreshLogin,
+            )
+            .await?;
+    }
+    let continue_uri = Some(if is_device {
+        format!("/device?login_id={}", encode(login_id))
+    } else {
+        protocol_continue_uri(ctx, login_id)?
+    });
+
+    render_json(
+        res,
+        StatusCode::CREATED,
+        ChallengeResponse {
+            preferred_credential_type: None,
+            status: LoginStatus::Authenticated,
+            session: Some(SessionInfo {
+                id: selected.protected_session_id.clone(),
+                expires_at: session.expires_at,
+            }),
+            acr: session.acr.clone(),
+            continue_uri,
+            sessions: Some(selected.protected_session_ids),
+        },
+    );
+    Ok(())
+}
+
+fn enrollment_response(enrollment: login::LoginTotpEnrollment) -> MfaEnrollmentResponse {
+    MfaEnrollmentResponse {
+        secret: enrollment.secret,
+        otp_auth_uri: enrollment.otp_auth_uri,
+        recovery_codes: enrollment.recovery_codes,
+        algorithm: enrollment.algorithm,
+        expires_at: enrollment.expires_at,
+    }
+}
+
+fn enrollment_issuer(ctx: &crate::boot::AppState) -> Result<String, AppError> {
+    let issuer = ctx.services().oidc().issuer()?;
+    Ok(issuer.host_str().unwrap_or("Identity").to_owned())
+}
+
+/// `POST /api/auth/login/mfa-enrollment`
+///
+/// Begin or resume the TOTP enrollment bound to an AAL2 login whose user has
+/// no second factor yet.
+#[handler]
+async fn mfa_enrollment(
+    depot: &mut Depot,
+    req: &mut Request,
+    res: &mut Response,
+) -> JsonWebResult<()> {
+    let ctx = app_state(depot)?;
+    let body: MfaEnrollmentRequest = parse_json(req).await?;
+    let login_oid = ctx
+        .services()
+        .oidc_authorize()
+        .decrypt_login_id(&body.id)
+        .await?;
+    let issuer = enrollment_issuer(&ctx)?;
+    let enrollment = ctx
+        .services()
+        .login()
+        .mfa_enrollment(login_oid, &issuer)
+        .await?;
+    render_json(res, StatusCode::OK, enrollment_response(enrollment));
+    Ok(())
+}
+
+/// `POST /api/auth/login/mfa-enrollment/algorithm`
+#[handler]
+async fn change_mfa_enrollment_algorithm(
+    depot: &mut Depot,
+    req: &mut Request,
+    res: &mut Response,
+) -> JsonWebResult<()> {
+    let ctx = app_state(depot)?;
+    let body: MfaEnrollmentAlgorithmRequest = parse_json(req).await?;
+    let login_oid = ctx
+        .services()
+        .oidc_authorize()
+        .decrypt_login_id(&body.id)
+        .await?;
+    let issuer = enrollment_issuer(&ctx)?;
+    let enrollment = ctx
+        .services()
+        .login()
+        .change_mfa_enrollment_algorithm(login_oid, &issuer, body.algorithm)
+        .await?;
+    render_json(res, StatusCode::OK, enrollment_response(enrollment));
+    Ok(())
+}
+
+/// `POST /api/auth/login/mfa-enrollment/confirm`
+///
+/// Confirm the pending authenticator; the verified code completes AAL2
+/// authentication exactly like an OTP challenge.
+#[handler]
+async fn confirm_mfa_enrollment(
+    depot: &mut Depot,
+    req: &mut Request,
+    res: &mut Response,
+) -> JsonWebResult<()> {
+    let ctx = app_state(depot)?;
+    let headers: HeaderMap = req.headers().clone();
+    let body: MfaEnrollmentConfirmRequest = parse_json(req).await?;
+
+    let mut session_ctx = build_session_context(&headers, resolved_client_ip(depot));
+    session_ctx.browser_session_oids = parse_session_header(&ctx, &headers)
+        .await
+        .into_iter()
+        .map(|entry| entry.session_oid)
+        .collect();
+    let login_oid = ctx
+        .services()
+        .oidc_authorize()
+        .decrypt_login_id(&body.id)
+        .await?;
+    let outcome = ctx
+        .services()
+        .login()
+        .confirm_mfa_enrollment(login_oid, &body.code, session_ctx)
+        .await?;
+    match outcome {
+        ChallengeOutcome::Authenticated { session, .. } => {
+            render_authenticated(&ctx, &headers, &body.id, &session, res).await
+        }
+        ChallengeOutcome::MfaRequired { .. } | ChallengeOutcome::MfaEnrollmentRequired { .. } => {
+            Err(AppError::from_code(AuthErrorCode::InvalidLoginState).into())
+        }
+    }
 }
 
 fn identifier_form_error(error: AppError) -> AppError {

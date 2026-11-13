@@ -46,7 +46,7 @@ impl LoginService {
 
     /// Emit the authentication result and session establishment events. The
     /// events never carry credentials, OTP codes or recovery codes.
-    fn record_authentication_result(
+    pub(super) fn record_authentication_result(
         &self,
         login_oid: Uuid,
         credential_type: CredentialType,
@@ -115,6 +115,25 @@ impl LoginService {
                         .attribute("login_oid", EventValue::Text(login_oid.to_string()))
                         .outcome("success")
                         .reason("mfa_required")
+                        .attribute("factor", EventValue::Text(factor.to_owned()))
+                        .attribute(
+                            "user_oid",
+                            EventValue::Pseudonymized {
+                                purpose: "user_oid",
+                                value: login
+                                    .user_oid
+                                    .map(|oid| oid.to_string())
+                                    .unwrap_or_default(),
+                            },
+                        ),
+                );
+            }
+            Ok(ChallengeOutcome::MfaEnrollmentRequired { login }) => {
+                self.events.emit(
+                    BusinessEvent::audit("authentication.result")
+                        .attribute("login_oid", EventValue::Text(login_oid.to_string()))
+                        .outcome("success")
+                        .reason("mfa_enrollment_required")
                         .attribute("factor", EventValue::Text(factor.to_owned()))
                         .attribute(
                             "user_oid",

@@ -3,7 +3,7 @@
 //! All external `id` fields are encrypted login.oid values.
 
 use chrono::{DateTime, Utc};
-use identity_application::user::CredentialType;
+use identity_application::user::{CredentialType, OtpAlgorithm};
 use identity_domain::auth::LoginStatus;
 use serde::{Deserialize, Serialize};
 
@@ -234,7 +234,7 @@ pub struct ChallengeRequest {
 pub struct ChallengeResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub preferred_credential_type: Option<CredentialType>,
-    /// `"authenticated"` or `"mfa_required"`.
+    /// `"authenticated"`, `"mfa_required"` or `"mfa_enrollment_required"`.
     pub status: LoginStatus,
     /// Present only when `status == "authenticated"`.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -249,6 +249,43 @@ pub struct ChallengeResponse {
     /// Complete protected session ID list after authentication.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub sessions: Option<Vec<String>>,
+}
+
+// ─── Progressive MFA Enrollment ──────────────────────────────────────────────
+
+/// `POST /api/auth/login/mfa-enrollment` request.
+#[derive(Debug, Deserialize)]
+pub struct MfaEnrollmentRequest {
+    /// Encrypted login.oid in the `mfa_enrollment_required` phase.
+    pub id: String,
+}
+
+/// `POST /api/auth/login/mfa-enrollment/algorithm` request.
+#[derive(Debug, Deserialize)]
+pub struct MfaEnrollmentAlgorithmRequest {
+    pub id: String,
+    pub algorithm: OtpAlgorithm,
+}
+
+/// `POST /api/auth/login/mfa-enrollment/confirm` request.
+#[derive(Debug, Deserialize)]
+pub struct MfaEnrollmentConfirmRequest {
+    pub id: String,
+    /// Current code from the newly configured authenticator.
+    pub code: String,
+}
+
+/// The pending TOTP enrollment bound to a login. Confirmation is answered
+/// with a [`ChallengeResponse`].
+#[derive(Debug, Serialize)]
+pub struct MfaEnrollmentResponse {
+    pub secret: String,
+    pub otp_auth_uri: String,
+    /// One-time recovery codes to save before confirming; empty when the
+    /// user already has recovery codes.
+    pub recovery_codes: Vec<String>,
+    pub algorithm: OtpAlgorithm,
+    pub expires_at: DateTime<Utc>,
 }
 
 // ─── Common Types ────────────────────────────────────────────────────────────

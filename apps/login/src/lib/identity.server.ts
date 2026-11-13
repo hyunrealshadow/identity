@@ -19,6 +19,11 @@ const SESSION_HEADER_NAME = 'x-sessions'
 const CSRF_HEADER_NAME = 'x-csrf-token'
 const SESSION_MAX_AGE = 7 * 24 * 60 * 60
 const TERMINAL_LOGIN_ERROR_CODES = new Set([11004, 11005])
+/** Endpoints whose `authenticated` answer establishes or renews a session. */
+const AUTHENTICATING_PATHS = new Set([
+  '/api/auth/login/challenge',
+  '/api/auth/login/mfa-enrollment/confirm',
+])
 
 export class IdentityApiError extends Error {
   readonly code?: number
@@ -251,7 +256,7 @@ export async function identityJson<T>(
   // A renewed provider session keeps its ID. Refresh the browser cookie's
   // lifetime after completed authentication even when the list is unchanged.
   const authenticationCompleted =
-    path === '/api/auth/login/challenge' &&
+    AUTHENTICATING_PATHS.has(path) &&
     init?.method === 'POST' &&
     !!payload &&
     typeof payload === 'object' &&

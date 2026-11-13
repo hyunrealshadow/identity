@@ -84,7 +84,7 @@ impl SessionRepositoryImpl {
             || login.expires_at <= Utc::now().fixed_offset()
             || !matches!(
                 login.status.as_str(),
-                "identifier_verified" | "mfa_required"
+                "identifier_verified" | "mfa_required" | "mfa_enrollment_required"
             )
         {
             return Err(SessionRepositoryError::SessionNotFound);

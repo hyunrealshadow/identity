@@ -83,7 +83,7 @@ impl UserCredentialRepositoryImpl {
             [owner.id.into(), keep_oid.into()])).await.map_err(fail)?;
         // Invalidating pending flows also closes an already-verified password/MFA race.
         txn.execute_raw(Statement::from_sql_and_values(DbBackend::Postgres,
-            "UPDATE login SET status = 'failed', updated_at = now() WHERE user_id = $1 AND status IN ('created', 'identifier_verified', 'mfa_required')", [owner.id.into()])).await.map_err(fail)?;
+            "UPDATE login SET status = 'failed', updated_at = now() WHERE user_id = $1 AND status IN ('created', 'identifier_verified', 'mfa_required', 'mfa_enrollment_required')", [owner.id.into()])).await.map_err(fail)?;
         txn.execute_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,
             "DELETE FROM authentication_challenge WHERE user_id = $1",

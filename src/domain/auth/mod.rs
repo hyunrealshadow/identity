@@ -14,6 +14,9 @@ pub enum LoginStatus {
     Created,
     IdentifierVerified,
     MfaRequired,
+    /// Password verified for a request that requires AAL2, but the user has no
+    /// second factor yet; the interaction may only continue by enrolling one.
+    MfaEnrollmentRequired,
     Authenticated,
     Expired,
     Failed,
@@ -28,6 +31,7 @@ impl LoginStatus {
     pub const IDENTIFIER_VERIFIED: Self = Self::IdentifierVerified;
     /// Password verified; awaiting MFA (TOTP) challenge.
     pub const MFA_REQUIRED: Self = Self::MfaRequired;
+    pub const MFA_ENROLLMENT_REQUIRED: Self = Self::MfaEnrollmentRequired;
     pub const AUTHENTICATED: Self = Self::Authenticated;
     pub const EXPIRED: Self = Self::Expired;
     pub const FAILED: Self = Self::Failed;
@@ -38,6 +42,7 @@ impl LoginStatus {
             Self::Created => "created",
             Self::IdentifierVerified => "identifier_verified",
             Self::MfaRequired => "mfa_required",
+            Self::MfaEnrollmentRequired => "mfa_enrollment_required",
             Self::Authenticated => "authenticated",
             Self::Expired => "expired",
             Self::Failed => "failed",
@@ -52,11 +57,20 @@ impl LoginStatus {
                 (Self::CREATED, Self::EXPIRED | Self::FAILED)
                     | (
                         Self::IDENTIFIER_VERIFIED,
-                        Self::MFA_REQUIRED | Self::AUTHENTICATED | Self::EXPIRED | Self::FAILED
+                        Self::MFA_REQUIRED
+                            | Self::MFA_ENROLLMENT_REQUIRED
+                            | Self::AUTHENTICATED
+                            | Self::EXPIRED
+                            | Self::FAILED
                     )
                     | (
                         Self::MFA_REQUIRED,
                         Self::AUTHENTICATED | Self::EXPIRED | Self::FAILED
+                    )
+                    // A factor enrolled elsewhere meanwhile is challenged instead.
+                    | (
+                        Self::MFA_ENROLLMENT_REQUIRED,
+                        Self::MFA_REQUIRED | Self::AUTHENTICATED | Self::EXPIRED | Self::FAILED
                     )
             )
     }
@@ -76,6 +90,7 @@ impl FromStr for LoginStatus {
             "created" => Ok(Self::Created),
             "identifier_verified" => Ok(Self::IdentifierVerified),
             "mfa_required" => Ok(Self::MfaRequired),
+            "mfa_enrollment_required" => Ok(Self::MfaEnrollmentRequired),
             "authenticated" => Ok(Self::Authenticated),
             "expired" => Ok(Self::Expired),
             "failed" => Ok(Self::Failed),

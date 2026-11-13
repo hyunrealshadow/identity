@@ -127,6 +127,22 @@ impl ChallengeRepository for MemoryRepo {
             },
         )
     }
+
+    async fn latest(
+        &self,
+        context: ChallengeContext,
+    ) -> Result<Option<AuthenticationChallenge>, AppError> {
+        let challenges = self.challenges.lock().unwrap();
+        Ok(challenges
+            .iter()
+            .filter(|(_, item)| item.0 == context && item.2 > Utc::now())
+            .max_by_key(|(_, item)| item.2)
+            .map(|(id, item)| AuthenticationChallenge {
+                id: *id,
+                state: item.1.clone(),
+                expires_at: item.2,
+            }))
+    }
 }
 
 struct FakeAuthenticator;

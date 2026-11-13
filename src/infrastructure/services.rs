@@ -2,7 +2,10 @@ use std::{error::Error as StdError, sync::Arc};
 
 use identity_application::{
     authentication::{
-        account::AccountService, login::LoginService, mfa::MfaService, passkey::PasskeyService,
+        account::AccountService,
+        login::{LoginMfaEnrollmentDependencies, LoginService},
+        mfa::MfaService,
+        passkey::PasskeyService,
         session::SessionService,
     },
     client::ClientManagementService,
@@ -114,7 +117,7 @@ pub struct AppServices {
     passkey: Arc<PasskeyService>,
     account: AppAccountService,
     session: AppSessionService,
-    mfa: AppMfaService,
+    mfa: Arc<AppMfaService>,
     key: AppKeyService,
     key_rotation: KeyRotationService,
     key_management: KeyManagementService,
@@ -189,6 +192,16 @@ impl AppServices {
             .with_events(Arc::clone(&events)),
         );
 
+        let mfa = Arc::new(
+            MfaService::new(
+                user_credential_repo.clone(),
+                totp.clone(),
+                totp.clone(),
+                data_protector.clone(),
+            )
+            .with_events(Arc::clone(&events)),
+        );
+
         let rbac_authorization_repo: Arc<dyn RbacAuthorizationRepository> =
             Arc::new(RbacAuthorizationRepositoryImpl::new(db.clone()));
 
@@ -231,18 +244,16 @@ impl AppServices {
             )
             .with_breach_checker(breach_checker.clone())
             .with_passkeys(passkey)
+            .with_mfa_enrollment(LoginMfaEnrollmentDependencies {
+                mfa: Arc::clone(&mfa),
+                challenges: Arc::new(ChallengeRepositoryImpl::new(db.clone())),
+            })
             .with_events(Arc::clone(&events)),
             session: SessionService::new(Arc::new(SessionRepositoryImpl::new(db.clone())))
                 .with_events(Arc::clone(&events)),
             account: AccountService::new(Arc::new(UserRepositoryImpl::new(db.clone())))
                 .with_events(Arc::clone(&events)),
-            mfa: MfaService::new(
-                user_credential_repo,
-                totp.clone(),
-                totp,
-                data_protector.clone(),
-            )
-            .with_events(Arc::clone(&events)),
+            mfa,
             key: AsymmetricKeyService::new(
                 key_repo.clone(),
                 Arc::new(AsymmetricKeyGeneratorImpl),

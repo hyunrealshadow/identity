@@ -62,7 +62,15 @@ impl UserRepository for TestUserRepo {
 }
 
 pub(super) struct TestCredentialRepo {
-    pub(super) credentials: Vec<UserCredential>,
+    pub(super) credentials: Mutex<Vec<UserCredential>>,
+}
+
+impl TestCredentialRepo {
+    pub(super) fn new(credentials: Vec<UserCredential>) -> Self {
+        Self {
+            credentials: Mutex::new(credentials),
+        }
+    }
 }
 
 #[async_trait]
@@ -74,6 +82,8 @@ impl UserCredentialRepository for TestCredentialRepo {
     ) -> Result<Vec<UserCredential>, UserCredentialRepositoryError> {
         Ok(self
             .credentials
+            .lock()
+            .unwrap()
             .iter()
             .filter(|credential| credential.r#type == credential_type)
             .cloned()
@@ -119,10 +129,27 @@ impl UserCredentialRepository for TestCredentialRepo {
     async fn enable_totp_if_disabled(
         &self,
         _user_oid: UserOid,
-        _otp: OtpCredentialData,
-        _recovery_codes: Vec<RecoveryCodeCredentialData>,
+        otp: OtpCredentialData,
+        recovery_codes: Vec<RecoveryCodeCredentialData>,
     ) -> Result<bool, UserCredentialRepositoryError> {
-        Ok(false)
+        let mut credentials = self.credentials.lock().unwrap();
+        if credentials
+            .iter()
+            .any(|credential| credential.r#type == CredentialType::Otp)
+        {
+            return Ok(false);
+        }
+        credentials.push(UserCredential {
+            oid: UserCredentialOid(Uuid::new_v4()),
+            r#type: CredentialType::Otp,
+            data: CredentialData::Otp(otp),
+        });
+        credentials.extend(recovery_codes.into_iter().map(|code| UserCredential {
+            oid: UserCredentialOid(Uuid::new_v4()),
+            r#type: CredentialType::RecoveryCode,
+            data: CredentialData::RecoveryCode(code),
+        }));
+        Ok(true)
     }
 
     async fn disable_totp(
@@ -333,7 +360,9 @@ impl LoginRepository for TestLoginRepo {
             .ok_or(LoginRepositoryError::LoginNotFound)?;
         if !matches!(
             login.status,
-            LoginStatus::IDENTIFIER_VERIFIED | LoginStatus::MFA_REQUIRED
+            LoginStatus::IDENTIFIER_VERIFIED
+                | LoginStatus::MFA_REQUIRED
+                | LoginStatus::MFA_ENROLLMENT_REQUIRED
         ) {
             return Err(LoginRepositoryError::InvalidTransition);
         }

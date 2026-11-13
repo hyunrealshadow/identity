@@ -26,7 +26,7 @@ fn location(binding: ChallengeBinding) -> (&'static str, &'static str, &'static 
         ChallengeBinding::Login(id) => (
             "login",
             "login_id",
-            "status IN ('identifier_verified', 'mfa_required') AND expires_at > now()",
+            "status IN ('identifier_verified', 'mfa_required', 'mfa_enrollment_required') AND expires_at > now()",
             id,
         ),
         ChallengeBinding::Session(id) => (
@@ -135,6 +135,53 @@ impl ChallengeRepository for ChallengeRepositoryImpl {
                     binding.into(),
                     context.user_oid.into(),
                     id.into(),
+                    context.method.as_str().into(),
+                    context.purpose.as_str().into(),
+                ],
+            ))
+            .await
+            .map_err(AppError::internal)?
+            .map(|row| {
+                Ok(AuthenticationChallenge {
+                    id: row.try_get("", "oid").map_err(AppError::internal)?,
+                    state: row.try_get("", "state").map_err(AppError::internal)?,
+                    expires_at: DateTime::<Utc>::from(
+                        row.try_get::<DateTime<chrono::FixedOffset>>("", "expires_at")
+                            .map_err(AppError::internal)?,
+                    ),
+                })
+            })
+            .transpose()
+    }
+
+    async fn latest(
+        &self,
+        context: ChallengeContext,
+    ) -> Result<Option<AuthenticationChallenge>, AppError> {
+        let (table, column, active, binding) = location(context.binding);
+        let sql = format!(
+            r#"
+            WITH owner AS MATERIALIZED (
+                SELECT id, user_id FROM "{table}"
+                WHERE oid = $1 AND user_id = (SELECT id FROM "user" WHERE oid = $2)
+                  AND {active}
+            )
+            SELECT challenge.oid, challenge.state, challenge.expires_at
+            FROM authentication_challenge AS challenge JOIN owner
+              ON challenge.{column} = owner.id AND challenge.user_id = owner.user_id
+            WHERE challenge.method = $3 AND challenge.purpose = $4
+              AND challenge.expires_at > now()
+            ORDER BY challenge.created_at DESC, challenge.id DESC
+            LIMIT 1
+        "#
+        );
+        self.db
+            .query_one_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                sql,
+                [
+                    binding.into(),
+                    context.user_oid.into(),
                     context.method.as_str().into(),
                     context.purpose.as_str().into(),
                 ],

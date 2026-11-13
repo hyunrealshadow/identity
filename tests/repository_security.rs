@@ -595,3 +595,88 @@ async fn profile_audit_survives_dropped_events_and_rolls_back_with_the_write() {
     assert_eq!(row.try_get::<String>("", "nickname").unwrap(), "durable");
     }).await;
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured PostgreSQL test database"]
+async fn mfa_enrollment_login_keeps_its_registration_until_authenticated() {
+    use identity_application::auth::challenge::ChallengeRepository;
+    use identity_domain::auth::challenge::{
+        AuthenticationChallenge, ChallengeBinding, ChallengeContext, ChallengeMethod,
+        ChallengePurpose,
+    };
+    use identity_infrastructure::database::repository::challenge::ChallengeRepositoryImpl;
+
+    common::isolated(|db| async move {
+        let user = Uuid::new_v4();
+        let client = Uuid::new_v4();
+        let relation = Uuid::new_v4();
+        let login = Uuid::new_v4();
+        sql(&db, &format!(r#"
+            INSERT INTO "user" (oid,name,name_normalized,email,email_normalized) VALUES ('{user}','{user}','{user}','{user}@example.test','{user}@example.test');
+            INSERT INTO client (oid,name,protocol) VALUES ('{client}','enrollment-test','openid_connect');
+            INSERT INTO client_authorization (oid,client_id,type,data,expires_at)
+              SELECT '{relation}',id,'authorization_request','{{}}',now()+interval '1 day' FROM client WHERE oid='{client}';
+            INSERT INTO login (oid,client_id,client_authorization_id,user_id,status,requested_acr,expires_at)
+              SELECT '{login}',c.id,a.id,u.id,'identifier_verified','aal2',now()+interval '5 minutes' FROM client c,client_authorization a,"user" u
+              WHERE c.oid='{client}' AND a.oid='{relation}' AND u.oid='{user}';
+        "#)).await;
+        let logins = LoginRepositoryImpl::new(db.clone());
+        let challenges = ChallengeRepositoryImpl::new(db.clone());
+        let registration = ChallengeContext {
+            user_oid: user,
+            binding: ChallengeBinding::Login(login),
+            method: ChallengeMethod::Totp,
+            purpose: ChallengePurpose::CredentialRegistration,
+        };
+        let challenge = |token: &str| AuthenticationChallenge {
+            id: Uuid::new_v4(),
+            state: serde_json::json!({ "enrollment_token": token }),
+            expires_at: Utc::now() + ChronoDuration::minutes(5),
+        };
+
+        logins
+            .update_status(login, LoginStatus::MFA_ENROLLMENT_REQUIRED, None, None)
+            .await
+            .unwrap();
+        assert_latest_action(&db, login, "login", "login.mfa_enrollment_required").await;
+
+        challenges.store(registration, challenge("first")).await.unwrap();
+        let second = challenge("second");
+        challenges.store(registration, second.clone()).await.unwrap();
+        // Reading the pending registration does not consume it, so a reload or
+        // a rejected code resumes the same secret.
+        for _ in 0..2 {
+            let latest = challenges.latest(registration).await.unwrap().unwrap();
+            assert_eq!(latest.id, second.id);
+            assert_eq!(latest.state["enrollment_token"], "second");
+        }
+        let passkey_registration = ChallengeContext {
+            method: ChallengeMethod::Passkey,
+            ..registration
+        };
+        assert!(challenges.latest(passkey_registration).await.unwrap().is_none());
+        let other_user = ChallengeContext {
+            user_oid: Uuid::new_v4(),
+            ..registration
+        };
+        assert!(challenges.latest(other_user).await.unwrap().is_none());
+
+        // The enrollment phase may complete authentication, which ends the
+        // registration together with the login.
+        let sessions = SessionRepositoryImpl::new(db.clone());
+        let session = sessions
+            .complete_authentication(login, None, input(user))
+            .await
+            .unwrap();
+        logins
+            .update_status(login, LoginStatus::AUTHENTICATED, Some(session.oid), Some("aal2"))
+            .await
+            .unwrap();
+        assert!(challenges.latest(registration).await.unwrap().is_none());
+        assert_eq!(
+            scalar(&db, "SELECT count(*)::bigint n FROM authentication_challenge").await,
+            0
+        );
+    })
+    .await;
+}

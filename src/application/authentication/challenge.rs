@@ -21,4 +21,12 @@ pub trait ChallengeRepository: Send + Sync {
         context: ChallengeContext,
         id: Uuid,
     ) -> Result<Option<AuthenticationChallenge>, AppError>;
+
+    /// Return the most recent unexpired challenge matching the entire context
+    /// without consuming it. Used by multi-step registrations that a page
+    /// reload or a rejected confirmation must be able to resume.
+    async fn latest(
+        &self,
+        context: ChallengeContext,
+    ) -> Result<Option<AuthenticationChallenge>, AppError>;
 }

@@ -27,6 +27,7 @@ use identity_domain::{
 use std::sync::Arc;
 use uuid::Uuid;
 mod challenge;
+mod enrollment;
 mod otp;
 mod passkey;
 mod password;
@@ -36,6 +37,8 @@ mod session;
 
 #[cfg(test)]
 mod tests;
+
+pub use enrollment::{LoginMfaEnrollmentDependencies, LoginTotpEnrollment};
 
 // ─── Input/Output Types ──────────────────────────────────────────────────────
 
@@ -79,6 +82,9 @@ pub enum ChallengeOutcome {
     /// The first factor is established; the client must supply an allowed
     /// second factor before authentication can complete.
     MfaRequired { login: Login },
+    /// The first factor is established for an AAL2 request but the user has
+    /// no second factor; authentication completes only by enrolling one.
+    MfaEnrollmentRequired { login: Login },
 }
 
 // ─── LoginService ────────────────────────────────────────────────────────────
@@ -93,6 +99,7 @@ pub struct LoginService {
     settings: Arc<dyn SettingsSource>,
     events: Arc<dyn EventSink>,
     passkeys: Option<Arc<PasskeyService>>,
+    mfa_enrollment: Option<LoginMfaEnrollmentDependencies>,
     breach_checker: Arc<dyn BreachedPasswordChecker>,
 }
 
@@ -122,6 +129,7 @@ impl LoginService {
             settings,
             breach_checker: Arc::new(UnavailableBreachChecker),
             passkeys: None,
+            mfa_enrollment: None,
             events: Arc::new(NoopEventSink),
         }
     }
@@ -130,6 +138,13 @@ impl LoginService {
     #[must_use]
     pub fn with_events(mut self, events: Arc<dyn EventSink>) -> Self {
         self.events = events;
+        self
+    }
+
+    /// Allow an AAL2 interaction to enroll a missing second factor.
+    #[must_use]
+    pub fn with_mfa_enrollment(mut self, dependencies: LoginMfaEnrollmentDependencies) -> Self {
+        self.mfa_enrollment = Some(dependencies);
         self
     }
 
@@ -151,21 +166,33 @@ impl LoginService {
     #[tracing::instrument(skip_all, name = "authentication.prepare")]
     pub async fn prepare_challenge(&self, login_oid: Uuid) -> Result<Login, AppError> {
         let mut login = self.get(login_oid).await?;
-        if login.status != LoginStatus::IDENTIFIER_VERIFIED
-            || login.session_oid.is_none()
-            || login.expires_at <= Utc::now()
-        {
+        if login.expires_at <= Utc::now() {
             return Ok(login);
         }
         let Some(user_oid) = login.user_oid else {
             return Ok(login);
         };
+        let established_by_session =
+            login.status == LoginStatus::IDENTIFIER_VERIFIED && login.session_oid.is_some();
+        // An enrollment-phase login whose user gained a second factor
+        // elsewhere (or whose enrollment was confirmed without completing the
+        // session) is challenged with that factor instead.
+        let awaiting_enrollment = login.status == LoginStatus::MFA_ENROLLMENT_REQUIRED;
+        if !established_by_session && !awaiting_enrollment {
+            return Ok(login);
+        }
         let credentials = self.credential_types(user_oid.into()).await?;
-        if login.requested_acr.as_deref() == Some(ACR_AAL2)
-            || credentials
+        let has_second_factor = if awaiting_enrollment {
+            has_second_factor(&credentials)
+        } else {
+            // An existing session establishes the first factor. Without any
+            // second factor, an AAL2 request asks for the password so a
+            // missing factor can be enrolled after it.
+            credentials
                 .iter()
                 .any(|kind| *kind != CredentialType::Password)
-        {
+        };
+        if has_second_factor {
             self.login_repo
                 .update_status(login.oid, LoginStatus::MFA_REQUIRED, None, None)
                 .await?;
@@ -277,6 +304,18 @@ impl LoginService {
             user,
         })
     }
+}
+
+/// Whether the user can complete an AAL2 challenge with an enrolled factor.
+fn has_second_factor(credentials: &[CredentialType]) -> bool {
+    credentials
+        .iter()
+        .any(|kind| matches!(kind, CredentialType::Otp | CredentialType::Passkey))
+}
+
+/// Whether the login requires a second factor the user must enroll first.
+fn requires_aal2(login: &Login) -> bool {
+    login.requested_acr.as_deref() == Some(ACR_AAL2)
 }
 
 fn can_challenge_second_factor(login: &Login) -> bool {

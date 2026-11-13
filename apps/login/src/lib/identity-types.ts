@@ -125,9 +125,18 @@ export interface SelectAccountResponse {
 
 export interface ChallengeResponse {
   preferred_credential_type?: string
-  status: 'authenticated' | 'mfa_required'
+  status: 'authenticated' | 'mfa_required' | 'mfa_enrollment_required'
   continue_uri?: string
   sessions?: Array<string>
+}
+
+/** The TOTP enrollment pending on an AAL2 login, from `/api/auth/login/mfa-enrollment`. */
+export interface MfaEnrollmentResponse {
+  secret: string
+  otp_auth_uri: string
+  recovery_codes: Array<string>
+  algorithm: 'SHA1' | 'SHA256' | 'SHA512'
+  expires_at: string
 }
 
 export interface ScopeDisplay {

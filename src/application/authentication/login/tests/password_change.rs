@@ -22,17 +22,15 @@ fn password_change_service() -> (LoginService, UserUserOid) {
         Arc::new(TestUserRepo {
             user: Arc::new(Mutex::new(user)),
         }),
-        Arc::new(TestCredentialRepo {
-            credentials: vec![UserCredential {
-                oid: UserCredentialOid(Uuid::new_v4()),
-                r#type: CredentialType::Password,
-                data: CredentialData::Password(Password::Argon2(Argon2Password {
-                    hash: "stored-hash".to_owned(),
-                    salt: "stored-salt".to_owned(),
-                    options: argon2_options.clone(),
-                })),
-            }],
-        }),
+        Arc::new(TestCredentialRepo::new(vec![UserCredential {
+            oid: UserCredentialOid(Uuid::new_v4()),
+            r#type: CredentialType::Password,
+            data: CredentialData::Password(Password::Argon2(Argon2Password {
+                hash: "stored-hash".to_owned(),
+                salt: "stored-salt".to_owned(),
+                options: argon2_options.clone(),
+            })),
+        }])),
         Arc::new(TestSessionRepo),
         login_repo,
         Arc::new(RecordingPasswordHasher),

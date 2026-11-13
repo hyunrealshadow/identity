@@ -440,7 +440,7 @@ async fn invalidate_access_in_txn(
     txn.execute_raw(Statement::from_sql_and_values(
         DbBackend::Postgres,
         "UPDATE login SET status = 'failed', updated_at = now() \
-         WHERE user_id = $1 AND status IN ('created', 'identifier_verified', 'mfa_required')",
+         WHERE user_id = $1 AND status IN ('created', 'identifier_verified', 'mfa_required', 'mfa_enrollment_required')",
         [user_id.into()],
     ))
     .await

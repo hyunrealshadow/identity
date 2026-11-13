@@ -8,9 +8,14 @@ import {
 } from './identity.server'
 import type { ChallengeResponse, RestartLoginResponse, SwitchLoginResponse } from './identity-types'
 import { formErrorResponse, formValidationErrorResponse, navigationResponse } from './responses.server'
-import { translate } from './i18n'
+import { translate, type Locale } from './i18n'
 import { formLocale } from './i18n.server'
-import { loginChallengeDestination, loginCredentialType, loginMethodPath } from './login-navigation'
+import {
+  loginChallengeDestination,
+  loginCredentialType,
+  loginMethodPath,
+  loginMfaSetupDestination,
+} from './login-navigation'
 
 function optionalString(value: unknown) {
   return typeof value === 'string' ? value : undefined
@@ -31,74 +36,19 @@ export async function submitLoginMethod(request: Request, method: string) {
   const uiLocales = optionalString(form.get('ui_locales'))
 
   if (intent === 'restart') {
-    if (!loginId) {
-      return formErrorResponse(
-        request,
-        pathname,
-        translate(locale, 'missingLoginShort'),
-        {},
-      )
-    }
-    try {
-      const result = await identityJson<RestartLoginResponse>(
-        '/api/auth/login/restart',
-        {
-          method: 'POST',
-          csrfToken,
-          body: { id: loginId },
-        },
-      )
-      const search = new URLSearchParams({ login_id: result.id })
-      if (uiLocales) search.set('ui_locales', uiLocales)
-      return navigationResponse(request, `/login?${search}`)
-    } catch (error) {
-      const restartUnavailable =
-        error instanceof IdentityApiError && error.code === 22005
-      return formErrorResponse(
-        request,
-        pathname,
-        restartUnavailable
-          ? translate(locale, 'authorizationRestartUnavailable')
-          : errorMessage(error, locale),
-        { login_id: loginId, ui_locales: uiLocales },
-        undefined,
-        loginChallengeDestination(
-          loginId,
-          credentialType,
-          uiLocales,
-          restartUnavailable ? 'unavailable' : 'required',
-        ),
-      )
-    }
+    return restartLoginResponse(request, {
+      pathname,
+      loginId,
+      csrfToken,
+      locale,
+      uiLocales,
+      retryDestination: (restart) =>
+        loginChallengeDestination(loginId, credentialType, uiLocales, restart),
+    })
   }
 
   if (intent === 'switch') {
-    try {
-      const result = await identityJson<SwitchLoginResponse>(
-        '/api/auth/login/switch',
-        {
-          method: 'POST',
-          csrfToken,
-          body: { id: loginId },
-        },
-      )
-      const search = new URLSearchParams({
-        login_id: result.id,
-        no_accounts: '1',
-      })
-      if (uiLocales) search.set('ui_locales', uiLocales)
-      return navigationResponse(request, `/login?${search}`)
-    } catch (error) {
-      return formErrorResponse(
-        request,
-        pathname,
-        errorMessage(error, locale),
-        {
-          login_id: loginId,
-          ui_locales: uiLocales,
-        },
-      )
-    }
+    return switchLoginResponse(request, { pathname, loginId, csrfToken, locale, uiLocales })
   }
 
   if (!loginId || !credential) {
@@ -125,6 +75,10 @@ export async function submitLoginMethod(request: Request, method: string) {
         },
       },
     )
+
+    if (result.status === 'mfa_enrollment_required') {
+      return navigationResponse(request, loginMfaSetupDestination(loginId, uiLocales))
+    }
 
     if (result.status === 'mfa_required') {
       return navigationResponse(
@@ -181,6 +135,97 @@ export async function submitLoginMethod(request: Request, method: string) {
       values,
       undefined,
       loginChallengeDestination(loginId, credentialType, uiLocales),
+    )
+  }
+}
+
+interface LoginFormContext {
+  pathname: string
+  loginId: string
+  csrfToken: string
+  locale: Locale
+  uiLocales?: string
+}
+
+/** Replace an expired login with a fresh one for the same authorization. */
+export async function restartLoginResponse(
+  request: Request,
+  {
+    pathname,
+    loginId,
+    csrfToken,
+    locale,
+    uiLocales,
+    retryDestination,
+  }: LoginFormContext & {
+    retryDestination: (restart: 'required' | 'unavailable') => string
+  },
+) {
+  if (!loginId) {
+    return formErrorResponse(
+      request,
+      pathname,
+      translate(locale, 'missingLoginShort'),
+      {},
+    )
+  }
+  try {
+    const result = await identityJson<RestartLoginResponse>(
+      '/api/auth/login/restart',
+      {
+        method: 'POST',
+        csrfToken,
+        body: { id: loginId },
+      },
+    )
+    const search = new URLSearchParams({ login_id: result.id })
+    if (uiLocales) search.set('ui_locales', uiLocales)
+    return navigationResponse(request, `/login?${search}`)
+  } catch (error) {
+    const restartUnavailable =
+      error instanceof IdentityApiError && error.code === 22005
+    return formErrorResponse(
+      request,
+      pathname,
+      restartUnavailable
+        ? translate(locale, 'authorizationRestartUnavailable')
+        : errorMessage(error, locale),
+      { login_id: loginId, ui_locales: uiLocales },
+      undefined,
+      retryDestination(restartUnavailable ? 'unavailable' : 'required'),
+    )
+  }
+}
+
+/** Roll an unfinished login back to identifier entry for another account. */
+export async function switchLoginResponse(
+  request: Request,
+  { pathname, loginId, csrfToken, locale, uiLocales }: LoginFormContext,
+) {
+  try {
+    const result = await identityJson<SwitchLoginResponse>(
+      '/api/auth/login/switch',
+      {
+        method: 'POST',
+        csrfToken,
+        body: { id: loginId },
+      },
+    )
+    const search = new URLSearchParams({
+      login_id: result.id,
+      no_accounts: '1',
+    })
+    if (uiLocales) search.set('ui_locales', uiLocales)
+    return navigationResponse(request, `/login?${search}`)
+  } catch (error) {
+    return formErrorResponse(
+      request,
+      pathname,
+      errorMessage(error, locale),
+      {
+        login_id: loginId,
+        ui_locales: uiLocales,
+      },
     )
   }
 }

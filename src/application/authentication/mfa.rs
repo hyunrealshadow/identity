@@ -59,6 +59,9 @@ pub struct BeginTotpEnrollment {
     pub otp_auth_uri: String,
     pub enrollment_token: String,
     pub recovery_codes: Vec<String>,
+    pub algorithm: OtpAlgorithm,
+    /// The pending enrollment cannot be confirmed after this instant.
+    pub expires_at: DateTime<Utc>,
 }
 
 #[derive(Debug, Clone)]
@@ -159,9 +162,10 @@ impl MfaService {
         } else {
             (Vec::new(), Vec::new())
         };
+        let expires_at = Utc::now() + ENROLLMENT_LIFETIME;
         let pending = PendingTotpEnrollment {
             user_oid,
-            expires_at: Utc::now() + ENROLLMENT_LIFETIME,
+            expires_at,
             credential: generated.credential.clone(),
             recovery_codes: recovery_codes.clone(),
             recovery_credentials,
@@ -173,11 +177,54 @@ impl MfaService {
             .await?;
         self.record_mfa_change("mfa.enrollment.started", user_oid, "success");
         Ok(BeginTotpEnrollment {
+            algorithm: generated.credential.algorithm,
             secret: generated.credential.secret,
             otp_auth_uri: generated.otp_auth_uri,
             enrollment_token,
             recovery_codes,
+            expires_at,
         })
+    }
+
+    /// Reopen a pending enrollment so the same secret and recovery codes can
+    /// be presented again, for example after a page reload.
+    pub async fn resume_totp_enrollment(
+        &self,
+        user_oid: UserOid,
+        enrollment_token: &str,
+        issuer: &str,
+        account_name: &str,
+    ) -> Result<BeginTotpEnrollment, AppError> {
+        let pending = self.open_pending(user_oid, enrollment_token).await?;
+        let otp_auth_uri =
+            self.generator
+                .otp_auth_uri(issuer, account_name, &pending.credential)?;
+        Ok(BeginTotpEnrollment {
+            algorithm: pending.credential.algorithm,
+            secret: pending.credential.secret,
+            otp_auth_uri,
+            enrollment_token: enrollment_token.to_owned(),
+            recovery_codes: pending.recovery_codes,
+            expires_at: pending.expires_at,
+        })
+    }
+
+    async fn open_pending(
+        &self,
+        user_oid: UserOid,
+        enrollment_token: &str,
+    ) -> Result<PendingTotpEnrollment, AppError> {
+        let plaintext = self
+            .data_protector
+            .unprotect(ENROLLMENT_PURPOSE, enrollment_token)
+            .await
+            .map_err(|_| AppError::from_code(AuthErrorCode::InvalidTotpEnrollment))?;
+        let pending: PendingTotpEnrollment = from_slice(&plaintext)
+            .map_err(|_| AppError::from_code(AuthErrorCode::InvalidTotpEnrollment))?;
+        if pending.user_oid != user_oid || pending.expires_at < Utc::now() {
+            return Err(AppError::from_code(AuthErrorCode::InvalidTotpEnrollment));
+        }
+        Ok(pending)
     }
 
     #[tracing::instrument(skip_all, name = "mfa.enrollment.confirm")]
@@ -190,16 +237,7 @@ impl MfaService {
         if self.status(user_oid).await?.totp_enabled {
             return Err(AppError::from_code(AuthErrorCode::TotpAlreadyEnabled));
         }
-        let plaintext = self
-            .data_protector
-            .unprotect(ENROLLMENT_PURPOSE, enrollment_token)
-            .await
-            .map_err(|_| AppError::from_code(AuthErrorCode::InvalidTotpEnrollment))?;
-        let pending: PendingTotpEnrollment = from_slice(&plaintext)
-            .map_err(|_| AppError::from_code(AuthErrorCode::InvalidTotpEnrollment))?;
-        if pending.user_oid != user_oid || pending.expires_at < Utc::now() {
-            return Err(AppError::from_code(AuthErrorCode::InvalidTotpEnrollment));
-        }
+        let pending = self.open_pending(user_oid, enrollment_token).await?;
         let Some(counter) = self.verifier.verify(&pending.credential, code)? else {
             return Err(AppError::from_code(AuthErrorCode::InvalidOtp).with_field("code"));
         };
@@ -229,16 +267,7 @@ impl MfaService {
         if self.status(user_oid).await?.totp_enabled {
             return Err(AppError::from_code(AuthErrorCode::TotpAlreadyEnabled));
         }
-        let plaintext = self
-            .data_protector
-            .unprotect(ENROLLMENT_PURPOSE, enrollment_token)
-            .await
-            .map_err(|_| AppError::from_code(AuthErrorCode::InvalidTotpEnrollment))?;
-        let mut pending: PendingTotpEnrollment = from_slice(&plaintext)
-            .map_err(|_| AppError::from_code(AuthErrorCode::InvalidTotpEnrollment))?;
-        if pending.user_oid != user_oid || pending.expires_at < Utc::now() {
-            return Err(AppError::from_code(AuthErrorCode::InvalidTotpEnrollment));
-        }
+        let mut pending = self.open_pending(user_oid, enrollment_token).await?;
 
         pending.credential.algorithm = algorithm;
         pending.credential.last_used_counter = None;
@@ -252,10 +281,12 @@ impl MfaService {
             .await?;
 
         Ok(BeginTotpEnrollment {
+            algorithm: pending.credential.algorithm,
             secret: pending.credential.secret,
             otp_auth_uri,
             enrollment_token,
             recovery_codes: pending.recovery_codes,
+            expires_at: pending.expires_at,
         })
     }
 

@@ -43,6 +43,12 @@ it('navigates to the preferred MFA path after password verification', async () =
   expect(response.headers.get('location')).toBe('/login/passkey?login_id=login&ui_locales=zh-CN')
 })
 
+it('sends an AAL2 sign-in without a second factor to authenticator setup', async () => {
+  vi.mocked(identityJson).mockResolvedValue({ status: 'mfa_enrollment_required' })
+  const response = await submit('password', { credential: 'password' })
+  expect(response.headers.get('location')).toBe('/login/mfa-setup?login_id=login&ui_locales=zh-CN')
+})
+
 it('keeps the current method when an expired login needs restarting', async () => {
   vi.mocked(identityJson).mockRejectedValue(new IdentityApiError('Expired', 400, 11004))
   const response = await submit('otp', { totp: '123456' })

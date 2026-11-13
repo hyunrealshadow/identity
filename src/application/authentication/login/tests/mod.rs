@@ -179,19 +179,17 @@ fn otp_service(login_repo: Arc<TestLoginRepo>, user: User) -> (LoginService, Arc
         Arc::new(TestUserRepo {
             user: Arc::clone(&user),
         }),
-        Arc::new(TestCredentialRepo {
-            credentials: vec![UserCredential {
-                oid: UserCredentialOid(Uuid::new_v4()),
-                r#type: CredentialType::Otp,
-                data: CredentialData::Otp(OtpCredentialData {
-                    secret: "secret".to_owned(),
-                    digits: 6,
-                    period: 30,
-                    algorithm: OtpAlgorithm::Sha1,
-                    last_used_counter: None,
-                }),
-            }],
-        }),
+        Arc::new(TestCredentialRepo::new(vec![UserCredential {
+            oid: UserCredentialOid(Uuid::new_v4()),
+            r#type: CredentialType::Otp,
+            data: CredentialData::Otp(OtpCredentialData {
+                secret: "secret".to_owned(),
+                digits: 6,
+                period: 30,
+                algorithm: OtpAlgorithm::Sha1,
+                last_used_counter: None,
+            }),
+        }])),
         Arc::new(TestSessionRepo),
         login_repo,
         Arc::new(StubPasswordHasher),
@@ -236,6 +234,13 @@ fn sign_in_service(user: User, logins: Vec<Login>, mfa: bool) -> LoginService {
         })),
     });
     let (mut service, _) = otp_service(login_repo, user);
+    service.credential_repo = Arc::new(TestCredentialRepo::new(sign_in_credentials(mfa)));
+    service.password_hasher = Arc::new(TestSignInHasher);
+    service
+}
+
+/// A password credential, plus a TOTP authenticator when `mfa` is set.
+fn sign_in_credentials(mfa: bool) -> Vec<UserCredential> {
     let mut credentials = if mfa {
         vec![UserCredential {
             oid: UserCredentialOid(Uuid::new_v4()),
@@ -266,12 +271,11 @@ fn sign_in_service(user: User, logins: Vec<Login>, mfa: bool) -> LoginService {
             },
         })),
     });
-    service.credential_repo = Arc::new(TestCredentialRepo { credentials });
-    service.password_hasher = Arc::new(TestSignInHasher);
-    service
+    credentials
 }
 
 mod attempts;
+mod enrollment;
 mod passkey;
 mod password_change;
 mod priority;

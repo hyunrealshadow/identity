@@ -5,6 +5,7 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ChallengeMethod {
     Passkey,
+    Totp,
     SmsOtp,
     EmailOtp,
 }
@@ -13,6 +14,7 @@ impl ChallengeMethod {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::Passkey => "passkey",
+            Self::Totp => "totp",
             Self::SmsOtp => "sms_otp",
             Self::EmailOtp => "email_otp",
         }

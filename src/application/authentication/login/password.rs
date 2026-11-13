@@ -1,4 +1,6 @@
-use super::{ChallengeOutcome, LoginService, SessionContext, failed_attempt_lock_until};
+use super::{
+    ChallengeOutcome, LoginService, SessionContext, failed_attempt_lock_until, requires_aal2,
+};
 use crate::{
     authentication::password::{HashOptions, VerifyResult, run_password_hashing},
     error::{AppError, codes::auth::AuthErrorCode},
@@ -144,7 +146,21 @@ impl LoginService {
                 } else {
                     false
                 };
-                if otp_credentials.is_empty() && !has_passkeys {
+                if otp_credentials.is_empty() && !has_passkeys && requires_aal2(&login) {
+                    self.user_repo.reset_failed_attempts(user.oid).await?;
+                    if let Err(e) = self
+                        .login_repo
+                        .update_status(login.oid, LoginStatus::MFA_ENROLLMENT_REQUIRED, None, None)
+                        .await
+                    {
+                        error!(error = %e, "failed to update login status to mfa_enrollment_required");
+                        return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
+                    }
+                    if let Err(e) = self.login_repo.reset_failed_attempts(login.oid).await {
+                        error!(error = %e, "failed to reset login failed attempts for MFA enrollment");
+                    }
+                    Ok(ChallengeOutcome::MfaEnrollmentRequired { login })
+                } else if otp_credentials.is_empty() && !has_passkeys {
                     self.user_repo.reset_failed_attempts(user.oid).await?;
                     // Complete AAL1 authentication. A forced
                     // reauthentication upgrades the bound session in place.

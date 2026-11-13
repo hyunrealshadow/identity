@@ -296,6 +296,7 @@ impl LoginRepository for LoginRepositoryImpl {
                 LoginStatus::Created => "login.created",
                 LoginStatus::IdentifierVerified => "login.identifier_verified",
                 LoginStatus::MfaRequired => "login.mfa_required",
+                LoginStatus::MfaEnrollmentRequired => "login.mfa_enrollment_required",
                 LoginStatus::Authenticated => "login.authenticated",
                 LoginStatus::Expired => "login.expired",
                 LoginStatus::Failed => "login.failed",
@@ -422,6 +423,7 @@ impl LoginRepository for LoginRepositoryImpl {
             .filter(LoginColumn::Status.is_in([
                 LoginStatus::IDENTIFIER_VERIFIED.as_str(),
                 LoginStatus::MFA_REQUIRED.as_str(),
+                LoginStatus::MFA_ENROLLMENT_REQUIRED.as_str(),
             ]))
             .exec(&transaction)
             .await

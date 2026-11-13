@@ -32,3 +32,26 @@ export function loginChallengeDestination(
   if (restart) search.set('restart', restart)
   return `${loginMethodPath(credentialType)}?${search}`
 }
+
+export const loginMfaSetupPath = '/login/mfa-setup'
+
+/**
+ * The enrollment step of an AAL2 sign-in whose account has no second factor:
+ * save the recovery codes, add the account to an authenticator, then verify.
+ * `recoverySaved` identifies the pending enrollment whose recovery codes the
+ * user already saved; `step` selects the verification screen after it.
+ */
+export function loginMfaSetupDestination(
+  loginId: string,
+  uiLocales?: string,
+  restart?: 'required' | 'unavailable',
+  recoverySaved?: string,
+  step?: 'verify',
+) {
+  const search = new URLSearchParams({ login_id: loginId })
+  if (uiLocales) search.set('ui_locales', uiLocales)
+  if (restart) search.set('restart', restart)
+  if (recoverySaved) search.set('recovery_saved', recoverySaved)
+  if (step) search.set('step', step)
+  return `${loginMfaSetupPath}?${search}`
+}

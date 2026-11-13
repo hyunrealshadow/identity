@@ -51,7 +51,9 @@ impl AuthorizeService {
         if context.stored.interaction.selection_source == Some(SelectionSource::Reauthentication)
             || !matches!(
                 context.login.status,
-                LoginStatus::IDENTIFIER_VERIFIED | LoginStatus::MFA_REQUIRED
+                LoginStatus::IDENTIFIER_VERIFIED
+                    | LoginStatus::MFA_REQUIRED
+                    | LoginStatus::MFA_ENROLLMENT_REQUIRED
             )
         {
             return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
