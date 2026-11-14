@@ -25,7 +25,7 @@ use tracing::{Instrument, info_span};
 
 use crate::controllers::response::{app_state, parse_form, parse_json, parse_query};
 
-pub(super) struct Endpoint {
+pub(in crate::controllers) struct Endpoint {
     name: &'static str,
     actions: Vec<ArcHandler>,
 }
@@ -99,15 +99,17 @@ fn missing_input() -> AppError {
         .with_param("message", "Protocol action input is missing")
 }
 
-pub(super) fn take<T: Send + Sync + 'static>(depot: &mut Depot) -> Result<T, AppError> {
+pub(in crate::controllers) fn take<T: Send + Sync + 'static>(
+    depot: &mut Depot,
+) -> Result<T, AppError> {
     depot.remove_typed::<T>().map_err(|_| missing_input())
 }
 
-pub(super) fn get<T: Send + Sync + 'static>(depot: &Depot) -> Result<&T, AppError> {
+pub(in crate::controllers) fn get<T: Send + Sync + 'static>(depot: &Depot) -> Result<&T, AppError> {
     depot.get_typed::<T>().map_err(|_| missing_input())
 }
 
-pub(super) struct RequireState<E>(PhantomData<fn() -> E>);
+pub(in crate::controllers) struct RequireState<E>(PhantomData<fn() -> E>);
 
 impl<E> RequireState<E> {
     pub fn new() -> Self {
@@ -137,7 +139,7 @@ enum Input {
     Json,
 }
 
-pub(super) struct Extract<T, E> {
+pub(in crate::controllers) struct Extract<T, E> {
     input: Input,
     marker: PhantomData<fn() -> (T, E)>,
 }

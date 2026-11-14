@@ -247,8 +247,8 @@ mod tests {
         for expected in [
             "error.html",
             "oauth2/form_post.html",
-            "oauth2/check_session.html",
-            "oauth2/logout.html",
+            "openid/check_session.html",
+            "openid/logout.html",
         ] {
             assert!(template_names.contains(&expected), "missing {expected}");
         }

@@ -215,7 +215,7 @@ no routes. Identity, Login and Console route switches can also be disabled
 independently. Console defaults to Login hostnames and matches `/console` with
 no rewrite; `gatewayApi.console.hostnames` may explicitly select another
 existing hostname. The image always serves `/console`. When Identity and Login
-share a hostname, protocol paths (`/oauth2`, `/.well-known`, `/api/auth`, `/static`)
+share a hostname, protocol paths (`/oauth2`, `/openid`, `/.well-known`, `/api/auth`, `/static`)
 and `/graphql` go to Identity; `/console` goes to Console; the remaining paths
 go to Login. The internal workload listener is never exposed by these routes.
 

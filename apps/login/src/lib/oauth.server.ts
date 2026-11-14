@@ -548,7 +548,7 @@ export function providerLogoutUrl(
   clientId: string,
   idToken?: string,
 ) {
-  const logoutUrl = new URL('/oauth2/logout', publicIdentityApiUrl())
+  const logoutUrl = new URL('/openid/logout', publicIdentityApiUrl())
   const parameters = new URLSearchParams({
     client_id: clientId,
     post_logout_redirect_uri: new URL('/logout', applicationUrl).toString(),

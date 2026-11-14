@@ -3,7 +3,7 @@ use identity_infrastructure::web::tera::render_view;
 use salvo::{Depot, Request, Response, handler, handler::HoopedHandler};
 use serde_json::to_string;
 
-use super::super::pipeline::{Endpoint, RequireState, take};
+use crate::controllers::oauth2::pipeline::{Endpoint, RequireState, take};
 use crate::{
     controllers::{
         response::{WebError, WebResult, app_state, render_app_error, render_html},
@@ -11,7 +11,7 @@ use crate::{
             generate_csp_nonce, inline_script_csp_header_value, load_op_active_session_entries,
         },
     },
-    views::oauth2::CheckSessionPageData,
+    views::openid::CheckSessionPageData,
 };
 
 struct BrowserState {
@@ -58,7 +58,7 @@ async fn check_session_iframe(
         nonce: nonce.clone(),
     };
 
-    match render_view(&ctx, req.headers(), "oauth2/check_session.html", data) {
+    match render_view(&ctx, req.headers(), "openid/check_session.html", data) {
         Ok(body) => render_html(res, StatusCode::OK, body),
         Err(error) => render_app_error(res, req.headers(), &ctx, error),
     }

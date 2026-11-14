@@ -9,7 +9,7 @@ use identity_infrastructure::{
 use salvo::{Router, affix_state::inject, serve_static::StaticDir};
 
 use super::{
-    controllers::{auth, install, oauth2, observability, well_known, workload_runtime},
+    controllers::{auth, install, oauth2, observability, openid, well_known, workload_runtime},
     middleware::{
         RequestIdMiddleware, RequireUpstreamHttps, RequireWorkload, ResolveClientIp,
         TraceContextMiddleware, require_login_workload, security_headers_middleware,
@@ -49,6 +49,7 @@ pub fn app_router(state: AppState, config: &AppConfig) -> Router {
 
     router = router
         .push(oauth2::routes())
+        .push(openid::routes())
         .push(auth::routes())
         .push(well_known::routes());
 

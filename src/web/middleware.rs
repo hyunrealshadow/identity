@@ -414,7 +414,7 @@ pub async fn security_headers_middleware(
     res: &mut Response,
     ctrl: &mut FlowCtrl,
 ) {
-    let allows_framing = req.uri().path() == "/oauth2/check_session";
+    let allows_framing = req.uri().path() == "/openid/check_session";
     ctrl.call_next(req, depot, res).await;
     let headers = res.headers_mut();
     headers.insert(
@@ -499,10 +499,10 @@ mod tests {
         let service = Service::new(
             Router::new()
                 .hoop(security_headers_middleware)
-                .push(Router::with_path("oauth2/check_session").get(ok)),
+                .push(Router::with_path("openid/check_session").get(ok)),
         );
 
-        let response = TestClient::get("http://127.0.0.1:5800/oauth2/check_session")
+        let response = TestClient::get("http://127.0.0.1:5800/openid/check_session")
             .send(&service)
             .await;
 

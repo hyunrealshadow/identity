@@ -115,7 +115,7 @@ describe('RP-initiated logout', () => {
         'id-token',
       ).toString(),
     ).toBe(
-      'https://id.example.com/oauth2/logout?client_id=client-id&post_logout_redirect_uri=https%3A%2F%2Flogin.example.com%2Flogout&id_token_hint=id-token',
+      'https://id.example.com/openid/logout?client_id=client-id&post_logout_redirect_uri=https%3A%2F%2Flogin.example.com%2Flogout&id_token_hint=id-token',
     )
   })
 
@@ -125,7 +125,7 @@ describe('RP-initiated logout', () => {
     expect(
       providerLogoutUrl('https://login.example.com', 'client-id').toString(),
     ).toBe(
-      'https://id.example.com/oauth2/logout?client_id=client-id&post_logout_redirect_uri=https%3A%2F%2Flogin.example.com%2Flogout',
+      'https://id.example.com/openid/logout?client_id=client-id&post_logout_redirect_uri=https%3A%2F%2Flogin.example.com%2Flogout',
     )
   })
 })

@@ -8,7 +8,7 @@ use serde_json::json;
 use unic_langid::LanguageIdentifier;
 use uuid::Uuid;
 
-use super::pipeline::{Endpoint, Extract, RequireState, take};
+use crate::controllers::oauth2::pipeline::{Endpoint, Extract, RequireState, take};
 use crate::{
     application::error::{
         AppError, code::AppErrorCode, codes::openid_connect::OpenIdConnectErrorCode,

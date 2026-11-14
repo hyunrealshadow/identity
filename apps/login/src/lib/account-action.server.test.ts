@@ -72,7 +72,7 @@ beforeEach(() => {
   mocks.mfaUiState.mockResolvedValue({})
   mocks.finishLogout.mockResolvedValue(new Response(null, {
     status: 303,
-    headers: { location: 'https://identity.example.com/oauth2/logout' },
+    headers: { location: 'https://identity.example.com/openid/logout' },
   }))
   mocks.startPopupReauthorization.mockResolvedValue({
     url: 'https://identity.example.com/oauth2/authorize?state=new',
@@ -494,7 +494,7 @@ describe('executeAccountAction', () => {
 
   it('returns the provider logout redirect', async () => {
     await expect(executeAccountAction({ action: 'logout', values: {} }))
-      .resolves.toEqual({ redirect: 'https://identity.example.com/oauth2/logout' })
+      .resolves.toEqual({ redirect: 'https://identity.example.com/openid/logout' })
 
     expect(mocks.finishLogout).toHaveBeenCalledWith('https://login.example.com')
   })

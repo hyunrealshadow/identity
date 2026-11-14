@@ -1,9 +1,6 @@
 use salvo::Router;
 
-use super::{
-    super::shared::{api_csrf_middleware, browser_csrf_middleware},
-    authorization, device, registration, session, token, user_info,
-};
+use super::{super::shared::api_csrf_middleware, authorization, device, registration, token};
 use crate::cors::{ClientCors, preflight};
 
 pub fn routes() -> Router {
@@ -55,20 +52,6 @@ pub fn routes() -> Router {
                 .options(preflight),
         )
         .push(Router::with_path("oauth2/initiate_login").get(authorization::initiate_login()))
-        .push(Router::with_path("oauth2/check_session").get(session::check()))
-        .push(Router::with_path("oauth2/logout").get(session::logout_get()))
-        .push(
-            Router::with_path("oauth2/logout")
-                .hoop(browser_csrf_middleware())
-                .post(session::logout_post()),
-        )
-        .push(
-            Router::with_path("oauth2/userinfo")
-                .hoop(ClientCors::new("GET, POST"))
-                .get(user_info::get_endpoint())
-                .post(user_info::post_endpoint())
-                .options(preflight),
-        )
         .push(
             Router::with_path("oauth2/consent")
                 .hoop(api_csrf_middleware())

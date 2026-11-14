@@ -68,11 +68,11 @@ async fn assembles_discovery_document_from_issuer_and_capabilities() {
     );
     assert_eq!(
         metadata.end_session_endpoint.unwrap().as_str(),
-        "https://identity.example.com/issuer1/oauth2/logout"
+        "https://identity.example.com/issuer1/openid/logout"
     );
     assert_eq!(
         metadata.check_session_iframe.unwrap().as_str(),
-        "https://identity.example.com/issuer1/oauth2/check_session"
+        "https://identity.example.com/issuer1/openid/check_session"
     );
     assert_eq!(metadata.frontchannel_logout_supported, Some(true));
     assert_eq!(metadata.frontchannel_logout_session_supported, Some(true));

@@ -280,9 +280,9 @@ Paths below are relative to the service's public origin.
 | POST | `/oauth2/device` | Start device authorization |
 | POST | `/oauth2/register` | Create a dynamic client |
 | GET, PUT, DELETE | `/oauth2/clients/{client_id}` | Manage a dynamic client |
-| GET, POST | `/oauth2/userinfo` | UserInfo |
-| GET, POST | `/oauth2/logout` | RP-initiated logout |
-| GET | `/oauth2/check_session` | Session management iframe |
+| GET, POST | `/openid/userinfo` | UserInfo |
+| GET, POST | `/openid/logout` | RP-initiated logout |
+| GET | `/openid/check_session` | Session management iframe |
 | GET | `/oauth2/initiate_login` | Third-party initiated login |
 | GET | `/oauth2/continue` | Resume an authorization interaction |
 | GET, POST | `/oauth2/consent` | Consent JSON API |

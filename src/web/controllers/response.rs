@@ -163,7 +163,7 @@ impl From<AppError> for WebError {
     }
 }
 
-/// JSON-only error wrapper for REST endpoints (`/oauth2/token`, `/oauth2/userinfo`,
+/// JSON-only error wrapper for REST endpoints (`/oauth2/token`, `/openid/userinfo`,
 /// `/oauth2/register`, `/api/*`, ...).
 ///
 /// Unlike `WebError` this **always** renders a JSON body regardless of the

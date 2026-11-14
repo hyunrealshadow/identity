@@ -254,8 +254,8 @@ class BrowserAuthHandler:
                 if (
                     final_response is not None
                     and final_response.status == 200
-                    and urlparse(local_url).path == "/oauth2/logout"
-                    and final_url.path == "/oauth2/logout"
+                    and urlparse(local_url).path == "/openid/logout"
+                    and final_url.path == "/openid/logout"
                     and (final_url.scheme, final_url.netloc) in {
                         (identity_origin.scheme, identity_origin.netloc),
                         ("https", "identity:5150"),

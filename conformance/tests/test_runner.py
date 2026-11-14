@@ -330,7 +330,7 @@ class TestRunnerResumeTests(unittest.TestCase):
     @patch("scripts.runner.time.sleep", return_value=None)
     def test_run_single_test_handles_new_browser_url_before_uploading_screenshot(self, _sleep):
         run_id = "review-run"
-        logout_url = "http://identity:5150/oauth2/logout?id_token_hint=abc"
+        logout_url = "http://identity:5150/openid/logout?id_token_hint=abc"
         client = FakeClient(
             modules=[TestModule("oidcc-review", {}, [run_id], "")],
             info_sequences={

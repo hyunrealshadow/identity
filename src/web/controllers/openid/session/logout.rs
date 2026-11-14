@@ -8,7 +8,7 @@ use salvo::{Depot, Request, Response, handler, handler::HoopedHandler};
 use serde::Deserialize;
 use url::Url;
 
-use super::super::pipeline::{Endpoint, Extract, take};
+use crate::controllers::oauth2::pipeline::{Endpoint, Extract, take};
 use crate::{
     controllers::{
         response::{
@@ -20,7 +20,7 @@ use crate::{
             load_op_active_session_entries, parse_op_session_cookie, unprotect_session_id,
         },
     },
-    views::oauth2::{FrontChannelNotificationView, LogoutPageData},
+    views::openid::{FrontChannelNotificationView, LogoutPageData},
 };
 
 #[derive(Debug, Deserialize)]
@@ -114,7 +114,7 @@ pub(super) async fn render_logout_page(
     };
 
     let mut response = Response::new();
-    match tera::render_view(ctx, headers, "oauth2/logout.html", data) {
+    match tera::render_view(ctx, headers, "openid/logout.html", data) {
         Ok(body) => render_html(&mut response, StatusCode::OK, body),
         Err(error) => render_app_error(&mut response, headers, ctx, error),
     }

@@ -7,6 +7,8 @@ mod graphql;
 mod metadata;
 #[path = "http/oauth2/mod.rs"]
 mod oauth2;
+#[path = "http/openid.rs"]
+mod openid;
 
 #[cfg(feature = "oidc-conformance")]
 #[path = "http/conformance.rs"]

@@ -30,7 +30,7 @@ spec:
         - name: {{ include "identity.fullname" . }}-server
           port: {{ .Values.identity.service.graphqlPort }}
     - matches:
-        {{- range list "/oauth2" "/.well-known" "/api/auth" "/static" }}
+        {{- range list "/oauth2" "/openid" "/.well-known" "/api/auth" "/static" }}
         - path:
             type: PathPrefix
             value: {{ . }}
