@@ -51,7 +51,13 @@ apps/login/.data/
 /config/secrets/
 /deploy/secrets/
 
+# Local working notes; these reference pages are committed
 CONTEXT.md
 docs/*
+!docs/README.md
+!docs/authentication-flows.md
+!docs/authorization.md
+!docs/graphql.md
 !docs/protocol.md
 !docs/security.md
+!docs/testing.md

@@ -18,8 +18,10 @@ uv run playwright install chromium
 uv run python run.py
 ```
 
-Exits 0 if no tests fail (PASSED, WARNING, SKIPPED, REVIEW are acceptable).
-Use `--exit-on-failure` to exit 1 on any non-passing results.
+Exits 0 even when tests fail. Pass `--exit-on-failure` (or the equivalent CI
+setting) to exit 1 on any result that is not PASSED, WARNING, SKIPPED, or
+REVIEW, including missing or unexpected test counts. Harness setup failures exit
+1 regardless.
 
 ## Scripts
 
@@ -77,6 +79,7 @@ uv run python run_single.py --plan-id <ID> --test oidcc-server
 | `IDENTITY_URL` | `https://localhost:5150` for browser, `https://identity:5150` for suite discovery | When set, supplies both origins; `--discovery-origin` overrides the suite origin independently |
 | `PROFILE` | `basic` | Test profile to create (`basic`, `implicit`, `hybrid`, `config`, `formpost-basic`, `formpost-implicit`, `formpost-hybrid`, `third-party-init`, `rp-init-logout`, `session`, `backchannel`, `dynamic`, or `frontchannel`) |
 | `CONFIG_PATH` | `conformance/plans/<profile>.json` | Config file path |
+| `CLIENT_REGISTRATION` | `static_client` | Registration variant: `static_client` or `dynamic_client`; overridden by `--client-registration` |
 | `PLAN_NAME` | Derived from `PROFILE` | Conformance suite plan name |
 | `TIMEOUT` | `60` | Timeout per test (seconds) |
 
@@ -256,7 +259,7 @@ are reset between modules. Seeded clients use the standard consent flow.
 
 - There are no auto-login or auto-consent endpoints; authentication and consent use the standard application.
 - Test credentials are scoped to the `identity_conformance` database only.
-- Only the key-rotation helper is mounted with `APP_ENV=conformance` and the `oidc-conformance` feature.
+- The compose `identity` service runs with `APP_ENV=conformance`, and its image is built with the `oidc-conformance` and `allow-none-alg` features. Neither belongs in a deployment build.
 - Compose workload and cookie-sealing defaults are disposable test credentials only.
 
 ## Architecture

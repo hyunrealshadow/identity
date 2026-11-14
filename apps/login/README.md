@@ -22,7 +22,12 @@ the generated production server. Production listens on HTTP by default and
 requires the upstream proxy to report `X-Forwarded-Proto: https` or
 `Forwarded: proto=https`; liveness and readiness probes are exempt. Set both
 `NITRO_SSL_CERT_FILE` and `NITRO_SSL_KEY_FILE` to make the production process
-terminate TLS itself. Providing only one file is a startup error.
+terminate TLS itself; `production-server.mjs` reads those files into
+`NITRO_SSL_CERT`/`NITRO_SSL_KEY`, so either variable pair works. Providing only
+one file is a startup error. Terminating TLS in the process relaxes the
+upstream-protocol requirement: `production-server.mjs` sets
+`IDENTITY_REQUIRE_UPSTREAM_HTTPS=false` unless a deployment overrides it
+explicitly.
 
 Identity and Login public addresses come from database settings returned by the
 authenticated runtime-configuration API. Production does not read public-address
@@ -61,8 +66,9 @@ Configure the Identity runtime settings to point to the development server:
 - Login URL: `https://localhost:3000/login`
 - Consent URL: `https://localhost:3000/consent`
 
-The same application also hosts the account and session management UI at `/`.
-Installation creates its confidential OIDC client automatically. Identity
+The same application also hosts the account and session management UI under
+`/account`; `/` redirects to `/account/profile`. Installation creates its
+confidential OIDC client automatically. Identity
 returns the current OAuth client generation over the internal
 runtime-configuration API; the BFF keeps the snapshot in memory only and
 refreshes it on demand. No client credential file is written or persisted.

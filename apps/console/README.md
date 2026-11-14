@@ -82,7 +82,8 @@ installation controls or Login client credentials, and the Console public client
 has no client secret. Browser headers, cookies and request bodies are not
 forwarded. Nginx publishes the response only when it has exactly the expected
 Console fields; anything else, an unavailable Identity or a rejected credential
-returns 503 with `Cache-Control: no-store`. The credential file is reread on
+returns 503 with `Cache-Control: no-store` and the body
+`{"error":"console_configuration_unavailable"}`. The credential file is reread on
 every request, so a rotated projected token takes effect without a restart. The
 credential never enters the served configuration, static assets or logs.
 `IDENTITY_WORKLOAD_TOKEN` is also accepted when a mounted file is not used.

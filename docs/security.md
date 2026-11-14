@@ -1,10 +1,22 @@
 # Security
 
-[Back to README](../README.md) · [Login and Passkeys](../apps/login/README.md#passkeys) ·
+[Documentation index](README.md) · [Authorization model](authorization.md) ·
+[Authentication flows](authentication-flows.md) ·
+[Login and Passkeys](../apps/login/README.md#passkeys) ·
 [Deployment](../deploy/README.md)
 
 Identity provides password protection, multi-factor authentication, session
-management, and security auditing.
+management, and security auditing. This page describes the controls an operator
+or reviewer needs to know about; the full permission model, including effective
+permissions, delegation, and credential authority, lives in the
+[authorization model](authorization.md).
+
+- [Password policy](#password-policy)
+- [Multi-factor authentication](#multi-factor-authentication)
+- [Session protection](#session-protection)
+- [API authorization](#api-authorization)
+- [Security auditing](#security-auditing)
+- [Authentication browser windows](#authentication-browser-windows)
 
 ## Password policy
 
@@ -26,85 +38,70 @@ Accounts support TOTP authenticator apps, Passkey/WebAuthn, and single-use recov
 codes. Users can choose their preferred MFA method. A user-verified Passkey can
 complete MFA without an additional password or OTP step.
 
-Sensitive credential changes require recent authentication. See the
-[Login guide](../apps/login/README.md#passkeys) for enrollment and recovery setup.
+MFA is an authentication-stage invariant: once a flow enters the MFA stage,
+presenting the password again does not satisfy it. Assurance (`AAL2`) and
+freshness (recent authentication) are separate requirements, and the windows are
+measured from the moment the stage completed. Sensitive credential changes
+require recent authentication; the exact windows per operation are listed with
+the [authentication requirements](authorization.md#authentication-requirements).
+See the [Login guide](../apps/login/README.md#passkeys) for enrollment and
+recovery setup.
 
 ## Session protection
 
 Users can review their sessions and sign out individual devices or all other
-sessions. Changing a password revokes other sessions and their access.
+sessions. Changing a password revokes other sessions, so they can no longer
+refresh or finish a pending flow. Sessions are bound to the sign-in they came
+from, so signing out does not leave a half-authenticated flow behind.
+
+Interactive tokens carry a `sid` claim naming their session. Revoking the
+session makes pending code exchanges fail and stops the session's refresh
+tokens from refreshing. Access tokens already issued stay valid until they
+expire; use the token revocation endpoint when a specific access or refresh
+token must be withdrawn. Machine tokens have no session and are withdrawn
+through the client credential that issued them.
 
 ## API authorization
 
-Each API resource owns its scope definitions. A scope is the canonical atomic
-permission referenced by both client assignments and role permissions. Codes
-are unique within a resource, and equal codes at different resources do not
-grant access to each other. Protocol scopes have no API-resource owner and
-cannot be added to a role as business permissions.
+Every API call must satisfy the same conjunction: a token for the target
+resource, an exact client scope assignment, the client's own token scopes, the
+user's live effective permissions (or the client's own grants for machine
+tokens), and the operation's authentication requirement. Consent approves a
+request; it never widens that set. The [authorization model](authorization.md)
+documents each step.
 
-Users obtain effective permissions through direct roles and user groups.
-Owner, Admin and Viewer are seeded built-in roles and groups with fixed
-permission sets; they are ordinary RBAC definitions, and no code path checks
-for a preset by name or identity when authorizing. Custom roles may reference
-built-in management permissions; API admission uses permissions rather than
-role or group names.
-Built-in definitions are immutable. Intrinsic account and session self-service
-remains available to ordinary authenticated users.
+The parts most relevant to a security review:
 
-A delegated user's scope is limited by the request, the client's exact scope
-assignments, the enabled target resource and the user's current effective
-permissions. Client-credentials tokens represent the client itself and may use
-only the assignments marked `client_granted`; an unmarked assignment bounds
-user-delegated requests and never becomes the client's own authority. They
-require no human RBAC/MFA identity, separate management grant or
-management-policy switch. Human-only management scopes cannot be granted to a
-client and still reject machine principals. Granting a scope to the client
-itself must fit the actor's delegation ceiling like a new assignment. Replacing
-a client's scopes replaces the complete set, API and protocol scopes alike;
-protocol scopes such as `openid` confer no permission, need no delegation
-ceiling and are never granted to the client itself. A replacement withdraws
-previously issued client artifacts and uses the client's UUID `version` as its
-optimistic lock. A new interactive client starts with `openid`, `profile` and
-`email`, plus `offline_access` when it may use refresh tokens; a machine client
-starts with none.
+- **Scopes belong to a resource.** Codes are unique within one resource, and the
+  same code at another resource grants nothing there. Protocol scopes have no
+  API-resource owner and cannot be attached to a role as a business permission.
+- **Nothing is authorized by name.** Built-in groups and roles are ordinary RBAC
+  definitions identified by a persisted `built_in` marker; no code path checks
+  for a preset by display name or key. Intrinsic account and session
+  self-service stays available to ordinary authenticated users.
+- **Delegation is capped.** Adding permissions, assigning roles, and replacing a
+  client's scopes must fit the actor's pre-change effective permissions, or use
+  explicit `management.permission.delegate` with recent AAL2. Enabling a
+  previously disabled resource re-checks its exact scopes against the same
+  ceiling, so resource write permission alone cannot restore authority the actor
+  cannot grant.
+- **Recovery is protected.** Every authorization-graph write re-checks, before
+  commit, that at least one enabled user with usable credentials still holds the
+  complete management permission set. The check is serialized, so concurrent
+  withdrawals cannot remove the last recoverable administrator.
+- **Withdrawal is permanent.** Scope or client withdrawal, role and group
+  changes, and resource disablement invalidate the credentials issued under the
+  old grant during online checks. Re-enabling the object or re-granting access
+  does not revive them. Display edits, metadata edits, and optimistic-lock
+  version changes do not invalidate anything.
+- **Offline validation has a known gap.** An external API that verifies JWTs
+  without introspection sees the claims frozen at issuance, so it must either
+  accept that window or introspect for current state.
 
-Client management writes re-check management authority in their transaction,
-lock the client, compare its `version` and audit the change. Built-in clients
-cannot be edited, disabled or deleted. A protocol-settings change that alters
-what the client may obtain, a credential revocation or rotation, and disabling
-the client permanently withdraw its issued artifacts; display-text edits and
-issuing an additional secret do not. A disabled client is rejected by every
-protocol endpoint, including dynamic registration management and CORS, and
-enabling it again never restores withdrawn artifacts. Deleting a client removes
-its configuration, credentials, scope assignments, consents and artifacts.
-Secret values are returned once when issued and are never readable afterwards.
-
-Editing roles, groups or scope definitions does not imply permission to grant
-arbitrary authority. An addition must fit the actor's pre-change effective
-permissions or use explicit `management.permission.delegate`. That capability
-must exist in both the token scope and live user authority; delegation beyond
-one's own permissions requires recent AAL2 authentication. Authentication errors
-from Guards and transactional checks expose the same MFA challenge.
-
-Re-enabling an API resource can restore every enabled scope it owns. The same
-delegation ceiling therefore applies to resource activation, using exact scope
-identities within that resource. Resource write permission alone cannot restore
-authority outside the actor's grantable set.
-
-Authorization recovery is protected by capability, not preset names: at least
-one enabled user with usable login credentials must retain the complete
-management permission set. Authorization graph writes serialize this check
-with their changes, so concurrent withdrawals cannot remove both remaining
-recovery paths.
-
-Custom API user authorization uses code flow with S256 PKCE and one target
-resource. Authorization and refresh credentials retain semantic authorization
-snapshots. Scope/client withdrawal, role or group authorization changes, and
-resource disablement invalidate affected credentials during online checks;
-restoring a relationship cannot revive an old credential. Metadata edits and
-record UUID CAS versions do not change authorization fingerprints. External APIs
-that validate JWTs offline must account for token lifetime or use introspection
-for current authorization state.
+Client management writes re-check management authority inside their transaction,
+lock the client, compare its UUID `version`, and audit the change. Built-in
+clients cannot be edited, disabled, or deleted. Secret values are returned once
+when issued and are never readable afterwards.
 
 ## Security auditing
 
@@ -127,9 +124,9 @@ append-only behavior does not restrict a privileged database operator.
 Installation records issuer, login and console addresses independently. Those
 settings configure first-party client callbacks and allowed API origins.
 Authentication uses a browser popup; no first-party iframe allowlist is loaded
-or sent. Login and Console deny framing, and the API retains its existing page
-framing restrictions. The standard OIDC session-monitoring endpoint keeps its
-pre-existing protocol policy.
+or sent. Login and Console deny framing. The API sends `X-Frame-Options: DENY`
+on every path except `/openid/check_session`, which keeps its deliberate
+framing exception for OIDC session monitoring.
 
 The login transport and sealed account cookies retain SameSite=Lax. Popup
 callbacks validate request state and target the exact opener origin. Console

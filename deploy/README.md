@@ -38,11 +38,13 @@ effect. The setting uses the existing runtime settings refresh mechanism.
 
 ## Docker Compose
 
-The Compose deployment runs PostgreSQL, Identity, and Login. Identity uses four
-separate listeners: public protocol API (`5150`), internal workload API
-(`5151`), GraphQL (`5152`), and health (`8081`). Only the public listener is
-published on the host. Login always reaches Identity through the private
-Compose service name rather than the public DNS name.
+The Compose deployment runs PostgreSQL, Identity, and Login. Identity runs with
+`APP_ENV=production` and reads its configuration from the mounted
+`deploy/config/identity.compose.yaml`. It uses four separate listeners: public
+protocol API (`5150`), internal workload API (`5151`), GraphQL (`5152`), and
+health (`8081`). Only the public listener is published on the host. Login always
+reaches Identity through the private Compose service name rather than the public
+DNS name.
 
 1. Copy `deploy/.env.example` to `deploy/.env` and replace both secrets.
 2. Create `deploy/secrets/login-workload-token` with at least 32 random
@@ -70,6 +72,11 @@ not create per-instance OAuth secrets:
 ```sh
 docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --scale login=3
 ```
+
+The Login image runs `pnpm start`, which is `node production-server.mjs`, and
+neither the image, Compose, nor the chart sets `NODE_ENV`. The bundle is already
+the production build produced by `pnpm build:login`; add `NODE_ENV=production`
+through the deployment environment only when a dependency needs to branch on it.
 
 ### TLS terminated by an upstream proxy
 
@@ -151,9 +158,9 @@ workload identity or configured gateway networks.
 
 | Setting | Compose | Helm |
 | --- | --- | --- |
-| OTLP endpoint | `IDENTITY_OTLP_ENABLE`, `OTEL_EXPORTER_OTLP_ENDPOINT` | `identity.observability.otlp.*` |
-| Console output | `observability.console` (`true` by default outside production) | `identity.observability.console` |
-| Trace sampling | production default 10%, override `observability.sampling.trace_ratio` | `identity.observability.sampling.traceRatio` |
+| OTLP endpoint | `IDENTITY_OTLP_ENABLE`, `OTEL_EXPORTER_OTLP_ENDPOINT` read by `deploy/config/identity.compose.yaml` (add them to the `server` environment block) | `identity.observability.otlp.*` |
+| Console output | `observability.console` through the mounted compose configuration | `identity.observability.console` (enabled in production by the default values) |
+| Trace sampling | production default 10%, override `observability.sampling.trace_ratio` in the mounted configuration | `identity.observability.sampling.traceRatio` |
 | Trace trust | `observability.trace_context.trusted_gateways`; workload-verified internal calls are trusted when `trust_verified_workload` is true | `identity.observability.traceContext.*` |
 | PII pseudonymization | `observability.pii.hmac_key.environment` / `file` | `identity.observability.pii.existingSecret` + `key` (mounted as `IDENTITY_PII_HMAC_KEY`) |
 | Self-metrics | internal listener `/internal/observability/metrics` | `identity.observability.selfMetrics.*` |
@@ -182,3 +189,9 @@ Deployment responsibilities:
   only when `IDENTITY_LOGIN_OTLP_ENABLE=true`; the pipeline is bounded and
   drops instead of blocking, with drops exported on `/health/metrics` when
   `IDENTITY_LOGIN_METRICS_ENABLE=true`.
+- Keep at least one output enabled when `observability.enable` is true.
+  Startup fails with `observability is enabled but neither the console nor OTLP
+  export is configured` (`src/infrastructure/observability/mod.rs:50`). The
+  console output defaults to off in production, so an OTLP endpoint must then be
+  configured explicitly; an enabled OTLP exporter with no endpoint falls back to
+  `http://127.0.0.1:4318`.

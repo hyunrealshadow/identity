@@ -195,12 +195,16 @@ src/
   web/             Salvo routes, middleware, GraphQL, and protocol HTML
   boot/            Configuration, application assembly, and listener startup
 migration/         Ordered schema and data migrations
-apps/login/        React/TanStack Start UI and server-side API integration
+apps/login/        TanStack Start UI for sign-in, consent, and account pages
+apps/console/      Static instance-management frontend
+packages/          Shared UI components and GraphQL access preflight
+graphql/           Exported schema, error catalog, and management scope catalog
 assets/            Fluent translations, Tera templates, and error-page styles
 config/            Development, test, and conformance startup configuration
 conformance/       OIDC conformance runner and test plans
 deploy/            Docker Compose, container builds, and Helm chart
-docs/              Protocol and security references
+docs/              Protocol, authorization, authentication, GraphQL, security, testing references
+tests/             Integration suites for protocol, database, and telemetry
 ```
 
 Domain and application code use repository contracts; infrastructure supplies
@@ -248,14 +252,23 @@ attempt. The same Markdown is available in the run summary and as an artifact.
 
 ## Documentation
 
+Start at the [documentation index](docs/README.md), which maps the reference set
+and the component guides to common tasks.
+
 | Guide | Contents |
 | --- | --- |
-| [Protocol reference](docs/protocol.md) | HTTP endpoints, client policies, resource indicators, scopes, PAR, and limits |
-| [Login application](apps/login/README.md) | UI behavior, Passkeys, environment, production transport, and health |
+| [Protocol reference](docs/protocol.md) | Identifiers, client policy, resource indicators, scopes, PAR, and endpoints |
+| [Authorization model](docs/authorization.md) | Principals, effective permissions, delegation, recovery, and credential authority |
+| [GraphQL API](docs/graphql.md) | Transport, `@access` requirements, pagination, errors, and management scopes |
+| [Authentication flows](docs/authentication-flows.md) | Login stages, assurance and freshness, consent, code and token exchange, device flow, step-up |
+| [Security](docs/security.md) | Password policy, MFA, sessions, authorization summary, and auditing |
+| [Testing](docs/testing.md) | Which suite proves what, isolated databases, contracts, and container checks |
+| [Login application](apps/login/README.md) | Account pages, Passkeys, environment, production transport, and health |
+| [Console application](apps/console/README.md) | Runtime configuration, workload credentials, scopes, and build |
 | [Deployment](deploy/README.md) | Compose, workload credentials, TLS, and observability configuration |
-| [Helm chart](deploy/helm/identity/README.md) | Replicated Kubernetes deployment |
-| [Security](docs/security.md) | Password requirements, MFA, session protection, and security auditing |
+| [Helm chart](deploy/helm/identity/README.md) | Replicated Kubernetes deployment, Secrets, probes, and network policy |
 | [Observability](deploy/README.md#observability) | OTLP pipelines, PII handling, queues, and export configuration |
+| [Test suites](tests/README.md) | Integration layout, isolated databases, and suite commands |
 | [Conformance](conformance/README.md) | Profiles, local/hosted runners, options, and result interpretation |
 
 ## License

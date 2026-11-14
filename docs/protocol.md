@@ -1,15 +1,18 @@
 # Protocol reference
 
-[Back to the project README](../README.md)
+[Documentation index](README.md) · [Authorization model](authorization.md) ·
+[Authentication flows](authentication-flows.md) · [GraphQL API](graphql.md)
 
 This reference describes Identity's OAuth/OIDC client policy, resource model,
 pushed authorization requests, and HTTP APIs. Supported algorithms are advertised
-through discovery and depend on the active keys and client metadata.
+through discovery and depend on the active keys and client metadata. Who may call
+what is covered by the [authorization model](authorization.md); the management API
+itself by the [GraphQL API](graphql.md).
 
+- [Identifiers](#identifiers)
 - [Client policy](#client-policy)
 - [Resource indicators](#resource-indicators-rfc-8707)
 - [Pushed authorization requests](#pushed-authorization-requests-rfc-9126)
-- [Identifiers](#identifiers)
 - [HTTP endpoints](#http-endpoints)
 
 ## Identifiers
@@ -157,8 +160,9 @@ GraphQL exposes `createResource`, `createScope`, scope metadata updates and scop
 state changes. `createScope` requires a resource global ID. Resource ownership
 and code cannot be changed after creation. `client_scope` and `role_permission`
 reference the same canonical scope IDs; there is no separate permission catalog.
-See the [executable schema](../graphql/schema.graphql) for inputs and access
-requirements.
+See the [GraphQL API](graphql.md#management-scope-catalog) for the management
+operations, and the [executable schema](../graphql/schema.graphql) for their
+inputs and access requirements.
 
 Clients receive an explicit scope ceiling through `client_scope`. Each row bounds
 what the client may request on behalf of a user; `client_granted` additionally
@@ -306,15 +310,16 @@ Machine principals do not acquire a human identity or satisfy human-only
 operations.
 
 Operation entry points and protected relationship fields publish their access
-requirements through repeatable `@access` directives, which drive the shared
-frontend preflight. Live ownership, delegation
-and transaction checks remain authoritative; `runtime: true` marks requirements
-that cannot be proved from token contents alone. Guards and transaction-level
-authentication failures return the same standard authentication challenge, so
-clients can use the existing session and complete MFA in a browser popup.
+requirements through repeatable `@access` directives, which also drive the shared
+frontend preflight; live ownership, delegation and transaction checks remain
+authoritative. Guards and transactional authentication failures return the same
+standard authentication challenge, so clients can reuse the existing session and
+complete MFA in a browser popup. Input validators, query depth, complexity,
+pagination and timeout limits apply, and the listener may be shared with the
+public API or bound separately.
 
-Input validators, query depth, complexity, pagination and timeout limits apply.
-The GraphQL listener may be shared with the public API or bound separately.
+Transport details, the access policy vocabulary, the error envelope, and the
+management scope catalog are documented in the [GraphQL API](graphql.md).
 
 ### Internal workload API
 

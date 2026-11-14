@@ -42,11 +42,14 @@ cargo test -p identity --test installation -- --ignored
 ```
 
 To also run the built production Login installer against that real service and
-temporary schema, first build Login and set `IDENTITY_TEST_LOGIN_NODE` to the
-absolute Node executable path. The same installation test then verifies the
-installer without public-address environment variables, Chinese field errors,
-correction and resubmission, and readiness after installation. It starts and
-stops its own local processes; it does not use a deployed Login instance.
+temporary schema, first run `pnpm build:login` and set
+`IDENTITY_TEST_LOGIN_NODE` to the absolute Node executable path. The test starts
+`apps/login/production-server.mjs`, which imports `.output/server/index.mjs`, so
+both the build output and Node must be present. The same installation test then
+verifies the installer without public-address environment variables, Chinese
+field errors, correction and resubmission, and readiness after installation. It
+starts and stops its own local processes; it does not use a deployed Login
+instance.
 
 ## Console container verification
 

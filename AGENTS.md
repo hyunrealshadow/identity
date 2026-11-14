@@ -4,6 +4,7 @@
 
 - Identity is a self-hosted OAuth 2.0 authorization server and OpenID Connect provider. Preserve protocol behavior as well as account and instance-management behavior.
 - Use `CONTEXT.md` for domain terminology. Update it alongside changes to concepts, invariants, authorization semantics, or user-visible responsibilities. Check the executable implementation when older design documents disagree; do not restore superseded models from planning notes.
+- Reference documentation lives in `docs/`; start at the [documentation index](docs/README.md). When behaviour described there changes, update the affected page instead of adding another report.
 - Keep the Rust workspace boundaries: `src/domain` defines domain models, invariants, and repository ports; `src/application` coordinates use cases; `src/infrastructure` implements persistence and external services; `src/web` handles HTTP/GraphQL transport; `src/boot` and the root executable compose the application and its lifecycle.
 - Domain and application code must not depend on infrastructure or web implementations. Keep transport types and SeaORM entities out of domain contracts.
 - Organize backend and frontend code by functional module. Keep related behavior together rather than expanding a shared miscellaneous directory.

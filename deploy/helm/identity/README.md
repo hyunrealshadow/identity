@@ -90,8 +90,11 @@ Login is ready to serve installation before any runtime client exists. Console
 waits for the installed configuration and remains unready until it can serve it.
 Installation creates both built-in clients transactionally, preserving Console
 callback and logout paths. A rejected form can be corrected and resubmitted.
-Restart Console Pods after changing saved public addresses to refresh their
-local public configuration. Login refreshes its in-memory snapshot on demand.
+Restart Console Pods after changing `IDENTITY_INTERNAL_API_URL` or the internal
+API Service, which the Pod reads from its environment. Saved public addresses
+and Console routing do not require a restart: the container serves
+`/console/config.json` from Identity on every request. Login refreshes its
+in-memory snapshot on demand.
 
 Console public addresses are not repeated in workload environment variables.
 Its optional routing hostname is configured above. Like Login, Console supports
@@ -341,8 +344,9 @@ kubectl api-resources --api-group=gateway.networking.k8s.io
 The default two replicas and PodDisruptionBudgets allow one voluntary
 disruption per component. Login readiness includes availability of a usable
 built-in OAuth credential. The chart NetworkPolicies leave public and health
-ports reachable, restrict Identity's internal port to Login Pods in the same
-namespace, and do not impose egress restrictions.
+ports reachable, restrict Identity's internal port to Login Pods (and to Console
+Pods while `console.enabled` is true) in the same namespace, and do not impose
+egress restrictions.
 
 If your Gateway controller runs in a known namespace, tighten public ingress
 rules for that namespace in a downstream policy rather than disabling the
