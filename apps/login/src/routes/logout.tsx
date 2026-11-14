@@ -1,9 +1,8 @@
-import { Button } from '@identity/ui/components/button'
 import { createFileRoute } from '@tanstack/react-router'
-import { useState } from 'react'
 import { createServerFn } from '@tanstack/react-start'
 
 import { AuthShell } from '#/components/auth-shell'
+import { SignInAgainButton } from '#/components/sign-in-again-button'
 import { beginAuthorization } from '#/lib/authorization-flow'
 import { translate } from '#/lib/i18n'
 import { requestLocale } from '#/lib/i18n.server'
@@ -39,23 +38,6 @@ export const Route = createFileRoute('/logout')({
 function SignedOutPage() {
   const { locale } = Route.useLoaderData()
   const t = (key: Parameters<typeof translate>[1]) => translate(locale, key)
-  const [starting, setStarting] = useState(false)
-
-  // The browser may still remember other accounts. Signing in again after an
-  // explicit sign-out lets the user choose one instead of silently continuing
-  // as whichever account remains.
-  async function signInAgain() {
-    setStarting(true)
-    try {
-      window.location.assign(
-        await beginAuthorization({
-          data: { returnTo: '/account/profile', selectAccount: true },
-        }),
-      )
-    } catch {
-      setStarting(false)
-    }
-  }
 
   return (
     <AuthShell
@@ -65,14 +47,17 @@ function SignedOutPage() {
       title={t('signedOutTitle')}
       description={t('signedOutDescription')}
     >
-      <Button
-        type="button"
-        disabled={starting}
-        onClick={() => void signInAgain()}
-        className="mt-6 w-full"
-      >
-        {t('signInAgain')}
-      </Button>
+      {/* The browser may still remember other accounts. Signing in again after
+          an explicit sign-out lets the user choose one instead of silently
+          continuing as whichever account remains. */}
+      <SignInAgainButton
+        label={t('signInAgain')}
+        begin={() =>
+          beginAuthorization({
+            data: { returnTo: '/account/profile', selectAccount: true },
+          })
+        }
+      />
     </AuthShell>
   )
 }
