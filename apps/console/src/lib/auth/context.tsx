@@ -38,6 +38,7 @@ import {
   type ReauthenticationTrigger,
 } from '#/lib/auth/reauthentication'
 import { currentReturnTo, sanitizeReturnTo } from '#/lib/auth/return-to'
+import { assignDocument, reloadDocument } from '#/lib/auth/navigation'
 import {
   clearAuthSession,
   getAuthSession,
@@ -61,6 +62,8 @@ export type AuthStatus =
   | 'authorizing'
   | 'authenticated'
   | 'anonymous'
+  /** Leaving for the provider's end-session endpoint. */
+  | 'signingOut'
   | 'expired'
   | 'error'
 
@@ -915,6 +918,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [applyAccountLocale, applyAccountTimeZone, config.redirectUri, config.postLogoutRedirectUri, signIn])
 
   useEffect(() => {
+    if (status !== 'authorizing' && status !== 'signingOut') return
+    // Returning from the provider with the browser's Back button can restore
+    // this document from the back/forward cache, frozen in the state it had
+    // while leaving. Nothing would ever finish that redirect, and an account
+    // switch or sign-out has already discarded the in-memory session, so start
+    // over from a fresh document instead of showing a permanent spinner.
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) reloadDocument()
+    }
+    window.addEventListener('pageshow', onPageShow)
+    return () => window.removeEventListener('pageshow', onPageShow)
+  }, [status])
+
+  useEffect(() => {
     if (status !== 'authenticated') return
     const session = getAuthSession()
     if (!session) return
@@ -1028,17 +1045,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setEndSessionEndpoint(undefined)
     setErrorCode(undefined)
     setRecoveryCorrelation(undefined)
-    setStatus('anonymous')
 
-    if (!endpoint || !idToken) return false
-
-    try {
-      const url = buildEndSessionUrl({ config, endpoint, idToken })
-      window.location.assign(url)
-      return true
-    } catch {
+    let url: string | undefined
+    if (endpoint && idToken) {
+      try {
+        url = buildEndSessionUrl({ config, endpoint, idToken })
+      } catch {
+        url = undefined
+      }
+    }
+    if (!url) {
+      setStatus('anonymous')
       return false
     }
+    // Keep a neutral progress state until the document is replaced, so the
+    // missing-session page never flashes during an intentional sign-out.
+    setStatus('signingOut')
+    assignDocument(url)
+    return true
   }, [applyAccountLocale, applyAccountTimeZone, closePopupPrompt, config])
 
   const value = useMemo<AuthContextValue>(

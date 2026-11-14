@@ -62,7 +62,7 @@ impl ConsoleRuntimeService {
             graphql_url: endpoint(issuer.as_str(), "graphql")?,
             client_id: identity_domain::openid_connect::identifier::client_id(client_id),
             redirect_uri: endpoint(&console, "callback")?,
-            post_logout_redirect_uri: endpoint(&console, "signed-out")?,
+            post_logout_redirect_uri: endpoint(&console, "logout")?,
             account_url: endpoint(&login, "account")?,
             scope: "openid profile email account.read management.*",
             display_name: CONSOLE_CLIENT_NAME,

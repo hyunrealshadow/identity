@@ -10,7 +10,7 @@ function baseConfig() {
     graphqlUrl: 'https://identity.example.test/graphql',
     clientId: 'console-client',
     redirectUri: `${origin}/callback`,
-    postLogoutRedirectUri: `${origin}/signed-out`,
+    postLogoutRedirectUri: `${origin}/logout`,
     accountUrl: 'https://login.example.test/account',
     scope: 'openid profile email',
     displayName: 'Identity Console',
@@ -51,7 +51,7 @@ describe('console runtime configuration', () => {
 
   it('allows a same-origin account center outside the Console prefix', () => {
     const value = { ...baseConfig(), redirectUri: `${origin}/console/callback`,
-      postLogoutRedirectUri: `${origin}/console/signed-out`, accountUrl: `${origin}/account` }
+      postLogoutRedirectUri: `${origin}/console/logout`, accountUrl: `${origin}/account` }
     expect(validateRuntimeConfig(value).accountUrl).toBe(`${origin}/account`)
     expect(configError({ ...value, accountUrl: `${origin}/console/account` })).toBe('config_invalid_account_url')
   })

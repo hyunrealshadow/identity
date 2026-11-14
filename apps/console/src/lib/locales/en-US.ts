@@ -158,6 +158,7 @@ const shared = {
     'Your tokens are no longer valid. Sign in again to continue from this page.',
   sessionExpiredAction: 'Sign in again',
   authLoadingDescription: 'Redirecting to Identity to authorize this console.',
+  authSigningOutDescription: 'Signing out…',
   authReauthenticatingTitle: 'Signing in again',
   authReauthenticatingDescription:
     'A fresh sign-in is required. Your draft will be kept.',

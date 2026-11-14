@@ -35,7 +35,7 @@ const config: RuntimeConfig = {
   graphqlUrl: 'https://issuer.example.test/graphql',
   clientId: 'console',
   redirectUri: 'https://console.example.test/callback',
-  postLogoutRedirectUri: 'https://console.example.test/signed-out',
+  postLogoutRedirectUri: 'https://console.example.test/logout',
   accountUrl: 'https://account.example.test',
   scope: 'openid profile email management.user.read',
   displayName: 'Identity Console',

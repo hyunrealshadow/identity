@@ -5,7 +5,7 @@ import { AuthStatusPage } from '#/components/auth-status-page'
 import { useAuth } from '#/lib/auth/context'
 import { useTranslator } from '#/lib/i18n'
 
-export const Route = createFileRoute('/signed-out')({
+export const Route = createFileRoute('/logout')({
   component: SignedOutPage,
 })
 

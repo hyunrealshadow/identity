@@ -25,7 +25,7 @@ def verify(image):
         "graphqlUrl": "https://identity.example/graphql",
         "clientId": "public-console",
         "redirectUri": "https://login.example/console/callback",
-        "postLogoutRedirectUri": "https://login.example/console/signed-out",
+        "postLogoutRedirectUri": "https://login.example/console/logout",
         "accountUrl": "https://login.example/account",
         "scope": "openid profile email management.*",
         "displayName": 'Console "测试"',

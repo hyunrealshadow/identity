@@ -33,6 +33,13 @@ import { readDraft, writeDraft } from '#/lib/draft-storage'
 const mocks = vi.hoisted(() => ({
   beginAuthorization: vi.fn(),
   completeAuthorization: vi.fn(),
+  reloadDocument: vi.fn(),
+  assignDocument: vi.fn(),
+}))
+
+vi.mock('#/lib/auth/navigation', () => ({
+  reloadDocument: mocks.reloadDocument,
+  assignDocument: mocks.assignDocument,
 }))
 
 vi.mock('#/lib/auth/oidc', async (importOriginal) => {
@@ -49,7 +56,7 @@ const config: RuntimeConfig = {
   graphqlUrl: 'https://issuer.example.test/graphql',
   clientId: 'console',
   redirectUri: `${window.location.origin}/callback`,
-  postLogoutRedirectUri: `${window.location.origin}/signed-out`,
+  postLogoutRedirectUri: `${window.location.origin}/logout`,
   accountUrl: 'https://account.example.test',
   scope: 'openid profile email',
   displayName: 'Identity Console',
@@ -168,6 +175,8 @@ beforeEach(() => {
       }),
     )
   mocks.completeAuthorization.mockReset()
+  mocks.reloadDocument.mockReset()
+  mocks.assignDocument.mockReset()
   vi.spyOn(window, 'open').mockReturnValue(fakePopup() as unknown as Window)
   authApi = undefined
 })
@@ -357,6 +366,38 @@ describe('automatic console reauthentication', () => {
     // The old account's draft survived the switch and stays isolated by subject.
     setAuthSession(session())
     expect(readDraft('switch-draft')).toEqual({ page: 'users' })
+  })
+
+  it('restarts a switch restored from the back/forward cache instead of waiting forever', async () => {
+    setAuthSession(session())
+    mocks.beginAuthorization.mockImplementation(async (options) => {
+      const request = authorizationRequest(options)
+      options.beforeRedirect?.(request)
+      return request
+    })
+    renderAuth()
+
+    // A persisted page shown while authenticated is an ordinary restore.
+    act(() => {
+      window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }))
+    })
+    expect(mocks.reloadDocument).not.toHaveBeenCalled()
+
+    await act(async () => {
+      await authApi?.signIn({ selectAccount: true })
+    })
+    expect(authApi?.status).toBe('authorizing')
+    expect(getAuthSession()).toBeNull()
+
+    act(() => {
+      window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: false }))
+    })
+    expect(mocks.reloadDocument).not.toHaveBeenCalled()
+
+    act(() => {
+      window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }))
+    })
+    expect(mocks.reloadDocument).toHaveBeenCalledTimes(1)
   })
 
   it('keeps the previous account when a switch request cannot be validated', async () => {
@@ -617,6 +658,43 @@ describe('automatic console reauthentication', () => {
     expect(
       mocks.beginAuthorization.mock.calls[1][0].deferNavigation,
     ).toBeUndefined()
+  })
+
+  it('shows a sign-out progress state, not a missing session, while leaving for end-session', async () => {
+    setAuthSession(session())
+    renderAuth()
+
+    let redirected: boolean | undefined
+    act(() => {
+      redirected = authApi?.logoutSso()
+    })
+
+    expect(redirected).toBe(true)
+    expect(authApi?.status).toBe('signingOut')
+    expect(getAuthSession()).toBeNull()
+    const target = new URL(mocks.assignDocument.mock.calls[0][0])
+    expect(`${target.origin}${target.pathname}`).toBe(`${config.issuer}/logout`)
+    expect(target.searchParams.get('id_token_hint')).toBe('id-user-a')
+
+    // Back from the provider can restore this frozen state; start over.
+    act(() => {
+      window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: true }))
+    })
+    expect(mocks.reloadDocument).toHaveBeenCalledTimes(1)
+  })
+
+  it('falls back to the local signed-out state without an end-session endpoint', async () => {
+    setAuthSession({ ...session(), endSessionEndpoint: undefined })
+    renderAuth()
+
+    let redirected: boolean | undefined
+    act(() => {
+      redirected = authApi?.logoutSso()
+    })
+
+    expect(redirected).toBe(false)
+    expect(authApi?.status).toBe('anonymous')
+    expect(mocks.assignDocument).not.toHaveBeenCalled()
   })
 
   it.each(['logoutLocal', 'logoutSso'] as const)(

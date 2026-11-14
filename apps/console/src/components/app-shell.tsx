@@ -168,7 +168,7 @@ function AppShellLayout() {
   // for credentials instead of silently restoring the same account. Without
   // an end-session endpoint the console still clears its own session.
   function signOut() {
-    if (!logoutSso()) void navigate({ to: '/signed-out', replace: true })
+    if (!logoutSso()) void navigate({ to: '/logout', replace: true })
   }
 
   function switchAccount() {

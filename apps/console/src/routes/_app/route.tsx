@@ -71,6 +71,10 @@ function AuthenticatedLayout() {
     )
   }
 
+  if (status === 'signingOut') {
+    return <FullPageLoading label={t('authSigningOutDescription')} />
+  }
+
   if (status === 'anonymous') {
     return (
       <Centered>

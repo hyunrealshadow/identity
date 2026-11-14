@@ -107,7 +107,7 @@ async fn installation_persists_same_origin_console_path_and_bootstraps_both_work
         let console_oid = read_setting::<ConsoleClientIdSetting, _>(&db).await.unwrap().unwrap();
         assert_eq!(console["clientId"], identity_domain::openid_connect::identifier::client_id(console_oid));
         assert_eq!(console["redirectUri"], "https://identity.example.test/console/callback");
-        assert_eq!(console["postLogoutRedirectUri"], "https://identity.example.test/console/signed-out");
+        assert_eq!(console["postLogoutRedirectUri"], "https://identity.example.test/console/logout");
         assert_eq!(console["accountUrl"], "https://identity.example.test/account");
         assert!(console.get("oauth_client").is_none());
         let mut response = TestClient::get(runtime)
@@ -122,7 +122,7 @@ async fn installation_persists_same_origin_console_path_and_bootstraps_both_work
              JOIN client_openid_connect_platform p ON p.client_id=c.id \
              WHERE c.oid=$1", [console_oid.into()]))
             .await.unwrap().unwrap();
-        assert_eq!(client.try_get::<Value>("", "logout").unwrap(), json!(["https://identity.example.test/console/signed-out"]));
+        assert_eq!(client.try_get::<Value>("", "logout").unwrap(), json!(["https://identity.example.test/console/logout"]));
         assert!(client.try_get::<Value>("", "redirects").unwrap().to_string().contains("/console/callback"));
         let count = db.query_one_raw(Statement::from_string(DbBackend::Postgres,
             "SELECT count(*) AS total FROM client".to_owned())).await.unwrap().unwrap();

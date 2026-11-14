@@ -72,7 +72,7 @@ async fn console_workload_fetches_only_its_public_configuration() {
     );
     assert_eq!(
         config["postLogoutRedirectUri"],
-        "https://login.example.com/console/signed-out"
+        "https://login.example.com/console/logout"
     );
     assert_eq!(config["accountUrl"], "https://login.example.com/account");
     assert_eq!(

@@ -313,7 +313,7 @@ async fn ensure_oidc_metadata(
         "include_scoped_claims_in_access_token": false
     });
     let logout_uris = json!([redirect_uri
-        .join("signed-out")
+        .join("logout")
         .map_err(AppError::internal)?
         .as_str()]);
     let grant_types = json!(["authorization_code"]);

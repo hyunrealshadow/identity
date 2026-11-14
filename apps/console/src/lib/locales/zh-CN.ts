@@ -144,6 +144,7 @@ const shared = {
   sessionExpiredDescription: '令牌已失效，请再次登录，从此页面继续',
   sessionExpiredAction: '再次登录',
   authLoadingDescription: '正在跳转到 Identity 以授权此控制台',
+  authSigningOutDescription: '正在退出登录',
   authReauthenticatingTitle: '正在重新登录',
   authReauthenticatingDescription: '需要重新验证身份，草稿会保留',
   authPopupLoadingTitle: '正在登录…',

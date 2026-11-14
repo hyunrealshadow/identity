@@ -11,7 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteRouteImport } from './routes/_app/route'
 import { Route as CallbackRouteImport } from './routes/callback'
-import { Route as SignedOutRouteImport } from './routes/signed-out'
+import { Route as LogoutRouteImport } from './routes/logout'
 import { Route as AppdashboardIndexRouteImport } from './routes/_app/(dashboard)/index'
 import { Route as AppinstanceSettingsRouteRouteImport } from './routes/_app/(instance)/settings/route'
 import { Route as AppclientManagementClientsIndexRouteImport } from './routes/_app/(client-management)/clients/index'
@@ -63,9 +63,9 @@ const CallbackRoute = CallbackRouteImport.update({
   path: '/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
-const SignedOutRoute = SignedOutRouteImport.update({
-  id: '/signed-out',
-  path: '/signed-out',
+const LogoutRoute = LogoutRouteImport.update({
+  id: '/logout',
+  path: '/logout',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppdashboardIndexRoute = AppdashboardIndexRouteImport.update({
@@ -319,7 +319,7 @@ const AppclientManagementResourcesResourceIdPermissionsNewRoute =
 export interface FileRoutesByFullPath {
   '/': typeof AppdashboardIndexRoute
   '/callback': typeof CallbackRoute
-  '/signed-out': typeof SignedOutRoute
+  '/logout': typeof LogoutRoute
   '/settings': typeof AppinstanceSettingsRouteRouteWithChildren
   '/clients/$clientId': typeof AppclientManagementClientsClientIdRouteRouteWithChildren
   '/resources/$resourceId': typeof AppclientManagementResourcesResourceIdRouteRouteWithChildren
@@ -363,7 +363,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/callback': typeof CallbackRoute
-  '/signed-out': typeof SignedOutRoute
+  '/logout': typeof LogoutRoute
   '/': typeof AppdashboardIndexRoute
   '/clients/new': typeof AppclientManagementClientsNewRoute
   '/settings/authentication': typeof AppinstanceSettingsAuthenticationRoute
@@ -404,7 +404,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteRouteWithChildren
   '/callback': typeof CallbackRoute
-  '/signed-out': typeof SignedOutRoute
+  '/logout': typeof LogoutRoute
   '/_app/(instance)/settings': typeof AppinstanceSettingsRouteRouteWithChildren
   '/_app/(dashboard)/': typeof AppdashboardIndexRoute
   '/_app/(client-management)/clients/$clientId': typeof AppclientManagementClientsClientIdRouteRouteWithChildren
@@ -452,7 +452,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/callback'
-    | '/signed-out'
+    | '/logout'
     | '/settings'
     | '/clients/$clientId'
     | '/resources/$resourceId'
@@ -496,7 +496,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/callback'
-    | '/signed-out'
+    | '/logout'
     | '/'
     | '/clients/new'
     | '/settings/authentication'
@@ -536,7 +536,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_app'
     | '/callback'
-    | '/signed-out'
+    | '/logout'
     | '/_app/(instance)/settings'
     | '/_app/(dashboard)/'
     | '/_app/(client-management)/clients/$clientId'
@@ -583,7 +583,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AppRouteRoute: typeof AppRouteRouteWithChildren
   CallbackRoute: typeof CallbackRoute
-  SignedOutRoute: typeof SignedOutRoute
+  LogoutRoute: typeof LogoutRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -602,11 +602,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof CallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/signed-out': {
-      id: '/signed-out'
-      path: '/signed-out'
-      fullPath: '/signed-out'
-      preLoaderRoute: typeof SignedOutRouteImport
+    '/logout': {
+      id: '/logout'
+      path: '/logout'
+      fullPath: '/logout'
+      preLoaderRoute: typeof LogoutRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/(dashboard)/': {
@@ -1094,7 +1094,7 @@ const AppRouteRouteWithChildren = AppRouteRoute._addFileChildren(
 const rootRouteChildren: RootRouteChildren = {
   AppRouteRoute: AppRouteRouteWithChildren,
   CallbackRoute: CallbackRoute,
-  SignedOutRoute: SignedOutRoute,
+  LogoutRoute: LogoutRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
