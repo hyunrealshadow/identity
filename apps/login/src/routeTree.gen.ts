@@ -24,6 +24,7 @@ import { Route as AccountIdentifiersRouteImport } from './routes/account/identif
 import { Route as AccountProfileRouteImport } from './routes/account/profile'
 import { Route as AccountSecurityRouteImport } from './routes/account/security'
 import { Route as AccountSessionsRouteImport } from './routes/account/sessions'
+import { Route as DeviceOutcomeRouteImport } from './routes/device_.$outcome'
 import { Route as HealthLiveRouteImport } from './routes/health.live'
 import { Route as HealthMetricsRouteImport } from './routes/health.metrics'
 import { Route as HealthReadyRouteImport } from './routes/health.ready'
@@ -106,6 +107,11 @@ const AccountSessionsRoute = AccountSessionsRouteImport.update({
   path: '/sessions',
   getParentRoute: () => AccountRouteRoute,
 } as any)
+const DeviceOutcomeRoute = DeviceOutcomeRouteImport.update({
+  id: '/device_/$outcome',
+  path: '/device/$outcome',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const HealthLiveRoute = HealthLiveRouteImport.update({
   id: '/health/live',
   path: '/health/live',
@@ -152,6 +158,7 @@ export interface FileRoutesByFullPath {
   '/account/profile': typeof AccountProfileRoute
   '/account/security': typeof AccountSecurityRoute
   '/account/sessions': typeof AccountSessionsRoute
+  '/device/$outcome': typeof DeviceOutcomeRoute
   '/health/live': typeof HealthLiveRoute
   '/health/metrics': typeof HealthMetricsRoute
   '/health/ready': typeof HealthReadyRoute
@@ -174,6 +181,7 @@ export interface FileRoutesByTo {
   '/account/profile': typeof AccountProfileRoute
   '/account/security': typeof AccountSecurityRoute
   '/account/sessions': typeof AccountSessionsRoute
+  '/device/$outcome': typeof DeviceOutcomeRoute
   '/health/live': typeof HealthLiveRoute
   '/health/metrics': typeof HealthMetricsRoute
   '/health/ready': typeof HealthReadyRoute
@@ -198,6 +206,7 @@ export interface FileRoutesById {
   '/account/profile': typeof AccountProfileRoute
   '/account/security': typeof AccountSecurityRoute
   '/account/sessions': typeof AccountSessionsRoute
+  '/device_/$outcome': typeof DeviceOutcomeRoute
   '/health/live': typeof HealthLiveRoute
   '/health/metrics': typeof HealthMetricsRoute
   '/health/ready': typeof HealthReadyRoute
@@ -223,6 +232,7 @@ export interface FileRouteTypes {
     | '/account/profile'
     | '/account/security'
     | '/account/sessions'
+    | '/device/$outcome'
     | '/health/live'
     | '/health/metrics'
     | '/health/ready'
@@ -245,6 +255,7 @@ export interface FileRouteTypes {
     | '/account/profile'
     | '/account/security'
     | '/account/sessions'
+    | '/device/$outcome'
     | '/health/live'
     | '/health/metrics'
     | '/health/ready'
@@ -268,6 +279,7 @@ export interface FileRouteTypes {
     | '/account/profile'
     | '/account/security'
     | '/account/sessions'
+    | '/device_/$outcome'
     | '/health/live'
     | '/health/metrics'
     | '/health/ready'
@@ -288,6 +300,7 @@ export interface RootRouteChildren {
   InstallRoute: typeof InstallRoute
   LoginRoute: typeof LoginRouteWithChildren
   LogoutRoute: typeof LogoutRoute
+  DeviceOutcomeRoute: typeof DeviceOutcomeRoute
   HealthLiveRoute: typeof HealthLiveRoute
   HealthMetricsRoute: typeof HealthMetricsRoute
   HealthReadyRoute: typeof HealthReadyRoute
@@ -400,6 +413,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AccountSessionsRouteImport
       parentRoute: typeof AccountRouteRoute
     }
+    '/device_/$outcome': {
+      id: '/device_/$outcome'
+      path: '/device/$outcome'
+      fullPath: '/device/$outcome'
+      preLoaderRoute: typeof DeviceOutcomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/health/live': {
       id: '/health/live'
       path: '/health/live'
@@ -490,6 +510,7 @@ const rootRouteChildren: RootRouteChildren = {
   InstallRoute: InstallRoute,
   LoginRoute: LoginRouteWithChildren,
   LogoutRoute: LogoutRoute,
+  DeviceOutcomeRoute: DeviceOutcomeRoute,
   HealthLiveRoute: HealthLiveRoute,
   HealthMetricsRoute: HealthMetricsRoute,
   HealthReadyRoute: HealthReadyRoute,

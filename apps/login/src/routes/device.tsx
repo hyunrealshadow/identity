@@ -1,10 +1,11 @@
 import { Field, FieldError, FieldLabel } from '@identity/ui/components/field'
 import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
-import { Check, Clock, ShieldAlert, X } from 'lucide-react'
+import { ShieldAlert } from 'lucide-react'
 import { useState } from 'react'
 
 import { ConsentAccount } from '#/components/consent-account'
+import { decisionOutcome, DeviceOutcomePage } from '#/components/device-outcome'
 import { AuthShell } from '#/components/auth-shell'
 import { ErrorAlert } from '#/components/form-alert'
 import { ProgressiveForm } from '#/components/progressive-form'
@@ -31,19 +32,12 @@ import { formLocale, requestLocale } from '#/lib/i18n.server'
 interface DeviceSearch {
   login_id?: string
   user_code?: string
-  done?: string
   error?: string
   ui_locales?: string
 }
 
-type DeviceOutcome = 'approved' | 'denied' | 'expired'
-
 function optionalString(value: unknown) {
   return typeof value === 'string' ? value : undefined
-}
-
-function deviceOutcome(value: string | undefined): DeviceOutcome | undefined {
-  return value === 'approved' || value === 'denied' ? value : undefined
 }
 
 /// A request that is already answered or gone cannot be decided again, so the
@@ -106,7 +100,6 @@ export const Route = createFileRoute('/device')({
   validateSearch: (search): DeviceSearch => ({
     login_id: optionalString(search.login_id),
     user_code: optionalString(search.user_code),
-    done: optionalString(search.done),
     error: optionalString(search.error),
     ui_locales: optionalString(search.ui_locales),
   }),
@@ -175,14 +168,14 @@ export const Route = createFileRoute('/device')({
             decision,
             String(form.get('csrf_token') ?? ''),
           )
-          const outcome = deviceOutcome(result.status)
+          const outcome = decisionOutcome(result.status)
           if (!outcome) {
             throw new LocalizedError(translate(locale, 'deviceDecisionUnknown'))
           }
 
           return navigationResponse(
             request,
-            `/device?done=${outcome}${uiLocales ? `&ui_locales=${encodeURIComponent(uiLocales)}` : ''}`,
+            `/device/${outcome}${uiLocales ? `?ui_locales=${encodeURIComponent(uiLocales)}` : ''}`,
           )
         } catch (error) {
           return formErrorResponse(
@@ -204,38 +197,13 @@ function DevicePage() {
   const search = Route.useSearch()
   const data = Route.useLoaderData()
   const device = data.device
-  const outcome =
-    deviceOutcome(search.done) ?? (device ? decidedOutcome(device.status) : undefined)
+  const outcome = device ? decidedOutcome(device.status) : undefined
   const visibleError = search.error ?? data.error
   const t = (key: Parameters<typeof translate>[1], values?: Record<string, string | number>) =>
     translate(data.locale, key, values)
 
   if (outcome) {
-    const titles = {
-      approved: 'deviceApprovedTitle',
-      denied: 'deviceDeniedTitle',
-      expired: 'deviceExpiredTitle',
-    } as const
-    const descriptions = {
-      approved: 'deviceApprovedDescription',
-      denied: 'deviceDeniedDescription',
-      expired: 'deviceExpiredDescription',
-    } as const
-    const OutcomeIcon = outcome === 'approved' ? Check : outcome === 'denied' ? X : Clock
-
-    return (
-      <AuthShell
-        lang={data.locale}
-        locale={data.locale}
-        showPreferences
-        title={t(titles[outcome])}
-        description={t(descriptions[outcome])}
-        compact
-        titleIcon={<OutcomeIcon className="size-6" aria-hidden="true" />}
-      >
-        {null}
-      </AuthShell>
-    )
+    return <DeviceOutcomePage locale={data.locale} outcome={outcome} />
   }
 
   if (!device) {
