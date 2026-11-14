@@ -1,6 +1,7 @@
 import { TableRowActions } from '#/components/table-row-actions'
 import { CursorPagination } from '#/components/cursor-pagination'
 import { useCursorPagination } from '#/lib/use-cursor-pagination'
+import { useUrlFilters } from '#/lib/use-url-filters'
 import {
   CollectionToolbar,
   ResourceTable,
@@ -15,7 +16,7 @@ import { Button } from '@identity/ui/components/button'
 import { Skeleton } from '@identity/ui/components/skeleton'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { Plus, TriangleAlert } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 
 import { AsyncState } from '#/components/async-state'
 import { ErrorDetails } from '#/components/error-details'
@@ -44,11 +45,13 @@ import {
   groupsFilterDraft,
   groupsQueryVariables,
   GROUP_PAGE_SIZE,
-  groupsSearchFromDraft,
+  groupsAppliedFilters,
+  groupsFormSearch,
   groupsSearchKey,
   hasGroupFilters,
   resolveLocalizedText,
   type GroupsFilterDraft,
+  type GroupsFilters,
   type GroupsSearch,
 } from '#/modules/user-management/groups/lib/groups-search'
 import { useConsoleQuery } from '#/lib/graphql/use-console-query'
@@ -200,13 +203,26 @@ export function GroupsListPage({ search }: { search: GroupsSearch }) {
     () => rbacScope(workspace.data?.effectivePermissions),
     [workspace.data?.effectivePermissions],
   )
-  const searchKey = groupsSearchKey(search)
-  const [draft, setDraft] = useState<GroupsFilterDraft>(() =>
-    groupsFilterDraft(search),
-  )
+  // The URL always mirrors the filter form; queries use the applied filters.
+  const draft = groupsFilterDraft(search)
+  const { applied, go } = useUrlFilters<GroupsSearch, GroupsFilters>({
+    search,
+    keyOf: groupsSearchKey,
+    appliedOf: groupsAppliedFilters,
+    navigate: (next, { replace }) =>
+      void navigate({ to: '/groups', search: next, replace }),
+  })
+  const appliedSearch: GroupsSearch = {
+    ...applied,
+    order: search.order,
+    size: search.size,
+    after: search.after,
+    before: search.before,
+  }
+  const appliedKey = groupsSearchKey(appliedSearch)
   const variables = useMemo<ConsoleGroupsQueryVariables | null>(
-    () => (scope.groupsRead ? groupsQueryVariables(search) : null),
-    [searchKey, scope.groupsRead],
+    () => (scope.groupsRead ? groupsQueryVariables(appliedSearch) : null),
+    [appliedKey, scope.groupsRead],
   )
   const groups = useConsoleQuery<
     ConsoleGroupsQuery,
@@ -219,30 +235,29 @@ export function GroupsListPage({ search }: { search: GroupsSearch }) {
     { keepPreviousData: true },
   )
 
-  useEffect(() => {
-    setDraft(groupsFilterDraft(search))
-  }, [searchKey])
+  const changeForm = (next: GroupsFilterDraft) =>
+    go({ ...search, ...groupsFormSearch(next) }, { replace: true })
 
-  const reset = () => {
-    setDraft(groupsFilterDraft({}))
-    void navigate({ to: '/groups', search: { size: search.size } })
-  }
+  const reset = () => go({ size: search.size }, { apply: {} })
 
   const apply = () => {
-    void navigate({
-      to: '/groups',
-      search: { ...groupsSearchFromDraft(draft), size: search.size },
-    })
+    const filters = groupsAppliedFilters(search)
+    const next: GroupsSearch = {
+      ...search,
+      ...filters,
+      after: undefined,
+      before: undefined,
+    }
+    // Applying the filters already in effect on the first page reloads them.
+    if (groupsSearchKey(next) === appliedKey) void groups.refresh()
+    go(next, { apply: filters })
   }
 
   const pager = useCursorPagination({
     search,
     variables,
     onNavigate: (cursor) =>
-      void navigate({
-        to: '/groups',
-        search: { ...search, after: undefined, before: undefined, ...cursor },
-      }),
+      go({ ...search, after: undefined, before: undefined, ...cursor }),
   })
 
   const filters = (
@@ -260,9 +275,7 @@ export function GroupsListPage({ search }: { search: GroupsSearch }) {
           label={t('groupsFilterSearchLabel')}
           hideLabel
           value={draft.q}
-          onChange={(value) =>
-            setDraft((current) => ({ ...current, q: value }))
-          }
+          onChange={(value) => changeForm({ ...draft, q: value })}
           placeholder={t('groupsFilterSearchPlaceholder')}
           maxLength={256}
         />
@@ -279,7 +292,7 @@ export function GroupsListPage({ search }: { search: GroupsSearch }) {
               value === 'enabled' ||
               value === 'disabled'
             ) {
-              setDraft((current) => ({ ...current, enabled: value }))
+              changeForm({ ...draft, enabled: value })
             }
           }}
           options={[
@@ -291,7 +304,7 @@ export function GroupsListPage({ search }: { search: GroupsSearch }) {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" variant="secondary">
+        <Button type="submit" variant="outline">
           {t('groupsApplyFilters')}
         </Button>
         <Button type="button" variant="ghost" onClick={reset}>
@@ -378,7 +391,7 @@ export function GroupsListPage({ search }: { search: GroupsSearch }) {
     const edges = connection.edges
     const emptyState = (() => {
       if (edges.length === 0) {
-        if (hasGroupFilters(search) || search.after || search.before) {
+        if (hasGroupFilters(appliedSearch) || search.after || search.before) {
           return (
             <AsyncState
               kind="empty"
@@ -386,7 +399,7 @@ export function GroupsListPage({ search }: { search: GroupsSearch }) {
               title={t('groupsNoResultsTitle')}
               description={t('groupsNoResultsDescription')}
               action={
-                <Button variant="secondary" onClick={reset}>
+                <Button variant="outline" onClick={reset}>
                   {t('groupsClearFilters')}
                 </Button>
               }
@@ -436,15 +449,7 @@ export function GroupsListPage({ search }: { search: GroupsSearch }) {
           order={search.order}
           onOrderChange={(order) => {
             if (order === undefined || isGroupOrder(order))
-              void navigate({
-                to: '/groups',
-                search: {
-                  ...search,
-                  order,
-                  after: undefined,
-                  before: undefined,
-                },
-              })
+              go({ ...search, order, after: undefined, before: undefined })
           }}
           refreshing={groups.refreshing}
           onRefresh={() => void groups.refresh()}
@@ -458,10 +463,7 @@ export function GroupsListPage({ search }: { search: GroupsSearch }) {
               isDisabled={groups.refreshing}
               pageSize={search.size ?? GROUP_PAGE_SIZE}
               onPageSizeChange={(size) =>
-                void navigate({
-                  to: '/groups',
-                  search: { ...search, size, after: undefined, before: undefined },
-                })
+                go({ ...search, size, after: undefined, before: undefined })
               }
             />
           }

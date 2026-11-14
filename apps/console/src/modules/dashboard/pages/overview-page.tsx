@@ -46,7 +46,7 @@ function LastUpdated({
       ) : null}
       <Button
         size="sm"
-        variant="secondary"
+        variant="outline"
         aria-label={t('dashboardRefreshLabel')}
         disabled={refreshing}
         onClick={onRefresh}

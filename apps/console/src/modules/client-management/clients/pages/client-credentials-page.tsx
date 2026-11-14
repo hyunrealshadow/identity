@@ -639,7 +639,7 @@ function AddCredentialDialog({
           </div>
           <DialogFooter>
             <Button
-              variant="secondary"
+              variant="outline"
               disabled={pending}
               onClick={() => {
                 state.close()

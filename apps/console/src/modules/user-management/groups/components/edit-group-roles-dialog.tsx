@@ -345,7 +345,7 @@ export function EditRolesDialog({
             />
             <Button
               size="sm"
-              variant="secondary"
+              variant="outline"
               onClick={() => void reloadSnapshot()}
             >
               {t('groupRolesCurrentReload')}

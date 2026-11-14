@@ -525,7 +525,7 @@ function AddSigningKeyDialog({
             options={options}
           />
           <DialogFooter>
-            <Button type="button" variant="secondary" disabled={pending} onClick={() => state.close()}>
+            <Button type="button" variant="outline" disabled={pending} onClick={() => state.close()}>
               {t('tableCancel')}
             </Button>
             <Button type="submit" disabled={pending || !selected}>

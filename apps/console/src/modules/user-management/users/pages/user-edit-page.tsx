@@ -160,7 +160,7 @@ export function UserEditPage({ userId }: { userId: string }) {
       description={detail.user?.username}
       actions={
         <Button
-          variant="secondary"
+          variant="outline"
           disabled={pending}
           onClick={() => {
             leaveEditor()
@@ -279,7 +279,7 @@ export function UserEditPage({ userId }: { userId: string }) {
           description={t('notFoundDescription')}
           action={
             <Button
-              variant="secondary"
+              variant="outline"
               onClick={() => void navigate({ to: '/users' })}
             >
               {t('backToUsers')}
@@ -602,7 +602,7 @@ export function UserEditPage({ userId }: { userId: string }) {
               </Button>
               <Button
                 type="button"
-                variant="secondary"
+                variant="outline"
                 disabled={pending}
                 onClick={() => {
                   leaveEditor()

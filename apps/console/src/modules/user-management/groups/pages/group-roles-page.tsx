@@ -36,6 +36,8 @@ import { resolveLocalizedText } from '#/modules/user-management/groups/lib/group
 import { cursorPage } from '#/modules/user-management/lib/cursor-page'
 
 import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
+import { FIRST_PAGE } from '#/modules/user-management/lib/relation-search'
+import type { GroupRolesSearch } from '#/modules/user-management/groups/lib/group-relations-search'
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
 import {
   AssignmentStatusChip,
@@ -49,7 +51,13 @@ import {
 
 type RelationStatus = 'any' | 'enabled' | 'disabled'
 
-export function GroupRolesPage({ groupId }: { groupId: string }) {
+export function GroupRolesPage({
+  groupId,
+  listSearch,
+}: {
+  groupId: string
+  listSearch: GroupRolesSearch
+}) {
   const t = useTranslator()
   const { locale } = useLocale()
   const navigate = useNavigate()
@@ -59,11 +67,19 @@ export function GroupRolesPage({ groupId }: { groupId: string }) {
     [workspace.data?.effectivePermissions],
   )
   const canRead = scope.groupsRead && scope.groupRolesRead && scope.rolesRead
-  const [status, setStatus] = useState<RelationStatus>('any')
-  const [after, setAfter] = useState<string | undefined>()
-  const [before, setBefore] = useState<string | undefined>()
-  const [pageSize, setPageSize] = useState(10)
-  const [search, setSearch] = useState('')
+  const status: RelationStatus = listSearch.status ?? 'any'
+  // Filters and paging live in the URL so a reload or link restores them.
+  const { after, before } = listSearch
+  const pageSize = listSearch.size ?? 10
+  const go = (next: GroupRolesSearch, replace = false) =>
+    void navigate({
+      to: '/groups/$groupId/roles',
+      params: { groupId },
+      search: next,
+      replace,
+    })
+  // Filters the loaded page; typing rewrites the URL without a new entry.
+  const search = listSearch.q ?? ''
   const [notice, setNotice] = useState<RbacNotice | null>(null)
 
   const variables = useMemo<ConsoleGroupRolesQueryVariables | null>(
@@ -229,7 +245,9 @@ export function GroupRolesPage({ groupId }: { groupId: string }) {
                     label={t('groupRolesSearchLabel')}
                     hideLabel
                     value={search}
-                    onChange={setSearch}
+                    onChange={(value) =>
+                      go({ ...listSearch, q: value || undefined }, true)
+                    }
                     placeholder={t('groupRolesSearchPlaceholder')}
                     maxLength={256}
                   />
@@ -246,9 +264,7 @@ export function GroupRolesPage({ groupId }: { groupId: string }) {
                         value === 'enabled' ||
                         value === 'disabled'
                       ) {
-                        setStatus(value)
-                        setAfter(undefined)
-                        setBefore(undefined)
+                        go({ ...listSearch, status: value === 'any' ? undefined : value, ...FIRST_PAGE })
                       }
                     }}
                     options={[
@@ -368,18 +384,15 @@ export function GroupRolesPage({ groupId }: { groupId: string }) {
               variables={variables}
               after={after}
               before={before}
-              onNavigate={(page) => {
-                setAfter(page.after)
-                setBefore(page.before)
-              }}
+              onNavigate={(page) =>
+                go({ ...listSearch, after: page.after, before: page.before })
+              }
               label={t('roleUsersPagination')}
               isDisabled={roles.refreshing || roles.status !== 'ready'}
               pageSize={pageSize}
-              onPageSizeChange={(size) => {
-                setPageSize(size)
-                setAfter(undefined)
-                setBefore(undefined)
-              }}
+              onPageSizeChange={(size) =>
+                go({ ...listSearch, size, ...FIRST_PAGE })
+              }
             />
           </footer>
         </section>

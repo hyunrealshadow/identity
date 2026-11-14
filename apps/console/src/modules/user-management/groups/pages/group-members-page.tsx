@@ -43,6 +43,8 @@ import { resolveLocalizedText } from '#/modules/user-management/groups/lib/group
 import { cursorPage } from '#/modules/user-management/lib/cursor-page'
 
 import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
+import { FIRST_PAGE } from '#/modules/user-management/lib/relation-search'
+import type { GroupMembersSearch } from '#/modules/user-management/groups/lib/group-relations-search'
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
 import { UserSelectField } from '#/modules/user-management/users/components/user-form-fields'
 
@@ -51,7 +53,13 @@ type GroupNode = NonNullable<ConsoleGroupMembersQuery['group']>
 type MemberEdge = GroupNode['members']['edges'][number]
 type MemberStatus = 'any' | 'enabled' | 'disabled'
 
-export function GroupMembersPage({ groupId }: { groupId: string }) {
+export function GroupMembersPage({
+  groupId,
+  listSearch,
+}: {
+  groupId: string
+  listSearch: GroupMembersSearch
+}) {
   const t = useTranslator()
   const { locale, timeZone } = useLocale()
   const navigate = useNavigate()
@@ -62,10 +70,17 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
   )
   const canRead =
     scope.groupsRead && scope.groupMembershipsRead && scope.usersRead
-  const [status, setStatus] = useState<MemberStatus>('any')
-  const [after, setAfter] = useState<string | undefined>()
-  const [before, setBefore] = useState<string | undefined>()
-  const [pageSize, setPageSize] = useState(10)
+  const status: MemberStatus = listSearch.status ?? 'any'
+  // Filters and paging live in the URL so a reload or link restores them.
+  const { after, before } = listSearch
+  const pageSize = listSearch.size ?? 10
+  const go = (next: GroupMembersSearch, replace = false) =>
+    void navigate({
+      to: '/groups/$groupId/members',
+      params: { groupId },
+      search: next,
+      replace,
+    })
   const [notice, setNotice] = useState<RbacNotice | null>(null)
 
   const variables = useMemo<ConsoleGroupMembersQueryVariables | null>(
@@ -221,9 +236,7 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
                         value === 'enabled' ||
                         value === 'disabled'
                       ) {
-                        setStatus(value)
-                        setAfter(undefined)
-                        setBefore(undefined)
+                        go({ ...listSearch, status: value === 'any' ? undefined : value, ...FIRST_PAGE })
                       }
                     }}
                     options={[
@@ -243,18 +256,15 @@ export function GroupMembersPage({ groupId }: { groupId: string }) {
               variables={variables}
               after={after}
               before={before}
-              onNavigate={(page) => {
-                setAfter(page.after)
-                setBefore(page.before)
-              }}
+              onNavigate={(page) =>
+                go({ ...listSearch, after: page.after, before: page.before })
+              }
               label={t('roleUsersPagination')}
               isDisabled={members.refreshing || members.status !== 'ready'}
               pageSize={pageSize}
-              onPageSizeChange={(size) => {
-                setPageSize(size)
-                setAfter(undefined)
-                setBefore(undefined)
-              }}
+              onPageSizeChange={(size) =>
+                go({ ...listSearch, size, ...FIRST_PAGE })
+              }
             />
           </footer>
         </section>

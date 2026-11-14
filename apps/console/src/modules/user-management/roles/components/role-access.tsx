@@ -31,7 +31,7 @@ export function RbacAccessRestricted({
             {t(description)}
           </p>
           {onBack ? (
-            <Button variant="secondary" className="mt-5" onClick={onBack}>
+            <Button variant="outline" className="mt-5" onClick={onBack}>
               {t(backLabel ?? 'backToUsers')}
             </Button>
           ) : null}

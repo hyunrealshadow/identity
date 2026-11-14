@@ -231,7 +231,7 @@ export function ResourceTable<T extends { id: string }>({
                 <Button variant="ghost" size="sm" onClick={() => setDraft(defaults)}>
                   {t('tableResetPreferences')}
                 </Button>
-                <Button variant="secondary" size="sm" onClick={() => setOpen(false)}>
+                <Button variant="outline" size="sm" onClick={() => setOpen(false)}>
                   {t('tableCancel')}
                 </Button>
                 <Button size="sm" onClick={() => save(draft)}>

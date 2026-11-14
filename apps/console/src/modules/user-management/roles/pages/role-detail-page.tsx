@@ -365,7 +365,7 @@ export function RoleDetailPage() {
                 </h2>
                 {!builtIn && scope.rolesWrite ? (
                   <Button
-                    variant="secondary"
+                    variant="outline"
                     size="sm"
                     onClick={() => setEditing(true)}
                   >
@@ -505,7 +505,7 @@ export function RoleDetailPage() {
                   </Button>
                   <Button
                     type="button"
-                    variant="secondary"
+                    variant="outline"
                     disabled={pending || !scope.rolesWrite}
                     onClick={() => {
                       initialized.current = undefined
@@ -666,7 +666,7 @@ function RoleStateDialog({
           </div>
           <DialogFooter>
             <Button
-              variant="secondary"
+              variant="outline"
               disabled={pending}
               onClick={() => state.close()}
             >

@@ -420,7 +420,7 @@ export function PermissionPickerDialog({
                   >
                     <Button
                       size="icon-sm"
-                      variant="secondary"
+                      variant="outline"
                       disabled={
                         resourceHistory.length === 0 ||
                         resources.status === 'loading'
@@ -432,7 +432,7 @@ export function PermissionPickerDialog({
                     </Button>
                     <Button
                       size="icon-sm"
-                      variant="secondary"
+                      variant="outline"
                       disabled={
                         !resourceConnection?.pageInfo.hasNextPage ||
                         resources.status === 'loading'
@@ -683,7 +683,7 @@ export function PermissionPickerDialog({
                 count: modalSelected.size,
               })}
             </span>
-            <Button variant="secondary" onClick={() => state.close()}>
+            <Button variant="outline" onClick={() => state.close()}>
               {t('cancel')}
             </Button>
             <Button

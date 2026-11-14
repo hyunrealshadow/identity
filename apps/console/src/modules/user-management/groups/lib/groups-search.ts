@@ -48,8 +48,9 @@ export function normalizeGroupsSearch(
   search: Record<string, unknown>,
 ): GroupsSearch {
   const result: GroupsSearch = {}
-  if (typeof search.q === 'string' && search.q.trim()) {
-    result.q = search.q.trim().slice(0, 256)
+  // Typed text stays as the form holds it; it is trimmed when applied.
+  if (typeof search.q === 'string' && search.q) {
+    result.q = search.q.slice(0, 256)
   }
   if (isEnabled(search.enabled) && search.enabled !== 'any') {
     result.enabled = search.enabled
@@ -82,6 +83,21 @@ export function groupsSearchFromDraft(draft: GroupsFilterDraft): GroupsSearch {
   if (draft.enabled !== 'any') result.enabled = draft.enabled
   if (draft.order !== undefined) result.order = draft.order
   return result
+}
+
+export type GroupsFilters = Pick<GroupsSearch, 'q' | 'enabled'>
+
+/** The form as it is written to the URL, without normalising typed text. */
+export function groupsFormSearch(draft: GroupsFilterDraft): GroupsFilters {
+  return {
+    q: draft.q || undefined,
+    enabled: draft.enabled === 'any' ? undefined : draft.enabled,
+  }
+}
+
+/** The filters a query is sent with: the form's values, trimmed. */
+export function groupsAppliedFilters(search: GroupsSearch): GroupsFilters {
+  return { q: search.q?.trim() || undefined, enabled: search.enabled }
 }
 
 export function hasGroupFilters(search: GroupsSearch): boolean {

@@ -138,7 +138,7 @@ export function PermissionRoleReferences({
             >
               <Button
                 size="sm"
-                variant="secondary"
+                variant="outline"
                 disabled={
                   !connection.pageInfo.hasPreviousPage || query.refreshing
                 }
@@ -151,7 +151,7 @@ export function PermissionRoleReferences({
               </Button>
               <Button
                 size="sm"
-                variant="secondary"
+                variant="outline"
                 disabled={
                   !connection.pageInfo.hasNextPage || query.refreshing
                 }

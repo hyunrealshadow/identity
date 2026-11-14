@@ -77,7 +77,7 @@ export function RoleCreatePage() {
       description={t('rolesNewDescription')}
       actions={
         <Button
-          variant="secondary"
+          variant="outline"
           disabled={pending}
           onClick={() => void navigate({ to: '/roles' })}
         >
@@ -136,7 +136,7 @@ export function RoleCreatePage() {
                   {t('rolesCreateAnother')}
                 </Button>
                 <Button
-                  variant="secondary"
+                  variant="outline"
                   onClick={() => void navigate({ to: '/roles' })}
                 >
                   {t('backToRoles')}
@@ -382,7 +382,7 @@ function RoleCreateForm({
             </Button>
             <Button
               type="button"
-              variant="secondary"
+              variant="outline"
               disabled={pending}
               onClick={() => void navigate({ to: '/roles' })}
             >

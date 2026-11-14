@@ -55,7 +55,7 @@ export function ConfirmationDialog({
         <DialogFooter>
           <Button
             type="button"
-            variant="secondary"
+            variant="outline"
             disabled={pending}
             onClick={() => state.close()}
           >

@@ -24,9 +24,10 @@ export function normalizeClientsSearch(
   input: Record<string, unknown>,
 ): ClientsSearch {
   return {
+    // Typed text stays as the form holds it; it is trimmed when applied.
     q:
-      typeof input.q === 'string' && input.q.trim()
-        ? input.q.trim().slice(0, 255)
+      typeof input.q === 'string' && input.q
+        ? input.q.slice(0, 255)
         : undefined,
     enabled:
       input.enabled === 'enabled' || input.enabled === 'disabled'
@@ -56,4 +57,15 @@ export function clientsQueryVariables(search: ClientsSearch) {
     orderBy: search.order ?? ('CREATED_AT_DESC' as ClientOrder),
     ...cursorPage(search.size ?? CLIENTS_PAGE_SIZE, search.after, search.before),
   }
+}
+
+export type ClientsFilters = Pick<ClientsSearch, 'q' | 'enabled'>
+
+export function clientsSearchKey(search: ClientsSearch): string {
+  return JSON.stringify(normalizeClientsSearch({ ...search }))
+}
+
+/** The filters a query is sent with: the form's values, trimmed. */
+export function clientsAppliedFilters(search: ClientsSearch): ClientsFilters {
+  return { q: search.q?.trim() || undefined, enabled: search.enabled }
 }

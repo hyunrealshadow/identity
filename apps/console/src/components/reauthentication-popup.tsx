@@ -54,7 +54,7 @@ export function ReauthenticationPopup({
         <Button
           type="button"
           size="sm"
-          variant="secondary"
+          variant="outline"
           onClick={onFallback}
         >
           {t('authPopupContinueInTab')}

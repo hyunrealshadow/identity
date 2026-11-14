@@ -76,7 +76,7 @@ export function GroupCreatePage() {
       description={t('groupsNewDescription')}
       actions={
         <Button
-          variant="secondary"
+          variant="outline"
           disabled={pending}
           onClick={() => void navigate({ to: '/groups' })}
         >
@@ -127,7 +127,7 @@ export function GroupCreatePage() {
                   {t('groupsCreateAnother')}
                 </Button>
                 <Button
-                  variant="secondary"
+                  variant="outline"
                   onClick={() => void navigate({ to: '/groups' })}
                 >
                   {t('backToGroups')}
@@ -373,7 +373,7 @@ function GroupCreateForm({
             </Button>
             <Button
               type="button"
-              variant="secondary"
+              variant="outline"
               disabled={pending}
               onClick={() => void navigate({ to: '/groups' })}
             >

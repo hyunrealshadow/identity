@@ -5,7 +5,7 @@ import {
 import { Badge } from '@identity/ui/components/badge'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { TriangleAlert } from 'lucide-react'
-import { useCallback, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 
 import { AsyncState } from '#/components/async-state'
 import { CopyButton } from '#/components/copy-button'
@@ -34,6 +34,8 @@ import {
 } from '#/lib/graphql/use-console-query'
 import { cursorPage } from '#/modules/user-management/lib/cursor-page'
 import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
+import { FIRST_PAGE } from '#/modules/user-management/lib/relation-search'
+import type { UserPermissionsSearch } from '#/modules/user-management/authorization/lib/user-authorization-search'
 import { UserDetailTabSkeleton } from '#/modules/user-management/users/components/user-detail-skeleton'
 import { useUserDetailContext } from '#/modules/user-management/users/components/user-detail-context'
 import {
@@ -43,7 +45,13 @@ import {
   type AuthorizationSourceFilterValue,
 } from '#/modules/user-management/authorization/components/authorization-source-filter'
 
-export function UserEffectivePermissionsPage({ userId }: { userId: string }) {
+export function UserEffectivePermissionsPage({
+  userId,
+  listSearch,
+}: {
+  userId: string
+  listSearch: UserPermissionsSearch
+}) {
   const t = useTranslator()
   const { locale } = useLocale()
   const navigate = useNavigate()
@@ -53,19 +61,26 @@ export function UserEffectivePermissionsPage({ userId }: { userId: string }) {
     [workspace.data?.effectivePermissions],
   )
   const userDetail = useUserDetailContext()
-  const [resourceId, setResourceId] = useState('')
-  const [after, setAfter] = useState<string>()
-  const [before, setBefore] = useState<string>()
-  const [pageSize, setPageSize] = useState(100)
+  // Filters and paging live in the URL so a reload or link restores them.
+  const { after, before } = listSearch
+  const pageSize = listSearch.size ?? 100
+  const resourceId = listSearch.resource ?? ''
+  const go = (next: UserPermissionsSearch, replace = false) =>
+    void navigate({
+      to: '/users/$userId/permissions',
+      params: { userId },
+      search: next,
+      replace,
+    })
   const sourceFilterable = canFilterBySource(scope)
-  const [sourceFilter, setSourceFilter] =
-    useState<AuthorizationSourceFilterValue>('any')
+  const sourceFilter: AuthorizationSourceFilterValue = listSearch.source ?? 'any'
   const source = sourceFilterable ? sourceVariable(sourceFilter) : undefined
-  const selectResource = useCallback((id: string) => {
-    setResourceId(id)
-    setAfter(undefined)
-    setBefore(undefined)
-  }, [])
+  // The automatic first choice replaces the entry, so Back leaves the page.
+  const selectResource = (id: string, options?: { automatic: boolean }) =>
+    go(
+      { ...listSearch, resource: id || undefined, ...FIRST_PAGE },
+      options?.automatic,
+    )
   const variables = useMemo<ConsoleUserPermissionsQueryVariables | null>(
     () =>
       scope.usersRead && scope.assignmentsRead && resourceId
@@ -131,10 +146,8 @@ export function UserEffectivePermissionsPage({ userId }: { userId: string }) {
   const pagination = useCursorPagination({
     search: { after, before },
     variables,
-    onNavigate: (cursor) => {
-      setAfter(cursor.after)
-      setBefore(cursor.before)
-    },
+    onNavigate: (cursor) =>
+      go({ ...listSearch, after: cursor.after, before: cursor.before }),
   })
   const loadingView = (
     <UserDetailTabSkeleton userId={userId} tab="permissions" />
@@ -216,9 +229,7 @@ export function UserEffectivePermissionsPage({ userId }: { userId: string }) {
           name="user-permission-source"
           value={sourceFilter}
           onChange={(value) => {
-            setSourceFilter(value)
-            setAfter(undefined)
-            setBefore(undefined)
+            go({ ...listSearch, source: value === 'any' ? undefined : value, ...FIRST_PAGE })
           }}
         />
       ) : null}
@@ -293,11 +304,9 @@ export function UserEffectivePermissionsPage({ userId }: { userId: string }) {
                   controller={pagination}
                   isDisabled={permissions.refreshing}
                   pageSize={pageSize}
-                  onPageSizeChange={(size) => {
-                    setPageSize(size)
-                    setAfter(undefined)
-                    setBefore(undefined)
-                  }}
+                  onPageSizeChange={(size) =>
+                    go({ ...listSearch, size, ...FIRST_PAGE })
+                  }
                 />
               ) : null
             }

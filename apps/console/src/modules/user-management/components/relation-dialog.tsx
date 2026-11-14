@@ -112,7 +112,7 @@ export function RelationDialog({
         <DialogFooter>
           <Button
             type="button"
-            variant="secondary"
+            variant="outline"
             disabled={pending}
             onClick={() => state.close()}
           >

@@ -29,7 +29,7 @@ describe('user time zone', () => {
   })
   it('applies the selected zone to list date filters without changing Relay pagination', () => {
     const result = usersQueryVariables(validateUsersSearch({
-      createdFrom: '2026-03-08', createdBefore: '2026-03-09', before: 'cursor-before',
+      createdFrom: '2026-03-08', createdTo: '2026-03-08', before: 'cursor-before',
     }), 'America/New_York')
     expect(result).toMatchObject({
       last: 10, before: 'cursor-before',

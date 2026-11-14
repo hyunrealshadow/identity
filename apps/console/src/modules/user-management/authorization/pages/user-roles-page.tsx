@@ -53,6 +53,8 @@ import {
 import { cursorPage } from '#/modules/user-management/lib/cursor-page'
 
 import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
+import { FIRST_PAGE } from '#/modules/user-management/lib/relation-search'
+import type { UserRolesSearch } from '#/modules/user-management/authorization/lib/user-authorization-search'
 import { useUserDetailContext } from '#/modules/user-management/users/components/user-detail-context'
 import {
   AuthorizationSourceFilter,
@@ -66,7 +68,13 @@ import { UserSelectField } from '#/modules/user-management/users/components/user
 type AssignmentStatus = 'any' | 'active' | 'revoked'
 
 
-export function UserRolesPage({ userId }: { userId: string }) {
+export function UserRolesPage({
+  userId,
+  listSearch,
+}: {
+  userId: string
+  listSearch: UserRolesSearch
+}) {
   const t = useTranslator()
   const { locale, timeZone } = useLocale()
   const navigate = useNavigate()
@@ -76,15 +84,21 @@ export function UserRolesPage({ userId }: { userId: string }) {
     [workspace.data?.effectivePermissions],
   )
   const userDetail = useUserDetailContext()
-  const [status, setStatus] = useState<AssignmentStatus>('active')
+  const status: AssignmentStatus = listSearch.status ?? 'active'
   const sourceFilterable = canFilterBySource(scope)
-  const [sourceFilter, setSourceFilter] =
-    useState<AuthorizationSourceFilterValue>('any')
+  const sourceFilter: AuthorizationSourceFilterValue = listSearch.source ?? 'any'
   // Without group reads the server only allows the direct list.
   const source = sourceFilterable ? sourceVariable(sourceFilter) : 'DIRECT'
-  const [after, setAfter] = useState<string | undefined>()
-  const [before, setBefore] = useState<string | undefined>()
-  const [pageSize, setPageSize] = useState(10)
+  // Filters and paging live in the URL so a reload or link restores them.
+  const { after, before } = listSearch
+  const pageSize = listSearch.size ?? 10
+  const go = (next: UserRolesSearch, replace = false) =>
+    void navigate({
+      to: '/users/$userId/roles',
+      params: { userId },
+      search: next,
+      replace,
+    })
   const [notice, setNotice] = useState<RbacNotice | null>(null)
   const variables = useMemo<ConsoleUserRolesQueryVariables | null>(
     () =>
@@ -297,9 +311,7 @@ export function UserRolesPage({ userId }: { userId: string }) {
                       name="user-role-source"
                       value={sourceFilter}
                       onChange={(value) => {
-                        setSourceFilter(value)
-                        setAfter(undefined)
-                        setBefore(undefined)
+                        go({ ...listSearch, source: value === 'any' ? undefined : value, ...FIRST_PAGE })
                       }}
                     />
                   ) : null}
@@ -315,9 +327,7 @@ export function UserRolesPage({ userId }: { userId: string }) {
                           value === 'active' ||
                           value === 'revoked'
                         ) {
-                          setStatus(value)
-                          setAfter(undefined)
-                          setBefore(undefined)
+                          go({ ...listSearch, status: value === 'active' ? undefined : value, ...FIRST_PAGE })
                         }
                       }}
                       options={[
@@ -338,20 +348,17 @@ export function UserRolesPage({ userId }: { userId: string }) {
                   variables={variables}
                   after={after}
                   before={before}
-                  onNavigate={(page) => {
-                    setAfter(page.after)
-                    setBefore(page.before)
-                  }}
+                  onNavigate={(page) =>
+                    go({ ...listSearch, after: page.after, before: page.before })
+                  }
                   label={t('userRolesPagination')}
                   isDisabled={
                     assignments.refreshing || assignments.status !== 'ready'
                   }
                   pageSize={pageSize}
-                  onPageSizeChange={(size) => {
-                    setPageSize(size)
-                    setAfter(undefined)
-                    setBefore(undefined)
-                  }}
+                  onPageSizeChange={(size) =>
+                    go({ ...listSearch, size, ...FIRST_PAGE })
+                  }
                 />
               ) : assignments.status === 'idle' ||
                 assignments.status === 'loading' ? (

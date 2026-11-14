@@ -8,7 +8,7 @@ import {
   ComboboxList,
 } from '@identity/ui/components/combobox'
 import { Field, FieldLabel } from '@identity/ui/components/field'
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 
 import {
   ConsoleResourceOptionsDocument,
@@ -28,7 +28,8 @@ export function ApiResourceSelect({
   hideLabel = false,
 }: {
   value: string
-  onChange: (id: string) => void
+  /** `automatic` marks the first resource chosen on the reader's behalf. */
+  onChange: (id: string, options?: { automatic: boolean }) => void
   enabled?: boolean
   /** Toolbar use: the placeholder names the field; the label stays for assistive technology. */
   hideLabel?: boolean
@@ -40,6 +41,9 @@ export function ApiResourceSelect({
   const [after, setAfter] = useState<string>()
   const [items, setItems] = useState<Resource[]>([])
   const [selected, setSelected] = useState<Resource>()
+  // The automatic first choice runs when data arrives, not on every render.
+  const onChangeRef = useRef(onChange)
+  onChangeRef.current = onChange
   useEffect(() => {
     const timer = window.setTimeout(() => {
       const next = text === selected?.name ? '' : text.trim()
@@ -80,9 +84,18 @@ export function ApiResourceSelect({
     if (!value && next[0]) {
       setSelected(next[0])
       setText(next[0].name)
-      onChange(next[0].id)
+      onChangeRef.current(next[0].id, { automatic: true })
     }
-  }, [resources.data, after, value, onChange])
+  }, [resources.data, after, value])
+  // A value from outside (a link, reload or history) shows its resource name.
+  useEffect(() => {
+    if (!value || selected?.id === value) return
+    const match = items.find((node) => node.id === value)
+    if (match) {
+      setSelected(match)
+      setText(match.name)
+    }
+  }, [value, items, selected?.id])
   const options =
     selected && !items.some((node) => node.id === selected.id)
       ? [selected, ...items]

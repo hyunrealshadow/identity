@@ -104,7 +104,7 @@ export function ClientCreatePage() {
       description={t('clientsNewDescription')}
       actions={
         <Button
-          variant="secondary"
+          variant="outline"
           disabled={pending}
           onClick={() => void navigate({ to: '/clients' })}
         >
@@ -342,7 +342,7 @@ export function ClientCreatePage() {
               </Button>
               <Button
                 type="button"
-                variant="secondary"
+                variant="outline"
                 disabled={pending}
                 onClick={() => void navigate({ to: '/clients' })}
               >

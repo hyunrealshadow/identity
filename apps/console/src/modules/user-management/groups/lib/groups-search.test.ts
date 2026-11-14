@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   DEFAULT_GROUP_ORDER,
+  groupsAppliedFilters,
   groupsFilterDraft,
   groupsQueryVariables,
   groupsSearchFromDraft,
@@ -21,7 +22,8 @@ describe('group directory search', () => {
         unexpected: 'ignored',
       }),
     ).toEqual({
-      q: 'operators',
+      // Typed text stays exactly as the form holds it.
+      q: '  operators  ',
       enabled: 'disabled',
       order: 'CREATED_AT_ASC',
       after: 'cursor-a',
@@ -34,7 +36,12 @@ describe('group directory search', () => {
         enabled: 'any',
         order: DEFAULT_GROUP_ORDER,
       }),
-    ).toEqual({ order: DEFAULT_GROUP_ORDER })
+    ).toEqual({ q: '   ', order: DEFAULT_GROUP_ORDER })
+  })
+
+  it('trims typed text only when the filters are applied', () => {
+    expect(groupsAppliedFilters({ q: '  operators  ' }).q).toBe('operators')
+    expect(groupsAppliedFilters({ q: '   ' }).q).toBeUndefined()
   })
 
   it('serializes visible filters and explicit sorting', () => {

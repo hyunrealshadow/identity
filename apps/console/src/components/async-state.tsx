@@ -126,7 +126,7 @@ export function AsyncState({
       {onRetry || action ? (
         <div className="col-span-full mt-3 flex flex-wrap gap-2">
           {onRetry ? (
-            <Button size="sm" variant="secondary" onClick={onRetry}>
+            <Button size="sm" variant="outline" onClick={onRetry}>
               {t('retry')}
             </Button>
           ) : null}

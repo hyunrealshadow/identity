@@ -1,7 +1,7 @@
 import { Button } from '@identity/ui/components/button'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { Plus } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 
 import { AsyncState } from '#/components/async-state'
 import { CopyButton } from '#/components/copy-button'
@@ -21,6 +21,7 @@ import {
 } from '#/lib/graphql/presentation'
 import { useLocale, useTranslator } from '#/lib/i18n'
 import { useCursorPagination } from '#/lib/use-cursor-pagination'
+import { useUrlFilters } from '#/lib/use-url-filters'
 import { useWorkspace } from '#/lib/workspace'
 import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
 import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
@@ -34,7 +35,10 @@ import { ClientBuiltInChip, ClientStatusChip } from '../components/client-status
 import { clientScope } from '../lib/client-scope'
 import {
   CLIENTS_PAGE_SIZE,
+  clientsAppliedFilters,
   clientsQueryVariables,
+  clientsSearchKey,
+  type ClientsFilters,
   type ClientsSearch,
 } from '../lib/clients-search'
 
@@ -47,15 +51,25 @@ export function ClientsListPage({ search }: { search: ClientsSearch }) {
     () => clientScope(workspace.data?.effectivePermissions),
     [workspace.data?.effectivePermissions],
   )
-  const [q, setQ] = useState(search.q ?? '')
-  const [enabled, setEnabled] = useState<string>(search.enabled ?? 'any')
-  useEffect(() => {
-    setQ(search.q ?? '')
-    setEnabled(search.enabled ?? 'any')
-  }, [search.q, search.enabled])
+  // The URL always mirrors the filter form; queries use the applied filters.
+  const { applied, go } = useUrlFilters<ClientsSearch, ClientsFilters>({
+    search,
+    keyOf: clientsSearchKey,
+    appliedOf: clientsAppliedFilters,
+    navigate: (next, { replace }) =>
+      void navigate({ to: '/clients', search: next, replace }),
+  })
+  const appliedSearch: ClientsSearch = {
+    ...applied,
+    order: search.order,
+    size: search.size,
+    after: search.after,
+    before: search.before,
+  }
+  const appliedKey = clientsSearchKey(appliedSearch)
   const variables = useMemo(
-    () => (scope.read ? clientsQueryVariables(search) : null),
-    [scope.read, search.q, search.enabled, search.order, search.size, search.after, search.before],
+    () => (scope.read ? clientsQueryVariables(appliedSearch) : null),
+    [scope.read, appliedKey],
   )
   const query = useConsoleQuery<ConsoleClientsQuery, ConsoleClientsQueryVariables>(
     ConsoleClientsDocument,
@@ -69,10 +83,7 @@ export function ClientsListPage({ search }: { search: ClientsSearch }) {
     search,
     variables,
     onNavigate: (cursor) =>
-      void navigate({
-        to: '/clients',
-        search: { ...search, after: undefined, before: undefined, ...cursor },
-      }),
+      go({ ...search, after: undefined, before: undefined, ...cursor }),
   })
 
   return (
@@ -107,18 +118,17 @@ export function ClientsListPage({ search }: { search: ClientsSearch }) {
                   className="flex flex-wrap items-start gap-2"
                   onSubmit={(event) => {
                     event.preventDefault()
-                    void navigate({
-                      to: '/clients',
-                      search: {
-                        q: q.trim() || undefined,
-                        enabled:
-                          enabled === 'enabled' || enabled === 'disabled'
-                            ? enabled
-                            : undefined,
-                        order: search.order,
-                        size: search.size,
-                      },
-                    })
+                    const filters = clientsAppliedFilters(search)
+                    const next: ClientsSearch = {
+                      ...search,
+                      ...filters,
+                      after: undefined,
+                      before: undefined,
+                    }
+                    // Applying the filters already in effect reloads them.
+                    if (clientsSearchKey(next) === appliedKey)
+                      void query.refresh()
+                    go(next, { apply: filters })
                   }}
                 >
                   <div className="w-full sm:w-72">
@@ -126,8 +136,10 @@ export function ClientsListPage({ search }: { search: ClientsSearch }) {
                       name="client-search"
                       label={t('clientsSearch')}
                       hideLabel
-                      value={q}
-                      onChange={setQ}
+                      value={search.q ?? ''}
+                      onChange={(value) =>
+                        go({ ...search, q: value || undefined }, { replace: true })
+                      }
                       placeholder={t('clientsSearchPlaceholder')}
                     />
                   </div>
@@ -136,8 +148,19 @@ export function ClientsListPage({ search }: { search: ClientsSearch }) {
                       name="client-status"
                       label={t('clientsStatus')}
                       hideLabel
-                      value={enabled}
-                      onChange={setEnabled}
+                      value={search.enabled ?? 'any'}
+                      onChange={(value) =>
+                        go(
+                          {
+                            ...search,
+                            enabled:
+                              value === 'enabled' || value === 'disabled'
+                                ? value
+                                : undefined,
+                          },
+                          { replace: true },
+                        )
+                      }
                       options={[
                         { id: 'any', label: t('clientsFilterAny') },
                         { id: 'enabled', label: t('clientsEnabled') },
@@ -145,14 +168,12 @@ export function ClientsListPage({ search }: { search: ClientsSearch }) {
                       ]}
                     />
                   </div>
-                  <Button type="submit" variant="secondary">
+                  <Button type="submit" variant="outline">
                     {t('clientsFilter')}
                   </Button>
                   <Button
                     variant="ghost"
-                    onClick={() =>
-                        void navigate({ to: '/clients', search: { size: search.size } })
-                      }
+                    onClick={() => go({ size: search.size }, { apply: {} })}
                   >
                     {t('clientsReset')}
                   </Button>
@@ -161,15 +182,12 @@ export function ClientsListPage({ search }: { search: ClientsSearch }) {
               items={(connection?.edges ?? []).map(({ node }) => node)}
               order={search.order}
               onOrderChange={(order) =>
-                void navigate({
-                  to: '/clients',
-                  search: {
+                go({
                     ...search,
                     order: order as ClientsSearch['order'],
                     after: undefined,
                     before: undefined,
-                  },
-                })
+                  })
               }
               onRefresh={() => void query.refresh()}
               refreshing={query.refreshing || query.status === 'loading'}
@@ -201,10 +219,7 @@ export function ClientsListPage({ search }: { search: ClientsSearch }) {
                     isDisabled={query.refreshing}
                     pageSize={search.size ?? CLIENTS_PAGE_SIZE}
                     onPageSizeChange={(size) =>
-                      void navigate({
-                        to: '/clients',
-                        search: { ...search, size, after: undefined, before: undefined },
-                      })
+                      go({ ...search, size, after: undefined, before: undefined })
                     }
                   />
                 ) : null

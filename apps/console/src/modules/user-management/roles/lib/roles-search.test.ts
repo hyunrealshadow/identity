@@ -5,6 +5,7 @@ import {
   DEFAULT_ROLE_ORDER,
   normalizeRolesSearch,
   nextRolesPage,
+  rolesAppliedFilters,
   previousRolesPage,
   rolesFilterDraft,
   rolesQueryVariables,
@@ -23,7 +24,8 @@ describe('role directory search', () => {
         unexpected: 'ignored',
       }),
     ).toEqual({
-      q: 'billing',
+      // Typed text stays exactly as the form holds it.
+      q: '  billing  ',
       status: 'disabled',
       order: 'NAME_DESC',
       after: 'cursor-a',
@@ -36,7 +38,12 @@ describe('role directory search', () => {
         status: 'any',
         order: DEFAULT_ROLE_ORDER,
       }),
-    ).toEqual({ order: DEFAULT_ROLE_ORDER })
+    ).toEqual({ q: '   ', order: DEFAULT_ROLE_ORDER })
+  })
+
+  it('trims typed text only when the filters are applied', () => {
+    expect(rolesAppliedFilters({ q: '  billing  ' }).q).toBe('billing')
+    expect(rolesAppliedFilters({ q: '   ' }).q).toBeUndefined()
   })
 
   it('builds bounded filter variables without inventing status', () => {

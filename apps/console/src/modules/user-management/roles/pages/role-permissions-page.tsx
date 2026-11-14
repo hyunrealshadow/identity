@@ -577,7 +577,7 @@ export function RolePermissionsPage({ roleId }: { roleId: string }) {
                 </Button>
                 <Button
                   type="button"
-                  variant="secondary"
+                  variant="outline"
                   disabled={pending || !canWrite}
                   onClick={resetSelection}
                 >

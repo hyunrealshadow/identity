@@ -7,6 +7,7 @@ import {
   normalizePermissionsSearch,
   permissionsQueryVariables,
   resourcePermissionsQueryVariables,
+  permissionsAppliedFilters,
   permissionsFilterDraft,
   permissionsSearchFromDraft,
 } from '#/modules/client-management/resources/permissions/lib/permissions-search'
@@ -61,7 +62,8 @@ describe('permission search state', () => {
         before: '',
       }),
     ).toEqual({
-      q: 'users.read',
+      // Typed text stays exactly as the form holds it.
+      q: '  users.read  ',
       resourceId: 'resource-1',
       builtIn: 'true',
       enabled: 'disabled',
@@ -79,7 +81,12 @@ describe('permission search state', () => {
         enabled: 'any',
         order: DEFAULT_PERMISSION_ORDER,
       }),
-    ).toEqual({ order: DEFAULT_PERMISSION_ORDER })
+    ).toEqual({ q: '   ', order: DEFAULT_PERMISSION_ORDER })
+    // Blank text is not a filter once applied.
+    expect(permissionsAppliedFilters({ q: '   ' }).q).toBeUndefined()
+    expect(permissionsAppliedFilters({ q: '  users.read  ' }).q).toBe(
+      'users.read',
+    )
     expect(
       normalizePermissionsSearch({
         builtIn: 'sometimes',

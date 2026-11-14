@@ -1,6 +1,7 @@
 import { TableRowActions } from '#/components/table-row-actions'
 import { CursorPagination } from '#/components/cursor-pagination'
 import { useCursorPagination } from '#/lib/use-cursor-pagination'
+import { useUrlFilters } from '#/lib/use-url-filters'
 import {
   CollectionToolbar,
   ResourceTable,
@@ -11,7 +12,7 @@ import { Button } from '@identity/ui/components/button'
 import { Skeleton } from '@identity/ui/components/skeleton'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { Plus, TriangleAlert } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 
 import { AsyncState } from '#/components/async-state'
 import { ErrorDetails } from '#/components/error-details'
@@ -49,9 +50,11 @@ import {
   rolesFilterDraft,
   rolesQueryVariables,
   ROLE_PAGE_SIZE,
-  rolesSearchFromDraft,
+  rolesAppliedFilters,
+  rolesFormSearch,
   rolesSearchKey,
   type RolesFilterDraft,
+  type RolesFilters,
   type RolesSearch,
 } from '#/modules/user-management/roles/lib/roles-search'
 import {
@@ -191,16 +194,29 @@ export function RolesListPage({ search }: { search: RolesSearch }) {
     () => rbacScope(workspace.data?.effectivePermissions),
     [workspace.data?.effectivePermissions],
   )
-  const searchKey = rolesSearchKey(search)
-  const [draft, setDraft] = useState<RolesFilterDraft>(() =>
-    rolesFilterDraft(search),
-  )
+  // The URL always mirrors the filter form; queries use the applied filters.
+  const draft = rolesFilterDraft(search)
+  const { applied, go } = useUrlFilters<RolesSearch, RolesFilters>({
+    search,
+    keyOf: rolesSearchKey,
+    appliedOf: rolesAppliedFilters,
+    navigate: (next, { replace }) =>
+      void navigate({ to: '/roles', search: next, replace }),
+  })
+  const appliedSearch: RolesSearch = {
+    ...applied,
+    order: search.order,
+    size: search.size,
+    after: search.after,
+    before: search.before,
+  }
+  const appliedKey = rolesSearchKey(appliedSearch)
   const variables = useMemo<ConsoleRolesQueryVariables | null>(
     () =>
       scope.rolesRead
-        ? (rolesQueryVariables(search) as ConsoleRolesQueryVariables)
+        ? (rolesQueryVariables(appliedSearch) as ConsoleRolesQueryVariables)
         : null,
-    [searchKey, scope.rolesRead],
+    [appliedKey, scope.rolesRead],
   )
   const roles = useConsoleQuery<ConsoleRolesQuery, ConsoleRolesQueryVariables>(
     ConsoleRolesDocument,
@@ -210,30 +226,29 @@ export function RolesListPage({ search }: { search: RolesSearch }) {
     { keepPreviousData: true },
   )
 
-  useEffect(() => {
-    setDraft(rolesFilterDraft(search))
-  }, [searchKey])
+  const changeForm = (next: RolesFilterDraft) =>
+    go({ ...search, ...rolesFormSearch(next) }, { replace: true })
 
-  const reset = () => {
-    setDraft(rolesFilterDraft({}))
-    void navigate({ to: '/roles', search: { size: search.size } })
-  }
+  const reset = () => go({ size: search.size }, { apply: {} })
 
   const apply = () => {
-    void navigate({
-      to: '/roles',
-      search: { ...rolesSearchFromDraft(draft), size: search.size },
-    })
+    const filters = rolesAppliedFilters(search)
+    const next: RolesSearch = {
+      ...search,
+      ...filters,
+      after: undefined,
+      before: undefined,
+    }
+    // Applying the filters already in effect on the first page reloads them.
+    if (rolesSearchKey(next) === appliedKey) void roles.refresh()
+    go(next, { apply: filters })
   }
 
   const pager = useCursorPagination({
     search,
     variables,
     onNavigate: (cursor) =>
-      void navigate({
-        to: '/roles',
-        search: { ...search, after: undefined, before: undefined, ...cursor },
-      }),
+      go({ ...search, after: undefined, before: undefined, ...cursor }),
   })
 
   const filters = (
@@ -252,7 +267,7 @@ export function RolesListPage({ search }: { search: RolesSearch }) {
           hideLabel
           value={draft.q}
           onChange={(value) =>
-            setDraft((current) => ({ ...current, q: value }))
+            changeForm({ ...draft, q: value })
           }
           placeholder={t('rolesFilterSearchPlaceholder')}
           maxLength={256}
@@ -270,7 +285,7 @@ export function RolesListPage({ search }: { search: RolesSearch }) {
               value === 'enabled' ||
               value === 'disabled'
             ) {
-              setDraft((current) => ({ ...current, status: value }))
+              changeForm({ ...draft, status: value })
             }
           }}
           options={[
@@ -282,7 +297,7 @@ export function RolesListPage({ search }: { search: RolesSearch }) {
       </div>
 
       <div className="flex flex-wrap gap-2">
-        <Button type="submit" variant="secondary">
+        <Button type="submit" variant="outline">
           {t('rolesApplyFilters')}
         </Button>
         <Button type="button" variant="ghost" onClick={reset}>
@@ -367,7 +382,12 @@ export function RolesListPage({ search }: { search: RolesSearch }) {
     const edges = connection.edges
     const emptyState = (() => {
       if (edges.length === 0) {
-        if (search.q || search.status || search.after || search.before) {
+        if (
+          appliedSearch.q ||
+          appliedSearch.status ||
+          search.after ||
+          search.before
+        ) {
           return (
             <AsyncState
               kind="empty"
@@ -375,7 +395,7 @@ export function RolesListPage({ search }: { search: RolesSearch }) {
               title={t('rolesNoResultsTitle')}
               description={t('rolesNoResultsDescription')}
               action={
-                <Button variant="secondary" onClick={reset}>
+                <Button variant="outline" onClick={reset}>
                   {t('rolesClearFilters')}
                 </Button>
               }
@@ -427,15 +447,7 @@ export function RolesListPage({ search }: { search: RolesSearch }) {
           order={search.order}
           onOrderChange={(order) => {
             if (order === undefined || isRoleOrder(order))
-              void navigate({
-                to: '/roles',
-                search: {
-                  ...search,
-                  order,
-                  after: undefined,
-                  before: undefined,
-                },
-              })
+              go({ ...search, order, after: undefined, before: undefined })
           }}
           refreshing={roles.refreshing}
           onRefresh={() => void roles.refresh()}
@@ -449,10 +461,7 @@ export function RolesListPage({ search }: { search: RolesSearch }) {
               isDisabled={roles.refreshing}
               pageSize={search.size ?? ROLE_PAGE_SIZE}
               onPageSizeChange={(size) =>
-                void navigate({
-                  to: '/roles',
-                  search: { ...search, size, after: undefined, before: undefined },
-                })
+                go({ ...search, size, after: undefined, before: undefined })
               }
             />
           }

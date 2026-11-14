@@ -85,7 +85,7 @@ export function PermissionCreatePage({ resourceId }: { resourceId: string }) {
       description={t('permissionsNewDescription')}
       actions={
         <Button
-          variant="secondary"
+          variant="outline"
           disabled={pending}
           onClick={() =>
             void navigate({
@@ -141,7 +141,7 @@ export function PermissionCreatePage({ resourceId }: { resourceId: string }) {
                   {t('permissionsCreateAnother')}
                 </Button>
                 <Button
-                  variant="secondary"
+                  variant="outline"
                   onClick={() =>
                     void navigate({
                       to: '/resources/$resourceId/permissions',
@@ -457,7 +457,7 @@ function PermissionCreateForm({
             </Button>
             <Button
               type="button"
-              variant="secondary"
+              variant="outline"
               disabled={pending}
               onClick={() =>
                 void navigate({

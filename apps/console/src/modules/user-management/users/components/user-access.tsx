@@ -42,7 +42,7 @@ export function UserReadRestricted({
               </Button>
             ) : null}
             {onGoHome ? (
-              <Button variant="secondary" onClick={onGoHome}>
+              <Button variant="outline" onClick={onGoHome}>
                 {t('goHome')}
               </Button>
             ) : null}
@@ -75,7 +75,7 @@ export function UserEditRestricted({
             {t('usersEditNoPermissionDescription')}
           </p>
           {onBack ? (
-            <Button variant="secondary" className="mt-5" onClick={onBack}>
+            <Button variant="outline" className="mt-5" onClick={onBack}>
               {t('usersBackToDetail')}
             </Button>
           ) : null}
@@ -107,7 +107,7 @@ export function UserCreateRestricted({
             {t('usersCreateNoPermissionDescription')}
           </p>
           {onGoHome ? (
-            <Button variant="secondary" className="mt-5" onClick={onGoHome}>
+            <Button variant="outline" className="mt-5" onClick={onGoHome}>
               {t('goHome')}
             </Button>
           ) : null}

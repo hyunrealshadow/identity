@@ -73,8 +73,7 @@ const enUS = {
   usersFiltersTitle: 'Filters',
   usersFiltersDescription:
     'Search, filter, and order users. Changing a filter or the order starts a new page.',
-  usersAdvancedFiltersShow: 'Show advanced filters',
-  usersAdvancedFiltersHide: 'Hide advanced filters',
+  usersAdvancedFilters: 'Advanced filters',
   usersAdvancedFiltersActive:
     '{count, plural, one {# filter selected} other {# filters selected}}',
   usersFilterSearchLabel: 'Search',
@@ -84,22 +83,20 @@ const enUS = {
   usersFilterEmailLabel: 'Email',
   usersFilterEnabledLabel: 'Account status',
   usersFilterLockedLabel: 'Lock status',
-  usersFilterCreatedFromLabel: 'Created from',
-  usersFilterCreatedBeforeLabel: 'Created before',
+  usersFilterCreatedFromLabel: 'Creation date (start)',
+  usersFilterCreatedToLabel: 'Creation date (end)',
   usersFilterOrderLabel: 'Order',
   usersFilterAny: 'Any',
   usersFilterEnabledOnly: 'Enabled only',
   usersFilterDisabledOnly: 'Disabled only',
   usersFilterLockedOnly: 'Locked only',
   usersFilterUnlockedOnly: 'Unlocked only',
-  usersFilterDateHint:
-    'Dates use your time zone. The start date is inclusive; the end date is exclusive.',
   usersFilterQueryTooLong: 'Search must be 255 characters or fewer.',
   usersFilterUsernameTooLong:
     'The username filter must be 64 characters or fewer.',
   usersFilterEmailTooLong: 'The email filter must be 320 characters or fewer.',
   usersFilterDateInvalid: 'Enter a valid date.',
-  usersFilterDateRange: 'The start date must be before the end date.',
+  usersFilterDateRange: 'The end date can’t be before the start date.',
   usersFilterInvalidTitle: 'Fix the filters before loading users',
   usersFilterInvalidDescription:
     'The filter values are invalid, so no user query was sent.',

@@ -24,9 +24,10 @@ export function normalizeResourcesSearch(
   input: Record<string, unknown>,
 ): ResourcesSearch {
   return {
+    // Typed text stays as the form holds it; it is trimmed when applied.
     q:
-      typeof input.q === 'string' && input.q.trim()
-        ? input.q.trim().slice(0, 256)
+      typeof input.q === 'string' && input.q
+        ? input.q.slice(0, 256)
         : undefined,
     enabled:
       input.enabled === 'enabled' || input.enabled === 'disabled'
@@ -55,4 +56,15 @@ export function resourcesQueryVariables(search: ResourcesSearch) {
     orderBy: search.order ?? ('NAME_ASC' as ResourceOrder),
     ...cursorPage(search.size ?? RESOURCES_PAGE_SIZE, search.after, search.before),
   }
+}
+
+export type ResourcesFilters = Pick<ResourcesSearch, 'q' | 'enabled'>
+
+export function resourcesSearchKey(search: ResourcesSearch): string {
+  return JSON.stringify(normalizeResourcesSearch({ ...search }))
+}
+
+/** The filters a query is sent with: the form's values, trimmed. */
+export function resourcesAppliedFilters(search: ResourcesSearch): ResourcesFilters {
+  return { q: search.q?.trim() || undefined, enabled: search.enabled }
 }

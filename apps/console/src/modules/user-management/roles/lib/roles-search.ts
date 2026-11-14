@@ -43,8 +43,9 @@ export function normalizeRolesSearch(
   search: Record<string, unknown>,
 ): RolesSearch {
   const result: RolesSearch = {}
-  if (typeof search.q === 'string' && search.q.trim()) {
-    result.q = search.q.trim().slice(0, 256)
+  // Typed text stays as the form holds it; it is trimmed when applied.
+  if (typeof search.q === 'string' && search.q) {
+    result.q = search.q.slice(0, 256)
   }
   if (isStatus(search.status) && search.status !== 'any') {
     result.status = search.status
@@ -77,6 +78,21 @@ export function rolesSearchFromDraft(draft: RolesFilterDraft): RolesSearch {
   if (draft.status !== 'any') result.status = draft.status
   if (draft.order !== undefined) result.order = draft.order
   return result
+}
+
+export type RolesFilters = Pick<RolesSearch, 'q' | 'status'>
+
+/** The form as it is written to the URL, without normalising typed text. */
+export function rolesFormSearch(draft: RolesFilterDraft): RolesFilters {
+  return {
+    q: draft.q || undefined,
+    status: draft.status === 'any' ? undefined : draft.status,
+  }
+}
+
+/** The filters a query is sent with: the form's values, trimmed. */
+export function rolesAppliedFilters(search: RolesSearch): RolesFilters {
+  return { q: search.q?.trim() || undefined, status: search.status }
 }
 
 export function hasRoleFilters(search: RolesSearch): boolean {

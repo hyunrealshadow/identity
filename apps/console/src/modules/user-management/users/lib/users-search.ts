@@ -32,7 +32,7 @@ export interface UsersSearch {
   enabled?: boolean
   locked?: boolean
   createdFrom?: string
-  createdBefore?: string
+  createdTo?: string
   order?: UsersOrder
   size?: number
   after?: string
@@ -44,7 +44,7 @@ export type UsersSearchIssue =
   | 'username'
   | 'email'
   | 'createdFrom'
-  | 'createdBefore'
+  | 'createdTo'
   | 'createdRange'
 
 export type UsersFilterStatus = 'any' | 'true' | 'false'
@@ -56,7 +56,7 @@ export interface UsersFilterDraft {
   enabled: UsersFilterStatus
   locked: UsersFilterStatus
   createdFrom: string
-  createdBefore: string
+  createdTo: string
   order?: UsersOrder
 }
 
@@ -68,7 +68,7 @@ export function emptyUsersFilterDraft(): UsersFilterDraft {
     enabled: 'any',
     locked: 'any',
     createdFrom: '',
-    createdBefore: '',
+    createdTo: '',
     order: undefined,
   }
 }
@@ -77,6 +77,11 @@ function text(value: unknown): string | undefined {
   if (typeof value !== 'string') return undefined
   const trimmed = value.trim()
   return trimmed.length > 0 ? trimmed : undefined
+}
+
+/** Free text as typed: the URL keeps the form exactly, spaces included. */
+function rawText(value: unknown): string | undefined {
+  return typeof value === 'string' && value.length > 0 ? value : undefined
 }
 
 function booleanValue(value: unknown): boolean | undefined {
@@ -103,13 +108,13 @@ export function validateUsersSearch(raw: Record<string, unknown>): UsersSearch {
   const order = isUserOrder(raw.order) ? raw.order : undefined
 
   return {
-    q: text(raw.q),
-    username: text(raw.username),
-    email: text(raw.email),
+    q: rawText(raw.q),
+    username: rawText(raw.username),
+    email: rawText(raw.email),
     enabled: booleanValue(raw.enabled),
     locked: booleanValue(raw.locked),
     createdFrom: text(raw.createdFrom),
-    createdBefore: text(raw.createdBefore),
+    createdTo: text(raw.createdTo),
     order,
     size: parsePageSize(raw.size),
     after,
@@ -127,7 +132,7 @@ export function usersFilterDraft(search: UsersSearch): UsersFilterDraft {
     locked:
       search.locked === undefined ? 'any' : search.locked ? 'true' : 'false',
     createdFrom: search.createdFrom ?? '',
-    createdBefore: search.createdBefore ?? '',
+    createdTo: search.createdTo ?? '',
     order: search.order,
   }
 }
@@ -136,6 +141,37 @@ function statusValue(value: UsersFilterStatus): boolean | undefined {
   if (value === 'true') return true
   if (value === 'false') return false
   return undefined
+}
+
+export type UsersFilters = Pick<
+  UsersSearch,
+  'q' | 'username' | 'email' | 'enabled' | 'locked' | 'createdFrom' | 'createdTo'
+>
+
+/** The form as it is written to the URL, without normalising typed text. */
+export function usersFormSearch(draft: UsersFilterDraft): UsersFilters {
+  return {
+    q: draft.q || undefined,
+    username: draft.username || undefined,
+    email: draft.email || undefined,
+    enabled: statusValue(draft.enabled),
+    locked: statusValue(draft.locked),
+    createdFrom: draft.createdFrom || undefined,
+    createdTo: draft.createdTo || undefined,
+  }
+}
+
+/** The filters a query is sent with: the form's values, trimmed. */
+export function usersAppliedFilters(search: UsersSearch): UsersFilters {
+  return {
+    q: search.q?.trim() || undefined,
+    username: search.username?.trim() || undefined,
+    email: search.email?.trim() || undefined,
+    enabled: search.enabled,
+    locked: search.locked,
+    createdFrom: search.createdFrom,
+    createdTo: search.createdTo,
+  }
 }
 
 /**
@@ -150,7 +186,7 @@ export function usersSearchFromDraft(draft: UsersFilterDraft): UsersSearch {
     enabled: statusValue(draft.enabled),
     locked: statusValue(draft.locked),
     createdFrom: draft.createdFrom.trim() || undefined,
-    createdBefore: draft.createdBefore.trim() || undefined,
+    createdTo: draft.createdTo.trim() || undefined,
     order: draft.order,
   }
 }
@@ -161,6 +197,12 @@ function isIsoDate(value: string): boolean {
   return (
     !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
   )
+}
+
+function nextIsoDate(value: string): string {
+  const date = new Date(`${value}T00:00:00.000Z`)
+  date.setUTCDate(date.getUTCDate() + 1)
+  return date.toISOString().slice(0, 10)
 }
 
 export function usersSearchIssues(search: UsersSearch): UsersSearchIssue[] {
@@ -174,17 +216,17 @@ export function usersSearchIssues(search: UsersSearch): UsersSearchIssue[] {
   }
 
   const fromValid = search.createdFrom ? isIsoDate(search.createdFrom) : true
-  const beforeValid = search.createdBefore
-    ? isIsoDate(search.createdBefore)
+  const beforeValid = search.createdTo
+    ? isIsoDate(search.createdTo)
     : true
   if (!fromValid) issues.push('createdFrom')
-  if (!beforeValid) issues.push('createdBefore')
+  if (!beforeValid) issues.push('createdTo')
   if (
     fromValid &&
     beforeValid &&
     search.createdFrom &&
-    search.createdBefore &&
-    search.createdFrom >= search.createdBefore
+    search.createdTo &&
+    search.createdFrom > search.createdTo
   ) {
     issues.push('createdRange')
   }
@@ -200,7 +242,7 @@ export function hasUserFilters(search: UsersSearch): boolean {
     search.enabled !== undefined ||
     search.locked !== undefined ||
     search.createdFrom ||
-    search.createdBefore,
+    search.createdTo,
   )
 }
 
@@ -217,8 +259,9 @@ export function userFilterFromSearch(
   if (search.createdFrom) {
     filter.createdFrom = startOfZonedDate(search.createdFrom, timeZone)
   }
-  if (search.createdBefore) {
-    filter.createdBefore = startOfZonedDate(search.createdBefore, timeZone)
+  if (search.createdTo) {
+    // The end date is inclusive: the API bound is the start of the next day.
+    filter.createdBefore = startOfZonedDate(nextIsoDate(search.createdTo), timeZone)
   }
   return filter
 }
@@ -258,7 +301,7 @@ export function usersSearchKey(search: UsersSearch): string {
     search.enabled ?? null,
     search.locked ?? null,
     search.createdFrom ?? '',
-    search.createdBefore ?? '',
+    search.createdTo ?? '',
     search.order ?? DEFAULT_USERS_ORDER,
     search.size ?? USERS_PAGE_SIZE,
     search.after ?? '',

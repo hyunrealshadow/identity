@@ -70,7 +70,7 @@ export function RbacMutationFeedback({
           <div className="mt-3">
             <Button
               size="sm"
-              variant="secondary"
+              variant="outline"
               disabled={reloadPending}
               onClick={onReload}
             >

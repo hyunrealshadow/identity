@@ -138,7 +138,7 @@ export function UserStateActions({
             <DropdownMenuTrigger
               render={
                 <Button
-                  variant="secondary"
+                  variant="outline"
                   aria-label={t('usersMoreActions')}
                 />
               }
@@ -204,7 +204,7 @@ export function UserStateActions({
         <div className="flex flex-wrap gap-2">
           {showEnable ? (
             <Button
-              variant="secondary"
+              variant="outline"
               disabled={!versionReady}
               onClick={enableState.open}
             >
@@ -224,7 +224,7 @@ export function UserStateActions({
           ) : null}
           {showUnlock ? (
             <Button
-              variant="secondary"
+              variant="outline"
               disabled={!versionReady}
               onClick={unlockState.open}
             >
@@ -416,7 +416,7 @@ function UserStateDialog({
         <DialogFooter>
           <Button
             type="button"
-            variant="secondary"
+            variant="outline"
             disabled={busy}
             onClick={() => state.close()}
           >

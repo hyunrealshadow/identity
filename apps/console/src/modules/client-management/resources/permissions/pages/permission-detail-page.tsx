@@ -183,7 +183,7 @@ export function PermissionDetailPage({
       description={t('permissionsDetailDescription')}
       actions={
         <Button
-          variant="secondary"
+          variant="outline"
           disabled={pending}
           onClick={() =>
             void navigate({
@@ -467,7 +467,7 @@ export function PermissionDetailPage({
                 {canWrite ? (
                   <Button
                     size="sm"
-                    variant="secondary"
+                    variant="outline"
                     onClick={() => setEditing(true)}
                   >
                     {t('rbacEntityEdit')}
@@ -629,7 +629,7 @@ export function PermissionDetailPage({
                   </Button>
                   <Button
                     type="button"
-                    variant="secondary"
+                    variant="outline"
                     disabled={pending}
                     onClick={() => {
                       initialized.current = undefined
@@ -875,7 +875,7 @@ export function PermissionStateDialog({
           </div>
           <DialogFooter>
             <Button
-              variant="secondary"
+              variant="outline"
               disabled={pending}
               onClick={state.close}
             >

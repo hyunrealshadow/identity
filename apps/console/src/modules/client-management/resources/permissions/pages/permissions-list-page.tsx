@@ -1,7 +1,7 @@
 import { Badge } from '@identity/ui/components/badge'
 import { Button } from '@identity/ui/components/button'
 import { Link, useNavigate } from '@tanstack/react-router'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { AsyncState } from '#/components/async-state'
 import { CopyButton } from '#/components/copy-button'
 import { CursorPagination } from '#/components/cursor-pagination'
@@ -14,6 +14,7 @@ import {
 } from '#/lib/graphql/presentation'
 import { useLocale, useTranslator } from '#/lib/i18n'
 import { useCursorPagination } from '#/lib/use-cursor-pagination'
+import { useUrlFilters } from '#/lib/use-url-filters'
 import { useWorkspace } from '#/lib/workspace'
 import { useResourceContext } from '../../components/resource-detail-shell'
 import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
@@ -35,8 +36,11 @@ import {
   permissionsFilterDraft,
   permissionsSearchForResource,
   resourcePermissionsQueryVariables,
-  permissionsSearchFromDraft,
+  permissionsAppliedFilters,
+  permissionsFormSearch,
+  permissionsSearchKey,
   isPermissionOrder,
+  type PermissionsFilters,
   type PermissionsSearch,
 } from '../lib/permissions-search'
 
@@ -55,31 +59,47 @@ export function PermissionsListPage({
   const { resource } = useResourceContext()
   const readOnly = !resource || resource.uri === 'urn:identity:graphql'
   const search = permissionsSearchForResource(routeSearch, readOnly)
-  const [draft, setDraft] = useState(() => permissionsFilterDraft(search))
-  useEffect(
-    () => setDraft(permissionsFilterDraft(search)),
-    [search.q, search.enabled, search.builtIn, search.order],
+  // The URL always mirrors the filter form; queries use the applied filters.
+  const draft = permissionsFilterDraft(search)
+  const { applied, go } = useUrlFilters<PermissionsSearch, PermissionsFilters>({
+    search,
+    keyOf: permissionsSearchKey,
+    appliedOf: permissionsAppliedFilters,
+    navigate: (next, { replace }) =>
+      void navigate({
+        to: '/resources/$resourceId/permissions',
+        params: { resourceId },
+        search: { ...next, resourceId: undefined },
+        replace,
+      }),
+  })
+  const appliedSearch = permissionsSearchForResource(
+    {
+      ...applied,
+      order: search.order,
+      size: search.size,
+      after: search.after,
+      before: search.before,
+    },
+    readOnly,
   )
+  const appliedKey = permissionsSearchKey(appliedSearch)
+  const changeForm = (next: typeof draft) =>
+    go({ ...search, ...permissionsFormSearch(next) }, { replace: true })
   const variables =
     useMemo<ConsoleResourcePermissionsQueryVariables | null>(() => {
       if (!scope.permissionRead || (scope.resourcesRead && !resource))
         return null
       return resourcePermissionsQueryVariables(
         resourceId,
-        search,
+        appliedSearch,
       ) as ConsoleResourcePermissionsQueryVariables
     }, [
       resourceId,
       resource,
       scope.resourcesRead,
       scope.permissionRead,
-      search.q,
-      search.enabled,
-      search.builtIn,
-      search.order,
-      search.size,
-      search.after,
-      search.before,
+      appliedKey,
     ])
   const query = usePermissionList(variables, Boolean(variables))
   const connection = query.data?.permissions
@@ -88,17 +108,7 @@ export function PermissionsListPage({
     search,
     variables,
     onNavigate: (cursor) =>
-      void navigate({
-        to: '/resources/$resourceId/permissions',
-        params: { resourceId },
-        search: {
-          ...search,
-          resourceId: undefined,
-          after: undefined,
-          before: undefined,
-          ...cursor,
-        },
-      }),
+      go({ ...search, after: undefined, before: undefined, ...cursor }),
   })
   return (
     <ConsoleWorkspaceGate>
@@ -136,15 +146,17 @@ export function PermissionsListPage({
                 className="flex flex-wrap items-start gap-2"
                 onSubmit={(event) => {
                   event.preventDefault()
-                  void navigate({
-                    to: '/resources/$resourceId/permissions',
-                    params: { resourceId },
-                    search: {
-                      ...permissionsSearchFromDraft(draft),
-                      resourceId: undefined,
-                      size: search.size,
-                    },
-                  })
+                  const filters = permissionsAppliedFilters(search)
+                  const next: PermissionsSearch = {
+                    ...search,
+                    ...filters,
+                    after: undefined,
+                    before: undefined,
+                  }
+                  // Applying the filters already in effect reloads them.
+                  if (permissionsSearchKey(next) === appliedKey)
+                    void query.refresh()
+                  go(next, { apply: filters })
                 }}
               >
                 <div className="w-full sm:w-72">
@@ -154,7 +166,7 @@ export function PermissionsListPage({
                     hideLabel
                     placeholder={t('permissionsFilterSearchPlaceholder')}
                     value={draft.q}
-                    onChange={(q) => setDraft({ ...draft, q })}
+                    onChange={(q) => changeForm({ ...draft, q })}
                   />
                 </div>
                 {!readOnly ? (
@@ -165,7 +177,7 @@ export function PermissionsListPage({
                       hideLabel
                       value={draft.enabled}
                       onChange={(enabled) =>
-                        setDraft({
+                        changeForm({
                           ...draft,
                           enabled: enabled as typeof draft.enabled,
                         })
@@ -178,18 +190,12 @@ export function PermissionsListPage({
                     />
                   </div>
                 ) : null}
-                <Button type="submit" variant="secondary">
+                <Button type="submit" variant="outline">
                   {t('resourcesFilter')}
                 </Button>
                 <Button
                   variant="ghost"
-                  onClick={() =>
-                    void navigate({
-                      to: '/resources/$resourceId/permissions',
-                      params: { resourceId },
-                      search: { size: search.size },
-                    })
-                  }
+                  onClick={() => go({ size: search.size }, { apply: {} })}
                 >
                   {t('resourcesReset')}
                 </Button>
@@ -201,16 +207,11 @@ export function PermissionsListPage({
             items={(connection?.edges ?? []).map(({ node }) => node)}
             order={search.order}
             onOrderChange={(order) =>
-              void navigate({
-                to: '/resources/$resourceId/permissions',
-                params: { resourceId },
-                search: {
-                  ...search,
-                  resourceId: undefined,
-                  order: isPermissionOrder(order) ? order : undefined,
-                  after: undefined,
-                  before: undefined,
-                },
+              go({
+                ...search,
+                order: isPermissionOrder(order) ? order : undefined,
+                after: undefined,
+                before: undefined,
               })
             }
             onRefresh={() => void query.refresh()}
@@ -247,11 +248,7 @@ export function PermissionsListPage({
                   isDisabled={query.refreshing}
                   pageSize={search.size ?? PERMISSION_PAGE_SIZE}
                   onPageSizeChange={(size) =>
-                    void navigate({
-                      to: '/resources/$resourceId/permissions',
-                      params: { resourceId },
-                      search: { ...search, size, after: undefined, before: undefined },
-                    })
+                    go({ ...search, size, after: undefined, before: undefined })
                   }
                 />
               ) : null

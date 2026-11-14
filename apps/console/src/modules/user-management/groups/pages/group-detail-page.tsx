@@ -348,7 +348,7 @@ export function GroupDetailPage() {
                 </h2>
                 {editable ? (
                   <Button
-                    variant="secondary"
+                    variant="outline"
                     size="sm"
                     onClick={() => setEditing(true)}
                   >
@@ -487,7 +487,7 @@ export function GroupDetailPage() {
                   </Button>
                   <Button
                     type="button"
-                    variant="secondary"
+                    variant="outline"
                     disabled={pending}
                     onClick={() => {
                       initialized.current = undefined
@@ -653,7 +653,7 @@ function GroupStateDialog({
           <DialogFooter>
             <Button
               type="button"
-              variant="secondary"
+              variant="outline"
               disabled={pending}
               onClick={() => state.close()}
             >
@@ -775,7 +775,7 @@ function GroupDeleteDialog({
           <DialogFooter>
             <Button
               type="button"
-              variant="secondary"
+              variant="outline"
               disabled={pending}
               onClick={() => state.close()}
             >

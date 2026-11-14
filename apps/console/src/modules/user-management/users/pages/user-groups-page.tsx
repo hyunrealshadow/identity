@@ -58,13 +58,27 @@ import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
 import { useUserDetailContext } from '#/modules/user-management/users/components/user-detail-context'
 import { UserTextField } from '#/modules/user-management/users/components/user-form-fields'
+import {
+  USER_GROUPS_PAGE_SIZE,
+  userGroupsAppliedFilters,
+  userGroupsSearchKey,
+  type UserGroupsFilters,
+  type UserGroupsSearch,
+} from '#/modules/user-management/users/lib/user-groups-search'
+import { useUrlFilters } from '#/lib/use-url-filters'
 
 
 type UserGroupsConnection = NonNullable<
   NonNullable<ConsoleUserGroupsQuery['user']>['groups']
 >
 type MembershipGroup = UserGroupsConnection['edges'][number]['node']
-export function UserGroupsPage({ userId }: { userId: string }) {
+export function UserGroupsPage({
+  userId,
+  search,
+}: {
+  userId: string
+  search: UserGroupsSearch
+}) {
   const t = useTranslator()
   const { locale } = useLocale()
   const navigate = useNavigate()
@@ -74,11 +88,22 @@ export function UserGroupsPage({ userId }: { userId: string }) {
     [workspace.data?.effectivePermissions],
   )
   const userDetail = useUserDetailContext()
-  const [query, setQuery] = useState('')
-  const [appliedQuery, setAppliedQuery] = useState('')
-  const [after, setAfter] = useState<string | undefined>()
-  const [before, setBefore] = useState<string | undefined>()
-  const [pageSize, setPageSize] = useState(10)
+  // The URL always mirrors the filter form; queries use the applied filters.
+  const { after, before } = search
+  const pageSize = search.size ?? USER_GROUPS_PAGE_SIZE
+  const { applied, go } = useUrlFilters<UserGroupsSearch, UserGroupsFilters>({
+    search,
+    keyOf: userGroupsSearchKey,
+    appliedOf: userGroupsAppliedFilters,
+    navigate: (next, { replace }) =>
+      void navigate({
+        to: '/users/$userId/groups',
+        params: { userId },
+        search: next,
+        replace,
+      }),
+  })
+  const appliedQuery = applied.q ?? ''
   const [notice, setNotice] = useState<RbacNotice | null>(null)
 
   const canRead =
@@ -273,9 +298,20 @@ export function UserGroupsPage({ userId }: { userId: string }) {
                     className="flex min-w-0 flex-wrap items-start gap-2"
                     onSubmit={(event) => {
                       event.preventDefault()
-                      setAppliedQuery(query.trim())
-                      setAfter(undefined)
-                      setBefore(undefined)
+                      const filters = userGroupsAppliedFilters(search)
+                      // Searching again for the same text reloads the list.
+                      if (!after && !before && filters.q === applied.q) {
+                        void memberships.refresh()
+                      }
+                      go(
+                        {
+                          ...search,
+                          ...filters,
+                          after: undefined,
+                          before: undefined,
+                        },
+                        { apply: filters },
+                      )
                     }}
                   >
                     <div className="w-full sm:w-72">
@@ -283,13 +319,18 @@ export function UserGroupsPage({ userId }: { userId: string }) {
                         name="user-group-search"
                         label={t('userGroupsSearchLabel')}
                         hideLabel
-                        value={query}
-                        onChange={setQuery}
+                        value={search.q ?? ''}
+                        onChange={(value) =>
+                          go(
+                            { ...search, q: value || undefined },
+                            { replace: true },
+                          )
+                        }
                         placeholder={t('userGroupsSearchPlaceholder')}
                         maxLength={256}
                       />
                     </div>
-                    <Button type="submit" variant="secondary">
+                    <Button type="submit" variant="outline">
                       <Search className="size-4" aria-hidden="true" />
                       {t('userGroupsSearchAction')}
                     </Button>
@@ -305,20 +346,17 @@ export function UserGroupsPage({ userId }: { userId: string }) {
                   variables={variables}
                   after={after}
                   before={before}
-                  onNavigate={(page) => {
-                    setAfter(page.after)
-                    setBefore(page.before)
-                  }}
+                  onNavigate={(page) =>
+                    go({ ...search, after: page.after, before: page.before })
+                  }
                   label={t('userGroupsPagination')}
                   isDisabled={
                     memberships.refreshing || memberships.status !== 'ready'
                   }
                   pageSize={pageSize}
-                  onPageSizeChange={(size) => {
-                    setPageSize(size)
-                    setAfter(undefined)
-                    setBefore(undefined)
-                  }}
+                  onPageSizeChange={(size) =>
+                    go({ ...search, size, after: undefined, before: undefined })
+                  }
                 />
               ) : memberships.status === 'idle' ||
                 memberships.status === 'loading' ? (

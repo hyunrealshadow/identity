@@ -132,7 +132,7 @@ export function UserCreatePage() {
       description={t('usersNewDescription')}
       actions={
         <Button
-          variant="secondary"
+          variant="outline"
           disabled={pending}
           onClick={() => {
             leaveCreate()
@@ -264,7 +264,7 @@ export function UserCreatePage() {
                 {t('usersCreateAnother')}
               </Button>
               <Button
-                variant="secondary"
+                variant="outline"
                 onClick={() => void navigate({ to: '/' })}
               >
                 {t('goHome')}
@@ -545,7 +545,7 @@ export function UserCreatePage() {
             </Button>
             <Button
               type="button"
-              variant="secondary"
+              variant="outline"
               disabled={pending}
               onClick={() => {
                 leaveCreate()

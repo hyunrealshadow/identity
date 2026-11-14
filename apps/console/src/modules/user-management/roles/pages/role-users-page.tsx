@@ -45,12 +45,20 @@ import {
 import { cursorPage } from '#/modules/user-management/lib/cursor-page'
 
 import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
+import { FIRST_PAGE } from '#/modules/user-management/lib/relation-search'
+import type { RoleUsersSearch } from '#/modules/user-management/roles/lib/role-users-search'
 import { UserSelectField } from '#/modules/user-management/users/components/user-form-fields'
 
 type UserStatus = 'any' | 'active' | 'revoked'
 
 
-export function RoleUsersPage({ roleId }: { roleId: string }) {
+export function RoleUsersPage({
+  roleId,
+  listSearch,
+}: {
+  roleId: string
+  listSearch: RoleUsersSearch
+}) {
   const t = useTranslator()
   const { locale, timeZone } = useLocale()
   const navigate = useNavigate()
@@ -60,10 +68,17 @@ export function RoleUsersPage({ roleId }: { roleId: string }) {
     [workspace.data?.effectivePermissions],
   )
   const roleQuery = useRoleDetailContext()
-  const [status, setStatus] = useState<UserStatus>('any')
-  const [after, setAfter] = useState<string | undefined>()
-  const [before, setBefore] = useState<string | undefined>()
-  const [pageSize, setPageSize] = useState(10)
+  const status: UserStatus = listSearch.status ?? 'any'
+  // Filters and paging live in the URL so a reload or link restores them.
+  const { after, before } = listSearch
+  const pageSize = listSearch.size ?? 10
+  const go = (next: RoleUsersSearch, replace = false) =>
+    void navigate({
+      to: '/roles/$roleId/users',
+      params: { roleId },
+      search: next,
+      replace,
+    })
   const [notice, setNotice] = useState<RbacNotice | null>(null)
   const assignmentsVariables = useMemo<ConsoleRoleUsersQueryVariables | null>(
     () =>
@@ -215,9 +230,7 @@ export function RoleUsersPage({ roleId }: { roleId: string }) {
                         value === 'active' ||
                         value === 'revoked'
                       ) {
-                        setStatus(value)
-                        setAfter(undefined)
-                        setBefore(undefined)
+                        go({ ...listSearch, status: value === 'any' ? undefined : value, ...FIRST_PAGE })
                       }
                     }}
                     options={[
@@ -237,18 +250,15 @@ export function RoleUsersPage({ roleId }: { roleId: string }) {
               variables={assignmentsVariables}
               after={after}
               before={before}
-              onNavigate={(page) => {
-                setAfter(page.after)
-                setBefore(page.before)
-              }}
+              onNavigate={(page) =>
+                go({ ...listSearch, after: page.after, before: page.before })
+              }
               label={t('roleUsersPagination')}
               isDisabled={assignments.refreshing || assignments.status !== 'ready'}
               pageSize={pageSize}
-              onPageSizeChange={(size) => {
-                setPageSize(size)
-                setAfter(undefined)
-                setBefore(undefined)
-              }}
+              onPageSizeChange={(size) =>
+                go({ ...listSearch, size, ...FIRST_PAGE })
+              }
             />
           </footer>
         </section>

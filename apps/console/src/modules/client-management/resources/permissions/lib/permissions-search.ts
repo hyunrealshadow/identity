@@ -56,8 +56,9 @@ export function normalizePermissionsSearch(
   search: Record<string, unknown>,
 ): PermissionsSearch {
   const result: PermissionsSearch = {}
-  if (typeof search.q === 'string' && search.q.trim()) {
-    result.q = search.q.trim().slice(0, 256)
+  // Typed text stays as the form holds it; it is trimmed when applied.
+  if (typeof search.q === 'string' && search.q) {
+    result.q = search.q.slice(0, 256)
   }
   if (typeof search.resourceId === 'string' && search.resourceId.trim()) {
     result.resourceId = search.resourceId.trim()
@@ -108,6 +109,33 @@ export function permissionsSearchFromDraft(
   if (draft.enabled !== 'any') result.enabled = draft.enabled
   if (draft.order !== undefined) result.order = draft.order
   return result
+}
+
+export type PermissionsFilters = Pick<
+  PermissionsSearch,
+  'q' | 'builtIn' | 'enabled'
+>
+
+/** The form as it is written to the URL, without normalising typed text. */
+export function permissionsFormSearch(
+  draft: PermissionsFilterDraft,
+): PermissionsFilters {
+  return {
+    q: draft.q || undefined,
+    builtIn: draft.builtIn === 'any' ? undefined : draft.builtIn,
+    enabled: draft.enabled === 'any' ? undefined : draft.enabled,
+  }
+}
+
+/** The filters a query is sent with: the form's values, trimmed. */
+export function permissionsAppliedFilters(
+  search: PermissionsSearch,
+): PermissionsFilters {
+  return {
+    q: search.q?.trim() || undefined,
+    builtIn: search.builtIn,
+    enabled: search.enabled,
+  }
 }
 
 export function hasPermissionFilters(search: PermissionsSearch): boolean {

@@ -2,8 +2,10 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  usersAppliedFilters,
   usersQueryVariables,
   usersFilterDraft,
+  usersFormSearch,
   usersSearchFromDraft,
   usersSearchIssues,
   validateUsersSearch,
@@ -18,7 +20,7 @@ function draft(overrides: Partial<UsersFilterDraft> = {}): UsersFilterDraft {
     enabled: 'any',
     locked: 'any',
     createdFrom: '',
-    createdBefore: '',
+    createdTo: '',
     order: 'CREATED_AT_DESC',
     ...overrides,
   }
@@ -36,17 +38,29 @@ describe('users search', () => {
     })
 
     expect(search).toEqual({
-      q: 'ada',
+      // Typed text stays exactly as the form holds it.
+      q: '  ada  ',
       username: undefined,
       email: undefined,
       enabled: false,
       locked: undefined,
       createdFrom: undefined,
-      createdBefore: undefined,
+      createdTo: undefined,
       order: undefined,
       after: 'after',
       before: undefined,
     })
+    // Text is trimmed only when the filters are applied.
+    expect(usersAppliedFilters(search).q).toBe('ada')
+  })
+
+  it('keeps the form in the URL exactly as typed, including spaces', () => {
+    const form = usersFormSearch(draft({ q: 'ada lovelace ', enabled: 'true' }))
+    expect(form).toMatchObject({ q: 'ada lovelace ', enabled: true })
+    // Round-trips through the URL without losing the trailing space.
+    expect(usersFilterDraft(validateUsersSearch({ ...form })).q).toBe(
+      'ada lovelace ',
+    )
   })
 
   it('starts a new page when applying filters', () => {
@@ -92,10 +106,20 @@ describe('users search', () => {
       usersSearchIssues(
         validateUsersSearch({
           createdFrom: '2026-02-01',
-          createdBefore: '2026-01-01',
+          createdTo: '2026-01-01',
         }),
       ),
     ).toContain('createdRange')
+
+    // Both ends are inclusive, so a single day is a valid range.
+    expect(
+      usersSearchIssues(
+        validateUsersSearch({
+          createdFrom: '2026-01-01',
+          createdTo: '2026-01-01',
+        }),
+      ),
+    ).toEqual([])
 
     expect(
       usersSearchIssues(validateUsersSearch({ createdFrom: '2026-02-30' })),

@@ -2,11 +2,13 @@ import { TableRowActions } from '#/components/table-row-actions'
 import { CursorPagination } from '#/components/cursor-pagination'
 import { DatePickerField } from '#/components/date-picker-field'
 import { useCursorPagination } from '#/lib/use-cursor-pagination'
+import { useUrlFilters } from '#/lib/use-url-filters'
 import {
   CollectionToolbar,
   ResourceTable,
   type ResourceTableControls,
 } from '#/components/resource-table'
+import { Badge } from '@identity/ui/components/badge'
 import { Button } from '@identity/ui/components/button'
 import {
   Alert,
@@ -36,15 +38,16 @@ import {
 import { userManagementScope } from '#/modules/user-management/users/lib/user-scope'
 import {
   USERS_PAGE_SIZE,
-  emptyUsersFilterDraft,
   hasUserFilters,
   isUserOrder,
+  usersAppliedFilters,
   usersFilterDraft,
+  usersFormSearch,
   usersQueryVariables,
-  usersSearchFromDraft,
   usersSearchIssues,
   usersSearchKey,
   type UsersFilterDraft,
+  type UsersFilters,
   type UsersSearch,
   type UsersSearchIssue,
 } from '#/modules/user-management/users/lib/users-search'
@@ -216,7 +219,7 @@ function issueMessage(
     case 'email':
       return t('usersFilterEmailTooLong')
     case 'createdFrom':
-    case 'createdBefore':
+    case 'createdTo':
       return t('usersFilterDateInvalid')
     case 'createdRange':
       return t('usersFilterDateRange')
@@ -236,7 +239,7 @@ function advancedFilterCount(draft: UsersFilterDraft): number {
     draft.enabled !== 'any',
     draft.locked !== 'any',
     draft.createdFrom.trim().length > 0,
-    draft.createdBefore.trim().length > 0,
+    draft.createdTo.trim().length > 0,
   ].filter(Boolean).length
 }
 
@@ -283,7 +286,7 @@ function UsersFilterBar({
           maxLength={256}
         />
       </div>
-      <Button type="submit" variant="secondary">
+      <Button type="submit" variant="outline">
         {t('usersApplyFilters')}
       </Button>
       <Button type="button" variant="ghost" onClick={onReset}>
@@ -296,16 +299,24 @@ function UsersFilterBar({
         aria-controls={USERS_ADVANCED_FILTERS_ID}
         onClick={onAdvancedToggle}
       >
-        {advancedExpanded
-          ? t('usersAdvancedFiltersHide')
-          : t('usersAdvancedFiltersShow')}
+        {t('usersAdvancedFilters')}
         {advancedCount > 0 ? (
-          <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
-            {t('usersAdvancedFiltersActive', { count: advancedCount })}
-          </span>
+          <>
+            <Badge
+              variant="secondary"
+              // The highlighted button shares the badge's fill; outline it then.
+              className="min-w-5 px-1.5 tabular-nums group-hover/button:border-border group-aria-expanded/button:border-border"
+              aria-hidden="true"
+            >
+              {advancedCount}
+            </Badge>
+            <span className="sr-only">
+              {t('usersAdvancedFiltersActive', { count: advancedCount })}
+            </span>
+          </>
         ) : null}
         <ChevronDown
-          className={`size-4 text-muted-foreground transition-transform ${advancedExpanded ? 'rotate-180' : ''}`}
+          className={`text-muted-foreground transition-transform ${advancedExpanded ? 'rotate-180' : ''}`}
           aria-hidden="true"
         />
       </Button>
@@ -326,7 +337,7 @@ function UsersAdvancedFilters({
   issues: ReadonlyArray<UsersSearchIssue>
   expanded: boolean
   onChange: (
-    key: 'username' | 'email' | 'createdFrom' | 'createdBefore',
+    key: 'username' | 'email' | 'createdFrom' | 'createdTo',
     value: string,
   ) => void
   onStatusChange: (key: 'enabled' | 'locked', value: string) => void
@@ -340,7 +351,7 @@ function UsersAdvancedFilters({
       {expanded ? (
         <form
           id={USERS_ADVANCED_FILTERS_ID}
-          aria-label={t('usersAdvancedFiltersShow')}
+          aria-label={t('usersAdvancedFilters')}
           onSubmit={(event) => {
             event.preventDefault()
             onApply()
@@ -406,22 +417,19 @@ function UsersAdvancedFilters({
               }
             />
             <DatePickerField
-              name="createdBefore"
-              label={t('usersFilterCreatedBeforeLabel')}
-              value={draft.createdBefore}
-              onChange={(value) => onChange('createdBefore', value)}
+              name="createdTo"
+              label={t('usersFilterCreatedToLabel')}
+              value={draft.createdTo}
+              onChange={(value) => onChange('createdTo', value)}
               error={
                 has('createdRange')
                   ? t('usersFilterDateRange')
-                  : has('createdBefore')
+                  : has('createdTo')
                     ? t('usersFilterDateInvalid')
                     : undefined
               }
             />
           </div>
-          <p className="mt-3 text-xs leading-5 text-muted-foreground">
-            {t('usersFilterDateHint')}
-          </p>
         </form>
       ) : null}
       {issues.length > 0 ? (
@@ -451,19 +459,28 @@ export function UsersListPage({ search }: { search: UsersSearch }) {
   const workspace = useWorkspace()
   const permissions = workspace.data?.effectivePermissions ?? null
   const scope = useMemo(() => userManagementScope(permissions), [permissions])
-  const searchKey = usersSearchKey(search)
-  const [draft, setDraft] = useState<UsersFilterDraft>(() =>
-    usersFilterDraft(search),
-  )
-  const [localIssues, setLocalIssues] = useState<UsersSearchIssue[]>([])
+  // The URL always mirrors the filter form; queries use only the filters
+  // last applied. Editing a field rewrites the URL without sending anything.
+  const draft = usersFilterDraft(search)
+  const { applied, go } = useUrlFilters<UsersSearch, UsersFilters>({
+    search,
+    keyOf: usersSearchKey,
+    appliedOf: usersAppliedFilters,
+    navigate: (next, { replace }) =>
+      void navigate({ to: '/users', search: next, replace }),
+  })
 
-  useEffect(() => {
-    setDraft(usersFilterDraft(search))
-    setLocalIssues([])
-  }, [searchKey])
-
-  const urlIssues = usersSearchIssues(search)
-  const issues = localIssues.length > 0 ? localIssues : urlIssues
+  const appliedSearch: UsersSearch = {
+    ...applied,
+    order: search.order,
+    size: search.size,
+    after: search.after,
+    before: search.before,
+  }
+  const appliedKey = usersSearchKey(appliedSearch)
+  // Field messages follow the form; the list reports only what was applied.
+  const issues = usersSearchIssues(search)
+  const appliedIssues = usersSearchIssues(appliedSearch)
   const advancedInvalid = issues.some(isAdvancedIssue)
   const [advancedExpanded, setAdvancedExpanded] = useState(
     () => advancedFilterCount(usersFilterDraft(search)) > 0 || advancedInvalid,
@@ -472,8 +489,8 @@ export function UsersListPage({ search }: { search: UsersSearch }) {
     if (advancedInvalid) setAdvancedExpanded(true)
   }, [advancedInvalid])
   const variables = useMemo(
-    () => usersQueryVariables(search, timeZone),
-    [searchKey, timeZone],
+    () => usersQueryVariables(appliedSearch, timeZone),
+    [appliedKey, timeZone],
   )
   const users = useUsers(variables, Boolean(scope.read && variables))
 
@@ -481,9 +498,11 @@ export function UsersListPage({ search }: { search: UsersSearch }) {
     search,
     variables,
     onNavigate: (cursor) =>
-      void navigate({
-        to: '/users',
-        search: { ...search, after: undefined, before: undefined, ...cursor },
+      go({
+        ...search,
+        after: undefined,
+        before: undefined,
+        ...cursor,
       }),
   })
 
@@ -591,35 +610,38 @@ export function UsersListPage({ search }: { search: UsersSearch }) {
     )
   }
 
+  function changeForm(next: UsersFilterDraft) {
+    go({ ...search, ...usersFormSearch(next) }, { replace: true })
+  }
+
   function changeDraft(
-    key: 'q' | 'username' | 'email' | 'createdFrom' | 'createdBefore',
+    key: 'q' | 'username' | 'email' | 'createdFrom' | 'createdTo',
     value: string,
   ) {
-    setDraft((current) => ({ ...current, [key]: value }))
-    setLocalIssues([])
+    changeForm({ ...draft, [key]: value })
   }
 
   function changeStatus(key: 'enabled' | 'locked', value: string) {
     if (value !== 'any' && value !== 'true' && value !== 'false') return
-    setDraft((current) => ({ ...current, [key]: value }))
-    setLocalIssues([])
+    changeForm({ ...draft, [key]: value })
   }
 
   function applyFilters() {
-    const next = usersSearchFromDraft(draft)
-    const nextIssues = usersSearchIssues(next)
-    if (nextIssues.length > 0) {
-      setLocalIssues(nextIssues)
-      return
+    const filters = usersAppliedFilters(search)
+    if (usersSearchIssues({ ...search, ...filters }).length > 0) return
+    const next: UsersSearch = {
+      ...search,
+      ...filters,
+      after: undefined,
+      before: undefined,
     }
-    setLocalIssues([])
-    void navigate({ to: '/users', search: { ...next, size: search.size } })
+    // Applying the filters already in effect on the first page reloads them.
+    if (usersSearchKey(next) === appliedKey) void users.refresh()
+    go(next, { apply: filters })
   }
 
   function resetFilters() {
-    setDraft(emptyUsersFilterDraft())
-    setLocalIssues([])
-    void navigate({ to: '/users', search: { size: search.size } })
+    go({ size: search.size }, { apply: {} })
   }
 
   const filters = (
@@ -646,7 +668,7 @@ export function UsersListPage({ search }: { search: UsersSearch }) {
 
   function renderList() {
     const toolbar = <CollectionToolbar filters={filters} panel={filtersPanel} />
-    if (issues.length > 0) {
+    if (appliedIssues.length > 0) {
       return (
         <>
           {toolbar}
@@ -702,7 +724,10 @@ export function UsersListPage({ search }: { search: UsersSearch }) {
     const edges = users.data.edges ?? []
     const emptyState = (() => {
       if (edges.length === 0) {
-        if (hasUserFilters(search) || Boolean(search.after || search.before)) {
+        if (
+          hasUserFilters(appliedSearch) ||
+          Boolean(search.after || search.before)
+        ) {
           return (
             <AsyncState
               kind="empty"
@@ -710,7 +735,7 @@ export function UsersListPage({ search }: { search: UsersSearch }) {
               title={t('usersNoResultsTitle')}
               description={t('usersNoResultsDescription')}
               action={
-                <Button variant="secondary" onClick={resetFilters}>
+                <Button variant="outline" onClick={resetFilters}>
                   {t('usersClearFilters')}
                 </Button>
               }
@@ -763,14 +788,11 @@ export function UsersListPage({ search }: { search: UsersSearch }) {
           order={search.order}
           onOrderChange={(order) => {
             if (order === undefined || isUserOrder(order))
-              void navigate({
-                to: '/users',
-                search: {
-                  ...search,
-                  order,
-                  after: undefined,
-                  before: undefined,
-                },
+              go({
+                ...search,
+                order,
+                after: undefined,
+                before: undefined,
               })
           }}
           refreshing={users.refreshing}
@@ -785,9 +807,11 @@ export function UsersListPage({ search }: { search: UsersSearch }) {
               isDisabled={users.refreshing}
               pageSize={search.size ?? USERS_PAGE_SIZE}
               onPageSizeChange={(size) =>
-                void navigate({
-                  to: '/users',
-                  search: { ...search, size, after: undefined, before: undefined },
+                go({
+                  ...search,
+                  size,
+                  after: undefined,
+                  before: undefined,
                 })
               }
             />

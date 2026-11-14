@@ -4,7 +4,7 @@ import { Alert, AlertDescription, AlertTitle } from '@identity/ui/components/ale
 import { Button } from '@identity/ui/components/button'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { ChevronLeft, ChevronRight, RotateCcw, Search, TriangleAlert } from 'lucide-react'
-import { useCallback, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useMemo, type ReactNode } from 'react'
 import { useIntl } from 'react-intl'
 
 import { AsyncState } from '#/components/async-state'
@@ -27,6 +27,7 @@ import {
   type Locale,
   type MessageValues,
 } from '#/lib/i18n'
+import { useUrlFilters } from '#/lib/use-url-filters'
 import { useWorkspace } from '#/lib/workspace'
 import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
 import {
@@ -41,6 +42,15 @@ import {
 import { cursorPage } from '#/modules/user-management/lib/cursor-page'
 import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
+import {
+  DEFAULT_ROLE_GROUPS_FILTER,
+  roleGroupsAppliedFilters,
+  roleGroupsFormSearch,
+  roleGroupsFormState,
+  roleGroupsSearchKey,
+  type RoleGroupsFilterState,
+  type RoleGroupsSearch,
+} from '#/modules/user-management/roles/lib/role-groups-search'
 import enUS from '#/modules/user-management/roles/locales/en-US'
 import zhCN from '#/modules/user-management/roles/locales/zh-CN'
 import {
@@ -51,20 +61,9 @@ import {
 const PAGE_SIZE = 5
 
 type RoleGroupsMessageKey = keyof typeof enUS
-type RoleGroupsFilterState = {
-  query: string
-  kind: 'any' | 'builtin' | 'custom'
-  order: 'CREATED_AT_ASC' | 'CREATED_AT_DESC'
-}
 type RoleGroupsConnection = NonNullable<
   ConsoleRoleGroupsQuery['role']
 >['groups']
-
-const DEFAULT_ROLE_GROUPS_FILTER: RoleGroupsFilterState = {
-  query: '',
-  kind: 'any',
-  order: 'CREATED_AT_DESC',
-}
 
 const roleGroupsMessages: Record<
   Locale,
@@ -109,7 +108,13 @@ function roleGroupsQueryFilter(
   return filter
 }
 
-export function RoleGroupsPage({ roleId }: { roleId: string }) {
+export function RoleGroupsPage({
+  roleId,
+  search,
+}: {
+  roleId: string
+  search: RoleGroupsSearch
+}) {
   const t = useTranslator()
   const tr = useRoleGroupsTranslator()
   const navigate = useNavigate()
@@ -119,14 +124,25 @@ export function RoleGroupsPage({ roleId }: { roleId: string }) {
     [workspace.data?.effectivePermissions],
   )
   const canRead = scope.rolesRead && scope.groupsRead && scope.groupRolesRead
-  const [draft, setDraft] = useState<RoleGroupsFilterState>(
-    DEFAULT_ROLE_GROUPS_FILTER,
+  // The URL always mirrors the filter form; queries use the applied filters.
+  const draft = roleGroupsFormState(search)
+  const { after, before } = search
+  const { applied, go } = useUrlFilters<RoleGroupsSearch, RoleGroupsFilterState>(
+    {
+      search,
+      keyOf: roleGroupsSearchKey,
+      appliedOf: roleGroupsAppliedFilters,
+      navigate: (next, { replace }) =>
+        void navigate({
+          to: '/roles/$roleId/groups',
+          params: { roleId },
+          search: next,
+          replace,
+        }),
+    },
   )
-  const [applied, setApplied] = useState<RoleGroupsFilterState>(
-    DEFAULT_ROLE_GROUPS_FILTER,
-  )
-  const [after, setAfter] = useState<string | undefined>()
-  const [before, setBefore] = useState<string | undefined>()
+  const changeForm = (next: RoleGroupsFilterState) =>
+    go({ ...search, ...roleGroupsFormSearch(next) }, { replace: true })
 
   const variables = useMemo<ConsoleRoleGroupsQueryVariables | null>(
     () =>
@@ -152,32 +168,38 @@ export function RoleGroupsPage({ roleId }: { roleId: string }) {
   )
 
   function applyFilters() {
-    setApplied({
-      query: draft.query,
-      kind: draft.kind,
-      order: draft.order,
-    })
-    setAfter(undefined)
-    setBefore(undefined)
+    const filters = roleGroupsAppliedFilters(search)
+    // Applying the filters already in effect on the first page reloads them.
+    if (
+      !after &&
+      !before &&
+      JSON.stringify(filters) === JSON.stringify(applied)
+    ) {
+      void groups.refresh()
+    }
+    go(
+      {
+        ...search,
+        ...roleGroupsFormSearch(filters),
+        after: undefined,
+        before: undefined,
+      },
+      { apply: filters },
+    )
   }
 
   function resetFilters() {
-    setDraft(DEFAULT_ROLE_GROUPS_FILTER)
-    setApplied(DEFAULT_ROLE_GROUPS_FILTER)
-    setAfter(undefined)
-    setBefore(undefined)
+    go({}, { apply: DEFAULT_ROLE_GROUPS_FILTER })
   }
 
   function goNext(cursor: string | null) {
     if (!cursor) return
-    setAfter(cursor)
-    setBefore(undefined)
+    go({ ...search, after: cursor, before: undefined })
   }
 
   function goPrevious(cursor: string | null) {
     if (!cursor) return
-    setBefore(cursor)
-    setAfter(undefined)
+    go({ ...search, before: cursor, after: undefined })
   }
 
   if (!canRead) {
@@ -304,9 +326,7 @@ export function RoleGroupsPage({ roleId }: { roleId: string }) {
                   name="role-groups-query"
                   label={tr('roleGroupsSearchLabel')}
                   value={draft.query}
-                  onChange={(value) =>
-                    setDraft((current) => ({ ...current, query: value }))
-                  }
+                  onChange={(value) => changeForm({ ...draft, query: value })}
                   placeholder={tr('roleGroupsSearchPlaceholder')}
                   maxLength={255}
                 />
@@ -322,7 +342,7 @@ export function RoleGroupsPage({ roleId }: { roleId: string }) {
                       value === 'builtin' ||
                       value === 'custom'
                     ) {
-                      setDraft((current) => ({ ...current, kind: value }))
+                      changeForm({ ...draft, kind: value })
                     }
                   }}
                   options={[
@@ -342,7 +362,7 @@ export function RoleGroupsPage({ roleId }: { roleId: string }) {
                       value === 'CREATED_AT_ASC' ||
                       value === 'CREATED_AT_DESC'
                     ) {
-                      setDraft((current) => ({ ...current, order: value }))
+                      changeForm({ ...draft, order: value })
                     }
                   }}
                   options={[
@@ -364,7 +384,7 @@ export function RoleGroupsPage({ roleId }: { roleId: string }) {
                 </Button>
                 <Button
                   type="button"
-                  variant="secondary"
+                  variant="outline"
                   onClick={resetFilters}
                 >
                   <RotateCcw className="size-4" aria-hidden="true" />
@@ -400,7 +420,7 @@ export function RoleGroupsPage({ roleId }: { roleId: string }) {
                     title={tr('roleGroupsNoResultsTitle')}
                     description={tr('roleGroupsNoResultsDescription')}
                     action={
-                      <Button variant="secondary" onClick={resetFilters}>
+                      <Button variant="outline" onClick={resetFilters}>
                         {tr('roleGroupsClearFilters')}
                       </Button>
                     }
