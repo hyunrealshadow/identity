@@ -5,7 +5,7 @@ import {
 import { useLocale, useTranslator } from '#/lib/i18n'
 
 export function DatePickerField(
-  props: Omit<DatePickerFieldProps, 'timeZone' | 'clearLabel' | 'locale'>,
+  props: Omit<DatePickerFieldProps, 'timeZone' | 'clearLabel' | 'calendarLabel' | 'locale'>,
 ) {
   const { timeZone, locale } = useLocale()
   const t = useTranslator()
@@ -15,6 +15,7 @@ export function DatePickerField(
       timeZone={timeZone}
       locale={locale}
       clearLabel={t('dateClear')}
+      calendarLabel={t('dateOpenCalendar')}
     />
   )
 }

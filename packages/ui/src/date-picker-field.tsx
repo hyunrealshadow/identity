@@ -12,7 +12,7 @@ export interface DatePickerFieldProps
 
 /**
  * Account form adapter: the shared date field with the account-center's
- * `isRequired`/`isDisabled` naming and an optional placeholder.
+ * `isRequired`/`isDisabled` naming.
  */
 export function DatePickerField({
   placeholder,
@@ -23,7 +23,7 @@ export function DatePickerField({
   return (
     <BaseDatePickerField
       {...props}
-      placeholder={placeholder ?? props.label}
+      placeholder={placeholder}
       required={isRequired}
       disabled={isDisabled}
     />

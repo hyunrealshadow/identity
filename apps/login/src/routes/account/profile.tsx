@@ -118,8 +118,8 @@ function ProfileDatePicker({
       label={t('accountBirthdate')}
       defaultValue={account.birthdate}
       error={error}
-      placeholder={t('accountDatePlaceholder')}
       clearLabel={t('accountDateClear')}
+      calendarLabel={t('accountDateOpenCalendar')}
       timeZone={timeZone}
       locale={locale}
     />

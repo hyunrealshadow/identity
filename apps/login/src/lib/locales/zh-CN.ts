@@ -82,7 +82,7 @@ const zhCN = {
   accountReview: '查看',
   accountWebsite: '个人网站',
   accountDateClear: '清除',
-  accountDatePlaceholder: '选择日期',
+  accountDateOpenCalendar: '选择日期',
   accountBirthdate: '出生日期',
   accountLocale: '语言偏好',
   accountLocaleBrowser: '跟随浏览器',

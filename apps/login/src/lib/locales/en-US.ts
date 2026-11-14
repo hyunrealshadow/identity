@@ -80,7 +80,7 @@ const enUS = {
   accountReview: 'Review',
   accountWebsite: 'Personal website',
   accountDateClear: 'Clear',
-  accountDatePlaceholder: 'Select a date',
+  accountDateOpenCalendar: 'Choose date',
   accountBirthdate: 'Birthdate',
   accountLocale: 'Language preference',
   accountLocaleBrowser: 'Follow the browser',

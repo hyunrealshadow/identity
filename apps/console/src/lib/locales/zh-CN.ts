@@ -15,6 +15,7 @@ const shared = {
   audienceLabel: 'Audience',
   permissionCodeLabel: '权限代码',
   dateClear: '清除',
+  dateOpenCalendar: '选择日期',
   tableRowActions: '更多操作',
   tableRowActionsFor: '{name}的操作',
   tableRefresh: '刷新表格',

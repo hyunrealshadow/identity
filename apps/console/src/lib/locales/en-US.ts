@@ -14,6 +14,7 @@ const shared = {
   audienceLabel: 'Audience',
   permissionCodeLabel: 'Permission code',
   dateClear: 'Clear',
+  dateOpenCalendar: 'Choose date',
   tableRowActions: 'More actions',
   tableRowActionsFor: 'Actions for {name}',
   tableRefresh: 'Refresh table',
