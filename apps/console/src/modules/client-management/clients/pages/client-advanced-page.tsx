@@ -1,19 +1,6 @@
-import { Button } from '@identity/ui/components/button'
-import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
-import { ShieldCheck, ShieldOff } from 'lucide-react'
-import { useEffect, useState } from 'react'
-
 import { AsyncState } from '#/components/async-state'
-import { ConfirmationDialog } from '#/components/confirmation-dialog'
-import {
-  SettingsGroup,
-  SettingsGroupSkeleton,
-  SettingsRow,
-} from '#/components/settings-section'
+import { SettingsGroup, SettingsGroupSkeleton } from '#/components/settings-section'
 import { useTranslator } from '#/lib/i18n'
-import { toast } from '#/lib/toast'
-import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
-import type { RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
 import {
   AuthenticationRequirementRows,
   ClientAssertionRow,
@@ -29,10 +16,9 @@ import {
   ParRow,
   ScopedClaimRows,
 } from '../components/client-settings-fields'
-import { useClientMutations } from '../hooks/client-mutations'
 import { useClientMetadataOptions } from '../hooks/use-client-metadata-options'
-import { mutationFeedback, useClientEditor } from '../hooks/use-client-editor'
-import { formSeed, settingsDraftFromClient, settingsInput } from '../lib/client-form'
+import { useClientEditor } from '../hooks/use-client-editor'
+import { formSeed } from '../lib/client-form'
 
 /**
  * Low-level protocol metadata. Choices come from what this instance supports
@@ -49,7 +35,7 @@ function ClientAdvancedSkeleton() {
     <div className="space-y-6" aria-busy="true">
       <SettingsGroupSkeleton rows={['control']} description />
       <SettingsGroupSkeleton rows={['switch', 'textarea', 'textarea', 'textarea', 'textarea']} />
-      <SettingsGroupSkeleton rows={['control']} description />
+      <SettingsGroupSkeleton rows={['control']} />
       <SettingsGroupSkeleton rows={['control', 'switch', 'textarea']} />
       <SettingsGroupSkeleton rows={['textarea', 'textarea', 'textarea', 'switch', 'switch']} />
       <SettingsGroupSkeleton rows={['textarea', 'textarea']} />
@@ -59,7 +45,6 @@ function ClientAdvancedSkeleton() {
 
 function ClientAdvanced({ client }: { client: ConsoleClient }) {
   const t = useTranslator()
-  const { scope } = useClientDetail()
   const editor = useClientEditor(client)
   const metadata = useClientMetadataOptions()
   const isDisabled = editor.pending || !useClientEditable(client)
@@ -81,7 +66,6 @@ function ClientAdvanced({ client }: { client: ConsoleClient }) {
     <ClientEditForm
       client={client}
       editor={editor}
-      after={!client.builtIn && scope.update ? <ClientConsent client={client} /> : null}
     >
       {metadata.status === 'error' ? (
         <AsyncState
@@ -103,7 +87,7 @@ function ClientAdvanced({ client }: { client: ConsoleClient }) {
         <RequestObjectRows {...advanced} />
       </SettingsGroup>
 
-      <SettingsGroup title={t('clientsSubjectSection')} description={t('clientsSubjectSectionHint')}>
+      <SettingsGroup title={t('clientsSubjectSection')}>
         <SubjectRows {...advanced} />
       </SettingsGroup>
 
@@ -121,87 +105,5 @@ function ClientAdvanced({ client }: { client: ConsoleClient }) {
         <InitiateLoginRow {...advanced} />
       </SettingsGroup>
     </ClientEditForm>
-  )
-}
-
-/** Skipping consent takes effect immediately, after its own confirmation. */
-function ClientConsent({ client }: { client: ConsoleClient }) {
-  const t = useTranslator()
-  const { query } = useClientDetail()
-  const mutations = useClientMutations()
-  const dialog = useOverlayState()
-  const [pending, setPending] = useState(false)
-  const [feedback, setFeedback] = useState<RbacFeedbackState | null>(null)
-
-  useEffect(() => setFeedback(null), [client.version])
-
-  async function setSkipConsent(skipConsent: boolean) {
-    setPending(true)
-    try {
-      const result = await mutations.update({
-        id: client.id,
-        expectedVersion: client.version,
-        settings: settingsInput({ ...settingsDraftFromClient(client), skipConsent }),
-      })
-      dialog.close()
-      if (!result.data?.updateClient) {
-        setFeedback(mutationFeedback(result, 'missing_update_client_payload'))
-        return
-      }
-      toast.success(t('clientsSavedToast'), { description: t('clientsSavedWithdrawn') })
-    } catch {
-      dialog.close()
-      setFeedback({
-        errors: [],
-        failure: { kind: 'network', code: 'client_update_request_failed' },
-        forbidden: false,
-      })
-    } finally {
-      setPending(false)
-    }
-  }
-
-  return (
-    <SettingsGroup title={t('clientsConsentSection')} tone="danger">
-      {feedback ? (
-        <div className="px-5 py-4">
-          <RbacMutationFeedback
-            feedback={feedback}
-            onReload={() => void query.refresh()}
-            reloadPending={query.refreshing}
-          />
-        </div>
-      ) : null}
-      <SettingsRow
-        label={t('clientsSkipConsent')}
-        description={t(client.skipConsent ? 'clientsSkipConsentOnHint' : 'clientsSkipConsentHint')}
-        action={
-          client.skipConsent ? (
-            <Button
-              variant="destructive"
-              disabled={pending}
-              onClick={() => void setSkipConsent(false)}
-            >
-              <ShieldCheck className="size-4" aria-hidden="true" />
-              {t('clientsSkipConsentDisable')}
-            </Button>
-          ) : (
-            <Button variant="destructive" onClick={dialog.open}>
-              <ShieldOff className="size-4" aria-hidden="true" />
-              {t('clientsSkipConsentEnable')}
-            </Button>
-          )
-        }
-      />
-      <ConfirmationDialog
-        state={dialog}
-        title={t('clientsSkipConsentConfirmTitle')}
-        description={t('clientsSkipConsentConfirmDescription')}
-        confirmLabel={t('clientsSkipConsentEnable')}
-        destructive
-        pending={pending}
-        onConfirm={() => void setSkipConsent(true)}
-      />
-    </SettingsGroup>
   )
 }

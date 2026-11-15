@@ -57,7 +57,8 @@ function RowError({ children }: { children?: string }) {
 /**
  * An algorithm (or level) choice that runs automatically until the
  * administrator pins it down. Automatic stores nothing, so the provider's
- * default behaviour applies, which `autoHint` describes. Specifying shows the
+ * default behaviour applies, which `autoHint` describes in place of the row
+ * description. Specifying shows the
  * supported values; the selection keeps the provider's order, which the
  * runtime tries in turn. A stored value the provider no longer supports stays
  * listed, marked, so it can be removed.
@@ -108,7 +109,7 @@ function ChoiceRow({
   return (
     <SettingsRow
       label={t(label)}
-      description={description ? t(description) : undefined}
+      description={!custom ? t(autoHint) : description ? t(description) : undefined}
       action={
         <SettingsSelect
           label={t('clientsAlgorithmMode', { setting: t(label) })}
@@ -123,7 +124,7 @@ function ChoiceRow({
       }
     >
       {!custom ? (
-        <p className="text-xs text-muted-foreground">{t(autoHint)}</p>
+        errors[field] ? <RowError>{errors[field]}</RowError> : null
       ) : !supported && choices.length === 0 ? (
         // Checkbox-shaped placeholders while the supported values load.
         <div aria-busy="true" className="flex flex-wrap gap-x-5 gap-y-2">
@@ -162,9 +163,9 @@ function ChoiceRow({
               {t('clientsAlgorithmCustomEmptyHint')}
             </p>
           ) : null}
+          <RowError>{errors[field]}</RowError>
         </>
       )}
-      <RowError>{errors[field]}</RowError>
     </SettingsRow>
   )
 }
@@ -333,7 +334,11 @@ export function SubjectRows(props: OptionProps) {
     <>
       <SettingsRow
         label={t('clientsSubjectType')}
-        description={t('clientsSubjectTypeHint')}
+        description={t(
+          draft.subjectType === 'PAIRWISE'
+            ? 'clientsSubjectPairwiseHint'
+            : 'clientsSubjectPublicHint',
+        )}
         action={
           <SettingsSelect
             label={t('clientsSubjectType')}
@@ -432,7 +437,11 @@ export function TokenProtectionRows(props: OptionProps) {
       <ChoiceRow
         {...props}
         field="idTokenEncryptedResponseEncs"
-        autoHint="clientsAutoDefaultContentEncryption"
+        autoHint={
+          props.draft.idTokenEncryptedResponseAlgs.length > 0
+            ? 'clientsAutoDefaultContentEncryption'
+            : 'clientsAutoContentEncryptionOff'
+        }
         label="clientsIdTokenEncryptionEnc"
         supported={options?.idTokenEncryptionEncs}
       />
@@ -455,7 +464,11 @@ export function TokenProtectionRows(props: OptionProps) {
       <ChoiceRow
         {...props}
         field="userinfoEncryptedResponseEncs"
-        autoHint="clientsAutoDefaultContentEncryption"
+        autoHint={
+          props.draft.userinfoEncryptedResponseAlgs.length > 0
+            ? 'clientsAutoDefaultContentEncryption'
+            : 'clientsAutoContentEncryptionOff'
+        }
         label="clientsUserinfoEncryptionEnc"
         supported={options?.userinfoEncryptionEncs}
       />

@@ -6,7 +6,7 @@ import {
 import { Button } from '@identity/ui/components/button'
 import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
 import { useNavigate } from '@tanstack/react-router'
-import { Power, Trash2, TriangleAlert } from 'lucide-react'
+import { Power, ShieldCheck, ShieldOff, Trash2, TriangleAlert } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { ConfirmationDialog } from '#/components/confirmation-dialog'
@@ -27,7 +27,7 @@ import { useClientDetail, type ConsoleClient } from '../components/client-detail
 import { ClientEditForm, useClientEditable } from '../components/client-edit-form'
 import { useClientMutations } from '../hooks/client-mutations'
 import { mutationFeedback, useClientEditor } from '../hooks/use-client-editor'
-import { formSeed } from '../lib/client-form'
+import { formSeed, settingsDraftFromClient, settingsInput } from '../lib/client-form'
 
 export function ClientGeneralPage() {
   const { client } = useClientDetail()
@@ -66,7 +66,7 @@ function ClientGeneral({ client }: { client: ConsoleClient }) {
               <AlertDescription>{t('clientsDisabledDescription')}</AlertDescription>
             </Alert>
           ) : null}
-          {!client.builtIn && (scope.state || scope.delete) ? (
+          {!client.builtIn && (scope.state || scope.delete || scope.update) ? (
             <ClientLifecycle client={client} />
           ) : null}
         </>
@@ -148,6 +148,7 @@ function ClientLifecycle({ client }: { client: ConsoleClient }) {
   const mutations = useClientMutations()
   const stateDialog = useOverlayState()
   const deleteDialog = useOverlayState()
+  const consentDialog = useOverlayState()
   const [pending, setPending] = useState(false)
   const [feedback, setFeedback] = useState<RbacFeedbackState | null>(null)
 
@@ -174,6 +175,32 @@ function ClientLifecycle({ client }: { client: ConsoleClient }) {
         return
       }
       toast.success(t(client.enabled ? 'clientsDisabledToast' : 'clientsEnabledToast'))
+    } finally {
+      setPending(false)
+    }
+  }
+
+  async function setSkipConsent(skipConsent: boolean) {
+    setPending(true)
+    try {
+      const result = await mutations.update({
+        id: client.id,
+        expectedVersion: client.version,
+        settings: settingsInput({ ...settingsDraftFromClient(client), skipConsent }),
+      })
+      consentDialog.close()
+      if (!result.data?.updateClient) {
+        setFeedback(mutationFeedback(result, 'missing_update_client_payload'))
+        return
+      }
+      toast.success(t('clientsSavedToast'), { description: t('clientsSavedWithdrawn') })
+    } catch {
+      consentDialog.close()
+      setFeedback({
+        errors: [],
+        failure: { kind: 'network', code: 'client_update_request_failed' },
+        forbidden: false,
+      })
     } finally {
       setPending(false)
     }
@@ -208,6 +235,31 @@ function ClientLifecycle({ client }: { client: ConsoleClient }) {
             reloadPending={query.refreshing}
           />
         </div>
+      ) : null}
+      {scope.update ? (
+        <SettingsRow
+          label={t('clientsSkipConsent')}
+          description={t(
+            client.skipConsent ? 'clientsSkipConsentOnHint' : 'clientsSkipConsentHint',
+          )}
+          action={
+            client.skipConsent ? (
+              <Button
+                variant="destructive"
+                disabled={pending}
+                onClick={() => void setSkipConsent(false)}
+              >
+                <ShieldCheck className="size-4" aria-hidden="true" />
+                {t('clientsSkipConsentDisable')}
+              </Button>
+            ) : (
+              <Button variant="destructive" onClick={consentDialog.open}>
+                <ShieldOff className="size-4" aria-hidden="true" />
+                {t('clientsSkipConsentEnable')}
+              </Button>
+            )
+          }
+        />
       ) : null}
       {scope.state ? (
         <SettingsRow
@@ -245,6 +297,15 @@ function ClientLifecycle({ client }: { client: ConsoleClient }) {
         destructive={client.enabled}
         pending={pending}
         onConfirm={() => void toggle()}
+      />
+      <ConfirmationDialog
+        state={consentDialog}
+        title={t('clientsSkipConsentConfirmTitle')}
+        description={t('clientsSkipConsentConfirmDescription')}
+        confirmLabel={t('clientsSkipConsentEnable')}
+        destructive
+        pending={pending}
+        onConfirm={() => void setSkipConsent(true)}
       />
       <ConfirmationDialog
         state={deleteDialog}

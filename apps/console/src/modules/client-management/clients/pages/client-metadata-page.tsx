@@ -42,10 +42,6 @@ export function ClientMetadataPage() {
 
   return (
     <div className="space-y-6">
-      <p className="max-w-2xl text-sm leading-6 text-muted-foreground">
-        {t('clientsMetadataDescription')}
-      </p>
-
       {metadata.status === 'loading' ? (
         <AsyncState kind="loading" />
       ) : metadata.status === 'error' || !metadata.data ? (
