@@ -111,7 +111,12 @@ Interactive sessions carry an authentication context class reference:
 | `aal2` | A second factor completed after the first |
 
 `acr_satisfies` accepts an equal value, and `aal2` also satisfies a request for
-`aal1`. A request for `aal2` from a password-only user becomes
+`aal1`. `acr_values` (and a client's `default_acr_values`, used when a request
+names none) list the acceptable classes in order of preference; meeting any one
+of them satisfies the request. An existing session and a new login apply the
+same rule: a new login needs only the weakest built-in level listed, so
+`aal2 aal1` asks for no second factor, just as an existing `aal1` session
+already satisfies it. A request for `aal2` from a password-only user becomes
 `MfaEnrollmentRequired` rather than a silent downgrade. After login the chosen
 level is written into the session and into the `acr` claim of issued tokens. Freshness is separate:
 `max_age` is measured from the authentication event, and the window is measured

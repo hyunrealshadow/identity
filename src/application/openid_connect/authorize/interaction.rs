@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::domain::{
     auth::{
-        LoginStatus, acr_satisfies, authentication_is_fresh,
+        LoginStatus, acr_satisfies_any, authentication_is_fresh,
         model::{ActiveSession, Login, SessionOid},
     },
     client_authorization::{ConsentState, SelectionSource, StoredAuthorizationRequest},
@@ -57,12 +57,10 @@ pub fn selected_session_satisfies_acr(
     request: &AuthorizationRequestData,
     selected_session: &ActiveSession,
 ) -> bool {
-    request.acr_values.as_ref().is_none_or(|requested| {
-        selected_session
-            .acr
-            .as_ref()
-            .is_some_and(|acr| requested.iter().any(|value| acr_satisfies(acr, value)))
-    })
+    request
+        .acr_values
+        .as_deref()
+        .is_none_or(|requested| acr_satisfies_any(selected_session.acr.as_deref(), requested))
 }
 
 #[must_use]

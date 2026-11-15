@@ -185,6 +185,34 @@ pub fn acr_satisfies(established: &str, requested: &str) -> bool {
     established == requested || (established == ACR_AAL2 && requested == ACR_AAL1)
 }
 
+/// Returns whether an established authentication context meets a request
+/// that accepts any of `requested` (OpenID Connect `acr_values` and
+/// `default_acr_values`; RFC 9470 §3 "requires one of these values").
+#[must_use]
+pub fn acr_satisfies_any(established: Option<&str>, requested: &[String]) -> bool {
+    established.is_some_and(|established| {
+        requested
+            .iter()
+            .any(|value| acr_satisfies(established, value))
+    })
+}
+
+/// The context a new authentication must establish for a request that
+/// accepts any of `requested`.
+///
+/// Because a higher built-in level satisfies a lower one, the weakest built-in
+/// level named is enough: `[aal2, aal1]` asks for no second factor, exactly as
+/// an existing AAL1 session already satisfies it. Order expresses preference,
+/// never a stricter requirement. A list of only deployment-specific classes is
+/// left to its first value, which only an exact match can satisfy.
+#[must_use]
+pub fn required_acr(requested: &[String]) -> Option<&str> {
+    [ACR_AAL1, ACR_AAL2]
+        .into_iter()
+        .find(|level| requested.iter().any(|value| value == level))
+        .or_else(|| requested.first().map(String::as_str))
+}
+
 /// Returns whether an authentication timestamp is not in the future and is
 /// within the permitted age.
 #[must_use]
@@ -232,7 +260,10 @@ pub const ELEVATED_AUTHENTICATION_TTL: Duration = Duration::from_secs(60 * 60); 
 
 #[cfg(test)]
 mod tests {
-    use super::{ACR_AAL1, ACR_AAL2, LoginStatus, acr_satisfies, authentication_is_fresh};
+    use super::{
+        ACR_AAL1, ACR_AAL2, LoginStatus, acr_satisfies, acr_satisfies_any, authentication_is_fresh,
+        required_acr,
+    };
 
     #[test]
     fn aal2_satisfies_aal1_and_aal2() {
@@ -249,6 +280,43 @@ mod tests {
     fn custom_acr_values_require_an_exact_match() {
         assert!(acr_satisfies("custom", "custom"));
         assert!(!acr_satisfies(ACR_AAL2, "custom"));
+    }
+
+    fn list(values: &[&str]) -> Vec<String> {
+        values.iter().map(|value| (*value).to_owned()).collect()
+    }
+
+    #[test]
+    fn a_new_authentication_needs_only_the_weakest_accepted_level() {
+        assert_eq!(required_acr(&list(&["aal2", "aal1"])), Some(ACR_AAL1));
+        assert_eq!(required_acr(&list(&["aal1", "aal2"])), Some(ACR_AAL1));
+        assert_eq!(required_acr(&list(&["custom", "aal2"])), Some(ACR_AAL2));
+        assert_eq!(required_acr(&list(&["aal2"])), Some(ACR_AAL2));
+        assert_eq!(required_acr(&list(&["custom"])), Some("custom"));
+        assert_eq!(required_acr(&[]), None);
+    }
+
+    /// A new login and an existing session judge the same request alike:
+    /// whatever a fresh login must reach is exactly enough for a session.
+    #[test]
+    fn new_and_existing_authentication_agree_for_every_built_in_request() {
+        let requests = [
+            list(&["aal1"]),
+            list(&["aal2"]),
+            list(&["aal1", "aal2"]),
+            list(&["aal2", "aal1"]),
+        ];
+        for requested in &requests {
+            let required = required_acr(requested).unwrap();
+            for established in [ACR_AAL1, ACR_AAL2] {
+                assert_eq!(
+                    acr_satisfies_any(Some(established), requested),
+                    acr_satisfies(established, required),
+                    "{requested:?} with {established}"
+                );
+            }
+        }
+        assert!(!acr_satisfies_any(None, &list(&["aal1"])));
     }
 
     #[test]

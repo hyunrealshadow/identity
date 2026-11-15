@@ -8,7 +8,7 @@ use identity_application::{
     error::codes::authorize_http::AuthorizeHttpErrorCode,
     openid_connect::authorize::ContinueContext,
 };
-use identity_domain::auth::{SessionOid, acr_satisfies};
+use identity_domain::auth::{SessionOid, acr_satisfies_any};
 use uuid::Uuid;
 
 use crate::{
@@ -125,12 +125,11 @@ where
         return Ok(FlowDecision::LoginRequired { login_id });
     }
 
-    if request.acr_values.as_ref().is_some_and(|requested| {
-        selected_session
-            .acr
-            .as_ref()
-            .is_none_or(|acr| !requested.iter().any(|value| acr_satisfies(acr, value)))
-    }) {
+    if request
+        .acr_values
+        .as_deref()
+        .is_some_and(|requested| !acr_satisfies_any(selected_session.acr.as_deref(), requested))
+    {
         if has_prompt(request.prompt.as_ref(), PromptValue::None) {
             return Ok(FlowDecision::OAuthError {
                 request: Box::new(request.clone()),

@@ -1,4 +1,4 @@
-use identity_domain::openid_connect::AuthorizationRequest;
+use identity_domain::{auth::required_acr, openid_connect::AuthorizationRequest};
 use salvo::{Depot, Request, Response, handler, handler::HoopedHandler};
 
 use super::{
@@ -85,11 +85,9 @@ async fn create_interaction(depot: &mut Depot) -> Result<(), AuthorizationWebErr
         .create_login_flow(
             request.client_id,
             request_id,
-            request
-                .acr_values
-                .as_ref()
-                .and_then(|values| values.first())
-                .map(String::as_str),
+            // The same "any one of" rule as an existing session, so a
+            // preference order never makes a fresh login stricter.
+            request.acr_values.as_deref().and_then(required_acr),
         )
         .await?;
     depot.insert_typed(AuthorizationInteraction { login_id });
