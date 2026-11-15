@@ -154,3 +154,57 @@ fn rejects_unknown_client_openid_connect_platform() {
         OpenIdConnectClientRepositoryError::ParseClientPlatform(_)
     ));
 }
+
+#[test]
+fn empty_algorithm_lists_read_as_automatic_but_empty_grants_still_allow_none() {
+    let metadata = to_metadata(client_openid_connect::Model {
+        id: 1,
+        client_id: 2,
+        post_logout_redirect_uris: None,
+        frontchannel_logout_uri: None,
+        frontchannel_logout_session_required: None,
+        backchannel_logout_uri: None,
+        backchannel_logout_session_required: None,
+        response_types: None,
+        grant_types: Some(json!([])),
+        contacts: None,
+        logo_uri: None,
+        client_uri: None,
+        policy_uri: None,
+        tos_uri: None,
+        sector_identifier_uri: None,
+        subject_type: None,
+        id_token_signed_response_algs: Some(json!([])),
+        id_token_encrypted_response_algs: Some(json!([])),
+        id_token_encrypted_response_encs: Some(json!([])),
+        userinfo_signed_response_algs: Some(json!([])),
+        userinfo_encrypted_response_algs: Some(json!([])),
+        userinfo_encrypted_response_encs: Some(json!([])),
+        request_object_signing_algs: Some(json!([])),
+        request_object_encryption_algs: Some(json!([])),
+        request_object_encryption_encs: Some(json!([])),
+        token_endpoint_auth_methods: None,
+        token_endpoint_auth_signing_algs: Some(json!([])),
+        default_max_age: None,
+        require_auth_time: None,
+        default_acr_values: None,
+        initiate_login_uri: None,
+        request_uris: None,
+        settings: json!({}),
+        created_at: Utc::now().into(),
+        updated_at: None,
+    })
+    .unwrap();
+
+    // An empty allow-list would otherwise reject every request object and
+    // client assertion; unset means "any supported algorithm".
+    assert!(metadata.request_object_signing_algs.is_none());
+    assert!(metadata.request_object_encryption_algs.is_none());
+    assert!(metadata.request_object_encryption_encs.is_none());
+    assert!(metadata.token_endpoint_auth_signing_algs.is_none());
+    assert!(metadata.id_token_signed_response_algs.is_none());
+    assert!(metadata.id_token_encrypted_response_algs.is_none());
+    assert!(metadata.userinfo_signed_response_algs.is_none());
+    // An explicitly empty grant list is a real registration: no grant allowed.
+    assert_eq!(metadata.grant_types, Some(vec![]));
+}

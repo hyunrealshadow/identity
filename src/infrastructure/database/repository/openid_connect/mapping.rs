@@ -125,39 +125,39 @@ pub(crate) fn to_metadata(
             .map(str::parse)
             .transpose()
             .map_err(OpenIdConnectClientRepositoryError::ParseSubjectType)?,
-        id_token_signed_response_algs: parse_metadata_values(
+        id_token_signed_response_algs: parse_algorithms(
             "id_token_signed_response_algs",
             deserialize_optional_string_vec(model.id_token_signed_response_algs.as_ref())?,
         )?,
-        id_token_encrypted_response_algs: parse_metadata_values(
+        id_token_encrypted_response_algs: parse_algorithms(
             "id_token_encrypted_response_algs",
             deserialize_optional_string_vec(model.id_token_encrypted_response_algs.as_ref())?,
         )?,
-        id_token_encrypted_response_encs: parse_metadata_values(
+        id_token_encrypted_response_encs: parse_algorithms(
             "id_token_encrypted_response_encs",
             deserialize_optional_string_vec(model.id_token_encrypted_response_encs.as_ref())?,
         )?,
-        userinfo_signed_response_algs: parse_metadata_values(
+        userinfo_signed_response_algs: parse_algorithms(
             "userinfo_signed_response_algs",
             deserialize_optional_string_vec(model.userinfo_signed_response_algs.as_ref())?,
         )?,
-        userinfo_encrypted_response_algs: parse_metadata_values(
+        userinfo_encrypted_response_algs: parse_algorithms(
             "userinfo_encrypted_response_algs",
             deserialize_optional_string_vec(model.userinfo_encrypted_response_algs.as_ref())?,
         )?,
-        userinfo_encrypted_response_encs: parse_metadata_values(
+        userinfo_encrypted_response_encs: parse_algorithms(
             "userinfo_encrypted_response_encs",
             deserialize_optional_string_vec(model.userinfo_encrypted_response_encs.as_ref())?,
         )?,
-        request_object_signing_algs: parse_metadata_values(
+        request_object_signing_algs: parse_algorithms(
             "request_object_signing_algs",
             deserialize_optional_string_vec(model.request_object_signing_algs.as_ref())?,
         )?,
-        request_object_encryption_algs: parse_metadata_values(
+        request_object_encryption_algs: parse_algorithms(
             "request_object_encryption_algs",
             deserialize_optional_string_vec(model.request_object_encryption_algs.as_ref())?,
         )?,
-        request_object_encryption_encs: parse_metadata_values(
+        request_object_encryption_encs: parse_algorithms(
             "request_object_encryption_encs",
             deserialize_optional_string_vec(model.request_object_encryption_encs.as_ref())?,
         )?,
@@ -165,7 +165,7 @@ pub(crate) fn to_metadata(
             "token_endpoint_auth_methods",
             deserialize_optional_string_vec(model.token_endpoint_auth_methods.as_ref())?,
         )?,
-        token_endpoint_auth_signing_algs: parse_metadata_values(
+        token_endpoint_auth_signing_algs: parse_algorithms(
             "token_endpoint_auth_signing_algs",
             deserialize_optional_string_vec(model.token_endpoint_auth_signing_algs.as_ref())?,
         )?,
@@ -194,6 +194,16 @@ fn parse_metadata_values<T: FromStr>(
                 .collect()
         })
         .transpose()
+}
+
+/// JOSE algorithm preferences and allow-lists. An empty list registers no
+/// choice, so it reads as unset and the provider's automatic behaviour
+/// applies, rather than an allow-list that admits nothing.
+fn parse_algorithms<T: FromStr>(
+    field: &'static str,
+    values: Option<Vec<String>>,
+) -> Result<Option<Vec<T>>, OpenIdConnectClientRepositoryError> {
+    parse_metadata_values(field, values.filter(|values| !values.is_empty()))
 }
 
 pub(crate) fn to_platform(

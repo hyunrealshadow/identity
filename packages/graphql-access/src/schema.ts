@@ -149,6 +149,11 @@ export const schemaMetadata: SchemaMetadata = {
       ],
       "possibleTypes": [],
       "fields": {
+        "advancedSettings": {
+          "name": "advancedSettings",
+          "returnType": "ClientAdvancedSettings",
+          "policies": []
+        },
         "allowPublicClientFlow": {
           "name": "allowPublicClientFlow",
           "returnType": "Boolean",
@@ -289,6 +294,143 @@ export const schemaMetadata: SchemaMetadata = {
         }
       }
     },
+    "ClientAdvancedSettings": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "backchannelLogoutSessionRequired": {
+          "name": "backchannelLogoutSessionRequired",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "backchannelLogoutUri": {
+          "name": "backchannelLogoutUri",
+          "returnType": "String",
+          "policies": []
+        },
+        "clientUri": {
+          "name": "clientUri",
+          "returnType": "String",
+          "policies": []
+        },
+        "contacts": {
+          "name": "contacts",
+          "returnType": "String",
+          "policies": []
+        },
+        "defaultAcrValues": {
+          "name": "defaultAcrValues",
+          "returnType": "String",
+          "policies": []
+        },
+        "defaultMaxAge": {
+          "name": "defaultMaxAge",
+          "returnType": "Int",
+          "policies": []
+        },
+        "frontchannelLogoutSessionRequired": {
+          "name": "frontchannelLogoutSessionRequired",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "frontchannelLogoutUri": {
+          "name": "frontchannelLogoutUri",
+          "returnType": "String",
+          "policies": []
+        },
+        "idTokenEncryptedResponseAlgs": {
+          "name": "idTokenEncryptedResponseAlgs",
+          "returnType": "String",
+          "policies": []
+        },
+        "idTokenEncryptedResponseEncs": {
+          "name": "idTokenEncryptedResponseEncs",
+          "returnType": "String",
+          "policies": []
+        },
+        "idTokenSignedResponseAlgs": {
+          "name": "idTokenSignedResponseAlgs",
+          "returnType": "String",
+          "policies": []
+        },
+        "initiateLoginUri": {
+          "name": "initiateLoginUri",
+          "returnType": "String",
+          "policies": []
+        },
+        "logoUri": {
+          "name": "logoUri",
+          "returnType": "String",
+          "policies": []
+        },
+        "policyUri": {
+          "name": "policyUri",
+          "returnType": "String",
+          "policies": []
+        },
+        "requestObjectEncryptionAlgs": {
+          "name": "requestObjectEncryptionAlgs",
+          "returnType": "String",
+          "policies": []
+        },
+        "requestObjectEncryptionEncs": {
+          "name": "requestObjectEncryptionEncs",
+          "returnType": "String",
+          "policies": []
+        },
+        "requestObjectSigningAlgs": {
+          "name": "requestObjectSigningAlgs",
+          "returnType": "String",
+          "policies": []
+        },
+        "requestUris": {
+          "name": "requestUris",
+          "returnType": "String",
+          "policies": []
+        },
+        "requireAuthTime": {
+          "name": "requireAuthTime",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "sectorIdentifierUri": {
+          "name": "sectorIdentifierUri",
+          "returnType": "String",
+          "policies": []
+        },
+        "subjectType": {
+          "name": "subjectType",
+          "returnType": "ClientSubjectType",
+          "policies": []
+        },
+        "tokenEndpointAuthSigningAlgs": {
+          "name": "tokenEndpointAuthSigningAlgs",
+          "returnType": "String",
+          "policies": []
+        },
+        "tosUri": {
+          "name": "tosUri",
+          "returnType": "String",
+          "policies": []
+        },
+        "userinfoEncryptedResponseAlgs": {
+          "name": "userinfoEncryptedResponseAlgs",
+          "returnType": "String",
+          "policies": []
+        },
+        "userinfoEncryptedResponseEncs": {
+          "name": "userinfoEncryptedResponseEncs",
+          "returnType": "String",
+          "policies": []
+        },
+        "userinfoSignedResponseAlgs": {
+          "name": "userinfoSignedResponseAlgs",
+          "returnType": "String",
+          "policies": []
+        }
+      }
+    },
     "ClientConnection": {
       "kind": "OBJECT",
       "interfaces": [],
@@ -398,6 +540,73 @@ export const schemaMetadata: SchemaMetadata = {
         "node": {
           "name": "node",
           "returnType": "Client",
+          "policies": []
+        }
+      }
+    },
+    "ClientMetadataOptions": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "acrValues": {
+          "name": "acrValues",
+          "returnType": "String",
+          "policies": []
+        },
+        "idTokenEncryptionAlgs": {
+          "name": "idTokenEncryptionAlgs",
+          "returnType": "String",
+          "policies": []
+        },
+        "idTokenEncryptionEncs": {
+          "name": "idTokenEncryptionEncs",
+          "returnType": "String",
+          "policies": []
+        },
+        "idTokenSigningAlgs": {
+          "name": "idTokenSigningAlgs",
+          "returnType": "String",
+          "policies": []
+        },
+        "requestObjectEncryptionAlgs": {
+          "name": "requestObjectEncryptionAlgs",
+          "returnType": "String",
+          "policies": []
+        },
+        "requestObjectEncryptionEncs": {
+          "name": "requestObjectEncryptionEncs",
+          "returnType": "String",
+          "policies": []
+        },
+        "requestObjectSigningAlgs": {
+          "name": "requestObjectSigningAlgs",
+          "returnType": "String",
+          "policies": []
+        },
+        "subjectTypes": {
+          "name": "subjectTypes",
+          "returnType": "String",
+          "policies": []
+        },
+        "tokenEndpointAuthSigningAlgs": {
+          "name": "tokenEndpointAuthSigningAlgs",
+          "returnType": "String",
+          "policies": []
+        },
+        "userinfoEncryptionAlgs": {
+          "name": "userinfoEncryptionAlgs",
+          "returnType": "String",
+          "policies": []
+        },
+        "userinfoEncryptionEncs": {
+          "name": "userinfoEncryptionEncs",
+          "returnType": "String",
+          "policies": []
+        },
+        "userinfoSigningAlgs": {
+          "name": "userinfoSigningAlgs",
+          "returnType": "String",
           "policies": []
         }
       }
@@ -3020,6 +3229,20 @@ export const schemaMetadata: SchemaMetadata = {
         "client": {
           "name": "client",
           "returnType": "Client",
+          "policies": [
+            {
+              "scopes": [
+                "management.client.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
+        },
+        "clientMetadataOptions": {
+          "name": "clientMetadataOptions",
+          "returnType": "ClientMetadataOptions",
           "policies": [
             {
               "scopes": [

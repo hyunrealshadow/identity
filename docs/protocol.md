@@ -271,6 +271,11 @@ use HTTPS.
 
 Paths below are relative to the service's public origin.
 
+Neither discovery document publishes `scopes_supported`. The scope catalog grows
+with every registered API resource, so clients learn their scopes from the
+integration they were configured for, not from public metadata. Requested scopes
+are still validated against the live catalog.
+
 | Method | Path | Purpose |
 | --- | --- | --- |
 | GET | `/.well-known/openid-configuration` | OIDC discovery |

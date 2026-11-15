@@ -6,7 +6,7 @@ use super::*;
 use identity_domain::{authorization::catalog::ManagementScope, openid_connect::ApiScope};
 
 #[tokio::test]
-async fn discovery_and_validation_use_catalog_instead_of_static_capabilities() {
+async fn validation_uses_catalog_and_discovery_does_not_list_scopes() {
     let settings = SettingsSnapshot::default().with_section(&AppSettings {
         console_domain: None,
         domain: Some("https://identity.example.com".to_owned()),
@@ -19,15 +19,9 @@ async fn discovery_and_validation_use_catalog_instead_of_static_capabilities() {
     let provider = OpenIdProviderService::new(Arc::new(settings)).with_scope_catalog(Arc::new(
         TestScopeCatalog(vec!["openid".into(), "orders.read".into()]),
     ));
-    assert_eq!(
-        provider
-            .discovery_metadata()
-            .await
-            .unwrap()
-            .scopes_supported
-            .unwrap(),
-        ["openid", "orders.read"]
-    );
+    // The scope catalog grows with every API resource; discovery never lists it.
+    let discovery = serde_json::to_value(provider.discovery_metadata().await.unwrap()).unwrap();
+    assert!(discovery.get("scopes_supported").is_none());
     provider
         .validate_scope_names("openid orders.read orders.read")
         .await

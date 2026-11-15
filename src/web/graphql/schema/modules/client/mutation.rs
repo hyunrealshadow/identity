@@ -83,6 +83,7 @@ impl ClientMutation {
                     .descriptions
                     .map(|descriptions| descriptions.into_iter().map(Into::into).collect()),
                 settings: input.settings.map(Into::into),
+                advanced: input.advanced_settings.map(Into::into),
                 reason: input.reason,
                 client_mutation_id: input.client_mutation_id,
             },

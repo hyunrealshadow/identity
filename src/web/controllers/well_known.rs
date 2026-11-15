@@ -85,7 +85,6 @@ fn authorization_server_document(oidc: OpenIdProviderMetadata) -> Value {
         "pushed_authorization_request_endpoint": oidc.pushed_authorization_request_endpoint,
         "require_pushed_authorization_requests": oidc.require_pushed_authorization_requests,
         "jwks_uri": oidc.jwks_uri,
-        "scopes_supported": oidc.scopes_supported,
         "response_types_supported": oidc.response_types_supported,
         "response_modes_supported": oidc.response_modes_supported,
         "grant_types_supported": oidc.grant_types_supported,

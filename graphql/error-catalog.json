@@ -3238,6 +3238,96 @@
     "module": "client"
   },
   {
+    "code": 18036,
+    "kind": "validation",
+    "fluentKey": "E18036",
+    "requiredParams": [
+      "uri"
+    ],
+    "optionalParams": [],
+    "module": "client"
+  },
+  {
+    "code": 18037,
+    "kind": "validation",
+    "fluentKey": "E18037",
+    "requiredParams": [
+      "max"
+    ],
+    "optionalParams": [],
+    "module": "client"
+  },
+  {
+    "code": 18038,
+    "kind": "validation",
+    "fluentKey": "E18038",
+    "requiredParams": [
+      "algorithm"
+    ],
+    "optionalParams": [],
+    "module": "client"
+  },
+  {
+    "code": 18039,
+    "kind": "validation",
+    "fluentKey": "E18039",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "client"
+  },
+  {
+    "code": 18040,
+    "kind": "validation",
+    "fluentKey": "E18040",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "client"
+  },
+  {
+    "code": 18041,
+    "kind": "validation",
+    "fluentKey": "E18041",
+    "requiredParams": [
+      "max"
+    ],
+    "optionalParams": [],
+    "module": "client"
+  },
+  {
+    "code": 18042,
+    "kind": "validation",
+    "fluentKey": "E18042",
+    "requiredParams": [
+      "acr"
+    ],
+    "optionalParams": [],
+    "module": "client"
+  },
+  {
+    "code": 18043,
+    "kind": "validation",
+    "fluentKey": "E18043",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "client"
+  },
+  {
+    "code": 18044,
+    "kind": "validation",
+    "fluentKey": "E18044",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "client"
+  },
+  {
+    "code": 18045,
+    "kind": "validation",
+    "fluentKey": "E18045",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "client"
+  },
+  {
     "code": 29000,
     "kind": "conflict",
     "fluentKey": "E29000",

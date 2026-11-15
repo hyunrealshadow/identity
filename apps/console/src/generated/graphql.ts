@@ -48,6 +48,39 @@ export type AuthorizationSource =
   /** Inherited through an active membership in an enabled group. */
   | 'GROUP';
 
+/**
+ * Advanced OpenID Connect metadata, replaced as one unit. Omitted values
+ * clear the field back to the provider default.
+ */
+export type ClientAdvancedSettingsInput = {
+  backchannelLogoutSessionRequired?: boolean;
+  backchannelLogoutUri?: string | null | undefined;
+  clientUri?: string | null | undefined;
+  contacts?: Array<string>;
+  defaultAcrValues?: Array<string>;
+  defaultMaxAge?: number | null | undefined;
+  frontchannelLogoutSessionRequired?: boolean;
+  frontchannelLogoutUri?: string | null | undefined;
+  idTokenEncryptedResponseAlgs?: Array<string>;
+  idTokenEncryptedResponseEncs?: Array<string>;
+  idTokenSignedResponseAlgs?: Array<string>;
+  initiateLoginUri?: string | null | undefined;
+  logoUri?: string | null | undefined;
+  policyUri?: string | null | undefined;
+  requestObjectEncryptionAlgs?: Array<string>;
+  requestObjectEncryptionEncs?: Array<string>;
+  requestObjectSigningAlgs?: Array<string>;
+  requestUris?: Array<string>;
+  requireAuthTime?: boolean;
+  sectorIdentifierUri?: string | null | undefined;
+  subjectType?: ClientSubjectType;
+  tokenEndpointAuthSigningAlgs?: Array<string>;
+  tosUri?: string | null | undefined;
+  userinfoEncryptedResponseAlgs?: Array<string>;
+  userinfoEncryptedResponseEncs?: Array<string>;
+  userinfoSignedResponseAlgs?: Array<string>;
+};
+
 export type ClientCredentialKind =
   | 'CLIENT_SECRET'
   | 'JWKS_URI'
@@ -125,6 +158,16 @@ export type ClientStateInput = {
   id: string | number;
   reason?: string;
 };
+
+/** How the `sub` claim is formed for this client's users. */
+export type ClientSubjectType =
+  /**
+   * An identifier unique to the client's sector, so separate parties cannot
+   * correlate one user.
+   */
+  | 'PAIRWISE'
+  /** The same identifier for every client. */
+  | 'PUBLIC';
 
 export type CreateClientInput = {
   clientMutationId?: string | null | undefined;
@@ -443,6 +486,8 @@ export type UpdateAuthenticationSettingsInput = {
 };
 
 export type UpdateClientInput = {
+  /** Omitting this keeps the current advanced metadata. */
+  advancedSettings?: ClientAdvancedSettingsInput | null | undefined;
   clientMutationId?: string | null | undefined;
   description?: string | null | undefined;
   descriptions?: Array<LocalizedTextInput> | null | undefined;
@@ -570,7 +615,9 @@ export type ConsoleAccountThemeQueryVariables = Exact<{ [key: string]: never; }>
 
 export type ConsoleAccountThemeQuery = { account: { id: string, theme: string | null } | null };
 
-export type ConsoleClientFieldsFragment = { id: string, name: string, description: string, builtIn: boolean, enabled: boolean, postLogoutRedirectUris: Array<string>, grantTypes: Array<ClientGrantType>, allowPublicClientFlow: boolean, requirePushedAuthorizationRequests: boolean, skipConsent: boolean, corsEnabled: boolean, oauthVersion: ClientOAuthVersion | null, includeScopedClaimsInIdToken: boolean, includeScopedClaimsInAccessToken: boolean, corsOrigins: Array<string>, version: string, createdAt: string, updatedAt: string | null, names: Array<{ locale: string, value: string }>, descriptions: Array<{ locale: string, value: string }>, platforms: Array<{ platform: ClientPlatformType, redirectUris: Array<string> }> };
+export type ConsoleClientAdvancedSettingsFieldsFragment = { frontchannelLogoutUri: string | null, frontchannelLogoutSessionRequired: boolean, backchannelLogoutUri: string | null, backchannelLogoutSessionRequired: boolean, logoUri: string | null, clientUri: string | null, policyUri: string | null, tosUri: string | null, contacts: Array<string>, subjectType: ClientSubjectType, sectorIdentifierUri: string | null, defaultMaxAge: number | null, requireAuthTime: boolean, defaultAcrValues: Array<string>, idTokenSignedResponseAlgs: Array<string>, idTokenEncryptedResponseAlgs: Array<string>, idTokenEncryptedResponseEncs: Array<string>, userinfoSignedResponseAlgs: Array<string>, userinfoEncryptedResponseAlgs: Array<string>, userinfoEncryptedResponseEncs: Array<string>, requestObjectSigningAlgs: Array<string>, requestObjectEncryptionAlgs: Array<string>, requestObjectEncryptionEncs: Array<string>, requestUris: Array<string>, tokenEndpointAuthSigningAlgs: Array<string>, initiateLoginUri: string | null };
+
+export type ConsoleClientFieldsFragment = { id: string, name: string, description: string, builtIn: boolean, enabled: boolean, postLogoutRedirectUris: Array<string>, grantTypes: Array<ClientGrantType>, allowPublicClientFlow: boolean, requirePushedAuthorizationRequests: boolean, skipConsent: boolean, corsEnabled: boolean, oauthVersion: ClientOAuthVersion | null, includeScopedClaimsInIdToken: boolean, includeScopedClaimsInAccessToken: boolean, corsOrigins: Array<string>, version: string, createdAt: string, updatedAt: string | null, names: Array<{ locale: string, value: string }>, descriptions: Array<{ locale: string, value: string }>, platforms: Array<{ platform: ClientPlatformType, redirectUris: Array<string> }>, advancedSettings: { frontchannelLogoutUri: string | null, frontchannelLogoutSessionRequired: boolean, backchannelLogoutUri: string | null, backchannelLogoutSessionRequired: boolean, logoUri: string | null, clientUri: string | null, policyUri: string | null, tosUri: string | null, contacts: Array<string>, subjectType: ClientSubjectType, sectorIdentifierUri: string | null, defaultMaxAge: number | null, requireAuthTime: boolean, defaultAcrValues: Array<string>, idTokenSignedResponseAlgs: Array<string>, idTokenEncryptedResponseAlgs: Array<string>, idTokenEncryptedResponseEncs: Array<string>, userinfoSignedResponseAlgs: Array<string>, userinfoEncryptedResponseAlgs: Array<string>, userinfoEncryptedResponseEncs: Array<string>, requestObjectSigningAlgs: Array<string>, requestObjectEncryptionAlgs: Array<string>, requestObjectEncryptionEncs: Array<string>, requestUris: Array<string>, tokenEndpointAuthSigningAlgs: Array<string>, initiateLoginUri: string | null } };
 
 export type ConsoleClientsQueryVariables = Exact<{
   filter?: ClientFilter | null | undefined;
@@ -589,7 +636,7 @@ export type ConsoleClientQueryVariables = Exact<{
 }>;
 
 
-export type ConsoleClientQuery = { client: { id: string, name: string, description: string, builtIn: boolean, enabled: boolean, postLogoutRedirectUris: Array<string>, grantTypes: Array<ClientGrantType>, allowPublicClientFlow: boolean, requirePushedAuthorizationRequests: boolean, skipConsent: boolean, corsEnabled: boolean, oauthVersion: ClientOAuthVersion | null, includeScopedClaimsInIdToken: boolean, includeScopedClaimsInAccessToken: boolean, corsOrigins: Array<string>, version: string, createdAt: string, updatedAt: string | null, names: Array<{ locale: string, value: string }>, descriptions: Array<{ locale: string, value: string }>, platforms: Array<{ platform: ClientPlatformType, redirectUris: Array<string> }> } | null };
+export type ConsoleClientQuery = { client: { id: string, name: string, description: string, builtIn: boolean, enabled: boolean, postLogoutRedirectUris: Array<string>, grantTypes: Array<ClientGrantType>, allowPublicClientFlow: boolean, requirePushedAuthorizationRequests: boolean, skipConsent: boolean, corsEnabled: boolean, oauthVersion: ClientOAuthVersion | null, includeScopedClaimsInIdToken: boolean, includeScopedClaimsInAccessToken: boolean, corsOrigins: Array<string>, version: string, createdAt: string, updatedAt: string | null, names: Array<{ locale: string, value: string }>, descriptions: Array<{ locale: string, value: string }>, platforms: Array<{ platform: ClientPlatformType, redirectUris: Array<string> }>, advancedSettings: { frontchannelLogoutUri: string | null, frontchannelLogoutSessionRequired: boolean, backchannelLogoutUri: string | null, backchannelLogoutSessionRequired: boolean, logoUri: string | null, clientUri: string | null, policyUri: string | null, tosUri: string | null, contacts: Array<string>, subjectType: ClientSubjectType, sectorIdentifierUri: string | null, defaultMaxAge: number | null, requireAuthTime: boolean, defaultAcrValues: Array<string>, idTokenSignedResponseAlgs: Array<string>, idTokenEncryptedResponseAlgs: Array<string>, idTokenEncryptedResponseEncs: Array<string>, userinfoSignedResponseAlgs: Array<string>, userinfoEncryptedResponseAlgs: Array<string>, userinfoEncryptedResponseEncs: Array<string>, requestObjectSigningAlgs: Array<string>, requestObjectEncryptionAlgs: Array<string>, requestObjectEncryptionEncs: Array<string>, requestUris: Array<string>, tokenEndpointAuthSigningAlgs: Array<string>, initiateLoginUri: string | null } } | null };
 
 export type ConsoleClientCredentialsQueryVariables = Exact<{
   id: string | number;
@@ -698,6 +745,11 @@ export type ConsoleClientMetadataQueryVariables = Exact<{ [key: string]: never; 
 
 
 export type ConsoleClientMetadataQuery = { instanceMetadata: { issuer: string, openidConfigurationUrl: string, oauthAuthorizationServerMetadataUrl: string, jwksUri: string, authorizationEndpoint: string, tokenEndpoint: string | null, pushedAuthorizationRequestEndpoint: string | null, userinfoEndpoint: string | null, deviceAuthorizationEndpoint: string | null, revocationEndpoint: string, introspectionEndpoint: string, endSessionEndpoint: string | null, checkSessionIframe: string | null, registrationEndpoint: string | null } };
+
+export type ConsoleClientMetadataOptionsQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type ConsoleClientMetadataOptionsQuery = { clientMetadataOptions: { subjectTypes: Array<string>, acrValues: Array<string>, idTokenSigningAlgs: Array<string>, idTokenEncryptionAlgs: Array<string>, idTokenEncryptionEncs: Array<string>, userinfoSigningAlgs: Array<string>, userinfoEncryptionAlgs: Array<string>, userinfoEncryptionEncs: Array<string>, requestObjectSigningAlgs: Array<string>, requestObjectEncryptionAlgs: Array<string>, requestObjectEncryptionEncs: Array<string>, tokenEndpointAuthSigningAlgs: Array<string> } };
 
 export type ConsoleResourcesQueryVariables = Exact<{
   filter?: ResourceFilter | null | undefined;
@@ -1238,6 +1290,36 @@ export class TypedDocumentString<TResult, TVariables>
     return this.value;
   }
 }
+export const ConsoleClientAdvancedSettingsFieldsFragmentDoc = new TypedDocumentString(`
+    fragment ConsoleClientAdvancedSettingsFields on ClientAdvancedSettings {
+  frontchannelLogoutUri
+  frontchannelLogoutSessionRequired
+  backchannelLogoutUri
+  backchannelLogoutSessionRequired
+  logoUri
+  clientUri
+  policyUri
+  tosUri
+  contacts
+  subjectType
+  sectorIdentifierUri
+  defaultMaxAge
+  requireAuthTime
+  defaultAcrValues
+  idTokenSignedResponseAlgs
+  idTokenEncryptedResponseAlgs
+  idTokenEncryptedResponseEncs
+  userinfoSignedResponseAlgs
+  userinfoEncryptedResponseAlgs
+  userinfoEncryptedResponseEncs
+  requestObjectSigningAlgs
+  requestObjectEncryptionAlgs
+  requestObjectEncryptionEncs
+  requestUris
+  tokenEndpointAuthSigningAlgs
+  initiateLoginUri
+}
+    `, {"fragmentName":"ConsoleClientAdvancedSettingsFields"}) as unknown as TypedDocumentString<ConsoleClientAdvancedSettingsFieldsFragment, unknown>;
 export const ConsoleClientFieldsFragmentDoc = new TypedDocumentString(`
     fragment ConsoleClientFields on Client {
   id
@@ -1266,12 +1348,42 @@ export const ConsoleClientFieldsFragmentDoc = new TypedDocumentString(`
   oauthVersion
   includeScopedClaimsInIdToken
   includeScopedClaimsInAccessToken
+  advancedSettings {
+    ...ConsoleClientAdvancedSettingsFields
+  }
   corsOrigins
   version
   createdAt
   updatedAt
 }
-    `, {"fragmentName":"ConsoleClientFields"}) as unknown as TypedDocumentString<ConsoleClientFieldsFragment, unknown>;
+    fragment ConsoleClientAdvancedSettingsFields on ClientAdvancedSettings {
+  frontchannelLogoutUri
+  frontchannelLogoutSessionRequired
+  backchannelLogoutUri
+  backchannelLogoutSessionRequired
+  logoUri
+  clientUri
+  policyUri
+  tosUri
+  contacts
+  subjectType
+  sectorIdentifierUri
+  defaultMaxAge
+  requireAuthTime
+  defaultAcrValues
+  idTokenSignedResponseAlgs
+  idTokenEncryptedResponseAlgs
+  idTokenEncryptedResponseEncs
+  userinfoSignedResponseAlgs
+  userinfoEncryptedResponseAlgs
+  userinfoEncryptedResponseEncs
+  requestObjectSigningAlgs
+  requestObjectEncryptionAlgs
+  requestObjectEncryptionEncs
+  requestUris
+  tokenEndpointAuthSigningAlgs
+  initiateLoginUri
+}`, {"fragmentName":"ConsoleClientFields"}) as unknown as TypedDocumentString<ConsoleClientFieldsFragment, unknown>;
 export const ConsoleKeyFieldsFragmentDoc = new TypedDocumentString(`
     fragment ConsoleKeyFields on Key {
   id
@@ -1411,7 +1523,35 @@ export const ConsoleClientDocument = new TypedDocumentString(`
     ...ConsoleClientFields
   }
 }
-    fragment ConsoleClientFields on Client {
+    fragment ConsoleClientAdvancedSettingsFields on ClientAdvancedSettings {
+  frontchannelLogoutUri
+  frontchannelLogoutSessionRequired
+  backchannelLogoutUri
+  backchannelLogoutSessionRequired
+  logoUri
+  clientUri
+  policyUri
+  tosUri
+  contacts
+  subjectType
+  sectorIdentifierUri
+  defaultMaxAge
+  requireAuthTime
+  defaultAcrValues
+  idTokenSignedResponseAlgs
+  idTokenEncryptedResponseAlgs
+  idTokenEncryptedResponseEncs
+  userinfoSignedResponseAlgs
+  userinfoEncryptedResponseAlgs
+  userinfoEncryptedResponseEncs
+  requestObjectSigningAlgs
+  requestObjectEncryptionAlgs
+  requestObjectEncryptionEncs
+  requestUris
+  tokenEndpointAuthSigningAlgs
+  initiateLoginUri
+}
+fragment ConsoleClientFields on Client {
   id
   name
   description
@@ -1438,6 +1578,9 @@ export const ConsoleClientDocument = new TypedDocumentString(`
   oauthVersion
   includeScopedClaimsInIdToken
   includeScopedClaimsInAccessToken
+  advancedSettings {
+    ...ConsoleClientAdvancedSettingsFields
+  }
   corsOrigins
   version
   createdAt
@@ -1649,6 +1792,24 @@ export const ConsoleClientMetadataDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ConsoleClientMetadataQuery, ConsoleClientMetadataQueryVariables>;
+export const ConsoleClientMetadataOptionsDocument = new TypedDocumentString(`
+    query ConsoleClientMetadataOptions {
+  clientMetadataOptions {
+    subjectTypes
+    acrValues
+    idTokenSigningAlgs
+    idTokenEncryptionAlgs
+    idTokenEncryptionEncs
+    userinfoSigningAlgs
+    userinfoEncryptionAlgs
+    userinfoEncryptionEncs
+    requestObjectSigningAlgs
+    requestObjectEncryptionAlgs
+    requestObjectEncryptionEncs
+    tokenEndpointAuthSigningAlgs
+  }
+}
+    `) as unknown as TypedDocumentString<ConsoleClientMetadataOptionsQuery, ConsoleClientMetadataOptionsQueryVariables>;
 export const ConsoleResourcesDocument = new TypedDocumentString(`
     query ConsoleResources($filter: ResourceFilter, $orderBy: ResourceOrder, $first: Int, $after: String, $last: Int, $before: String) {
   resources(

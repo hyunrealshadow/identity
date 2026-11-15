@@ -181,6 +181,11 @@ type Client implements Node {
 	"""
 	includeScopedClaimsInAccessToken: Boolean!
 	"""
+	Logout channels, application links, subject identifiers,
+	authentication requirements and JOSE algorithm choices.
+	"""
+	advancedSettings: ClientAdvancedSettings!
+	"""
 	Browser origins derived from the redirect URIs while CORS is enabled.
 	"""
 	corsOrigins: [String!]!
@@ -199,6 +204,82 @@ type Client implements Node {
 	API and protocol scopes assigned to this client.
 	"""
 	scopes(orderBy: ScopeOrder, first: Int, after: String, last: Int, before: String): ClientScopeConnection! @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+}
+
+"""
+Advanced OpenID Connect metadata. Algorithm lists take registered JOSE
+names; an empty list keeps the provider default. Response signing and
+encryption lists are tried in order; request object and client assertion
+lists are allow-lists. Supported values come from `clientMetadataOptions`.
+"""
+type ClientAdvancedSettings {
+	frontchannelLogoutUri: String
+	frontchannelLogoutSessionRequired: Boolean!
+	backchannelLogoutUri: String
+	backchannelLogoutSessionRequired: Boolean!
+	logoUri: String
+	clientUri: String
+	policyUri: String
+	tosUri: String
+	contacts: [String!]!
+	subjectType: ClientSubjectType!
+	sectorIdentifierUri: String
+	"""
+	Seconds; `null` sets no default.
+	"""
+	defaultMaxAge: Int
+	requireAuthTime: Boolean!
+	"""
+	Authentication context classes requested when a request names none,
+	in order of preference; any one of them satisfies the request. Empty
+	lets the request decide.
+	"""
+	defaultAcrValues: [String!]!
+	idTokenSignedResponseAlgs: [String!]!
+	idTokenEncryptedResponseAlgs: [String!]!
+	idTokenEncryptedResponseEncs: [String!]!
+	userinfoSignedResponseAlgs: [String!]!
+	userinfoEncryptedResponseAlgs: [String!]!
+	userinfoEncryptedResponseEncs: [String!]!
+	requestObjectSigningAlgs: [String!]!
+	requestObjectEncryptionAlgs: [String!]!
+	requestObjectEncryptionEncs: [String!]!
+	requestUris: [String!]!
+	tokenEndpointAuthSigningAlgs: [String!]!
+	initiateLoginUri: String
+}
+
+"""
+Advanced OpenID Connect metadata, replaced as one unit. Omitted values
+clear the field back to the provider default.
+"""
+input ClientAdvancedSettingsInput {
+	frontchannelLogoutUri: String
+	frontchannelLogoutSessionRequired: Boolean! = false
+	backchannelLogoutUri: String
+	backchannelLogoutSessionRequired: Boolean! = false
+	logoUri: String
+	clientUri: String
+	policyUri: String
+	tosUri: String
+	contacts: [String!]! = []
+	subjectType: ClientSubjectType! = PUBLIC
+	sectorIdentifierUri: String
+	defaultMaxAge: Int
+	requireAuthTime: Boolean! = false
+	defaultAcrValues: [String!]! = []
+	idTokenSignedResponseAlgs: [String!]! = []
+	idTokenEncryptedResponseAlgs: [String!]! = []
+	idTokenEncryptedResponseEncs: [String!]! = []
+	userinfoSignedResponseAlgs: [String!]! = []
+	userinfoEncryptedResponseAlgs: [String!]! = []
+	userinfoEncryptedResponseEncs: [String!]! = []
+	requestObjectSigningAlgs: [String!]! = []
+	requestObjectEncryptionAlgs: [String!]! = []
+	requestObjectEncryptionEncs: [String!]! = []
+	requestUris: [String!]! = []
+	tokenEndpointAuthSigningAlgs: [String!]! = []
+	initiateLoginUri: String
 }
 
 """
@@ -298,6 +379,24 @@ enum ClientGrantType {
 	CLIENT_CREDENTIALS
 	DEVICE_CODE
 	IMPLICIT
+}
+
+"""
+Supported values for the advanced client settings.
+"""
+type ClientMetadataOptions {
+	subjectTypes: [String!]!
+	acrValues: [String!]!
+	idTokenSigningAlgs: [String!]!
+	idTokenEncryptionAlgs: [String!]!
+	idTokenEncryptionEncs: [String!]!
+	userinfoSigningAlgs: [String!]!
+	userinfoEncryptionAlgs: [String!]!
+	userinfoEncryptionEncs: [String!]!
+	requestObjectSigningAlgs: [String!]!
+	requestObjectEncryptionAlgs: [String!]!
+	requestObjectEncryptionEncs: [String!]!
+	tokenEndpointAuthSigningAlgs: [String!]!
 }
 
 """
@@ -436,6 +535,21 @@ input ClientStateInput {
 	expectedVersion: UUID!
 	reason: String! = ""
 	clientMutationId: String
+}
+
+"""
+How the `sub` claim is formed for this client's users.
+"""
+enum ClientSubjectType {
+	"""
+	The same identifier for every client.
+	"""
+	PUBLIC
+	"""
+	An identifier unique to the client's sector, so separate parties cannot
+	correlate one user.
+	"""
+	PAIRWISE
 }
 
 input ConfirmTotpEnrollmentInput {
@@ -1302,6 +1416,12 @@ type QueryRoot {
 	client(id: ID!): Client @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	clients(filter: ClientFilter, orderBy: ClientOrder, first: Int, after: String, last: Int, before: String): ClientConnection! @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	"""
+	Values a client may register in its advanced settings, the same lists
+	discovery publishes. Provider signing follows the active signing keys
+	and request object encryption the active encryption keys.
+	"""
+	clientMetadataOptions: ClientMetadataOptions! @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
 	Instance-wide settings as currently stored.
 	"""
 	instanceSettings: InstanceSettings @access(policy: {scopes: ["management.setting.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
@@ -1846,6 +1966,10 @@ input UpdateClientInput {
 	names: [LocalizedTextInput!]
 	descriptions: [LocalizedTextInput!]
 	settings: ClientSettingsInput
+	"""
+	Omitting this keeps the current advanced metadata.
+	"""
+	advancedSettings: ClientAdvancedSettingsInput
 	reason: String! = ""
 	clientMutationId: String
 }

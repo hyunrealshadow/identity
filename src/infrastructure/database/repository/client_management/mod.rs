@@ -1,5 +1,6 @@
 //! SeaORM implementation of OAuth client management persistence.
 
+mod advanced;
 mod read;
 mod support;
 mod write;

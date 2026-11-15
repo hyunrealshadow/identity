@@ -230,6 +230,13 @@ impl AppServices {
         .with_management_authority_repository(authorization.clone())
         .with_rbac_authorization_repository(rbac_authorization_repo.clone())
         .with_events(Arc::clone(&events));
+        let oidc_provider = OpenIdProviderService::new(settings.store())
+            .with_scope_catalog(scope_catalog.clone())
+            .with_resource_repo(oauth_resource_repo.clone())
+            .with_rbac_authorization_repository(rbac_authorization_repo.clone())
+            .with_key_repo(key_repo.clone())
+            .with_key_jwk_repo(Arc::new(KeyJwkRepositoryImpl::new(db.clone())))
+            .with_signing_algorithm_detector(signing_algorithm_detector.clone());
         Ok(Self {
             authorization: authorization.clone(),
             passkey: passkey.clone(),
@@ -316,14 +323,9 @@ impl AppServices {
                 data_protector.clone(),
                 Arc::new(ClientPublicKeyReaderImpl),
             )
+            .with_provider(Arc::new(oidc_provider.clone()))
             .with_events(Arc::clone(&events)),
-            oidc: OpenIdProviderService::new(settings.store())
-                .with_scope_catalog(scope_catalog.clone())
-                .with_resource_repo(oauth_resource_repo.clone())
-                .with_rbac_authorization_repository(rbac_authorization_repo.clone())
-                .with_key_repo(key_repo.clone())
-                .with_key_jwk_repo(Arc::new(KeyJwkRepositoryImpl::new(db.clone())))
-                .with_signing_algorithm_detector(signing_algorithm_detector.clone()),
+            oidc: oidc_provider.clone(),
             oidc_authorize: oidc_authorize.clone(),
             pushed_authorization: PushedAuthorizationService::new(
                 Arc::new(ClientAuthenticator::new(ClientAuthenticatorDependencies {

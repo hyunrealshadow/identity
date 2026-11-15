@@ -42,6 +42,16 @@ pub enum ClientErrorCode {
     InvalidJwksUri = 18033,
     JwksUnavailable = 18034,
     CredentialLimitReached = 18035,
+    InvalidMetadataUri = 18036,
+    InvalidContact = 18037,
+    UnsupportedAlgorithm = 18038,
+    EncryptionAlgorithmRequired = 18039,
+    LogoutUriRequired = 18040,
+    InvalidDefaultMaxAge = 18041,
+    UnsupportedAcrValue = 18042,
+    SectorIdentifierRequired = 18043,
+    SectorIdentifierMismatch = 18044,
+    SectorIdentifierUnavailable = 18045,
 }
 
 impl ClientErrorCode {
@@ -77,7 +87,17 @@ impl ClientErrorCode {
             | Self::InvalidCredentialExpiry
             | Self::InvalidJwksUri
             | Self::JwksUnavailable
-            | Self::CredentialLimitReached => ErrorKind::Validation,
+            | Self::CredentialLimitReached
+            | Self::InvalidMetadataUri
+            | Self::InvalidContact
+            | Self::UnsupportedAlgorithm
+            | Self::EncryptionAlgorithmRequired
+            | Self::LogoutUriRequired
+            | Self::InvalidDefaultMaxAge
+            | Self::UnsupportedAcrValue
+            | Self::SectorIdentifierRequired
+            | Self::SectorIdentifierMismatch
+            | Self::SectorIdentifierUnavailable => ErrorKind::Validation,
         }
     }
 }
@@ -185,6 +205,51 @@ pub const CLIENT_ERROR_INVENTORY: &[ClientErrorCodeDefinition] = &[
         ClientErrorCode::CredentialLimitReached,
         "E18035",
         &["max"],
+        &[],
+    ),
+    entry(ClientErrorCode::InvalidMetadataUri, "E18036", &["uri"], &[]),
+    entry(ClientErrorCode::InvalidContact, "E18037", &["max"], &[]),
+    entry(
+        ClientErrorCode::UnsupportedAlgorithm,
+        "E18038",
+        &["algorithm"],
+        &[],
+    ),
+    entry(
+        ClientErrorCode::EncryptionAlgorithmRequired,
+        "E18039",
+        &[],
+        &[],
+    ),
+    entry(ClientErrorCode::LogoutUriRequired, "E18040", &[], &[]),
+    entry(
+        ClientErrorCode::InvalidDefaultMaxAge,
+        "E18041",
+        &["max"],
+        &[],
+    ),
+    entry(
+        ClientErrorCode::UnsupportedAcrValue,
+        "E18042",
+        &["acr"],
+        &[],
+    ),
+    entry(
+        ClientErrorCode::SectorIdentifierRequired,
+        "E18043",
+        &[],
+        &[],
+    ),
+    entry(
+        ClientErrorCode::SectorIdentifierMismatch,
+        "E18044",
+        &[],
+        &[],
+    ),
+    entry(
+        ClientErrorCode::SectorIdentifierUnavailable,
+        "E18045",
+        &[],
         &[],
     ),
 ];

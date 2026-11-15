@@ -139,3 +139,99 @@ async fn discovery_maps_key_repo_errors() {
 
     assert_eq!(error.code(), 20005);
 }
+
+fn rsa_binding(key_oid: identity_domain::key::KeyOid, algorithm: JwkAlgorithm) -> KeyJwk {
+    KeyJwk {
+        oid: KeyJwkOid(Uuid::new_v4()),
+        key_oid,
+        algorithm,
+        jwk: PublicJwk::Rsa {
+            key_use: None,
+            alg: Some(algorithm.as_str().to_owned()),
+            kid: Some(Uuid::new_v4().to_string()),
+            n: "AQAB".to_owned(),
+            e: "AQAB".to_owned(),
+            x5c: None,
+            x5t: None,
+            x5t_s256: None,
+        },
+        created_at: Utc::now(),
+    }
+}
+
+async fn provider_with_bindings(bindings: Vec<JwkAlgorithm>) -> OpenIdProviderService {
+    let key = make_asymmetric_key(generate_rsa_pem());
+    let bindings = bindings
+        .into_iter()
+        .map(|algorithm| rsa_binding(key.oid, algorithm))
+        .collect::<Vec<_>>();
+    let mut jwk_repo = MockKeyJwkRepository::new();
+    jwk_repo
+        .expect_list_active()
+        .returning(move || Ok(bindings.clone()));
+    OpenIdProviderService::for_test(
+        SettingsSnapshot::default()
+            .with_section(&AppSettings {
+                console_domain: None,
+                domain: Some("https://identity.example.com".to_owned()),
+                login_domain: None,
+                login_client_id: None,
+                console_client_id: None,
+            })
+            .with_section(&InstallationSettings {
+                initialized: true,
+                initialized_at: None,
+            }),
+    )
+    .await
+    .with_key_repo(Arc::new(key_repo_with_keys(vec![key])))
+    .with_key_jwk_repo(Arc::new(jwk_repo))
+}
+
+#[tokio::test]
+async fn request_object_encryption_follows_active_encryption_keys() {
+    use identity_domain::key::JwaEncryptionAlgorithm;
+
+    let service = provider_with_bindings(vec![
+        JwkAlgorithm::Signing(JwaSigningAlgorithm::Rs256),
+        JwkAlgorithm::Encryption(JwaEncryptionAlgorithm::RsaOaep256),
+    ])
+    .await;
+    let metadata = service.discovery_metadata().await.unwrap();
+    assert_eq!(
+        metadata.request_object_encryption_alg_values_supported,
+        Some(vec!["RSA-OAEP-256".to_owned()])
+    );
+    assert!(
+        metadata
+            .request_object_encryption_enc_values_supported
+            .is_some_and(|values| !values.is_empty())
+    );
+    let options = service.client_metadata_options().await.unwrap();
+    assert_eq!(options.request_object_encryption_algs, ["RSA-OAEP-256"]);
+    assert_eq!(
+        options.id_token_signing_algs,
+        expected_id_token_algorithms(&["RS256"])
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+    );
+    assert_eq!(options.userinfo_signing_algs, options.id_token_signing_algs);
+
+    // Without an encryption key, neither discovery nor the options offer
+    // request object encryption.
+    let signing_only =
+        provider_with_bindings(vec![JwkAlgorithm::Signing(JwaSigningAlgorithm::Rs256)]).await;
+    let metadata = signing_only.discovery_metadata().await.unwrap();
+    assert_eq!(
+        metadata.request_object_encryption_alg_values_supported,
+        None
+    );
+    assert_eq!(
+        metadata.request_object_encryption_enc_values_supported,
+        None
+    );
+    let options = signing_only.client_metadata_options().await.unwrap();
+    assert!(options.request_object_encryption_algs.is_empty());
+    assert!(options.request_object_encryption_encs.is_empty());
+}

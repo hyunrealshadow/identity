@@ -6,7 +6,7 @@ use std::collections::BTreeSet;
 use chrono::{Duration, Utc};
 use identity_application::{
     client::{
-        AddClientCredentialTransaction, ClientManagementRepository,
+        AddClientCredentialTransaction, ClientAdvancedSettings, ClientManagementRepository,
         ClientManagementRepositoryError, ClientPlatform, ClientProtocolSettings,
         ClientStateTransaction, CreateClientSecretTransaction, CreateClientTransaction,
         NewClientSecret, RevokeClientCredentialTransaction, UpdateClientTransaction,
@@ -23,8 +23,8 @@ use identity_domain::{
     },
     openid_connect::{
         GrantType, OpenIdConnectClientPlatformType, OpenIdConnectClientRepository,
-        OpenIdConnectCredentialData, OpenIdConnectCredentialOid, TokenEndpointAuthMethod,
-        resource::OAuthResourceRepository,
+        OpenIdConnectCredentialData, OpenIdConnectCredentialOid, SubjectType,
+        TokenEndpointAuthMethod, resource::OAuthResourceRepository,
     },
     user::UserOid,
 };
@@ -192,7 +192,7 @@ async fn postgres_client_management_rechecks_authority_and_withdraws_on_boundary
             client_oid: created.oid,
             expected_version: created.version,
             name: Some("Orders portal".to_owned()),
-            description: None, names: None, descriptions: None, settings: None,
+            description: None, names: None, descriptions: None, settings: None, advanced: None,
             reason: String::new(),
             authority: authority.clone(),
         }).await.unwrap();
@@ -203,7 +203,7 @@ async fn postgres_client_management_rechecks_authority_and_withdraws_on_boundary
             client_oid: created.oid,
             expected_version: created.version,
             name: Some("Lost update".to_owned()),
-            description: None, names: None, descriptions: None, settings: None,
+            description: None, names: None, descriptions: None, settings: None, advanced: None,
             reason: String::new(),
             authority: authority.clone(),
         }).await.unwrap_err();
@@ -214,6 +214,7 @@ async fn postgres_client_management_rechecks_authority_and_withdraws_on_boundary
             expected_version: renamed.version,
             name: None, description: None, names: None, descriptions: None,
             settings: Some(web_settings("https://portal.example.test/callback")),
+            advanced: None,
             reason: String::new(),
             authority: authority.clone(),
         }).await.unwrap();
@@ -297,6 +298,196 @@ async fn postgres_client_management_rechecks_authority_and_withdraws_on_boundary
         let missing = repo.find_client(Uuid::new_v4()).await.unwrap();
         assert!(missing.is_none());
     }).await;
+}
+
+#[tokio::test]
+#[ignore = "requires explicitly configured PostgreSQL test database"]
+async fn postgres_client_advanced_settings_withdraw_only_on_semantic_boundary_changes() {
+    isolated(|db| async move {
+        seed::run_all(&db).await.unwrap();
+        owner(&db).await;
+        let authority = machine(
+            &db,
+            &[
+                ManagementScope::ClientsCreate,
+                ManagementScope::ClientsUpdate,
+            ],
+        )
+        .await;
+        let repo = ClientManagementRepositoryImpl::new(db.clone());
+        let protocol = OpenIdConnectClientRepositoryImpl::new(db.clone());
+        let created = repo
+            .create_client(CreateClientTransaction {
+                client_oid: Uuid::new_v4(),
+                name: "Advanced".to_owned(),
+                description: String::new(),
+                names: Vec::new(),
+                descriptions: Vec::new(),
+                settings: web_settings("https://app.example.test/callback"),
+                reason: String::new(),
+                authority: authority.clone(),
+            })
+            .await
+            .unwrap();
+        assert_eq!(created.advanced, ClientAdvancedSettings::default());
+        let update = |version: Uuid, advanced: ClientAdvancedSettings| UpdateClientTransaction {
+            client_oid: created.oid,
+            expected_version: version,
+            name: None,
+            description: None,
+            names: None,
+            descriptions: None,
+            settings: None,
+            advanced: Some(advanced),
+            reason: String::new(),
+            authority: authority.clone(),
+        };
+
+        // Application links are display metadata: saved, audited, no withdrawal.
+        let artifact = issued_artifact(&db, created.oid).await;
+        let links = ClientAdvancedSettings {
+            logo_uri: Some("https://cdn.example.test/logo.png".to_owned()),
+            // A bare host reads back with a trailing slash; equal on resave.
+            client_uri: Some("https://app.example.test".to_owned()),
+            contacts: vec!["ops@example.test".to_owned()],
+            ..Default::default()
+        };
+        let linked = repo
+            .update_client(update(created.version, links.clone()))
+            .await
+            .unwrap();
+        assert_eq!(
+            linked.advanced.logo_uri.as_deref(),
+            Some("https://cdn.example.test/logo.png")
+        );
+        assert_eq!(
+            linked.advanced.client_uri.as_deref(),
+            Some("https://app.example.test/")
+        );
+        assert_eq!(linked.advanced.contacts, ["ops@example.test"]);
+        assert!(!withdrawn(&db, artifact).await);
+        assert_eq!(audit_count(&db, "client.update", created.oid).await, 1);
+
+        // Resaving what was read back, including explicit defaults, changes nothing.
+        let resaved = repo
+            .update_client(update(linked.version, linked.advanced.clone()))
+            .await
+            .unwrap();
+        assert!(!withdrawn(&db, artifact).await);
+        assert_eq!(resaved.advanced, linked.advanced);
+
+        // The runtime sees the authentication requirements; they bound issuance.
+        let required = ClientAdvancedSettings {
+            default_max_age: Some(300),
+            require_auth_time: true,
+            default_acr_values: vec!["aal2".to_owned()],
+            backchannel_logout_uri: Some("https://app.example.test/backchannel".to_owned()),
+            backchannel_logout_session_required: true,
+            // An ordered preference: the runtime tries PS256 before ES256.
+            id_token_signed_response_algs: vec!["PS256".to_owned(), "ES256".to_owned()],
+            request_object_signing_algs: vec!["ES256".to_owned(), "RS256".to_owned()],
+            ..resaved.advanced.clone()
+        };
+        let stricter = repo
+            .update_client(update(resaved.version, required))
+            .await
+            .unwrap();
+        assert!(withdrawn(&db, artifact).await);
+        let runtime = protocol.find_by_oid(created.oid).await.unwrap().unwrap();
+        assert_eq!(runtime.metadata().default_max_age, Some(300));
+        assert_eq!(
+            runtime
+                .metadata()
+                .id_token_signed_response_algs
+                .iter()
+                .flatten()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>(),
+            ["PS256", "ES256"]
+        );
+        assert_eq!(
+            stricter.advanced.request_object_signing_algs,
+            ["ES256", "RS256"]
+        );
+        assert_eq!(runtime.metadata().require_auth_time, Some(true));
+        assert_eq!(
+            runtime
+                .metadata()
+                .backchannel_logout_uri
+                .as_ref()
+                .map(ToString::to_string)
+                .as_deref(),
+            Some("https://app.example.test/backchannel")
+        );
+
+        // Moving a pairwise sector moves every subject, so it withdraws even
+        // though the boundary fingerprint does not cover the sector itself.
+        let pairwise = repo
+            .update_client(update(
+                stricter.version,
+                ClientAdvancedSettings {
+                    subject_type: SubjectType::Pairwise,
+                    ..stricter.advanced.clone()
+                },
+            ))
+            .await
+            .unwrap();
+        let before_sector = issued_artifact(&db, created.oid).await;
+        let sectored = repo
+            .update_client(update(
+                pairwise.version,
+                ClientAdvancedSettings {
+                    sector_identifier_uri: Some(
+                        "https://sector.example.test/redirects.json".to_owned(),
+                    ),
+                    ..pairwise.advanced.clone()
+                },
+            ))
+            .await
+            .unwrap();
+        assert!(withdrawn(&db, before_sector).await);
+        assert_eq!(sectored.advanced.subject_type, SubjectType::Pairwise);
+
+        // A stale version is rejected without writing.
+        let stale = repo
+            .update_client(update(pairwise.version, ClientAdvancedSettings::default()))
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            stale,
+            ClientManagementRepositoryError::VersionConflict { .. }
+        ));
+
+        // An audit failure rolls the metadata change back.
+        let target = created.oid;
+        sql(
+            &db,
+            &format!(
+                "ALTER TABLE security_audit ADD CONSTRAINT client_test_audit_failure
+               CHECK (target_oid IS DISTINCT FROM '{target}') NOT VALID"
+            ),
+        )
+        .await;
+        let failed = repo
+            .update_client(update(
+                sectored.version,
+                ClientAdvancedSettings {
+                    logo_uri: Some("https://cdn.example.test/other.png".to_owned()),
+                    ..sectored.advanced.clone()
+                },
+            ))
+            .await;
+        assert!(failed.is_err());
+        sql(
+            &db,
+            "ALTER TABLE security_audit DROP CONSTRAINT client_test_audit_failure",
+        )
+        .await;
+        let unchanged = repo.find_client(created.oid).await.unwrap().unwrap();
+        assert_eq!(unchanged.version, sectored.version);
+        assert_eq!(unchanged.advanced, sectored.advanced);
+    })
+    .await;
 }
 
 async fn assigned_codes(db: &DatabaseConnection, client: Uuid) -> Vec<String> {
@@ -683,6 +874,7 @@ async fn postgres_client_auth_methods_follow_credentials_within_their_limits() {
                 names: None,
                 descriptions: None,
                 settings: Some(public),
+                advanced: None,
                 reason: String::new(),
                 authority: authority.clone(),
             })

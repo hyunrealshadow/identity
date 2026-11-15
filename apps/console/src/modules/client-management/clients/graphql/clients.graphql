@@ -1,3 +1,32 @@
+fragment ConsoleClientAdvancedSettingsFields on ClientAdvancedSettings {
+  frontchannelLogoutUri
+  frontchannelLogoutSessionRequired
+  backchannelLogoutUri
+  backchannelLogoutSessionRequired
+  logoUri
+  clientUri
+  policyUri
+  tosUri
+  contacts
+  subjectType
+  sectorIdentifierUri
+  defaultMaxAge
+  requireAuthTime
+  defaultAcrValues
+  idTokenSignedResponseAlgs
+  idTokenEncryptedResponseAlgs
+  idTokenEncryptedResponseEncs
+  userinfoSignedResponseAlgs
+  userinfoEncryptedResponseAlgs
+  userinfoEncryptedResponseEncs
+  requestObjectSigningAlgs
+  requestObjectEncryptionAlgs
+  requestObjectEncryptionEncs
+  requestUris
+  tokenEndpointAuthSigningAlgs
+  initiateLoginUri
+}
+
 fragment ConsoleClientFields on Client {
   id
   name
@@ -25,6 +54,9 @@ fragment ConsoleClientFields on Client {
   oauthVersion
   includeScopedClaimsInIdToken
   includeScopedClaimsInAccessToken
+  advancedSettings {
+    ...ConsoleClientAdvancedSettingsFields
+  }
   corsOrigins
   version
   createdAt
@@ -273,5 +305,22 @@ query ConsoleClientMetadata {
     endSessionEndpoint
     checkSessionIframe
     registrationEndpoint
+  }
+}
+
+query ConsoleClientMetadataOptions {
+  clientMetadataOptions {
+    subjectTypes
+    acrValues
+    idTokenSigningAlgs
+    idTokenEncryptionAlgs
+    idTokenEncryptionEncs
+    userinfoSigningAlgs
+    userinfoEncryptionAlgs
+    userinfoEncryptionEncs
+    requestObjectSigningAlgs
+    requestObjectEncryptionAlgs
+    requestObjectEncryptionEncs
+    tokenEndpointAuthSigningAlgs
   }
 }

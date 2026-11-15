@@ -56,8 +56,22 @@ function setter(draft: ClientSettingsDraft, onChange: FieldsProps['onChange']) {
     onChange({ ...draft, [key]: value })
 }
 
+type RedirectRow = 'webRedirectUris' | 'nativeRedirectUris' | 'postLogoutRedirectUris'
+
+const ALL_REDIRECT_ROWS: readonly RedirectRow[] = [
+  'webRedirectUris',
+  'nativeRedirectUris',
+  'postLogoutRedirectUris',
+]
+
 /** Where the provider may send the browser back after sign-in and sign-out. */
-export function RedirectUriRows({ draft, onChange, errors, isDisabled = false }: FieldsProps) {
+export function RedirectUriRows({
+  draft,
+  onChange,
+  errors,
+  isDisabled = false,
+  include = ALL_REDIRECT_ROWS,
+}: FieldsProps & { include?: readonly RedirectRow[] }) {
   const t = useTranslator()
   const set = setter(draft, onChange)
   const rows = [
@@ -88,7 +102,7 @@ export function RedirectUriRows({ draft, onChange, errors, isDisabled = false }:
   ]
   return (
     <>
-      {rows.map((row) => (
+      {rows.filter((row) => include.includes(row.key)).map((row) => (
         <SettingsRow key={row.key} label={row.label} description={row.hint}>
           <UserTextAreaField
             name={row.name}

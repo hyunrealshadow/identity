@@ -35,6 +35,7 @@ use serde_json::{Value, from_value, json, to_value};
 use uuid::Uuid;
 
 use super::{
+    advanced::write_advanced,
     read::{PROTOCOL, credential_record, find_record},
     support::{corrupt, from_management, storage},
 };
@@ -435,7 +436,19 @@ pub(super) async fn update(
     if let Some(settings) = &command.settings {
         write_protocol(&txn, model.id, settings).await?;
     }
-    let changed = boundary(&txn, model.id).await? != before;
+    let mut subject_identity_changed = false;
+    if let Some(advanced) = &command.advanced {
+        let row = OpenIdConnectEntity::find()
+            .filter(OpenIdConnectColumn::ClientId.eq(model.id))
+            .one(&txn)
+            .await
+            .map_err(storage)?
+            .ok_or_else(corrupt)?;
+        subject_identity_changed = write_advanced(&txn, row, advanced).await?.subject_identity;
+    }
+    // The fingerprint omits the sector identifier, which moves pairwise
+    // subjects, so that change withdraws issued credentials explicitly.
+    let changed = subject_identity_changed || boundary(&txn, model.id).await? != before;
     finish(
         txn,
         model,

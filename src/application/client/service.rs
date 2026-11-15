@@ -14,7 +14,7 @@ use identity_domain::{
     key::PublicJwk,
     openid_connect::{
         GrantType, OpenIdConnectClientPlatformType, OpenIdConnectCredentialData,
-        OpenIdConnectCredentialOid,
+        OpenIdConnectCredentialOid, SubjectType,
     },
     rbac::{LocalizedMetadata, LocalizedTextError},
 };
@@ -24,15 +24,15 @@ use uuid::Uuid;
 
 use super::{
     model::{
-        AddClientJwksUriCommand, AddClientPublicKeyCommand, ClientCredentialRecord,
-        ClientCredentialResult, ClientCredentialRevokeResult, ClientFilter, ClientPage,
-        ClientPageItem, ClientPageRequest, ClientPlatform, ClientProtocolSettings, ClientRecord,
-        ClientSecretResult, ClientStateCommand, CreateClientCommand, CreateClientSecretCommand,
-        MANAGEABLE_GRANT_TYPES, MAX_CLIENT_DESCRIPTION_LENGTH, MAX_CLIENT_MUTATION_ID_LENGTH,
-        MAX_CLIENT_NAME_LENGTH, MAX_PUBLIC_KEY_LIFETIME_DAYS, MAX_QUERY_FILTER_LENGTH,
-        MAX_REASON_LENGTH, MAX_REDIRECT_URIS, MAX_SECRET_LIFETIME_DAYS, MAX_URI_LENGTH,
-        MIN_PUBLIC_KEY_LIFETIME_DAYS, MIN_SECRET_LIFETIME_DAYS, RevokeClientCredentialCommand,
-        UpdateClientCommand,
+        AddClientJwksUriCommand, AddClientPublicKeyCommand, ClientAdvancedSettings,
+        ClientCredentialRecord, ClientCredentialResult, ClientCredentialRevokeResult, ClientFilter,
+        ClientPage, ClientPageItem, ClientPageRequest, ClientPlatform, ClientProtocolSettings,
+        ClientRecord, ClientSecretResult, ClientStateCommand, CreateClientCommand,
+        CreateClientSecretCommand, MANAGEABLE_GRANT_TYPES, MAX_CLIENT_DESCRIPTION_LENGTH,
+        MAX_CLIENT_MUTATION_ID_LENGTH, MAX_CLIENT_NAME_LENGTH, MAX_PUBLIC_KEY_LIFETIME_DAYS,
+        MAX_QUERY_FILTER_LENGTH, MAX_REASON_LENGTH, MAX_REDIRECT_URIS, MAX_SECRET_LIFETIME_DAYS,
+        MAX_URI_LENGTH, MIN_PUBLIC_KEY_LIFETIME_DAYS, MIN_SECRET_LIFETIME_DAYS,
+        RevokeClientCredentialCommand, UpdateClientCommand,
     },
     public_key::{ClientPublicKeyReader, PublicKeyError, PublicKeyMaterial},
     repository::{
@@ -49,6 +49,9 @@ use crate::{
         codes::{authorization::AuthorizationErrorCode, client::ClientErrorCode},
     },
     observability::{BusinessEvent, EventSink, EventValue, NoopEventSink, error_outcome},
+    openid_connect::provider::{
+        ClientMetadataOptions, OpenIdProviderCapabilities, OpenIdProviderService,
+    },
     openid_connect::remote::{
         DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchPolicy, conformance_allows_invalid_certs,
         fetch_https_public_document, remote_http_client, validate_https_public_url,
@@ -65,6 +68,8 @@ pub struct ClientManagementService {
     repository: Arc<dyn ClientManagementRepository>,
     data_protector: Arc<dyn DataProtector>,
     public_keys: Arc<dyn ClientPublicKeyReader>,
+    /// Live supported metadata values; without it the static capabilities apply.
+    provider: Option<Arc<OpenIdProviderService>>,
     events: Arc<dyn EventSink>,
 }
 
@@ -79,7 +84,24 @@ impl ClientManagementService {
             repository,
             data_protector,
             public_keys,
+            provider: None,
             events: Arc::new(NoopEventSink),
+        }
+    }
+
+    /// Validate advanced metadata against the provider's live keys.
+    #[must_use]
+    pub fn with_provider(mut self, provider: Arc<OpenIdProviderService>) -> Self {
+        self.provider = Some(provider);
+        self
+    }
+
+    async fn metadata_options(&self) -> Result<ClientMetadataOptions, AppError> {
+        match &self.provider {
+            Some(provider) => provider.client_metadata_options().await,
+            None => Ok(ClientMetadataOptions::from_capabilities(
+                &OpenIdProviderCapabilities::default(),
+            )),
         }
     }
 
@@ -221,8 +243,32 @@ impl ClientManagementService {
                 && command.names.is_none()
                 && command.descriptions.is_none()
                 && command.settings.is_none()
+                && command.advanced.is_none()
             {
                 return Err(AppError::from_code(ClientErrorCode::EmptyUpdate));
+            }
+            let settings = command.settings.map(validate_settings).transpose()?;
+            let current = if settings.is_some() || command.advanced.is_some() {
+                Some(
+                    self.repository
+                        .find_client(command.client_oid)
+                        .await
+                        .map_err(map_repository_error)?
+                        .ok_or_else(|| AppError::from_code(ClientErrorCode::ClientNotFound))?,
+                )
+            } else {
+                None
+            };
+            let advanced = match (command.advanced, &current) {
+                (Some(advanced), Some(current)) => Some(advanced::validate_advanced_settings(
+                    advanced,
+                    &self.metadata_options().await?,
+                    &current.advanced,
+                )?),
+                _ => None,
+            };
+            if let Some(current) = &current {
+                validate_subject_change(current, settings.as_ref(), advanced.as_ref()).await?;
             }
             let names = command
                 .names
@@ -246,7 +292,8 @@ impl ClientManagementService {
                         .transpose()?,
                     names,
                     descriptions,
-                    settings: command.settings.map(validate_settings).transpose()?,
+                    settings,
+                    advanced,
                     reason,
                     authority: authority.clone(),
                 })
@@ -877,5 +924,34 @@ fn map_repository_error(error: ClientManagementRepositoryError) -> AppError {
     }
 }
 
+/// Pairwise subject rules depend on both the subject settings and the
+/// redirect URIs. Either side may change alone; the other comes from the
+/// stored client, and the repository's version check rejects a concurrent
+/// edit. The sector document is fetched only when an input actually changed.
+async fn validate_subject_change(
+    current: &ClientRecord,
+    settings: Option<&ClientProtocolSettings>,
+    advanced: Option<&ClientAdvancedSettings>,
+) -> Result<(), AppError> {
+    let settings = settings.unwrap_or(&current.settings);
+    let advanced = advanced.unwrap_or(&current.advanced);
+    if advanced.subject_type != SubjectType::Pairwise && advanced.sector_identifier_uri.is_none() {
+        return Ok(());
+    }
+    if settings.platforms == current.settings.platforms
+        && advanced.subject_type == current.advanced.subject_type
+        && advanced.sector_identifier_uri == current.advanced.sector_identifier_uri
+    {
+        return Ok(());
+    }
+    let redirect_uris = settings
+        .platforms
+        .iter()
+        .flat_map(|platform| platform.redirect_uris.iter().cloned())
+        .collect::<Vec<_>>();
+    advanced::validate_subject_identifier(advanced, &redirect_uris).await
+}
+
+mod advanced;
 #[cfg(test)]
 mod tests;

@@ -20,9 +20,11 @@ use identity_domain::{
 use std::{collections::BTreeSet, sync::Arc};
 
 mod capabilities;
+mod client_options;
 mod discovery;
 mod signing;
 pub use capabilities::OpenIdProviderCapabilities;
+pub use client_options::ClientMetadataOptions;
 pub use signing::SigningAlgorithmDetector;
 #[cfg(test)]
 mod tests;

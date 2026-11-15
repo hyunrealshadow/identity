@@ -28,6 +28,18 @@ impl OpenIdProviderService {
         let issuer = self.issuer()?;
 
         let id_token_algos = self.compute_id_token_signing_algos().await?;
+        // Request objects can be encrypted only to an active encryption key.
+        let request_object_encryption_algos =
+            self.compute_request_object_encryption_algos().await?;
+        let request_object_encryption_encs = if request_object_encryption_algos.is_empty() {
+            Vec::new()
+        } else {
+            to_string_values(
+                &self
+                    .capabilities
+                    .request_object_encryption_enc_values_supported,
+            )
+        };
 
         Ok(OpenIdProviderMetadata {
             issuer: issuer.clone(),
@@ -62,7 +74,6 @@ impl OpenIdProviderService {
             device_authorization_endpoint: Some(endpoint_url(&issuer, "/oauth2/device")?),
             jwks_uri: endpoint_url(&issuer, "/.well-known/keys")?,
             registration_endpoint: self.registration_endpoint(&issuer)?,
-            scopes_supported: non_empty(self.supported_scopes().await?),
             response_types_supported: to_string_values(&self.capabilities.response_types_supported),
             response_modes_supported: non_empty(to_string_values(
                 &self.capabilities.response_modes_supported,
@@ -93,15 +104,11 @@ impl OpenIdProviderService {
                     .request_object_signing_alg_values_supported,
             )),
             request_object_encryption_alg_values_supported: non_empty(to_string_values(
-                &self
-                    .capabilities
-                    .request_object_encryption_alg_values_supported,
+                &request_object_encryption_algos,
             )),
-            request_object_encryption_enc_values_supported: non_empty(to_string_values(
-                &self
-                    .capabilities
-                    .request_object_encryption_enc_values_supported,
-            )),
+            request_object_encryption_enc_values_supported: non_empty(
+                request_object_encryption_encs,
+            ),
             token_endpoint_auth_methods_supported: non_empty(to_string_values(
                 &self.capabilities.token_endpoint_auth_methods_supported,
             )),

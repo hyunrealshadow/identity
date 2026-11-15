@@ -132,16 +132,10 @@ pub(super) async fn runtime_state(console: Option<&str>) -> identity_infrastruct
         .append_query_results([Vec::<BTreeMap<String, DbValue>>::new()])
         .append_query_results([Vec::<key::Model>::new(), Vec::<key::Model>::new()])
         .append_query_results([Vec::<key_jwk::Model>::new(), Vec::<key_jwk::Model>::new()])
-        .append_query_results([[
-            BTreeMap::from([(
-                "code".to_owned(),
-                DbValue::String(Some("openid".to_owned())),
-            )]),
-            BTreeMap::from([(
-                "code".to_owned(),
-                DbValue::String(Some("profile".to_owned())),
-            )]),
-        ]])
+        // Discovery lists no scopes; request object encryption reads the
+        // active keys and their encryption bindings.
+        .append_query_results([Vec::<key::Model>::new(), Vec::<key::Model>::new()])
+        .append_query_results([Vec::<key_jwk::Model>::new(), Vec::<key_jwk::Model>::new()])
         .into_connection();
 
     let i18n = build_i18n().unwrap();

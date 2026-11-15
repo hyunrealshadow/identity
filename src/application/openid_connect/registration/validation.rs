@@ -217,7 +217,11 @@ pub(super) async fn validate_sector_identifier_uri(
     }
 }
 
-async fn fetch_sector_redirect_uris(sector_identifier_uri: &Url) -> Result<Vec<String>, AppError> {
+/// Load a sector identifier document: a JSON array of redirect URIs served
+/// over public HTTPS.
+pub(crate) async fn fetch_sector_redirect_uris(
+    sector_identifier_uri: &Url,
+) -> Result<Vec<String>, AppError> {
     let client = remote_http_client(RemoteFetchPolicy::new(
         DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
         Duration::from_secs(5),

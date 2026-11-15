@@ -4,19 +4,10 @@ import {
   AlertTitle,
 } from '@identity/ui/components/alert'
 import { Button } from '@identity/ui/components/button'
-import { Spinner } from '@identity/ui/components/spinner'
 import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
 import { useNavigate } from '@tanstack/react-router'
-import {
-  Info,
-  Power,
-  Save,
-  ShieldCheck,
-  ShieldOff,
-  Trash2,
-  TriangleAlert,
-} from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { Power, Trash2, TriangleAlert } from 'lucide-react'
+import { useEffect, useState } from 'react'
 
 import { ConfirmationDialog } from '#/components/confirmation-dialog'
 import { LocalizedTextField } from '#/components/localized-text-field'
@@ -25,340 +16,127 @@ import {
   SettingsGroupSkeleton,
   SettingsRow,
 } from '#/components/settings-section'
-import type { UpdateClientInput } from '#/generated/graphql'
 import { formatDateTime } from '#/lib/format'
-import { useLocale, useTranslator, type MessageKey } from '#/lib/i18n'
-import {
-  createLocalizedDraft,
-  hasLocalizedDraftChanges,
-  localizedMetadata,
-  type LocalizedDraft,
-} from '#/lib/localized-values'
+import { useLocale, useTranslator } from '#/lib/i18n'
+import { toast } from '#/lib/toast'
 import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
 import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
 import type { RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
-import { toast } from '#/lib/toast'
+import { ApplicationLinkRows } from '../components/advanced-fields'
 import { useClientDetail, type ConsoleClient } from '../components/client-detail-shell'
-import {
-  CorsRow,
-  GrantTypeRows,
-  OAuthVersionRow,
-  ParRow,
-  RedirectUriRows,
-  PublicClientFlowRow,
-  ScopedClaimRows,
-} from '../components/client-settings-fields'
+import { ClientEditForm, useClientEditable } from '../components/client-edit-form'
 import { useClientMutations } from '../hooks/client-mutations'
-import {
-  clientFieldErrors,
-  formSeed,
-  settingsDraftFromClient,
-  settingsInput,
-  validateSettings,
-  type ClientFieldErrors,
-  type ClientSettingsDraft,
-} from '../lib/client-form'
+import { mutationFeedback, useClientEditor } from '../hooks/use-client-editor'
+import { formSeed } from '../lib/client-form'
 
-const noErrors: ClientFieldErrors = { settings: {}, text: {} }
-
-interface MutationResultLike {
-  errors: RbacFeedbackState['errors']
-  failure?: RbacFeedbackState['failure']
-  stepUp?: RbacFeedbackState['stepUp']
-  requestId?: string
-  traceId?: string
-  forbidden: boolean
-}
-
-function feedbackFrom(result: MutationResultLike, code: string): RbacFeedbackState {
-  return {
-    errors: result.errors,
-    failure: result.failure ?? {
-      kind: 'invalid_response',
-      code,
-      requestId: result.requestId,
-      traceId: result.traceId,
-    },
-    stepUp: result.stepUp,
-    requestId: result.requestId,
-    traceId: result.traceId,
-    forbidden: result.forbidden,
-  }
-}
-
-export function ClientDetailPage() {
+export function ClientGeneralPage() {
   const { client } = useClientDetail()
-  if (!client) return <ClientDetailSkeleton />
-  return <ClientOverview key={formSeed(client)} client={client} />
+  if (!client) return <ClientGeneralSkeleton />
+  return <ClientGeneral key={formSeed(client)} client={client} />
 }
 
-/** Matches the settings groups below, in order, so loading keeps the layout. */
-function ClientDetailSkeleton() {
+/** Matches the groups below, in order, so loading keeps the layout. */
+function ClientGeneralSkeleton() {
   return (
     <div className="space-y-6" aria-busy="true">
       <SettingsGroupSkeleton rows={['localized', 'localizedTextarea', 'value', 'value']} />
-      <SettingsGroupSkeleton rows={['textarea', 'textarea', 'textarea']} />
-      <SettingsGroupSkeleton rows={['switch']} />
-      <SettingsGroupSkeleton rows={['switch', 'switch', 'switch', 'switch']} />
-      <SettingsGroupSkeleton rows={['switch']} description />
-      <SettingsGroupSkeleton rows={['switch']} />
-      <SettingsGroupSkeleton rows={['control']} description />
-      <SettingsGroupSkeleton rows={['switch', 'switch']} />
+      <SettingsGroupSkeleton rows={['textarea', 'textarea', 'textarea', 'textarea', 'textarea']} />
     </div>
   )
 }
 
-function ClientOverview({ client }: { client: ConsoleClient }) {
+function ClientGeneral({ client }: { client: ConsoleClient }) {
   const t = useTranslator()
   const { locale, timeZone } = useLocale()
-  const { query, scope } = useClientDetail()
-  const mutations = useClientMutations()
-  const [text, setText] = useState<LocalizedDraft>(() => createLocalizedDraft(client))
-  const [settings, setSettings] = useState<ClientSettingsDraft>(() =>
-    settingsDraftFromClient(client),
-  )
-  const [errors, setErrors] = useState<ClientFieldErrors>(noErrors)
-  const [nameError, setNameError] = useState<MessageKey | null>(null)
-  const [feedback, setFeedback] = useState<RbacFeedbackState | null>(null)
-  const [pending, setPending] = useState(false)
-
-  const editable = scope.update && !client.builtIn
-  const original = useMemo(
-    () => JSON.stringify(settingsInput(settingsDraftFromClient(client))),
-    [client],
-  )
-  const settingsChanged = JSON.stringify(settingsInput(settings)) !== original
-  const textChanged = hasLocalizedDraftChanges(client, text)
-  const dirty = settingsChanged || textChanged
-  const fieldProps = {
-    draft: settings,
-    onChange: (next: ClientSettingsDraft) => {
-      setSettings(next)
-      touched()
-    },
-    errors: errors.settings,
-    isDisabled: pending || !editable,
-  }
-
-  function touched() {
-    setFeedback(null)
-    setErrors(noErrors)
-    setNameError(null)
-  }
-
-  async function save() {
-    if (pending || !dirty) return
-    const local = settingsChanged ? validateSettings(settings) : {}
-    const missingName = text.name.trim() === ''
-    if (missingName || Object.keys(local).length > 0) {
-      setNameError(missingName ? 'clientsNameRequired' : null)
-      setErrors({
-        settings: Object.fromEntries(
-          Object.entries(local).map(([field, key]) => [field, t(key)]),
-        ),
-        text: {},
-      })
-      return
-    }
-    setPending(true)
-    setFeedback(null)
-    try {
-      const input: UpdateClientInput = {
-        id: client.id,
-        expectedVersion: client.version,
-      }
-      if (textChanged) Object.assign(input, localizedMetadata(text))
-      if (settingsChanged) input.settings = settingsInput(settings)
-      const result = await mutations.update(input)
-      if (!result.data?.updateClient) {
-        setErrors(clientFieldErrors(result.errors))
-        setFeedback(feedbackFrom(result, 'missing_update_client_payload'))
-        return
-      }
-      toast.success(t('clientsSavedToast'), {
-        description: t(settingsChanged ? 'clientsSavedWithdrawn' : 'clientsSavedCommitted'),
-      })
-    } catch {
-      setFeedback({
-        errors: [],
-        failure: { kind: 'network', code: 'client_update_request_failed' },
-        forbidden: false,
-      })
-    } finally {
-      setPending(false)
-    }
-  }
+  const { scope } = useClientDetail()
+  const editor = useClientEditor(client)
+  const disabled = editor.pending || !useClientEditable(client)
+  const { text } = editor
 
   return (
-    <div className="space-y-8">
-      {client.builtIn ? (
-        <Alert className="console-card border border-border">
-          <Info aria-hidden="true" />
-          <AlertTitle>{t('clientsBuiltInTitle')}</AlertTitle>
-          <AlertDescription>{t('clientsBuiltInDescription')}</AlertDescription>
-        </Alert>
-      ) : null}
-      {!client.enabled ? (
-        <Alert className="console-card border border-border text-warning">
-          <TriangleAlert aria-hidden="true" />
-          <AlertTitle>{t('clientsDisabledTitle')}</AlertTitle>
-          <AlertDescription>{t('clientsDisabledDescription')}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      {feedback ? (
-        <RbacMutationFeedback
-          feedback={feedback}
-          onReload={() => void query.refresh()}
-          reloadPending={query.refreshing}
-        />
-      ) : null}
-
-      <form
-        noValidate
-        aria-busy={pending}
-        className="space-y-6"
-        onSubmit={(event) => {
-          event.preventDefault()
-          void save()
-        }}
-      >
-        <SettingsGroup title={t('clientsBasicSection')}>
-          <SettingsRow>
-            <LocalizedTextField
-              name="names"
-              label={t('localizedName')}
-              defaultValue={text.name}
-              onDefaultValueChange={(name) => {
-                setText({ ...text, name })
-                touched()
-              }}
-              value={text.names}
-              onChange={(names) => {
-                setText({ ...text, names })
-                touched()
-              }}
-              isDisabled={pending || !editable}
-              isRequired
-              maxLength={256}
-              error={nameError ? t(nameError) : (errors.text.name ?? errors.text.names)}
-            />
-          </SettingsRow>
-          <SettingsRow>
-            <LocalizedTextField
-              name="descriptions"
-              label={t('localizedDescription')}
-              defaultValue={text.description}
-              onDefaultValueChange={(description) => {
-                setText({ ...text, description })
-                touched()
-              }}
-              value={text.descriptions}
-              onChange={(descriptions) => {
-                setText({ ...text, descriptions })
-                touched()
-              }}
-              isDisabled={pending || !editable}
-              multiline
-              maxLength={1024}
-              error={errors.text.description ?? errors.text.descriptions}
-            />
-          </SettingsRow>
-          <SettingsRow
-            label={t('tableColumnCreated')}
-            action={
-              <span className="text-sm text-muted-foreground">
-                {formatDateTime(client.createdAt, locale, timeZone)}
-              </span>
-            }
-          />
-          <SettingsRow
-            label={t('clientsUpdated')}
-            action={
-              <span className="text-sm text-muted-foreground">
-                {client.updatedAt
-                  ? formatDateTime(client.updatedAt, locale, timeZone)
-                  : t('clientsNeverUpdated')}
-              </span>
-            }
-          />
-        </SettingsGroup>
-
-        <SettingsGroup title={t('clientsRedirectSection')}>
-          <RedirectUriRows {...fieldProps} />
-        </SettingsGroup>
-
-        <SettingsGroup title={t('clientsCorsSection')}>
-          <CorsRow {...fieldProps} />
-          {client.corsEnabled ? (
-            <SettingsRow
-              label={t('clientsCorsOrigins')}
-              description={t('clientsCorsOriginsHint')}
-            >
-              {client.corsOrigins.length ? (
-                <ul className="flex flex-wrap gap-2">
-                  {client.corsOrigins.map((origin) => (
-                    <li key={origin}>
-                      <code className="rounded-lg bg-muted px-2 py-1 text-xs">
-                        {origin}
-                      </code>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="text-sm text-muted-foreground">{t('clientsCorsOriginsEmpty')}</p>
-              )}
-            </SettingsRow>
+    <ClientEditForm
+      client={client}
+      editor={editor}
+      after={
+        <>
+          {!client.enabled ? (
+            <Alert className="console-card border border-border text-warning">
+              <TriangleAlert aria-hidden="true" />
+              <AlertTitle>{t('clientsDisabledTitle')}</AlertTitle>
+              <AlertDescription>{t('clientsDisabledDescription')}</AlertDescription>
+            </Alert>
           ) : null}
-        </SettingsGroup>
+          {!client.builtIn && (scope.state || scope.delete) ? (
+            <ClientLifecycle client={client} />
+          ) : null}
+        </>
+      }
+    >
+      <SettingsGroup title={t('clientsBasicSection')}>
+        <SettingsRow>
+          <LocalizedTextField
+            name="names"
+            label={t('localizedName')}
+            defaultValue={text.name}
+            onDefaultValueChange={(name) => editor.setText({ ...text, name })}
+            value={text.names}
+            onChange={(names) => editor.setText({ ...text, names })}
+            isDisabled={disabled}
+            isRequired
+            maxLength={256}
+            error={
+              editor.nameError
+                ? t(editor.nameError)
+                : (editor.errors.text.name ?? editor.errors.text.names)
+            }
+          />
+        </SettingsRow>
+        <SettingsRow>
+          <LocalizedTextField
+            name="descriptions"
+            label={t('localizedDescription')}
+            defaultValue={text.description}
+            onDefaultValueChange={(description) => editor.setText({ ...text, description })}
+            value={text.descriptions}
+            onChange={(descriptions) => editor.setText({ ...text, descriptions })}
+            isDisabled={disabled}
+            multiline
+            maxLength={1024}
+            error={editor.errors.text.description ?? editor.errors.text.descriptions}
+          />
+        </SettingsRow>
+        <SettingsRow
+          label={t('tableColumnCreated')}
+          action={
+            <span className="text-sm text-muted-foreground">
+              {formatDateTime(client.createdAt, locale, timeZone)}
+            </span>
+          }
+        />
+        <SettingsRow
+          label={t('clientsUpdated')}
+          action={
+            <span className="text-sm text-muted-foreground">
+              {client.updatedAt
+                ? formatDateTime(client.updatedAt, locale, timeZone)
+                : t('clientsNeverUpdated')}
+            </span>
+          }
+        />
+      </SettingsGroup>
 
-        <SettingsGroup title={t('clientsGrantTypes')}>
-          <GrantTypeRows {...fieldProps} />
-        </SettingsGroup>
-
-        <SettingsGroup
-          title={t('clientsPublicClientSection')}
-          description={t('clientsPublicClientSectionHint')}
-        >
-          <PublicClientFlowRow {...fieldProps} />
-        </SettingsGroup>
-
-        <SettingsGroup title={t('clientsAuthorizationRequestsSection')}>
-          <ParRow {...fieldProps} />
-        </SettingsGroup>
-
-        <SettingsGroup
-          title={t('clientsOAuthSection')}
-          description={t('clientsOAuthSectionHint')}
-        >
-          <OAuthVersionRow {...fieldProps} />
-        </SettingsGroup>
-
-        <SettingsGroup title={t('clientsTokenClaimsSection')}>
-          <ScopedClaimRows {...fieldProps} />
-        </SettingsGroup>
-
-        {editable ? (
-          <div className="flex flex-wrap items-center justify-end gap-3">
-            {settingsChanged ? (
-              <span className="text-xs text-muted-foreground">{t('clientsSettingsWithdrawNote')}</span>
-            ) : null}
-            <Button type="submit" disabled={pending || !dirty}>
-              {pending ? (
-                <Spinner aria-label={t('clientsSavePending')} />
-              ) : (
-                <Save className="size-4" aria-hidden="true" />
-              )}
-              {t('clientsSave')}
-            </Button>
-          </div>
-        ) : null}
-      </form>
-
-      {!client.builtIn && (scope.state || scope.delete || scope.update) ? (
-        <ClientLifecycle client={client} />
-      ) : null}
-    </div>
+      <SettingsGroup
+        title={t('clientsApplicationLinksSection')}
+        description={t('clientsApplicationLinksSectionHint')}
+      >
+        <ApplicationLinkRows
+          draft={editor.advanced}
+          onChange={editor.setAdvanced}
+          errors={editor.errors.advanced}
+          isDisabled={disabled}
+        />
+      </SettingsGroup>
+    </ClientEditForm>
   )
 }
 
@@ -370,7 +148,6 @@ function ClientLifecycle({ client }: { client: ConsoleClient }) {
   const mutations = useClientMutations()
   const stateDialog = useOverlayState()
   const deleteDialog = useOverlayState()
-  const consentDialog = useOverlayState()
   const [pending, setPending] = useState(false)
   const [feedback, setFeedback] = useState<RbacFeedbackState | null>(null)
 
@@ -380,7 +157,7 @@ function ClientLifecycle({ client }: { client: ConsoleClient }) {
     setPending(true)
     try {
       const input = { id: client.id, expectedVersion: client.version }
-      let result: MutationResultLike
+      let result: Parameters<typeof mutationFeedback>[0]
       let changed: boolean
       if (client.enabled) {
         const disabled = await mutations.disable(input)
@@ -391,39 +168,12 @@ function ClientLifecycle({ client }: { client: ConsoleClient }) {
         result = enabled
         changed = Boolean(enabled.data?.enableClient)
       }
-      if (!changed) {
-        setFeedback(feedbackFrom(result, 'missing_client_state_payload'))
-        stateDialog.close()
-        return
-      }
       stateDialog.close()
-      toast.success(t(client.enabled ? 'clientsDisabledToast' : 'clientsEnabledToast'))
-    } finally {
-      setPending(false)
-    }
-  }
-
-  async function setSkipConsent(skipConsent: boolean) {
-    setPending(true)
-    try {
-      const result = await mutations.update({
-        id: client.id,
-        expectedVersion: client.version,
-        settings: settingsInput({ ...settingsDraftFromClient(client), skipConsent }),
-      })
-      consentDialog.close()
-      if (!result.data?.updateClient) {
-        setFeedback(feedbackFrom(result, 'missing_update_client_payload'))
+      if (!changed) {
+        setFeedback(mutationFeedback(result, 'missing_client_state_payload'))
         return
       }
-      toast.success(t('clientsSavedToast'), { description: t('clientsSavedWithdrawn') })
-    } catch {
-      consentDialog.close()
-      setFeedback({
-        errors: [],
-        failure: { kind: 'network', code: 'client_update_request_failed' },
-        forbidden: false,
-      })
+      toast.success(t(client.enabled ? 'clientsDisabledToast' : 'clientsEnabledToast'))
     } finally {
       setPending(false)
     }
@@ -436,12 +186,11 @@ function ClientLifecycle({ client }: { client: ConsoleClient }) {
         id: client.id,
         expectedVersion: client.version,
       })
+      deleteDialog.close()
       if (!result.data?.deleteClient) {
-        setFeedback(feedbackFrom(result, 'missing_delete_client_payload'))
-        deleteDialog.close()
+        setFeedback(mutationFeedback(result, 'missing_delete_client_payload'))
         return
       }
-      deleteDialog.close()
       toast.success(t('clientsDeletedToast'))
       void navigate({ to: '/clients', replace: true })
     } finally {
@@ -459,31 +208,6 @@ function ClientLifecycle({ client }: { client: ConsoleClient }) {
             reloadPending={query.refreshing}
           />
         </div>
-      ) : null}
-      {scope.update ? (
-        <SettingsRow
-          label={t('clientsSkipConsent')}
-          description={t(
-            client.skipConsent ? 'clientsSkipConsentOnHint' : 'clientsSkipConsentHint',
-          )}
-          action={
-            client.skipConsent ? (
-              <Button
-                variant="destructive"
-                disabled={pending}
-                onClick={() => void setSkipConsent(false)}
-              >
-                <ShieldCheck className="size-4" aria-hidden="true" />
-                {t('clientsSkipConsentDisable')}
-              </Button>
-            ) : (
-              <Button variant="destructive" onClick={consentDialog.open}>
-                <ShieldOff className="size-4" aria-hidden="true" />
-                {t('clientsSkipConsentEnable')}
-              </Button>
-            )
-          }
-        />
       ) : null}
       {scope.state ? (
         <SettingsRow
@@ -521,15 +245,6 @@ function ClientLifecycle({ client }: { client: ConsoleClient }) {
         destructive={client.enabled}
         pending={pending}
         onConfirm={() => void toggle()}
-      />
-      <ConfirmationDialog
-        state={consentDialog}
-        title={t('clientsSkipConsentConfirmTitle')}
-        description={t('clientsSkipConsentConfirmDescription')}
-        confirmLabel={t('clientsSkipConsentEnable')}
-        destructive
-        pending={pending}
-        onConfirm={() => void setSkipConsent(true)}
       />
       <ConfirmationDialog
         state={deleteDialog}

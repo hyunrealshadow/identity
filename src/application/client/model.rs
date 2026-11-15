@@ -5,7 +5,8 @@ use identity_domain::{
     client::model::ClientOid,
     openid_connect::{
         GrantType, OAuthProtocolVersion, OpenIdConnectClientPlatformType,
-        OpenIdConnectCredentialOid, OpenIdConnectCredentialType, TokenEndpointAuthMethod,
+        OpenIdConnectCredentialOid, OpenIdConnectCredentialType, SubjectType,
+        TokenEndpointAuthMethod,
     },
     rbac::LocalizedText,
 };
@@ -107,6 +108,56 @@ pub struct ClientProtocolSettings {
     pub include_scoped_claims_in_access_token: bool,
 }
 
+pub const MAX_CONTACTS: usize = 10;
+pub const MAX_CONTACT_LENGTH: usize = 320;
+pub const MAX_REQUEST_URIS: usize = 20;
+pub const MAX_DEFAULT_ACR_VALUES: usize = 5;
+pub const MAX_ALGORITHMS: usize = 16;
+/// Upper bound for `default_max_age`: one year, in seconds.
+pub const MAX_DEFAULT_MAX_AGE_SECONDS: i32 = 31_536_000;
+
+/// OpenID Connect registration metadata beyond the core protocol settings:
+/// logout channels, application links, subject identifiers, authentication
+/// requirements and JOSE algorithm choices. It is edited as one unit and kept
+/// separate from [`ClientProtocolSettings`] so a protocol-settings update never
+/// resets it.
+///
+/// Algorithm lists hold registered JOSE names (`ES256`, `RSA-OAEP`,
+/// `A128GCM`) and an empty list leaves the provider default in force. Response
+/// signing and encryption lists are ordered preferences the runtime tries in
+/// turn; request object and client assertion lists are allow-lists.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ClientAdvancedSettings {
+    pub frontchannel_logout_uri: Option<String>,
+    pub frontchannel_logout_session_required: bool,
+    pub backchannel_logout_uri: Option<String>,
+    pub backchannel_logout_session_required: bool,
+    pub logo_uri: Option<String>,
+    pub client_uri: Option<String>,
+    pub policy_uri: Option<String>,
+    pub tos_uri: Option<String>,
+    pub contacts: Vec<String>,
+    /// Pairwise subjects derive from the sector identifier host, or from the
+    /// first redirect URI host when no sector identifier is registered.
+    pub subject_type: SubjectType,
+    pub sector_identifier_uri: Option<String>,
+    pub default_max_age: Option<i32>,
+    pub require_auth_time: bool,
+    pub default_acr_values: Vec<String>,
+    pub id_token_signed_response_algs: Vec<String>,
+    pub id_token_encrypted_response_algs: Vec<String>,
+    pub id_token_encrypted_response_encs: Vec<String>,
+    pub userinfo_signed_response_algs: Vec<String>,
+    pub userinfo_encrypted_response_algs: Vec<String>,
+    pub userinfo_encrypted_response_encs: Vec<String>,
+    pub request_object_signing_algs: Vec<String>,
+    pub request_object_encryption_algs: Vec<String>,
+    pub request_object_encryption_encs: Vec<String>,
+    pub request_uris: Vec<String>,
+    pub token_endpoint_auth_signing_algs: Vec<String>,
+    pub initiate_login_uri: Option<String>,
+}
+
 /// One managed OAuth client plus its UUID optimistic-lock version.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClientRecord {
@@ -118,6 +169,7 @@ pub struct ClientRecord {
     pub built_in: bool,
     pub enabled: bool,
     pub settings: ClientProtocolSettings,
+    pub advanced: ClientAdvancedSettings,
     /// Read-only projection of the CORS origins derived from the settings.
     pub cors_origins: Vec<String>,
     /// `client.version`; shared with client scope assignment.
@@ -217,6 +269,7 @@ pub struct UpdateClientCommand {
     pub names: Option<Vec<LocalizedText>>,
     pub descriptions: Option<Vec<LocalizedText>>,
     pub settings: Option<ClientProtocolSettings>,
+    pub advanced: Option<ClientAdvancedSettings>,
     pub reason: String,
     pub client_mutation_id: Option<String>,
 }

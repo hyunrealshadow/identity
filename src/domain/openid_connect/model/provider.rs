@@ -8,9 +8,11 @@ fn is_empty<T>(value: &Option<Vec<T>>) -> bool {
     value.as_ref().is_none_or(Vec::is_empty)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Display, AsRefStr, EnumIter)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Display, AsRefStr, EnumIter)]
 #[strum(serialize_all = "snake_case")]
 pub enum SubjectType {
+    /// OpenID Connect Core §8: the default when a client registers none.
+    #[default]
     Public,
     Pairwise,
 }
@@ -106,8 +108,6 @@ pub struct OpenIdProviderMetadata {
     pub jwks_uri: Url,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub registration_endpoint: Option<Url>,
-    #[serde(skip_serializing_if = "is_empty")]
-    pub scopes_supported: Option<Vec<String>>,
     pub response_types_supported: Vec<String>,
     #[serde(skip_serializing_if = "is_empty")]
     pub response_modes_supported: Option<Vec<String>>,
@@ -199,7 +199,6 @@ mod tests {
             device_authorization_endpoint: None,
             jwks_uri: Url::parse("https://identity.example.com/.well-known/keys").unwrap(),
             registration_endpoint: None,
-            scopes_supported: Some(vec![]),
             response_types_supported: vec!["code".to_owned()],
             response_modes_supported: Some(vec![]),
             grant_types_supported: Some(vec![]),
@@ -239,7 +238,6 @@ mod tests {
 
         let value = to_value(&metadata).unwrap();
 
-        assert!(value.get("scopes_supported").is_none());
         assert!(value.get("token_endpoint_auth_methods_supported").is_none());
         assert!(value.get("claims_supported").is_none());
     }

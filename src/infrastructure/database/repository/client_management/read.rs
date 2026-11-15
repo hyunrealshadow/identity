@@ -16,7 +16,10 @@ use sea_orm::{
     ColumnTrait, ConnectionTrait, DbBackend, EntityTrait, QueryFilter, QueryOrder, Statement,
 };
 
-use super::support::{corrupt, storage};
+use super::{
+    advanced::advanced_from_metadata,
+    support::{corrupt, storage},
+};
 use crate::database::{
     entity::{
         client,
@@ -127,6 +130,7 @@ pub(super) async fn load_records<C: ConnectionTrait>(
                         .settings
                         .include_scoped_claims_in_access_token,
                 },
+                advanced: advanced_from_metadata(&metadata),
                 cors_origins: origins.remove(&model.id).unwrap_or_default(),
                 version: model.version,
                 created_at: model.created_at.with_timezone(&Utc),

@@ -1,11 +1,13 @@
 use crate::graphql::schema::access::access;
-use async_graphql::{Context, Enum, ID, InputObject, Object, Result as GraphqlResult};
+use async_graphql::{
+    Context, Enum, ID, InputObject, Object, Result as GraphqlResult, SimpleObject,
+};
 use chrono::{DateTime, Utc};
 use identity_application::{
     authorization::ManagementTarget,
     client::{
-        ClientCredentialRecord, ClientFilter as ApplicationFilter, ClientOrder as ApplicationOrder,
-        ClientPlatform, ClientProtocolSettings, ClientRecord,
+        ClientAdvancedSettings, ClientCredentialRecord, ClientFilter as ApplicationFilter,
+        ClientOrder as ApplicationOrder, ClientPlatform, ClientProtocolSettings, ClientRecord,
     },
 };
 use identity_domain::global_id::GlobalId;
@@ -14,7 +16,8 @@ use identity_domain::{
     client::model::ClientOid,
     openid_connect::{
         GrantType, OAuthProtocolVersion, OpenIdConnectClientPlatformType,
-        OpenIdConnectCredentialOid, OpenIdConnectCredentialType, TokenEndpointAuthMethod,
+        OpenIdConnectCredentialOid, OpenIdConnectCredentialType, SubjectType,
+        TokenEndpointAuthMethod,
     },
 };
 use uuid::Uuid;
@@ -159,6 +162,34 @@ impl From<ClientOAuthVersion> for OAuthProtocolVersion {
         match value {
             ClientOAuthVersion::V2_0 => Self::V2_0,
             ClientOAuthVersion::V2_1 => Self::V2_1,
+        }
+    }
+}
+
+/// How the `sub` claim is formed for this client's users.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]
+pub(crate) enum ClientSubjectType {
+    /// The same identifier for every client.
+    Public,
+    /// An identifier unique to the client's sector, so separate parties cannot
+    /// correlate one user.
+    Pairwise,
+}
+
+impl From<SubjectType> for ClientSubjectType {
+    fn from(value: SubjectType) -> Self {
+        match value {
+            SubjectType::Public => Self::Public,
+            SubjectType::Pairwise => Self::Pairwise,
+        }
+    }
+}
+
+impl From<ClientSubjectType> for SubjectType {
+    fn from(value: ClientSubjectType) -> Self {
+        match value {
+            ClientSubjectType::Public => Self::Public,
+            ClientSubjectType::Pairwise => Self::Pairwise,
         }
     }
 }
@@ -407,6 +438,12 @@ impl ClientNode {
         self.record.settings.include_scoped_claims_in_access_token
     }
 
+    /// Logout channels, application links, subject identifiers,
+    /// authentication requirements and JOSE algorithm choices.
+    async fn advanced_settings(&self) -> ClientAdvancedSettingsNode {
+        ClientAdvancedSettingsNode::from(&self.record.advanced)
+    }
+
     /// Browser origins derived from the redirect URIs while CORS is enabled.
     async fn cors_origins(&self) -> &[String] {
         &self.record.cors_origins
@@ -526,6 +563,170 @@ impl From<ClientSettingsInput> for ClientProtocolSettings {
     }
 }
 
+/// Advanced OpenID Connect metadata. Algorithm lists take registered JOSE
+/// names; an empty list keeps the provider default. Response signing and
+/// encryption lists are tried in order; request object and client assertion
+/// lists are allow-lists. Supported values come from `clientMetadataOptions`.
+#[derive(SimpleObject)]
+#[graphql(name = "ClientAdvancedSettings")]
+pub(crate) struct ClientAdvancedSettingsNode {
+    frontchannel_logout_uri: Option<String>,
+    frontchannel_logout_session_required: bool,
+    backchannel_logout_uri: Option<String>,
+    backchannel_logout_session_required: bool,
+    logo_uri: Option<String>,
+    client_uri: Option<String>,
+    policy_uri: Option<String>,
+    tos_uri: Option<String>,
+    contacts: Vec<String>,
+    subject_type: ClientSubjectType,
+    sector_identifier_uri: Option<String>,
+    /// Seconds; `null` sets no default.
+    default_max_age: Option<i32>,
+    require_auth_time: bool,
+    /// Authentication context classes requested when a request names none,
+    /// in order of preference; any one of them satisfies the request. Empty
+    /// lets the request decide.
+    default_acr_values: Vec<String>,
+    id_token_signed_response_algs: Vec<String>,
+    id_token_encrypted_response_algs: Vec<String>,
+    id_token_encrypted_response_encs: Vec<String>,
+    userinfo_signed_response_algs: Vec<String>,
+    userinfo_encrypted_response_algs: Vec<String>,
+    userinfo_encrypted_response_encs: Vec<String>,
+    request_object_signing_algs: Vec<String>,
+    request_object_encryption_algs: Vec<String>,
+    request_object_encryption_encs: Vec<String>,
+    request_uris: Vec<String>,
+    token_endpoint_auth_signing_algs: Vec<String>,
+    initiate_login_uri: Option<String>,
+}
+
+impl From<&ClientAdvancedSettings> for ClientAdvancedSettingsNode {
+    fn from(value: &ClientAdvancedSettings) -> Self {
+        let value = value.clone();
+        Self {
+            frontchannel_logout_uri: value.frontchannel_logout_uri,
+            frontchannel_logout_session_required: value.frontchannel_logout_session_required,
+            backchannel_logout_uri: value.backchannel_logout_uri,
+            backchannel_logout_session_required: value.backchannel_logout_session_required,
+            logo_uri: value.logo_uri,
+            client_uri: value.client_uri,
+            policy_uri: value.policy_uri,
+            tos_uri: value.tos_uri,
+            contacts: value.contacts,
+            subject_type: value.subject_type.into(),
+            sector_identifier_uri: value.sector_identifier_uri,
+            default_max_age: value.default_max_age,
+            require_auth_time: value.require_auth_time,
+            default_acr_values: value.default_acr_values,
+            id_token_signed_response_algs: value.id_token_signed_response_algs,
+            id_token_encrypted_response_algs: value.id_token_encrypted_response_algs,
+            id_token_encrypted_response_encs: value.id_token_encrypted_response_encs,
+            userinfo_signed_response_algs: value.userinfo_signed_response_algs,
+            userinfo_encrypted_response_algs: value.userinfo_encrypted_response_algs,
+            userinfo_encrypted_response_encs: value.userinfo_encrypted_response_encs,
+            request_object_signing_algs: value.request_object_signing_algs,
+            request_object_encryption_algs: value.request_object_encryption_algs,
+            request_object_encryption_encs: value.request_object_encryption_encs,
+            request_uris: value.request_uris,
+            token_endpoint_auth_signing_algs: value.token_endpoint_auth_signing_algs,
+            initiate_login_uri: value.initiate_login_uri,
+        }
+    }
+}
+
+/// Advanced OpenID Connect metadata, replaced as one unit. Omitted values
+/// clear the field back to the provider default.
+#[derive(Clone, InputObject)]
+pub(crate) struct ClientAdvancedSettingsInput {
+    #[graphql(validator(chars_max_length = 2048))]
+    pub frontchannel_logout_uri: Option<String>,
+    #[graphql(default)]
+    pub frontchannel_logout_session_required: bool,
+    #[graphql(validator(chars_max_length = 2048))]
+    pub backchannel_logout_uri: Option<String>,
+    #[graphql(default)]
+    pub backchannel_logout_session_required: bool,
+    #[graphql(validator(chars_max_length = 2048))]
+    pub logo_uri: Option<String>,
+    #[graphql(validator(chars_max_length = 2048))]
+    pub client_uri: Option<String>,
+    #[graphql(validator(chars_max_length = 2048))]
+    pub policy_uri: Option<String>,
+    #[graphql(validator(chars_max_length = 2048))]
+    pub tos_uri: Option<String>,
+    #[graphql(default, validator(max_items = 10))]
+    pub contacts: Vec<String>,
+    #[graphql(default_with = "ClientSubjectType::Public")]
+    pub subject_type: ClientSubjectType,
+    #[graphql(validator(chars_max_length = 2048))]
+    pub sector_identifier_uri: Option<String>,
+    #[graphql(validator(minimum = 0, maximum = 31536000))]
+    pub default_max_age: Option<i32>,
+    #[graphql(default)]
+    pub require_auth_time: bool,
+    #[graphql(default, validator(max_items = 5))]
+    pub default_acr_values: Vec<String>,
+    #[graphql(default, validator(max_items = 16, list, chars_max_length = 32))]
+    pub id_token_signed_response_algs: Vec<String>,
+    #[graphql(default, validator(max_items = 16, list, chars_max_length = 32))]
+    pub id_token_encrypted_response_algs: Vec<String>,
+    #[graphql(default, validator(max_items = 16, list, chars_max_length = 32))]
+    pub id_token_encrypted_response_encs: Vec<String>,
+    #[graphql(default, validator(max_items = 16, list, chars_max_length = 32))]
+    pub userinfo_signed_response_algs: Vec<String>,
+    #[graphql(default, validator(max_items = 16, list, chars_max_length = 32))]
+    pub userinfo_encrypted_response_algs: Vec<String>,
+    #[graphql(default, validator(max_items = 16, list, chars_max_length = 32))]
+    pub userinfo_encrypted_response_encs: Vec<String>,
+    #[graphql(default, validator(max_items = 16, list, chars_max_length = 32))]
+    pub request_object_signing_algs: Vec<String>,
+    #[graphql(default, validator(max_items = 16, list, chars_max_length = 32))]
+    pub request_object_encryption_algs: Vec<String>,
+    #[graphql(default, validator(max_items = 16, list, chars_max_length = 32))]
+    pub request_object_encryption_encs: Vec<String>,
+    #[graphql(default, validator(max_items = 20))]
+    pub request_uris: Vec<String>,
+    #[graphql(default, validator(max_items = 16, list, chars_max_length = 32))]
+    pub token_endpoint_auth_signing_algs: Vec<String>,
+    #[graphql(validator(chars_max_length = 2048))]
+    pub initiate_login_uri: Option<String>,
+}
+
+impl From<ClientAdvancedSettingsInput> for ClientAdvancedSettings {
+    fn from(input: ClientAdvancedSettingsInput) -> Self {
+        Self {
+            frontchannel_logout_uri: input.frontchannel_logout_uri,
+            frontchannel_logout_session_required: input.frontchannel_logout_session_required,
+            backchannel_logout_uri: input.backchannel_logout_uri,
+            backchannel_logout_session_required: input.backchannel_logout_session_required,
+            logo_uri: input.logo_uri,
+            client_uri: input.client_uri,
+            policy_uri: input.policy_uri,
+            tos_uri: input.tos_uri,
+            contacts: input.contacts,
+            subject_type: input.subject_type.into(),
+            sector_identifier_uri: input.sector_identifier_uri,
+            default_max_age: input.default_max_age,
+            require_auth_time: input.require_auth_time,
+            default_acr_values: input.default_acr_values,
+            id_token_signed_response_algs: input.id_token_signed_response_algs,
+            id_token_encrypted_response_algs: input.id_token_encrypted_response_algs,
+            id_token_encrypted_response_encs: input.id_token_encrypted_response_encs,
+            userinfo_signed_response_algs: input.userinfo_signed_response_algs,
+            userinfo_encrypted_response_algs: input.userinfo_encrypted_response_algs,
+            userinfo_encrypted_response_encs: input.userinfo_encrypted_response_encs,
+            request_object_signing_algs: input.request_object_signing_algs,
+            request_object_encryption_algs: input.request_object_encryption_algs,
+            request_object_encryption_encs: input.request_object_encryption_encs,
+            request_uris: input.request_uris,
+            token_endpoint_auth_signing_algs: input.token_endpoint_auth_signing_algs,
+            initiate_login_uri: input.initiate_login_uri,
+        }
+    }
+}
+
 #[derive(Clone, InputObject)]
 pub(crate) struct CreateClientInput {
     #[graphql(validator(chars_min_length = 1, chars_max_length = 256))]
@@ -556,6 +757,8 @@ pub(crate) struct UpdateClientInput {
     #[graphql(validator(max_items = 20))]
     pub descriptions: Option<Vec<LocalizedTextInput>>,
     pub settings: Option<ClientSettingsInput>,
+    /// Omitting this keeps the current advanced metadata.
+    pub advanced_settings: Option<ClientAdvancedSettingsInput>,
     #[graphql(default, validator(chars_max_length = 1000))]
     pub reason: String,
     #[graphql(validator(chars_max_length = 255))]

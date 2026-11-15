@@ -1,6 +1,6 @@
 use crate::graphql::schema::access::access;
 use async_graphql::{
-    Context, ID, Object, Result,
+    Context, ID, Object, Result, SimpleObject,
     connection::{Connection, Edge},
 };
 use identity_application::authorization::ManagementTarget;
@@ -82,4 +82,52 @@ impl ClientQuery {
         }));
         Ok(connection)
     }
+
+    /// Values a client may register in its advanced settings, the same lists
+    /// discovery publishes. Provider signing follows the active signing keys
+    /// and request object encryption the active encryption keys.
+    #[graphql(
+        guard = "ManagementGuard::new(ManagementScope::ClientsRead, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::ClientsRead))
+    )]
+    async fn client_metadata_options(&self, ctx: &Context<'_>) -> Result<ClientMetadataOptions> {
+        let options = request_context(ctx)?
+            .state
+            .services()
+            .oidc()
+            .client_metadata_options()
+            .await
+            .map_err(|error| app_error(ctx, error))?;
+        Ok(ClientMetadataOptions {
+            subject_types: options.subject_types,
+            acr_values: options.acr_values,
+            id_token_signing_algs: options.id_token_signing_algs,
+            id_token_encryption_algs: options.id_token_encryption_algs,
+            id_token_encryption_encs: options.id_token_encryption_encs,
+            userinfo_signing_algs: options.userinfo_signing_algs,
+            userinfo_encryption_algs: options.userinfo_encryption_algs,
+            userinfo_encryption_encs: options.userinfo_encryption_encs,
+            request_object_signing_algs: options.request_object_signing_algs,
+            request_object_encryption_algs: options.request_object_encryption_algs,
+            request_object_encryption_encs: options.request_object_encryption_encs,
+            token_endpoint_auth_signing_algs: options.token_endpoint_auth_signing_algs,
+        })
+    }
+}
+
+/// Supported values for the advanced client settings.
+#[derive(SimpleObject)]
+pub(crate) struct ClientMetadataOptions {
+    subject_types: Vec<String>,
+    acr_values: Vec<String>,
+    id_token_signing_algs: Vec<String>,
+    id_token_encryption_algs: Vec<String>,
+    id_token_encryption_encs: Vec<String>,
+    userinfo_signing_algs: Vec<String>,
+    userinfo_encryption_algs: Vec<String>,
+    userinfo_encryption_encs: Vec<String>,
+    request_object_signing_algs: Vec<String>,
+    request_object_encryption_algs: Vec<String>,
+    request_object_encryption_encs: Vec<String>,
+    token_endpoint_auth_signing_algs: Vec<String>,
 }

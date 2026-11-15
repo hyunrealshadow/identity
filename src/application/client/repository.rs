@@ -18,8 +18,9 @@ use identity_domain::{
 use uuid::Uuid;
 
 use super::model::{
-    ClientCredentialRecord, ClientCredentialResult, ClientCredentialRevokeResult, ClientFilter,
-    ClientOrder, ClientProtocolSettings, ClientRecord, ClientSecretResult,
+    ClientAdvancedSettings, ClientCredentialRecord, ClientCredentialResult,
+    ClientCredentialRevokeResult, ClientFilter, ClientOrder, ClientProtocolSettings, ClientRecord,
+    ClientSecretResult,
 };
 use crate::{
     authorization::ManagementAuthorizationError,
@@ -124,6 +125,7 @@ pub struct UpdateClientTransaction {
     pub names: Option<Vec<LocalizedText>>,
     pub descriptions: Option<Vec<LocalizedText>>,
     pub settings: Option<ClientProtocolSettings>,
+    pub advanced: Option<ClientAdvancedSettings>,
     pub reason: String,
     pub authority: RbacManagementAuthority,
 }
