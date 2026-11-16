@@ -1,3 +1,4 @@
+import { AuthenticationContextClass } from '@identity/graphql-access'
 import {
   createContext,
   useCallback,
@@ -244,7 +245,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // The management console requests AAL2 for ordinary sign-in, but it
           // deliberately omits max_age so read-only users are not forced into
           // a recent-authentication window.
-          acrValues: options.stepUp ? undefined : (options.acrValues ?? 'aal2'),
+          acrValues: options.stepUp ? undefined : (options.acrValues ?? AuthenticationContextClass.MultiFactor),
           // Only an explicit step-up uses the current session as a routing hint
           // and an identity binding. Ordinary and switch-account sign-in send
           // neither.
@@ -351,9 +352,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             // Expired or rejected credentials require ordinary sign-in, not
             // an assurance/freshness challenge against the invalid session.
             stepUp: challenge
-              ? { acrValues: challenge.acrValues ?? 'aal2', maxAge: 0 }
+              ? { acrValues: challenge.acrValues ?? AuthenticationContextClass.MultiFactor, maxAge: 0 }
               : undefined,
-            acrValues: challenge ? undefined : 'aal2',
+            acrValues: challenge ? undefined : AuthenticationContextClass.MultiFactor,
             loginHint,
             expectedSubject,
             beforeRedirect: (request) => {
@@ -535,7 +536,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             locale,
             returnTo,
             stepUp: {
-              acrValues: challenge?.acrValues ?? 'aal2',
+              acrValues: challenge?.acrValues ?? AuthenticationContextClass.MultiFactor,
               maxAge: 0,
             },
             loginHint,

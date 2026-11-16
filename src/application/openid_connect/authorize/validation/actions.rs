@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use identity_domain::auth::AuthenticationContextClass;
 use identity_domain::openid_connect::{
     AuthorizationRequest, CodeChallengeMethod, Display, OAuthProtocolVersion, OpenIdConnectClient,
     PromptValue, ResponseMode, ResponseType, ScopeSet, TokenEndpointAuthMethod,
@@ -266,9 +267,12 @@ impl AuthorizeService {
 
         self.validate_redirect_uri(client, &params.redirect_uri)?;
 
+        // Values this instance does not define can never be established, so
+        // they are dropped; a request naming none of ours asks for nothing.
         let acr_values = params
             .acr_values
-            .map(|value| value.split_whitespace().map(str::to_owned).collect())
+            .map(|value| AuthenticationContextClass::parse_list(value.split_whitespace()))
+            .filter(|classes| !classes.is_empty())
             .or_else(|| {
                 scope
                     .contains_openid()

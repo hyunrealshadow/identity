@@ -292,7 +292,7 @@ mod tests {
     use async_trait::async_trait;
     use chrono::{DateTime, Utc};
     use identity_domain::auth::{
-        SessionOid, SessionStatus,
+        AuthenticationContextClass, SessionOid, SessionStatus,
         model::{ActiveSession, Session},
         repository::{
             CreateSessionInput, SessionPage, SessionPageDirection, SessionRepository,
@@ -373,7 +373,7 @@ mod tests {
             &self,
             _oid: SessionOid,
             _expected_user_oid: Uuid,
-            _acr: &str,
+            _acr: AuthenticationContextClass,
             _acr_expires_at: DateTime<Utc>,
             _amr: &[String],
         ) -> Result<Session, SessionRepositoryError> {

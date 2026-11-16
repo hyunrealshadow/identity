@@ -114,7 +114,10 @@ impl SessionRepositoryImpl {
                 .col_expr(SessionColumn::AuthenticatedAt, Expr::value(Some(now)))
                 .col_expr(SessionColumn::LastActiveAt, Expr::value(now))
                 .col_expr(SessionColumn::UpdatedAt, Expr::value(Some(now)))
-                .col_expr(SessionColumn::Acr, Expr::value(input.acr))
+                .col_expr(
+                    SessionColumn::Acr,
+                    Expr::value(input.acr.map(|acr| acr.to_string())),
+                )
                 .col_expr(
                     SessionColumn::AcrExpiresAt,
                     Expr::value(input.acr_expires_at.map(|v| v.fixed_offset())),
@@ -149,7 +152,7 @@ impl SessionRepositoryImpl {
                 expires_at: Set(encode_nonnullable_expiry(input.expires_at)),
                 created_at: Set(now),
                 updated_at: Set(None),
-                acr: Set(input.acr),
+                acr: Set(input.acr.map(|acr| acr.to_string())),
                 acr_expires_at: Set(input.acr_expires_at.map(Into::into)),
                 amr: Set(json!(input.amr)),
                 ..Default::default()

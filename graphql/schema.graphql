@@ -397,6 +397,16 @@ type ClientMetadataOptions {
 	requestObjectEncryptionAlgs: [String!]!
 	requestObjectEncryptionEncs: [String!]!
 	tokenEndpointAuthSigningAlgs: [String!]!
+	"""
+	Provider signing algorithms (ID Token, UserInfo) with an active key
+	now. Keys can be revoked at any time, so settings may list others; an
+	issuance skips listed algorithms without a key.
+	"""
+	activeSigningAlgs: [String!]!
+	"""
+	Request object encryption algorithms with an active decryption key now.
+	"""
+	activeRequestObjectEncryptionAlgs: [String!]!
 }
 
 """
@@ -1416,9 +1426,9 @@ type QueryRoot {
 	client(id: ID!): Client @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	clients(filter: ClientFilter, orderBy: ClientOrder, first: Int, after: String, last: Int, before: String): ClientConnection! @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	"""
-	Values a client may register in its advanced settings, the same lists
-	discovery publishes. Provider signing follows the active signing keys
-	and request object encryption the active encryption keys.
+	Values a client may register in its advanced settings: everything the
+	provider supports, whether or not a key for it is active now. Each
+	issuance uses the first listed algorithm with an active key.
 	"""
 	clientMetadataOptions: ClientMetadataOptions! @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	"""

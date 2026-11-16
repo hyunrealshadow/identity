@@ -30,6 +30,7 @@ import { Route as HealthMetricsRouteImport } from './routes/health.metrics'
 import { Route as HealthReadyRouteImport } from './routes/health.ready'
 import { Route as LoginMethodRouteImport } from './routes/login.$method'
 import { Route as LoginMfaSetupRouteImport } from './routes/login.mfa-setup'
+import { Route as LoginPasskeySetupRouteImport } from './routes/login.passkey-setup'
 import { Route as AccountMfaSetupRouteImport } from './routes/account/mfa/setup'
 
 const IndexRoute = IndexRouteImport.update({
@@ -137,6 +138,11 @@ const LoginMfaSetupRoute = LoginMfaSetupRouteImport.update({
   path: '/mfa-setup',
   getParentRoute: () => LoginRoute,
 } as any)
+const LoginPasskeySetupRoute = LoginPasskeySetupRouteImport.update({
+  id: '/passkey-setup',
+  path: '/passkey-setup',
+  getParentRoute: () => LoginRoute,
+} as any)
 const AccountMfaSetupRoute = AccountMfaSetupRouteImport.update({
   id: '/mfa/setup',
   path: '/mfa/setup',
@@ -164,6 +170,7 @@ export interface FileRoutesByFullPath {
   '/health/ready': typeof HealthReadyRoute
   '/login/$method': typeof LoginMethodRoute
   '/login/mfa-setup': typeof LoginMfaSetupRoute
+  '/login/passkey-setup': typeof LoginPasskeySetupRoute
   '/account/': typeof AccountIndexRoute
   '/account/mfa/setup': typeof AccountMfaSetupRoute
 }
@@ -187,6 +194,7 @@ export interface FileRoutesByTo {
   '/health/ready': typeof HealthReadyRoute
   '/login/$method': typeof LoginMethodRoute
   '/login/mfa-setup': typeof LoginMfaSetupRoute
+  '/login/passkey-setup': typeof LoginPasskeySetupRoute
   '/account': typeof AccountIndexRoute
   '/account/mfa/setup': typeof AccountMfaSetupRoute
 }
@@ -212,6 +220,7 @@ export interface FileRoutesById {
   '/health/ready': typeof HealthReadyRoute
   '/login/$method': typeof LoginMethodRoute
   '/login/mfa-setup': typeof LoginMfaSetupRoute
+  '/login/passkey-setup': typeof LoginPasskeySetupRoute
   '/account/': typeof AccountIndexRoute
   '/account/mfa/setup': typeof AccountMfaSetupRoute
 }
@@ -238,6 +247,7 @@ export interface FileRouteTypes {
     | '/health/ready'
     | '/login/$method'
     | '/login/mfa-setup'
+    | '/login/passkey-setup'
     | '/account/'
     | '/account/mfa/setup'
   fileRoutesByTo: FileRoutesByTo
@@ -261,6 +271,7 @@ export interface FileRouteTypes {
     | '/health/ready'
     | '/login/$method'
     | '/login/mfa-setup'
+    | '/login/passkey-setup'
     | '/account'
     | '/account/mfa/setup'
   id:
@@ -285,6 +296,7 @@ export interface FileRouteTypes {
     | '/health/ready'
     | '/login/$method'
     | '/login/mfa-setup'
+    | '/login/passkey-setup'
     | '/account/'
     | '/account/mfa/setup'
   fileRoutesById: FileRoutesById
@@ -455,6 +467,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginMfaSetupRouteImport
       parentRoute: typeof LoginRoute
     }
+    '/login/passkey-setup': {
+      id: '/login/passkey-setup'
+      path: '/passkey-setup'
+      fullPath: '/login/passkey-setup'
+      preLoaderRoute: typeof LoginPasskeySetupRouteImport
+      parentRoute: typeof LoginRoute
+    }
     '/account/mfa/setup': {
       id: '/account/mfa/setup'
       path: '/mfa/setup'
@@ -490,11 +509,13 @@ const AccountRouteRouteWithChildren = AccountRouteRoute._addFileChildren(
 interface LoginRouteChildren {
   LoginMethodRoute: typeof LoginMethodRoute
   LoginMfaSetupRoute: typeof LoginMfaSetupRoute
+  LoginPasskeySetupRoute: typeof LoginPasskeySetupRoute
 }
 
 const LoginRouteChildren: LoginRouteChildren = {
   LoginMethodRoute: LoginMethodRoute,
   LoginMfaSetupRoute: LoginMfaSetupRoute,
+  LoginPasskeySetupRoute: LoginPasskeySetupRoute,
 }
 
 const LoginRouteWithChildren = LoginRoute._addFileChildren(LoginRouteChildren)

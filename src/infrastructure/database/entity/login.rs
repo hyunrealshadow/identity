@@ -30,7 +30,9 @@ pub struct Model {
     #[sea_orm(default_value = 0)]
     pub failed_attempts: i32,
     pub acr: Option<String>,
-    pub requested_acr: Option<String>,
+    /// Requested classes in order of preference, as a JSON string array.
+    #[sea_orm(default_expr = "Expr::cust(\"'[]'::jsonb\")")]
+    pub requested_acr_values: Json,
     #[sea_orm(default_expr = "Expr::current_timestamp()")]
     pub created_at: DateTimeWithTimeZone,
     #[sea_orm(indexed)]

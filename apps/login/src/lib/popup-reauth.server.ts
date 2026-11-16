@@ -1,3 +1,4 @@
+import { AuthenticationContextClass } from '@identity/graphql-access'
 import { PASSKEY_MANAGEMENT_CONTINUATION } from './account-reauth'
 import type { AccountReauthRequest } from './popup-reauth'
 import { startPopupReauthorization } from './oauth.server'
@@ -16,7 +17,7 @@ export function startPopupPasskeyReauth(requirements: {
     'account',
     {
       loginHint: requirements.loginHint,
-      acrValues: requirements.acrValues ?? 'aal1',
+      acrValues: requirements.acrValues ?? AuthenticationContextClass.SingleFactor,
       maxAge: requirements.maxAge,
     },
   )

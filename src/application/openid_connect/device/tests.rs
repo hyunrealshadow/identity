@@ -5,6 +5,7 @@ use std::{
 };
 
 use chrono::{DateTime, Duration, Utc};
+use identity_domain::auth::AuthenticationContextClass;
 use josekit::{
     jws::{JwsHeader, RS256},
     jwt,
@@ -768,7 +769,7 @@ fn verification_user() -> DeviceVerificationUser {
     DeviceVerificationUser {
         user_oid: Uuid::parse_str("22222222-2222-2222-2222-222222222222").unwrap(),
         auth_time: Some(1_700_000_000),
-        acr: Some("aal1".to_owned()),
+        acr: Some(AuthenticationContextClass::SingleFactor),
         amr: vec!["pwd".to_owned()],
     }
 }
@@ -893,7 +894,7 @@ async fn decide_approves_with_the_session_authentication_context() {
     let approval = approvals.try_recv().unwrap();
     assert_eq!(approval.user_oid, verification_user().user_oid.to_string());
     assert_eq!(approval.auth_time, Some(1_700_000_000));
-    assert_eq!(approval.acr.as_deref(), Some("aal1"));
+    assert_eq!(approval.acr, Some(AuthenticationContextClass::SingleFactor));
     assert_eq!(approval.amr, vec!["pwd".to_owned()]);
     assert_eq!(approval.approved_scope, "openid profile");
 }

@@ -5,7 +5,7 @@ use std::{
 
 use chrono::Utc;
 use identity_domain::{
-    auth::{ACR_AAL1, ACR_AAL2},
+    auth::AuthenticationContextClass,
     key::{JwaSigningAlgorithm, JweContentEncryption, JwkAlgorithm, JwsAlgorithm, Key},
     openid_connect::resource,
 };
@@ -92,7 +92,7 @@ pub struct PrincipalClaims {
     pub claims: Option<ClaimsRequest>,
     pub audience: Vec<String>,
     pub auth_time: Option<i64>,
-    pub acr: Option<String>,
+    pub acr: Option<AuthenticationContextClass>,
     pub amr: Vec<String>,
     pub management: Option<ManagementAuthorizationSnapshotData>,
     pub business: Option<BusinessAuthorizationSnapshotData>,
@@ -108,7 +108,7 @@ pub struct TokenClaims {
     pub claims: Option<ClaimsRequest>,
     pub audience: Vec<String>,
     pub auth_time: Option<i64>,
-    pub acr: Option<String>,
+    pub acr: Option<AuthenticationContextClass>,
     pub amr: Vec<String>,
 }
 
@@ -479,7 +479,7 @@ impl UserInfoService {
             .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?
             .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
 
-        let mut session_has_aal2 = None;
+        let mut session_is_multi_factor = None;
         let device_linked = access_token_data.device_authorization_oid.is_some();
         if let Some(user_oid) = user_oid {
             // Disabled and locked users cannot keep using a human token.
@@ -513,7 +513,11 @@ impl UserInfoService {
                             return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken)
                                 .with_param("reason", "session is not active for the user"));
                         }
-                        session_has_aal2 = Some(session.effective_acr(now) == Some(ACR_AAL2));
+                        session_is_multi_factor = Some(
+                            session
+                                .effective_acr(now)
+                                .is_some_and(AuthenticationContextClass::is_multi_factor),
+                        );
                     }
                 }
                 None if !device_linked => {
@@ -640,13 +644,13 @@ impl UserInfoService {
         let mut acr = payload
             .claim(JwtClaimNames::ACR)
             .and_then(|value| value.as_str())
-            .map(str::to_owned);
-        if acr.as_deref() == Some(ACR_AAL2)
-            && (session_has_aal2 == Some(false)
+            .and_then(|value| value.parse::<AuthenticationContextClass>().ok());
+        if acr.is_some_and(AuthenticationContextClass::is_multi_factor)
+            && (session_is_multi_factor == Some(false)
                 || !auth_time
                     .is_some_and(|time| (0..=3600).contains(&(Utc::now().timestamp() - time))))
         {
-            acr = Some(ACR_AAL1.to_owned());
+            acr = Some(AuthenticationContextClass::SingleFactor);
         }
         let amr = payload
             .claim(JwtClaimNames::AMR)

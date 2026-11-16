@@ -1,7 +1,7 @@
 use chrono::{Duration, Utc};
 use identity_domain::{
     auth::{
-        ACR_AAL1, ACR_AAL2, AMR_PASSWORD, LoginStatus, SessionOid,
+        AMR_PASSWORD, AuthenticationContextClass, LoginStatus, SessionOid,
         model::{ActiveSession, Login},
     },
     client_authorization::{
@@ -58,7 +58,7 @@ fn login(status: LoginStatus) -> Login {
         status,
         failed_attempts: 0,
         acr: None,
-        requested_acr: None,
+        requested_acr_values: Vec::new(),
         created_at: Utc::now(),
         expires_at: Utc::now() + Duration::minutes(5),
     }
@@ -75,7 +75,7 @@ fn active_session() -> ActiveSession {
         expires_at: None,
         created_at: Utc::now(),
         authenticated_at: Utc::now(),
-        acr: Some(ACR_AAL1.to_owned()),
+        acr: Some(AuthenticationContextClass::SingleFactor),
         amr: vec![AMR_PASSWORD.to_owned()],
     }
 }
@@ -97,7 +97,7 @@ fn continue_action_approves_when_consent_is_approved() {
             session_oid: selected_session.session_oid,
             user_oid: selected_session.user_oid,
             auth_time: Some(selected_session.authenticated_at.timestamp()),
-            acr: selected_session.acr.clone(),
+            acr: selected_session.acr,
             amr: selected_session.amr.clone(),
         }
     );
@@ -118,7 +118,7 @@ fn max_age_uses_latest_authentication_instead_of_session_creation() {
 fn continue_action_rejects_an_authentication_that_does_not_meet_requested_acr() {
     let selected_session = active_session();
     let mut stored = stored(ConsentState::Approved);
-    stored.request.acr_values = Some(vec![ACR_AAL2.to_owned()]);
+    stored.request.acr_values = Some(vec![AuthenticationContextClass::MultiFactor]);
 
     let action = determine_continue_action(
         &stored,
@@ -136,9 +136,9 @@ fn continue_action_rejects_an_authentication_that_does_not_meet_requested_acr() 
 #[test]
 fn continue_action_accepts_aal2_for_an_aal1_request() {
     let mut selected_session = active_session();
-    selected_session.acr = Some(ACR_AAL2.to_owned());
+    selected_session.acr = Some(AuthenticationContextClass::MultiFactor);
     let mut stored = stored(ConsentState::Approved);
-    stored.request.acr_values = Some(vec![ACR_AAL1.to_owned()]);
+    stored.request.acr_values = Some(vec![AuthenticationContextClass::SingleFactor]);
 
     let action = determine_continue_action(
         &stored,

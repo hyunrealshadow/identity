@@ -138,6 +138,39 @@ impl PasskeyService {
         username: &str,
         recovery_codes: Vec<RecoveryCodeCredentialData>,
     ) -> Result<PasskeyOptions, AppError> {
+        self.begin_bound_registration(
+            registration_context(user, ChallengeBinding::Session(session)),
+            user,
+            username,
+            recovery_codes,
+        )
+        .await
+    }
+
+    /// Begin registration inside a sign-in interaction, bound to its login.
+    pub async fn begin_registration_for_login(
+        &self,
+        user: UserOid,
+        login: Uuid,
+        username: &str,
+        recovery_codes: Vec<RecoveryCodeCredentialData>,
+    ) -> Result<PasskeyOptions, AppError> {
+        self.begin_bound_registration(
+            registration_context(user, ChallengeBinding::Login(login)),
+            user,
+            username,
+            recovery_codes,
+        )
+        .await
+    }
+
+    async fn begin_bound_registration(
+        &self,
+        context: ChallengeContext,
+        user: UserOid,
+        username: &str,
+        recovery_codes: Vec<RecoveryCodeCredentialData>,
+    ) -> Result<PasskeyOptions, AppError> {
         let credentials = self.credentials.list(user).await?;
         if credentials.len() >= MAX_PASSKEYS_PER_USER {
             return Err(AppError::from_code(AuthErrorCode::PasskeyLimitReached)
@@ -154,9 +187,7 @@ impl PasskeyService {
             .map_err(AppError::internal)?,
         );
         let id = challenge.id;
-        self.challenges
-            .store(registration_context(user, session), challenge)
-            .await?;
+        self.challenges.store(context, challenge).await?;
         Ok(PasskeyOptions {
             challenge_id: id,
             public_key: ceremony.public_key,
@@ -171,9 +202,46 @@ impl PasskeyService {
         name: &str,
         credential: Value,
     ) -> Result<(), AppError> {
+        self.finish_bound_registration(
+            registration_context(user, ChallengeBinding::Session(session)),
+            user,
+            challenge,
+            name,
+            credential,
+        )
+        .await
+    }
+
+    /// Finish a registration begun by [`Self::begin_registration_for_login`].
+    pub async fn finish_registration_for_login(
+        &self,
+        user: UserOid,
+        login: Uuid,
+        challenge: Uuid,
+        name: &str,
+        credential: Value,
+    ) -> Result<(), AppError> {
+        self.finish_bound_registration(
+            registration_context(user, ChallengeBinding::Login(login)),
+            user,
+            challenge,
+            name,
+            credential,
+        )
+        .await
+    }
+
+    async fn finish_bound_registration(
+        &self,
+        context: ChallengeContext,
+        user: UserOid,
+        challenge: Uuid,
+        name: &str,
+        credential: Value,
+    ) -> Result<(), AppError> {
         let state = self
             .challenges
-            .take(registration_context(user, session), challenge)
+            .take(context, challenge)
             .await?
             .ok_or_else(invalid)?;
         let name = name.trim();
@@ -285,10 +353,10 @@ impl PasskeyService {
     }
 }
 
-fn registration_context(user: UserOid, session: Uuid) -> ChallengeContext {
+fn registration_context(user: UserOid, binding: ChallengeBinding) -> ChallengeContext {
     ChallengeContext {
         user_oid: user.0,
-        binding: ChallengeBinding::Session(session),
+        binding,
         method: ChallengeMethod::Passkey,
         purpose: ChallengePurpose::CredentialRegistration,
     }

@@ -14,6 +14,7 @@ use strum::{AsRefStr, Display};
 use uuid::Uuid;
 
 use super::model::ClientAuthenticationMode;
+use crate::auth::AuthenticationContextClass;
 
 /// Characters used for user codes: upper-case consonants without vowels, so a
 /// generated code cannot spell a word and stays unambiguous when typed.
@@ -84,7 +85,7 @@ pub struct DeviceAuthorizationApproval {
     pub user_oid: String,
     pub approved_scope: String,
     pub auth_time: Option<i64>,
-    pub acr: Option<String>,
+    pub acr: Option<AuthenticationContextClass>,
     #[serde(default)]
     pub amr: Vec<String>,
     /// Relation created by this approval.
@@ -142,7 +143,7 @@ pub struct DeviceAuthorizationData {
     pub resources: Vec<String>,
     pub user_oid: String,
     pub auth_time: Option<i64>,
-    pub acr: Option<String>,
+    pub acr: Option<AuthenticationContextClass>,
     #[serde(default)]
     pub amr: Vec<String>,
     /// Request row this relation was created from.
@@ -268,7 +269,7 @@ mod tests {
             user_oid: Uuid::nil().to_string(),
             approved_scope: "openid profile".to_owned(),
             auth_time: Some(1_700_000_000),
-            acr: Some("aal1".to_owned()),
+            acr: Some(AuthenticationContextClass::SingleFactor),
             amr: vec!["pwd".to_owned()],
             device_authorization_oid: Uuid::new_v4(),
         }

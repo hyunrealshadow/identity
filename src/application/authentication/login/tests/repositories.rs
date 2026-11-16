@@ -190,7 +190,7 @@ impl SessionRepository for TestSessionRepo {
                 self.reauthenticate_by_oid(
                     oid,
                     input.user_oid,
-                    input.acr.as_deref().unwrap(),
+                    input.acr.unwrap(),
                     input.acr_expires_at.unwrap(),
                     &input.amr,
                 )
@@ -241,7 +241,7 @@ impl SessionRepository for TestSessionRepo {
         &self,
         oid: SessionOid,
         expected_user_oid: Uuid,
-        acr: &str,
+        acr: AuthenticationContextClass,
         acr_expires_at: DateTime<Utc>,
         amr: &[String],
     ) -> Result<Session, SessionRepositoryError> {
@@ -323,7 +323,7 @@ impl LoginRepository for TestLoginRepo {
         &self,
         _client_oid: Uuid,
         _client_authorization_oid: Uuid,
-        _requested_acr: Option<&str>,
+        _requested_acr_values: &[AuthenticationContextClass],
     ) -> Result<Login, LoginRepositoryError> {
         Err(LoginRepositoryError::LoginNotFound)
     }
@@ -341,7 +341,7 @@ impl LoginRepository for TestLoginRepo {
         login_oid: Uuid,
         status: LoginStatus,
         _session_oid: Option<SessionOid>,
-        _acr: Option<&str>,
+        _acr: Option<AuthenticationContextClass>,
     ) -> Result<(), LoginRepositoryError> {
         let mut state = self.state.lock().unwrap();
         state.update_status_calls.push((login_oid, status));

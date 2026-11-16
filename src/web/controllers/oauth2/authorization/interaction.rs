@@ -128,7 +128,7 @@ where
     if request
         .acr_values
         .as_deref()
-        .is_some_and(|requested| !acr_satisfies_any(selected_session.acr.as_deref(), requested))
+        .is_some_and(|requested| !acr_satisfies_any(selected_session.acr, requested))
     {
         if has_prompt(request.prompt.as_ref(), PromptValue::None) {
             return Ok(FlowDecision::OAuthError {
@@ -252,7 +252,7 @@ mod tests {
         AppError, code::AppErrorCode, codes::authorize::AuthorizeErrorCode,
     };
     use identity_domain::{
-        auth::{ACR_AAL1, ACR_AAL2, AMR_PASSWORD, model::ActiveSession},
+        auth::{AMR_PASSWORD, AuthenticationContextClass, model::ActiveSession},
         openid_connect::{AuthorizationRequest, ResponseType, ScopeSet},
     };
     use url::Url;
@@ -298,7 +298,7 @@ mod tests {
             expires_at: None,
             created_at,
             authenticated_at: created_at,
-            acr: Some(ACR_AAL1.to_owned()),
+            acr: Some(AuthenticationContextClass::SingleFactor),
             amr: vec![AMR_PASSWORD.to_owned()],
         }
     }
@@ -315,7 +315,7 @@ mod tests {
             expires_at: None,
             created_at: Utc::now(),
             authenticated_at: Utc::now(),
-            acr: Some(ACR_AAL1.to_owned()),
+            acr: Some(AuthenticationContextClass::SingleFactor),
             amr: vec![AMR_PASSWORD.to_owned()],
         };
         let other = ActiveSession {
@@ -328,7 +328,7 @@ mod tests {
             expires_at: None,
             created_at: Utc::now(),
             authenticated_at: Utc::now(),
-            acr: Some(ACR_AAL1.to_owned()),
+            acr: Some(AuthenticationContextClass::SingleFactor),
             amr: vec![AMR_PASSWORD.to_owned()],
         };
 
@@ -375,9 +375,9 @@ mod tests {
     #[tokio::test]
     async fn determine_authorize_flow_accepts_aal2_for_an_aal1_request() {
         let mut request = request(None, None);
-        request.acr_values = Some(vec![ACR_AAL1.to_owned()]);
+        request.acr_values = Some(vec![AuthenticationContextClass::SingleFactor]);
         let mut session = active_session(Utc::now());
-        session.acr = Some(ACR_AAL2.to_owned());
+        session.acr = Some(AuthenticationContextClass::MultiFactor);
 
         let decision = determine_authorize_flow_with_selection_recorder(
             &request,

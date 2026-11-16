@@ -1,5 +1,6 @@
 use super::{
-    ChallengeOutcome, LoginService, SessionContext, failed_attempt_lock_until, requires_aal2,
+    ChallengeOutcome, LoginService, SessionContext, failed_attempt_lock_until,
+    requires_second_factor,
 };
 use crate::{
     authentication::password::{HashOptions, VerifyResult, run_password_hashing},
@@ -7,7 +8,8 @@ use crate::{
     user::model::{CredentialData, CredentialType, Password},
 };
 use identity_domain::auth::{
-    ACR_AAL1, AMR_PASSWORD, LoginFailureReason, LoginStatus, MAX_FAILED_ATTEMPTS, model::Login,
+    AMR_PASSWORD, AuthenticationContextClass, LoginFailureReason, LoginStatus, MAX_FAILED_ATTEMPTS,
+    model::Login,
 };
 use std::sync::Arc;
 use tracing::error;
@@ -146,7 +148,7 @@ impl LoginService {
                 } else {
                     false
                 };
-                if otp_credentials.is_empty() && !has_passkeys && requires_aal2(&login) {
+                if otp_credentials.is_empty() && !has_passkeys && requires_second_factor(&login) {
                     self.user_repo.reset_failed_attempts(user.oid).await?;
                     if let Err(e) = self
                         .login_repo
@@ -162,35 +164,14 @@ impl LoginService {
                     Ok(ChallengeOutcome::MfaEnrollmentRequired { login })
                 } else if otp_credentials.is_empty() && !has_passkeys {
                     self.user_repo.reset_failed_attempts(user.oid).await?;
-                    // Complete AAL1 authentication. A forced
-                    // reauthentication upgrades the bound session in place.
-                    let session = self
-                        .complete_session(
-                            &login,
-                            user.oid.into(),
-                            ctx,
-                            ACR_AAL1,
-                            &[AMR_PASSWORD.to_owned()],
-                        )
-                        .await?;
-
-                    if let Err(e) = self
-                        .login_repo
-                        .update_status(
-                            login.oid,
-                            LoginStatus::AUTHENTICATED,
-                            Some(session.oid),
-                            Some(ACR_AAL1),
-                        )
-                        .await
-                    {
-                        error!(error = %e, "failed to update login status to authenticated");
-                    }
-
-                    Ok(ChallengeOutcome::Authenticated {
+                    self.complete_authentication(
                         login,
-                        session: Box::new(session),
-                    })
+                        user.oid.into(),
+                        ctx,
+                        AuthenticationContextClass::SingleFactor,
+                        &[AMR_PASSWORD.to_owned()],
+                    )
+                    .await
                 } else {
                     // MFA required — do NOT create a session yet.
                     if let Err(e) = self

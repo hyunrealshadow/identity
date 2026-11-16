@@ -1,6 +1,6 @@
 use chrono::{Duration, Utc};
 use identity_domain::{
-    auth::SessionOid,
+    auth::{AuthenticationContextClass, SessionOid},
     client_authorization::{
         AccessTokenData, AccessTokenPrincipal, ClientAuthenticationMode, ClientAuthorizationData,
     },
@@ -31,7 +31,7 @@ fn front_channel_token_mode(client: &OpenIdConnectClient) -> ClientAuthenticatio
 #[derive(Clone, Copy)]
 pub(super) struct AuthenticationContext<'a> {
     pub auth_time: Option<i64>,
-    pub acr: Option<&'a str>,
+    pub acr: Option<AuthenticationContextClass>,
     pub amr: &'a [String],
 }
 

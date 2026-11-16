@@ -1,3 +1,4 @@
+import { AuthenticationContextClass } from '@identity/graphql-access'
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 
 import { translate } from './i18n'
@@ -35,8 +36,6 @@ const REAUTHENTICATION_SCOPES = {
   account: 'openid account.*',
   mfa: 'openid account.*',
 } as const
-const ACR_AAL1 = 'aal1'
-const ACR_AAL2 = 'aal2'
 
 interface TokenResponse {
   access_token: string
@@ -176,7 +175,9 @@ export function reauthenticationRequestParameters(
     loginHint: requirements.loginHint,
     maxAge: requirements.maxAge ?? 0,
     acrValues:
-      requirements.acrValues ?? (purpose === 'mfa' ? ACR_AAL2 : ACR_AAL1),
+      requirements.acrValues ?? (purpose === 'mfa'
+        ? AuthenticationContextClass.MultiFactor
+        : AuthenticationContextClass.SingleFactor),
   }
 }
 

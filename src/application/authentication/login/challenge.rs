@@ -20,7 +20,7 @@ impl LoginService {
     /// # Password flow
     /// - If the user has an OTP credential: returns [`ChallengeOutcome::MfaRequired`].
     /// - Otherwise: renews a matching browser session or creates a new session,
-    ///   with `acr = ACR_AAL1` and returns
+    ///   with `acr = AuthenticationContextClass::SingleFactor` and returns
     ///   [`ChallengeOutcome::Authenticated`].
     ///
     /// # OTP flow
@@ -28,7 +28,7 @@ impl LoginService {
     /// by a password or an existing session. Up to [`identity_domain::auth::MAX_OTP_ATTEMPTS`] invalid codes are allowed
     /// per login flow; further attempts return [`AuthErrorCode::TooManyAttempts`]
     /// and invalidate the login. Creates or refreshes the bound session with
-    /// `acr = ACR_AAL2` and an internal expiry on success.
+    /// `acr = AuthenticationContextClass::MultiFactor` and an internal expiry on success.
     #[tracing::instrument(skip_all, name = "authentication.challenge")]
     pub async fn challenge(
         &self,
@@ -86,7 +86,9 @@ impl LoginService {
                         )
                         .attribute(
                             "acr",
-                            EventValue::Text(session.acr.clone().unwrap_or_default()),
+                            EventValue::Text(
+                                session.acr.map(|acr| acr.to_string()).unwrap_or_default(),
+                            ),
                         ),
                 );
                 self.events.emit(

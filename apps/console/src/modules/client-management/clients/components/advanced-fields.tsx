@@ -1,3 +1,4 @@
+import { AuthenticationContextClass } from '@identity/graphql-access'
 import { Badge } from '@identity/ui/components/badge'
 import { Checkbox } from '@identity/ui/components/checkbox'
 import { Skeleton } from '@identity/ui/components/skeleton'
@@ -61,7 +62,9 @@ function RowError({ children }: { children?: string }) {
  * description. Specifying shows the
  * supported values; the selection keeps the provider's order, which the
  * runtime tries in turn. A stored value the provider no longer supports stays
- * listed, marked, so it can be removed.
+ * listed, marked, so it can be removed. With `keyed`, a selected algorithm the
+ * provider holds no active key for is marked too: it stays valid, because keys
+ * come and go, but issuance skips it until a key exists.
  */
 function ChoiceRow({
   field,
@@ -69,6 +72,7 @@ function ChoiceRow({
   description,
   supported,
   labels,
+  keyed,
   autoHint,
   draft,
   onChange,
@@ -80,6 +84,8 @@ function ChoiceRow({
   description?: MessageKey
   supported: readonly string[] | undefined
   labels?: Partial<Record<string, MessageKey>>
+  /** Values the provider holds an active key for; others are marked when selected. */
+  keyed?: readonly string[]
   autoHint: MessageKey
 }) {
   const t = useTranslator()
@@ -154,6 +160,10 @@ function ChoiceRow({
                   <Badge variant="outline" className="text-warning">
                     {t('clientsAlgorithmUnavailable')}
                   </Badge>
+                ) : keyed && selected.includes(value) && !keyed.includes(value) ? (
+                  <Badge variant="outline" className="text-warning">
+                    {t('clientsAlgorithmNoActiveKey')}
+                  </Badge>
                 ) : null}
               </label>
             ))}
@@ -162,6 +172,8 @@ function ChoiceRow({
             <p className="mt-2 text-xs text-muted-foreground">
               {t('clientsAlgorithmCustomEmptyHint')}
             </p>
+          ) : keyed && !selected.some((value) => keyed.includes(value)) ? (
+            <p className="mt-2 text-xs text-warning">{t('clientsAlgorithmNoKeyedSelection')}</p>
           ) : null}
           <RowError>{errors[field]}</RowError>
         </>
@@ -365,8 +377,9 @@ export function SubjectRows(props: OptionProps) {
 }
 
 const ACR_LABELS: Partial<Record<string, MessageKey>> = {
-  aal1: 'clientsAcrAal1',
-  aal2: 'clientsAcrAal2',
+  [AuthenticationContextClass.SingleFactor]: 'clientsAcrSingleFactor',
+  [AuthenticationContextClass.MultiFactor]: 'clientsAcrMultiFactor',
+  [AuthenticationContextClass.PhishingResistant]: 'clientsAcrPhishingResistant',
 }
 
 /** Defaults applied when an authorization request does not ask itself. */
@@ -425,6 +438,7 @@ export function TokenProtectionRows(props: OptionProps) {
         label="clientsIdTokenSigning"
         description="clientsIdTokenSigningHint"
         supported={options?.idTokenSigningAlgs}
+        keyed={options?.activeSigningAlgs}
       />
       <ChoiceRow
         {...props}
@@ -452,6 +466,7 @@ export function TokenProtectionRows(props: OptionProps) {
         label="clientsUserinfoSigning"
         description="clientsUserinfoSigningHint"
         supported={options?.userinfoSigningAlgs}
+        keyed={options?.activeSigningAlgs}
       />
       <ChoiceRow
         {...props}
@@ -498,6 +513,7 @@ export function RequestObjectRows(props: OptionProps) {
         label="clientsRequestObjectEncryptionAlg"
         description="clientsRequestObjectEncryptionAlgHint"
         supported={options?.requestObjectEncryptionAlgs}
+        keyed={options?.activeRequestObjectEncryptionAlgs}
       />
       <ChoiceRow
         {...props}

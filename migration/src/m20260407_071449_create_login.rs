@@ -1,4 +1,5 @@
 use sea_orm_migration::prelude::Alias;
+use sea_orm_migration::prelude::ExprTrait;
 use sea_orm_migration::prelude::Func;
 use sea_orm_migration::{
     async_trait,
@@ -7,7 +8,7 @@ use sea_orm_migration::{
         MigrationTrait, SchemaManager, Table,
     },
     schema::{
-        big_integer, big_integer_null, integer, pk_auto, string, string_null,
+        big_integer, big_integer_null, integer, json_binary, pk_auto, string, string_null,
         timestamp_with_time_zone, timestamp_with_time_zone_null, uuid_uniq,
     },
     sea_orm,
@@ -35,7 +36,7 @@ pub enum Login {
     FailureReason,
     FailedAttempts,
     Acr,
-    RequestedAcr,
+    RequestedAcrValues,
     CreatedAt,
     ExpiresAt,
     UpdatedAt,
@@ -59,7 +60,12 @@ impl MigrationTrait for Migration {
                     .col(string_null(Login::FailureReason))
                     .col(integer(Login::FailedAttempts).default(0))
                     .col(string_null(Login::Acr))
-                    .col(string_null(Login::RequestedAcr))
+                    // Requested classes in order of preference; empty when
+                    // the request asks for none.
+                    .col(
+                        json_binary(Login::RequestedAcrValues)
+                            .default(Expr::val("[]").cast_as(Alias::new("jsonb"))),
+                    )
                     .col(timestamp_with_time_zone(Login::ExpiresAt))
                     .col(
                         timestamp_with_time_zone(Login::CreatedAt)

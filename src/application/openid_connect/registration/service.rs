@@ -567,7 +567,10 @@ impl DynamicClientRegistrationService {
             .map(|value| vec![value]),
             default_max_age: request.default_max_age,
             require_auth_time: request.require_auth_time,
-            default_acr_values: request.default_acr_values.clone(),
+            default_acr_values: parse_metadata_values(
+                "default_acr_values",
+                request.default_acr_values.as_deref(),
+            )?,
             initiate_login_uri: request.initiate_login_uri.clone(),
             request_uris: request.request_uris.clone(),
             settings: OpenIdConnectClientSettings {

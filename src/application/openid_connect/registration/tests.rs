@@ -407,7 +407,7 @@ async fn register_maps_supported_client_metadata_and_generates_secret() {
                 token_endpoint_auth_signing_alg: Some("HS256".to_owned()),
                 default_max_age: Some(3600),
                 require_auth_time: Some(true),
-                default_acr_values: Some(vec!["1".to_owned()]),
+                default_acr_values: Some(vec!["aal2".to_owned()]),
                 initiate_login_uri: Some(Url::parse("https://rp.example.com/login").unwrap()),
                 request_uris: Some(vec![
                     Url::parse("https://rp.example.com/request.jwt").unwrap(),

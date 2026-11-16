@@ -1,6 +1,7 @@
 use std::time::{Duration, SystemTime};
 
 use identity_domain::{
+    auth::AuthenticationContextClass,
     key::{JwaSigningAlgorithm, JwsAlgorithm},
     openid_connect::{ClaimsRequest, model::claim::JwtTokenType},
     user::User,
@@ -34,7 +35,7 @@ pub(super) struct SignImplicitIdTokenInput<'a> {
     pub client: &'a OpenIdConnectClient,
     pub nonce: &'a str,
     pub auth_time: i64,
-    pub acr: Option<&'a str>,
+    pub acr: Option<AuthenticationContextClass>,
     pub amr: &'a [String],
     pub access_token: Option<&'a str>,
     pub code: Option<&'a str>,
@@ -58,7 +59,7 @@ pub(super) struct SignImplicitAccessTokenInput<'a> {
     /// `jti`: the access token's Global ID.
     pub token_id: &'a str,
     pub auth_time: i64,
-    pub acr: Option<&'a str>,
+    pub acr: Option<AuthenticationContextClass>,
     pub amr: &'a [String],
 }
 
@@ -213,7 +214,7 @@ impl AuthorizeService {
 
         if let Some(acr) = input.acr {
             payload
-                .set_claim(JwtClaimNames::ACR, Some(json!(acr)))
+                .set_claim(JwtClaimNames::ACR, Some(json!(acr.as_str())))
                 .map_err(AppError::map_source(
                     AuthorizeErrorCode::SerializeCodeFailed,
                 ))?;
@@ -334,7 +335,7 @@ impl AuthorizeService {
             ))?;
         if let Some(acr) = input.acr {
             payload
-                .set_claim(JwtClaimNames::ACR, Some(json!(acr)))
+                .set_claim(JwtClaimNames::ACR, Some(json!(acr.as_str())))
                 .map_err(AppError::map_source(
                     AuthorizeErrorCode::SerializeCodeFailed,
                 ))?;

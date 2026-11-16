@@ -44,7 +44,7 @@ async fn begin_verification(depot: &mut Depot) -> JsonWebResult<AppResponse> {
     let login_id = ctx
         .services()
         .oidc_authorize()
-        .create_login_flow(client_oid, request_oid, None)
+        .create_login_flow(client_oid, request_oid, &[])
         .await?;
 
     let mut response = json_response(

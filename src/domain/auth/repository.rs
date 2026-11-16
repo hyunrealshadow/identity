@@ -6,7 +6,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use crate::auth::{
-    LoginFailureReason, LoginStatus,
+    AuthenticationContextClass, LoginFailureReason, LoginStatus,
     model::{ActiveSession, Login, Session, SessionOid},
 };
 
@@ -17,6 +17,9 @@ pub enum SessionRepositoryError {
 
     #[error("database contains an unknown session status")]
     InvalidStoredStatus,
+
+    #[error("database contains an unknown authentication context class")]
+    InvalidStoredAcr,
 
     #[error("failed to query active sessions")]
     ListActiveFailed(#[source] Box<dyn StdError + Send + Sync>),
@@ -73,6 +76,9 @@ pub enum LoginRepositoryError {
     #[error("failed to query login")]
     QueryFailed(#[source] Box<dyn StdError + Send + Sync>),
 
+    #[error("database contains an unknown authentication context class")]
+    InvalidStoredAcr,
+
     #[error("user not found while creating login")]
     UserNotFound,
 
@@ -113,7 +119,7 @@ pub struct CreateSessionInput {
     pub user_agent: Option<String>,
     pub ip_address: Option<String>,
     pub expires_at: Option<DateTime<Utc>>,
-    pub acr: Option<String>,
+    pub acr: Option<AuthenticationContextClass>,
     pub acr_expires_at: Option<DateTime<Utc>>,
     pub amr: Vec<String>,
 }
@@ -171,7 +177,7 @@ pub trait SessionRepository: Send + Sync {
         &self,
         oid: SessionOid,
         expected_user_oid: Uuid,
-        acr: &str,
+        acr: AuthenticationContextClass,
         acr_expires_at: DateTime<Utc>,
         amr: &[String],
     ) -> Result<Session, SessionRepositoryError>;
@@ -203,7 +209,7 @@ pub trait LoginRepository: Send + Sync {
         &self,
         client_oid: Uuid,
         client_authorization_oid: Uuid,
-        requested_acr: Option<&str>,
+        requested_acr_values: &[AuthenticationContextClass],
     ) -> Result<Login, LoginRepositoryError>;
 
     /// Atomically bind a resolved user to a newly-created login and transition
@@ -230,7 +236,7 @@ pub trait LoginRepository: Send + Sync {
         login_oid: Uuid,
         status: LoginStatus,
         session_oid: Option<SessionOid>,
-        acr: Option<&str>,
+        acr: Option<AuthenticationContextClass>,
     ) -> Result<(), LoginRepositoryError>;
 
     /// Roll an unfinished credential challenge back to identifier entry while

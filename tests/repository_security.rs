@@ -12,7 +12,7 @@ use identity_application::user::{
 };
 use identity_domain::{
     auth::{
-        LoginStatus, SessionOid,
+        AuthenticationContextClass, LoginStatus, SessionOid,
         repository::{CreateSessionInput, LoginRepository, SessionRepository},
     },
     authorization::{ActorContext, HumanAuthenticationContext, RequestId},
@@ -138,7 +138,7 @@ fn input(user_oid: Uuid) -> CreateSessionInput {
         user_agent: None,
         ip_address: None,
         expires_at: Some(Utc::now() + ChronoDuration::days(7)),
-        acr: Some("aal1".into()),
+        acr: Some(AuthenticationContextClass::SingleFactor),
         acr_expires_at: Some(Utc::now() + ChronoDuration::minutes(5)),
         amr: vec!["pwd".into()],
     }
@@ -230,7 +230,7 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
         sessions.reauthenticate_by_oid(
             direct.oid,
             user,
-            "aal2",
+            AuthenticationContextClass::MultiFactor,
             Utc::now() + ChronoDuration::hours(1),
             &["pwd".to_owned()],
         ),
@@ -275,7 +275,7 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
 
     // Direct login transitions record their own semantic facts without creating sessions.
     let logins = LoginRepositoryImpl::new(db.clone());
-    let login = logins.create_pending(client, relation, None).await.unwrap();
+    let login = logins.create_pending(client, relation, &[]).await.unwrap();
     assert_latest_action(&db, login.oid, "login", "login.created").await;
 
     logins.bind_user(login.oid, user).await.unwrap();
@@ -308,14 +308,14 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
         .unwrap();
     assert_latest_action(&db, login.oid, "login", "login.session_bound").await;
 
-    let second = logins.create_pending(client, relation, None).await.unwrap();
+    let second = logins.create_pending(client, relation, &[]).await.unwrap();
     logins.bind_user(second.oid, user).await.unwrap();
     logins
         .update_status(
             second.oid,
             LoginStatus::AUTHENTICATED,
             Some(SessionOid(keep)),
-            Some("aal1"),
+            Some(AuthenticationContextClass::SingleFactor),
         )
         .await
         .unwrap();
@@ -616,8 +616,8 @@ async fn mfa_enrollment_login_keeps_its_registration_until_authenticated() {
             INSERT INTO client (oid,name,protocol) VALUES ('{client}','enrollment-test','openid_connect');
             INSERT INTO client_authorization (oid,client_id,type,data,expires_at)
               SELECT '{relation}',id,'authorization_request','{{}}',now()+interval '1 day' FROM client WHERE oid='{client}';
-            INSERT INTO login (oid,client_id,client_authorization_id,user_id,status,requested_acr,expires_at)
-              SELECT '{login}',c.id,a.id,u.id,'identifier_verified','aal2',now()+interval '5 minutes' FROM client c,client_authorization a,"user" u
+            INSERT INTO login (oid,client_id,client_authorization_id,user_id,status,requested_acr_values,expires_at)
+              SELECT '{login}',c.id,a.id,u.id,'identifier_verified','["aal2"]'::jsonb,now()+interval '5 minutes' FROM client c,client_authorization a,"user" u
               WHERE c.oid='{client}' AND a.oid='{relation}' AND u.oid='{user}';
         "#)).await;
         let logins = LoginRepositoryImpl::new(db.clone());
@@ -669,7 +669,7 @@ async fn mfa_enrollment_login_keeps_its_registration_until_authenticated() {
             .await
             .unwrap();
         logins
-            .update_status(login, LoginStatus::AUTHENTICATED, Some(session.oid), Some("aal2"))
+            .update_status(login, LoginStatus::AUTHENTICATED, Some(session.oid), Some(AuthenticationContextClass::MultiFactor))
             .await
             .unwrap();
         assert!(challenges.latest(registration).await.unwrap().is_none());

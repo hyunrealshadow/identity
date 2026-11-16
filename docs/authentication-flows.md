@@ -65,7 +65,7 @@ Created ─▶ IdentifierVerified ─▶ MfaRequired ─▶ Authenticated
 | `Created` | Interaction opened, no identifier accepted yet | Identifier submission |
 | `IdentifierVerified` | User identified, password not yet accepted | Password, passkey |
 | `MfaRequired` | Password accepted, a second factor is still required | OTP, recovery code, passkey |
-| `MfaEnrollmentRequired` | Password accepted for an AAL2 request, but the user has no second factor | Enrollment, then a completed session |
+| `MfaEnrollmentRequired` | The verified factors fall short of the requested class and the user has no credential that meets it | `aal2`: authenticator enrollment, then a completed session. `phr`: passkey registration, then a passkey challenge (an existing passkey may also be used) |
 | `Authenticated` | Session established and bound to the interaction | Continue to consent or the protocol |
 | `Expired` | Interaction lifetime elapsed | Restart only |
 | `Failed` | Bounded failure such as a locked or disabled account | Nothing |
@@ -103,22 +103,50 @@ protocol flow.
 
 ## Assurance and freshness
 
-Interactive sessions carry an authentication context class reference:
+Interactive sessions carry an authentication context class reference. The
+classes are defined once, by `AuthenticationContextClass` in
+`src/domain/auth/acr.rs` (mirrored for the frontends in
+`packages/graphql-access/src/acr.ts`), and discovery advertises them in
+`acr_values_supported`:
 
-| ACR | Meaning |
-| --- | --- |
-| `aal1` | One factor completed |
-| `aal2` | A second factor completed after the first |
+| ACR | Meaning | Established by |
+| --- | --- | --- |
+| `aal1` | One factor | Password |
+| `aal2` | Two distinct factors | Password plus a one-time or recovery code, or a passkey |
+| `phr` | Phishing resistant | A user-verified passkey |
 
-`acr_satisfies` accepts an equal value, and `aal2` also satisfies a request for
-`aal1`. `acr_values` (and a client's `default_acr_values`, used when a request
-names none) list the acceptable classes in order of preference; meeting any one
-of them satisfies the request. An existing session and a new login apply the
-same rule: a new login needs only the weakest built-in level listed, so
+`phr` is the OpenID EAP ACR Values name registered in the IANA LoA registry.
+`aal1` and `aal2` are this instance's own values; federation profiles from that
+registry are not used because they carry the federation's policy obligations.
+`phrh` is not offered: a synced passkey cannot prove a hardware-bound key.
+
+The classes are nested for the methods offered here: a passkey is
+user-verified, so `phr` also satisfies `aal2`, and `aal2` satisfies `aal1`.
+`acr_values` (and a client's `default_acr_values`, used when a request names
+none) list the acceptable classes in order of preference; meeting any one of
+them satisfies the request. Values this instance does not define are ignored,
+and a list of only such values asks for nothing. An existing session and a new
+login apply the same rule: a new login needs only the weakest class listed, so
 `aal2 aal1` asks for no second factor, just as an existing `aal1` session
-already satisfies it. A request for `aal2` from a password-only user becomes
-`MfaEnrollmentRequired` rather than a silent downgrade. After login the chosen
-level is written into the session and into the `acr` claim of issued tokens. Freshness is separate:
+already satisfies it. The login keeps the whole ordered list
+(`login.requested_acr_values`): the weakest class is its requirement and the
+first is its preference. A request that prefers `phr` is offered an enrolled
+passkey first, ahead of the user's own method order, without being required to
+use one: `phr aal2` still accepts a one-time code. A request for `aal2` from a password-only user becomes
+`MfaEnrollmentRequired` rather than a silent downgrade.
+
+A `phr` request prefers a passkey. A one-time or recovery code still verifies a
+second factor, after which the user registers a passkey on this device (with
+recovery codes, when the account has none) and authenticates with it;
+registration alone authenticates nothing. The bootstrap is only as phishing
+resistant as the factors that authorized it.
+
+The session stores the class actually established, and management admission
+uses it. The `acr` claim reports the most preferred requested class the session
+meets, so a client that checks the value against its own list recognizes it: a
+passkey session answering `acr_values=aal2` reports `aal2`. Without a request the
+established class is reported. Code exchange and refresh recompute the claim
+from the live session and the original request. Freshness is separate:
 `max_age` is measured from the authentication event, and the window is measured
 from the moment the stage completed, not from when the session was first created.
 A forced reauthentication upgrades the bound session in place, so the user

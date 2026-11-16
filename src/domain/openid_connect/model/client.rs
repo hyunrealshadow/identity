@@ -14,6 +14,7 @@ use uuid::Uuid;
 
 use super::scope;
 use crate::{
+    auth::AuthenticationContextClass,
     client::model::{Client, ClientProtocol},
     key::{JwaEncryptionAlgorithm, JweContentEncryption, JwsAlgorithm},
     openid_connect::{
@@ -237,7 +238,7 @@ pub struct OpenIdConnectClientMetadata {
     pub token_endpoint_auth_signing_algs: Option<Vec<JwsAlgorithm>>,
     pub default_max_age: Option<i32>,
     pub require_auth_time: Option<bool>,
-    pub default_acr_values: Option<Vec<String>>,
+    pub default_acr_values: Option<Vec<AuthenticationContextClass>>,
     pub initiate_login_uri: Option<Url>,
     pub request_uris: Option<Vec<Url>>,
     pub settings: OpenIdConnectClientSettings,

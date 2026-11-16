@@ -12,6 +12,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
+    auth::AuthenticationContextClass,
     client_authorization::ManagementAuthorizationSnapshotData,
     openid_connect::{GrantType, ScopeSet},
 };
@@ -363,7 +364,7 @@ pub struct AuthorizationRequest {
     pub claims_locales: Option<Vec<String>>,
     pub id_token_hint: Option<String>,
     pub login_hint: Option<String>,
-    pub acr_values: Option<Vec<String>>,
+    pub acr_values: Option<Vec<AuthenticationContextClass>>,
     pub claims: Option<ClaimsRequest>,
     pub request_uri: Option<Url>,
     pub code_challenge: Option<String>,
@@ -392,7 +393,7 @@ pub struct AuthorizationRequestData {
     pub login_hint: Option<String>,
     pub code_challenge: Option<String>,
     pub code_challenge_method: Option<CodeChallengeMethod>,
-    pub acr_values: Option<Vec<String>>,
+    pub acr_values: Option<Vec<AuthenticationContextClass>>,
     pub claims: Option<String>,
     #[serde(default)]
     pub ui_locales: Option<Vec<String>>,

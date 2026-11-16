@@ -1,24 +1,30 @@
 //! Progressive second-factor enrollment inside a login interaction.
 //!
-//! When the authorization request requires AAL2 and the user verified a
-//! password but has no second factor, the interaction enters
+//! When the authorization request requires a multi-factor class and the user
+//! verified a password but has no second factor, the interaction enters
 //! `mfa_enrollment_required`. The only way forward is to enroll a TOTP
 //! authenticator; confirming it with a valid code is the second factor that
-//! completes AAL2 authentication. The pending enrollment is bound to the
+//! completes multi-factor authentication.
+//!
+//! A `phr` request enters the same phase after a second factor other than a
+//! passkey (or a password, for a user without one). The user registers a
+//! passkey on this device and then authenticates with it. The pending enrollment is bound to the
 //! login record so a reload or a rejected code resumes the same secret.
 
-use super::{ChallengeOutcome, LoginService, SessionContext};
+use super::{ChallengeOutcome, LoginService, SessionContext, enrollment_method};
 use crate::{
     authentication::{
         challenge::ChallengeRepository,
         mfa::{BeginTotpEnrollment, MfaService},
+        passkey::{PasskeyOptions, PasskeyService},
     },
     error::{AppError, code::AppErrorCode as _, codes::auth::AuthErrorCode},
     user::model::{CredentialType, OtpAlgorithm, User},
 };
 use chrono::{DateTime, Utc};
 use identity_domain::auth::{
-    ACR_AAL2, AMR_MFA, AMR_OTP, AMR_PASSWORD, LoginFailureReason, LoginStatus, MAX_OTP_ATTEMPTS,
+    AMR_MFA, AMR_OTP, AMR_PASSWORD, AuthenticationContextClass, LoginFailureReason, LoginStatus,
+    MAX_OTP_ATTEMPTS,
     challenge::{
         AuthenticationChallenge, ChallengeBinding, ChallengeContext, ChallengeMethod,
         ChallengePurpose,
@@ -50,6 +56,14 @@ pub struct LoginTotpEnrollment {
     pub expires_at: DateTime<Utc>,
 }
 
+/// What the sign-in page presents for passkey registration in a `phr`
+/// interaction.
+pub struct LoginPasskeyEnrollment {
+    pub options: PasskeyOptions,
+    /// Shown before registration; empty when the user already has codes.
+    pub recovery_codes: Vec<String>,
+}
+
 impl LoginService {
     /// Begin, or resume, the TOTP enrollment bound to this login.
     #[tracing::instrument(skip_all, name = "authentication.mfa_enrollment.prepare")]
@@ -59,7 +73,9 @@ impl LoginService {
         issuer: &str,
     ) -> Result<LoginTotpEnrollment, AppError> {
         let enrollment = self.enrollment_dependencies()?;
-        let (login, user) = self.enrollment_login(login_oid).await?;
+        let (login, user) = self
+            .enrollment_login(login_oid, CredentialType::Otp)
+            .await?;
         let context = enrollment_context(&login, &user);
         if let Some(challenge) = enrollment.challenges.latest(context).await?
             && let Ok(token) = enrollment_token(&challenge)
@@ -89,7 +105,9 @@ impl LoginService {
         algorithm: OtpAlgorithm,
     ) -> Result<LoginTotpEnrollment, AppError> {
         let enrollment = self.enrollment_dependencies()?;
-        let (login, user) = self.enrollment_login(login_oid).await?;
+        let (login, user) = self
+            .enrollment_login(login_oid, CredentialType::Otp)
+            .await?;
         let context = enrollment_context(&login, &user);
         let challenge = enrollment
             .challenges
@@ -129,7 +147,9 @@ impl LoginService {
         ctx: SessionContext,
     ) -> Result<ChallengeOutcome, AppError> {
         let enrollment = self.enrollment_dependencies()?;
-        let (login, user) = self.enrollment_login(login_oid).await?;
+        let (login, user) = self
+            .enrollment_login(login_oid, CredentialType::Otp)
+            .await?;
         if login.failed_attempts >= MAX_OTP_ATTEMPTS {
             self.fail_login_for_too_many_otp_attempts(login.oid).await;
             return Err(AppError::from_code(AuthErrorCode::TooManyAttempts));
@@ -164,35 +184,72 @@ impl LoginService {
 
         // The authenticator is now enrolled. If completing the session fails,
         // the next attempt is routed to an ordinary OTP challenge.
-        let session = self
-            .complete_session(
-                &login,
-                user.oid.into(),
-                ctx,
-                ACR_AAL2,
-                &[
-                    AMR_PASSWORD.to_owned(),
-                    AMR_OTP.to_owned(),
-                    AMR_MFA.to_owned(),
-                ],
-            )
-            .await?;
-        if let Err(e) = self
-            .login_repo
-            .update_status(
-                login.oid,
-                LoginStatus::AUTHENTICATED,
-                Some(session.oid),
-                Some(ACR_AAL2),
-            )
-            .await
-        {
-            error!(error = %e, "failed to update login status to authenticated");
-        }
-        Ok(ChallengeOutcome::Authenticated {
+        self.complete_authentication(
             login,
-            session: Box::new(session),
+            user.oid.into(),
+            ctx,
+            AuthenticationContextClass::MultiFactor,
+            &[
+                AMR_PASSWORD.to_owned(),
+                AMR_OTP.to_owned(),
+                AMR_MFA.to_owned(),
+            ],
+        )
+        .await
+    }
+
+    /// Prepare passkey registration for a `phr` interaction whose user
+    /// verified a second factor other than a passkey. Recovery codes are
+    /// generated for a user without any and stored with the new passkey.
+    #[tracing::instrument(skip_all, name = "authentication.passkey_enrollment.prepare")]
+    pub async fn passkey_enrollment(
+        &self,
+        login_oid: Uuid,
+    ) -> Result<LoginPasskeyEnrollment, AppError> {
+        let enrollment = self.enrollment_dependencies()?;
+        let passkeys = self.passkey_service()?;
+        let (login, user) = self
+            .enrollment_login(login_oid, CredentialType::Passkey)
+            .await?;
+        let recovery = enrollment
+            .mfa
+            .prepare_recovery_code_enrollment(user.oid)
+            .await?;
+        let credentials = enrollment
+            .mfa
+            .registration_recovery_codes(user.oid, recovery.enrollment_token.as_deref())
+            .await?;
+        let options = passkeys
+            .begin_registration_for_login(user.oid, login.oid, &user.email, credentials)
+            .await?;
+        Ok(LoginPasskeyEnrollment {
+            options,
+            recovery_codes: recovery.recovery_codes,
         })
+    }
+
+    /// Store the passkey registered in this interaction. The login then asks
+    /// for an assertion with a passkey, which establishes `phr`.
+    #[tracing::instrument(skip_all, name = "authentication.passkey_enrollment.confirm")]
+    pub async fn confirm_passkey_enrollment(
+        &self,
+        login_oid: Uuid,
+        challenge_id: Uuid,
+        name: &str,
+        credential: serde_json::Value,
+    ) -> Result<Login, AppError> {
+        let passkeys = self.passkey_service()?;
+        let (mut login, user) = self
+            .enrollment_login(login_oid, CredentialType::Passkey)
+            .await?;
+        passkeys
+            .finish_registration_for_login(user.oid, login.oid, challenge_id, name, credential)
+            .await?;
+        self.login_repo
+            .update_status(login.oid, LoginStatus::MFA_REQUIRED, None, None)
+            .await?;
+        login.status = LoginStatus::MFA_REQUIRED;
+        Ok(login)
     }
 
     fn enrollment_dependencies(&self) -> Result<&LoginMfaEnrollmentDependencies, AppError> {
@@ -201,7 +258,19 @@ impl LoginService {
             .ok_or_else(|| AppError::from_code(AuthErrorCode::InvalidLoginState))
     }
 
-    async fn enrollment_login(&self, login_oid: Uuid) -> Result<(Login, User), AppError> {
+    fn passkey_service(&self) -> Result<&PasskeyService, AppError> {
+        self.passkeys
+            .as_deref()
+            .ok_or_else(|| AppError::from_code(AuthErrorCode::CredentialTypeUnsupported))
+    }
+
+    /// The enrollment-phase login and its user, when the requested class asks
+    /// for a `method` credential.
+    async fn enrollment_login(
+        &self,
+        login_oid: Uuid,
+        method: CredentialType,
+    ) -> Result<(Login, User), AppError> {
         let login = self.prepare_challenge(login_oid).await?;
         if login.expires_at <= Utc::now() {
             if let Err(e) = self
@@ -213,7 +282,9 @@ impl LoginService {
             }
             return Err(AppError::from_code(AuthErrorCode::LoginExpired));
         }
-        if login.status != LoginStatus::MFA_ENROLLMENT_REQUIRED {
+        if login.status != LoginStatus::MFA_ENROLLMENT_REQUIRED
+            || enrollment_method(&login) != method
+        {
             return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
         }
         let user_oid = login

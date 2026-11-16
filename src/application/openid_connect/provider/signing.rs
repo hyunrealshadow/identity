@@ -78,7 +78,7 @@ impl OpenIdProviderService {
 }
 
 #[cfg(feature = "allow-none-alg")]
-fn append_conformance_none_alg(mut values: Vec<JwsAlgorithm>) -> Vec<JwsAlgorithm> {
+pub(super) fn append_conformance_none_alg(mut values: Vec<JwsAlgorithm>) -> Vec<JwsAlgorithm> {
     if !values.contains(&JwsAlgorithm::None) {
         values.push(JwsAlgorithm::None);
     }
@@ -86,6 +86,6 @@ fn append_conformance_none_alg(mut values: Vec<JwsAlgorithm>) -> Vec<JwsAlgorith
 }
 
 #[cfg(not(feature = "allow-none-alg"))]
-fn append_conformance_none_alg(values: Vec<JwsAlgorithm>) -> Vec<JwsAlgorithm> {
+pub(super) fn append_conformance_none_alg(values: Vec<JwsAlgorithm>) -> Vec<JwsAlgorithm> {
     values
 }

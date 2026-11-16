@@ -554,6 +554,16 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "String",
           "policies": []
         },
+        "activeRequestObjectEncryptionAlgs": {
+          "name": "activeRequestObjectEncryptionAlgs",
+          "returnType": "String",
+          "policies": []
+        },
+        "activeSigningAlgs": {
+          "name": "activeSigningAlgs",
+          "returnType": "String",
+          "policies": []
+        },
         "idTokenEncryptionAlgs": {
           "name": "idTokenEncryptionAlgs",
           "returnType": "String",

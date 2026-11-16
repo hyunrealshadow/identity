@@ -328,7 +328,7 @@ impl OpenIdConnectClientRepositoryImpl {
                         )),
                         default_max_age: Set(metadata.default_max_age),
                         require_auth_time: Set(metadata.require_auth_time),
-                        default_acr_values: Set(optional_strings_to_json(
+                        default_acr_values: Set(optional_metadata_values_to_json(
                             metadata.default_acr_values,
                         )),
                         initiate_login_uri: Set(metadata

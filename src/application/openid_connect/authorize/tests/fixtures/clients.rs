@@ -1,5 +1,5 @@
 use identity_domain::{
-    auth::ACR_AAL2,
+    auth::AuthenticationContextClass,
     openid_connect::{GrantType, OAuthProtocolVersion, TokenEndpointAuthMethod},
 };
 
@@ -85,7 +85,7 @@ impl OpenIdConnectClientRepository for DefaultsClientRepository {
     ) -> Result<Option<OpenIdConnectClient>, OpenIdConnectClientRepositoryError> {
         let mut metadata = test_metadata(None, None);
         metadata.default_max_age = Some(300);
-        metadata.default_acr_values = Some(vec![ACR_AAL2.to_owned()]);
+        metadata.default_acr_values = Some(vec![AuthenticationContextClass::MultiFactor]);
         Ok(Some(
             OpenIdConnectClient::new(test_client(oid), metadata, test_platforms(), test_scopes())
                 .unwrap(),

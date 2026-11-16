@@ -14,7 +14,7 @@ import {
   loginChallengeDestination,
   loginCredentialType,
   loginMethodPath,
-  loginMfaSetupDestination,
+  loginEnrollmentDestination,
 } from './login-navigation'
 
 function optionalString(value: unknown) {
@@ -77,7 +77,10 @@ export async function submitLoginMethod(request: Request, method: string) {
     )
 
     if (result.status === 'mfa_enrollment_required') {
-      return navigationResponse(request, loginMfaSetupDestination(loginId, uiLocales))
+      return navigationResponse(
+        request,
+        loginEnrollmentDestination(loginId, result.enrollment_method, uiLocales),
+      )
     }
 
     if (result.status === 'mfa_required') {

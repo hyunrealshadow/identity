@@ -322,5 +322,7 @@ query ConsoleClientMetadataOptions {
     requestObjectEncryptionAlgs
     requestObjectEncryptionEncs
     tokenEndpointAuthSigningAlgs
+    activeSigningAlgs
+    activeRequestObjectEncryptionAlgs
   }
 }

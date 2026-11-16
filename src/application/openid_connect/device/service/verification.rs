@@ -7,6 +7,7 @@ use crate::{
 };
 use chrono::{DateTime, Utc};
 use identity_domain::{
+    auth::AuthenticationContextClass,
     client_authorization::{
         ClientAuthorization, ClientAuthorizationData, DeviceAuthorizationApproval,
         DeviceAuthorizationRequestData, DeviceRequestStatus, USER_CODE_LENGTH, normalize_user_code,
@@ -32,7 +33,7 @@ pub enum DeviceVerificationStatus {
 pub struct DeviceVerificationUser {
     pub user_oid: Uuid,
     pub auth_time: Option<i64>,
-    pub acr: Option<String>,
+    pub acr: Option<AuthenticationContextClass>,
     pub amr: Vec<String>,
 }
 
@@ -186,7 +187,7 @@ impl DeviceAuthorizationService {
                         user_oid: user.user_oid.to_string(),
                         approved_scope: data.scope.clone(),
                         auth_time: user.auth_time,
-                        acr: user.acr.clone(),
+                        acr: user.acr,
                         amr: user.amr.clone(),
                         device_authorization_oid,
                     },

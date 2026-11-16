@@ -1,5 +1,6 @@
 use chrono::{DateTime, Duration, Utc};
 use identity_domain::{
+    auth::reported_acr,
     client_authorization::{AccessTokenPrincipal, ClientAuthenticationMode},
     openid_connect::{API_RESOURCE, ScopeSet, TokenEndpointAuthMethod},
 };
@@ -182,17 +183,19 @@ impl TokenService {
                         return Err(AppError::from_code(TokenErrorCode::RefreshTokenInvalid)
                             .with_param("reason", "session is not active for the user"));
                     }
-                    (session.effective_acr(now).map(str::to_owned), session.amr)
+                    (session.effective_acr(now), session.amr)
                 } else {
-                    (refresh_data.acr.clone(), refresh_data.amr.clone())
+                    (refresh_data.acr, refresh_data.amr.clone())
                 }
             }
             None if self.session_repo.is_some() && !device_linked => {
                 return Err(AppError::from_code(TokenErrorCode::RefreshTokenInvalid)
                     .with_param("reason", "human refresh requires a live session"));
             }
-            None => (refresh_data.acr.clone(), refresh_data.amr.clone()),
+            None => (refresh_data.acr, refresh_data.amr.clone()),
         };
+        // Report the most preferred originally requested class still met.
+        let session_acr = reported_acr(session_acr, &refresh_data.acr_values);
         let protected_session_id = match refresh_data.session_oid {
             Some(session_oid) => Some(
                 self.protected_session_id(
@@ -409,7 +412,7 @@ impl TokenService {
                 protected_session_id: protected_session_id.as_deref(),
                 scope: &scope,
                 auth_time: refresh_data.auth_time,
-                acr: session_acr.as_deref(),
+                acr: session_acr,
                 amr: &session_amr,
             })
             .await?;
@@ -429,7 +432,7 @@ impl TokenService {
                     scope: &grant_scope,
                     nonce: None,
                     auth_time: refresh_data.auth_time,
-                    acr: session_acr.as_deref(),
+                    acr: session_acr,
                     amr: &session_amr,
                     access_token: Some(&access_token),
                     protected_session_id: protected_session_id.as_deref(),
@@ -456,6 +459,7 @@ impl TokenService {
                     auth_time: refresh_data.auth_time,
                     acr: session_acr,
                     amr: session_amr,
+                    acr_values: refresh_data.acr_values.clone(),
                     rotated_from: Some(rotated_from),
                     authorization_code_oid: refresh_data
                         .authorization_code_oid

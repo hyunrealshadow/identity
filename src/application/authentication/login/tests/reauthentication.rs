@@ -51,7 +51,7 @@ async fn password_only_account_can_reauthenticate_at_aal1() {
         panic!("password-only reauthentication must complete at AAL1")
     };
     assert_eq!(session.oid, login.session_oid.unwrap());
-    assert_eq!(session.acr.as_deref(), Some(ACR_AAL1));
+    assert_eq!(session.acr, Some(AuthenticationContextClass::SingleFactor));
 }
 
 #[tokio::test]
@@ -83,7 +83,7 @@ async fn forced_reauthentication_reuses_the_bound_session() {
                 user_agent: None,
                 ip_address: None,
             },
-            ACR_AAL2,
+            AuthenticationContextClass::MultiFactor,
             &[
                 AMR_PASSWORD.to_owned(),
                 AMR_OTP.to_owned(),
@@ -94,7 +94,7 @@ async fn forced_reauthentication_reuses_the_bound_session() {
         .unwrap();
 
     assert_eq!(session.oid, bound_session_oid);
-    assert_eq!(session.acr.as_deref(), Some(ACR_AAL2));
+    assert_eq!(session.acr, Some(AuthenticationContextClass::MultiFactor));
 }
 
 #[tokio::test]

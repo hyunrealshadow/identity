@@ -2,9 +2,9 @@ use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use identity_domain::{
     auth::{
-        ACR_AAL1, ACR_AAL2, SESSION_EXPIRY, SessionOid, SessionStatus,
+        AuthenticationContextClass, SESSION_EXPIRY, SessionOid, SessionStatus,
         challenge::ChallengeBinding,
-        model::{ActiveSession, Session},
+        model::{ActiveSession, Session, effective_acr},
         repository::{
             CreateSessionInput, SessionPage, SessionPageDirection, SessionPageItem,
             SessionRepository, SessionRepositoryError, SessionSortKey,
@@ -39,6 +39,15 @@ use crate::database::{
     query::json_text,
 };
 
+pub(super) fn decode_acr(
+    value: Option<String>,
+) -> Result<Option<AuthenticationContextClass>, SessionRepositoryError> {
+    value
+        .map(|value| value.parse())
+        .transpose()
+        .map_err(|_| SessionRepositoryError::InvalidStoredAcr)
+}
+
 pub(super) fn session_to_domain(
     m: session::Model,
     user_oid: Uuid,
@@ -64,7 +73,7 @@ pub(super) fn session_to_domain(
         expires_at: decode_nonnullable_expiry(m.expires_at),
         revoked_at: m.revoked_at.map(|value| value.with_timezone(&Utc)),
         created_at: m.created_at.with_timezone(&Utc),
-        acr: m.acr,
+        acr: decode_acr(m.acr)?,
         acr_expires_at: m.acr_expires_at.map(|value| value.with_timezone(&Utc)),
         amr,
     })
@@ -308,14 +317,11 @@ impl SessionRepository for SessionRepositoryImpl {
                     expires_at: decode_nonnullable_expiry(s.expires_at),
                     created_at,
                     authenticated_at,
-                    acr: if s.acr.as_deref() == Some(ACR_AAL2)
-                        && s.acr_expires_at
-                            .is_some_and(|expires_at| expires_at.with_timezone(&Utc) <= Utc::now())
-                    {
-                        Some(ACR_AAL1.to_owned())
-                    } else {
-                        s.acr
-                    },
+                    acr: effective_acr(
+                        decode_acr(s.acr).ok()?,
+                        s.acr_expires_at.map(|value| value.with_timezone(&Utc)),
+                        Utc::now(),
+                    ),
                     amr: from_value(s.amr).unwrap_or_default(),
                 })
             })
@@ -349,7 +355,7 @@ impl SessionRepository for SessionRepositoryImpl {
             expires_at: Set(encode_nonnullable_expiry(input.expires_at)),
             created_at: Set(now.into()),
             updated_at: Set(None),
-            acr: Set(input.acr),
+            acr: Set(input.acr.map(|acr| acr.to_string())),
             acr_expires_at: Set(input.acr_expires_at.map(Into::into)),
             amr: Set(json!(input.amr)),
             ..Default::default()
@@ -395,7 +401,7 @@ impl SessionRepository for SessionRepositoryImpl {
         &self,
         oid: SessionOid,
         expected_user_oid: Uuid,
-        acr: &str,
+        acr: AuthenticationContextClass,
         acr_expires_at: DateTime<Utc>,
         amr: &[String],
     ) -> Result<Session, SessionRepositoryError> {
@@ -433,7 +439,7 @@ impl SessionRepository for SessionRepositoryImpl {
         active.expires_at = Set((now
             + Duration::from_std(SESSION_EXPIRY).unwrap_or_else(|_| Duration::days(7)))
         .into());
-        active.acr = Set(Some(acr.to_owned()));
+        active.acr = Set(Some(acr.to_string()));
         active.acr_expires_at = Set(Some(acr_expires_at.into()));
         active.amr = Set(json!(amr));
         active.updated_at = Set(Some(now.into()));
@@ -548,7 +554,7 @@ pub(super) use super::session_security::lock_account_sessions;
 mod tests {
     use chrono::{Duration, Utc};
     use identity_domain::auth::{
-        ACR_AAL1, AMR_PASSWORD, SESSION_EXPIRY, SessionOid, SessionStatus,
+        AMR_PASSWORD, AuthenticationContextClass, SESSION_EXPIRY, SessionOid, SessionStatus,
         model::Session,
         repository::{SessionRepository as _, SessionRepositoryError},
     };
@@ -654,7 +660,7 @@ mod tests {
             .reauthenticate_by_oid(
                 oid,
                 owner,
-                ACR_AAL1,
+                AuthenticationContextClass::SingleFactor,
                 started + Duration::hours(1),
                 &[AMR_PASSWORD.to_owned()],
             )
@@ -723,7 +729,13 @@ mod tests {
                 .into_connection();
             let repo = SessionRepositoryImpl::new(db);
             let result = repo
-                .reauthenticate_by_oid(oid, owner, ACR_AAL1, Utc::now() + Duration::hours(1), &[])
+                .reauthenticate_by_oid(
+                    oid,
+                    owner,
+                    AuthenticationContextClass::SingleFactor,
+                    Utc::now() + Duration::hours(1),
+                    &[],
+                )
                 .await;
             assert!(matches!(
                 result,

@@ -18,7 +18,7 @@ use crate::{
 use chrono::{DateTime, Duration, Utc};
 use identity_domain::{
     auth::{
-        ACR_AAL2, LOCK_DURATION, LoginStatus, MAX_FAILED_ATTEMPTS, SessionOid,
+        AuthenticationContextClass, LOCK_DURATION, LoginStatus, MAX_FAILED_ATTEMPTS, SessionOid,
         model::{Login, Session},
         repository::{LoginRepository, SessionRepository},
     },
@@ -38,7 +38,7 @@ mod session;
 #[cfg(test)]
 mod tests;
 
-pub use enrollment::{LoginMfaEnrollmentDependencies, LoginTotpEnrollment};
+pub use enrollment::{LoginMfaEnrollmentDependencies, LoginPasskeyEnrollment, LoginTotpEnrollment};
 
 // ─── Input/Output Types ──────────────────────────────────────────────────────
 
@@ -76,14 +76,14 @@ pub struct IdentifierResult {
 /// The outcome of a challenge step.
 #[derive(Debug)]
 pub enum ChallengeOutcome {
-    /// Password was verified and the user has no OTP credential — session
-    /// created or renewed immediately with password-only ACR.
+    /// The requested class is established — session created or renewed.
     Authenticated { login: Login, session: Box<Session> },
     /// The first factor is established; the client must supply an allowed
     /// second factor before authentication can complete.
     MfaRequired { login: Login },
-    /// The first factor is established for an AAL2 request but the user has
-    /// no second factor; authentication completes only by enrolling one.
+    /// The established factors fall short of the requested class and the
+    /// user has no credential that meets it; authentication completes only by
+    /// enrolling one (see [`enrollment_method`]).
     MfaEnrollmentRequired { login: Login },
 }
 
@@ -141,7 +141,7 @@ impl LoginService {
         self
     }
 
-    /// Allow an AAL2 interaction to enroll a missing second factor.
+    /// Allow an interaction to enroll a credential its requested class needs.
     #[must_use]
     pub fn with_mfa_enrollment(mut self, dependencies: LoginMfaEnrollmentDependencies) -> Self {
         self.mfa_enrollment = Some(dependencies);
@@ -183,11 +183,16 @@ impl LoginService {
         }
         let credentials = self.credential_types(user_oid.into()).await?;
         let has_second_factor = if awaiting_enrollment {
-            has_second_factor(&credentials)
+            // A `phr` enrollment is left only by registering a passkey in
+            // this interaction or by asserting an existing one.
+            !requires_phishing_resistance(&login)
+                && credentials
+                    .iter()
+                    .any(|kind| matches!(kind, CredentialType::Otp | CredentialType::Passkey))
         } else {
             // An existing session establishes the first factor. Without any
-            // second factor, an AAL2 request asks for the password so a
-            // missing factor can be enrolled after it.
+            // second factor, a multi-factor request asks for the password so
+            // a missing factor can be enrolled after it.
             credentials
                 .iter()
                 .any(|kind| *kind != CredentialType::Password)
@@ -306,16 +311,28 @@ impl LoginService {
     }
 }
 
-/// Whether the user can complete an AAL2 challenge with an enrolled factor.
-fn has_second_factor(credentials: &[CredentialType]) -> bool {
-    credentials
-        .iter()
-        .any(|kind| matches!(kind, CredentialType::Otp | CredentialType::Passkey))
+/// Whether the login requires a multi-factor class.
+fn requires_second_factor(login: &Login) -> bool {
+    login
+        .required_acr()
+        .is_some_and(AuthenticationContextClass::is_multi_factor)
 }
 
-/// Whether the login requires a second factor the user must enroll first.
-fn requires_aal2(login: &Login) -> bool {
-    login.requested_acr.as_deref() == Some(ACR_AAL2)
+/// Whether only a passkey can complete the login. A one-time or recovery code
+/// still verifies a second factor, after which the user registers a passkey
+/// on this device and authenticates with it.
+fn requires_phishing_resistance(login: &Login) -> bool {
+    login.required_acr() == Some(AuthenticationContextClass::PhishingResistant)
+}
+
+/// The credential an enrollment-phase login asks the user to add.
+#[must_use]
+pub fn enrollment_method(login: &Login) -> CredentialType {
+    if requires_phishing_resistance(login) {
+        CredentialType::Passkey
+    } else {
+        CredentialType::Otp
+    }
 }
 
 fn can_challenge_second_factor(login: &Login) -> bool {
@@ -357,6 +374,17 @@ pub fn preferred_credential_type(
     if login.user_oid.is_none() || login.expires_at <= Utc::now() {
         return None;
     }
+    // A request that prefers `phr` is offered an enrolled passkey first,
+    // whatever it requires and whatever the user's own preference.
+    if login.preferred_acr() == Some(AuthenticationContextClass::PhishingResistant)
+        && has(CredentialType::Passkey)
+        && matches!(
+            login.status,
+            LoginStatus::IDENTIFIER_VERIFIED | LoginStatus::MFA_REQUIRED
+        )
+    {
+        return Some(CredentialType::Passkey);
+    }
     if login.status == LoginStatus::MFA_REQUIRED {
         if login.session_oid.is_some()
             && preference == MfaMethod::Passkey
@@ -387,10 +415,15 @@ fn validate_passkey_login(login: &Login) -> Result<(), AppError> {
     if login.expires_at <= Utc::now() {
         return Err(AppError::from_code(AuthErrorCode::LoginExpired));
     }
-    if !matches!(
-        login.status,
-        LoginStatus::IDENTIFIER_VERIFIED | LoginStatus::MFA_REQUIRED
-    ) || login.user_oid.is_none()
+    // A `phr` enrollment may still be completed with an existing passkey.
+    let enrolling_passkey =
+        login.status == LoginStatus::MFA_ENROLLMENT_REQUIRED && requires_phishing_resistance(login);
+    if !(enrolling_passkey
+        || matches!(
+            login.status,
+            LoginStatus::IDENTIFIER_VERIFIED | LoginStatus::MFA_REQUIRED
+        ))
+        || login.user_oid.is_none()
     {
         return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
     }

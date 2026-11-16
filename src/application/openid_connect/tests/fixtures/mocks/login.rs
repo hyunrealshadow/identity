@@ -2,7 +2,7 @@ use std::sync::Mutex;
 
 use chrono::{Duration, Utc};
 use identity_domain::auth::{
-    LoginFailureReason, LoginStatus, SessionOid,
+    AuthenticationContextClass, LoginFailureReason, LoginStatus, SessionOid,
     model::Login,
     repository::{LoginRepository, LoginRepositoryError},
 };
@@ -10,7 +10,12 @@ use uuid::Uuid;
 
 // ─── LoginRepository test double (mockall can't handle &str lifetime params) ───
 
-type UpdateStatusCall = (Uuid, String, Option<SessionOid>, Option<String>);
+type UpdateStatusCall = (
+    Uuid,
+    String,
+    Option<SessionOid>,
+    Option<AuthenticationContextClass>,
+);
 type BindSessionCall = (Uuid, SessionOid);
 
 /// Simple test double for LoginRepository.  mockall's `mock!` macro cannot
@@ -58,7 +63,7 @@ impl LoginRepository for MockLoginRepository {
         &self,
         client_oid: Uuid,
         client_authorization_oid: Uuid,
-        requested_acr: Option<&str>,
+        requested_acr_values: &[AuthenticationContextClass],
     ) -> Result<Login, LoginRepositoryError> {
         self.create_pending_calls
             .lock()
@@ -75,7 +80,7 @@ impl LoginRepository for MockLoginRepository {
             .ok_or(LoginRepositoryError::LoginNotFound)?;
         login.client_oid = client_oid;
         login.client_authorization_oid = client_authorization_oid;
-        login.requested_acr = requested_acr.map(str::to_owned);
+        login.requested_acr_values = requested_acr_values.to_vec();
         Ok(login)
     }
 
@@ -104,13 +109,13 @@ impl LoginRepository for MockLoginRepository {
         login_oid: Uuid,
         status: LoginStatus,
         session_oid: Option<SessionOid>,
-        acr: Option<&str>,
+        acr: Option<AuthenticationContextClass>,
     ) -> Result<(), LoginRepositoryError> {
         self.update_status_calls.lock().unwrap().push((
             login_oid,
             status.to_string(),
             session_oid,
-            acr.map(str::to_owned),
+            acr,
         ));
         Ok(())
     }
@@ -179,7 +184,7 @@ pub fn mock_login_repo() -> MockLoginRepository {
             created_at: Utc::now(),
             expires_at: Utc::now() + Duration::minutes(5),
             acr: None,
-            requested_acr: None,
+            requested_acr_values: Vec::new(),
         })),
         create_pending_error: Mutex::new(None),
         create_pending_calls: Mutex::new(Vec::new()),
@@ -194,7 +199,7 @@ pub fn mock_login_repo() -> MockLoginRepository {
             created_at: Utc::now(),
             expires_at: Utc::now() + Duration::minutes(5),
             acr: None,
-            requested_acr: None,
+            requested_acr_values: Vec::new(),
         })),
         bind_user_error: Mutex::new(None),
         bind_session_calls: Mutex::new(Vec::new()),

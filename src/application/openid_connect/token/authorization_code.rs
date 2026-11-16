@@ -1,7 +1,6 @@
 use chrono::{Duration, Utc};
 use identity_domain::{
-    auth,
-    auth::ACR_AAL2,
+    auth::{AuthenticationContextClass, reported_acr},
     client_authorization::{AccessTokenPrincipal, ClientAuthenticationMode},
     openid_connect::{API_RESOURCE, CodeChallengeMethod, OAuthProtocolVersion, ScopeSet},
 };
@@ -258,17 +257,18 @@ impl TokenService {
                     TokenErrorCode::AuthCodeSessionUserMismatch,
                 ));
             }
-            (session.effective_acr(now).map(str::to_owned), session.amr)
+            (session.effective_acr(now), session.amr)
         } else {
-            (data.acr.clone(), data.amr.clone())
+            (data.acr, data.amr.clone())
         };
         if management
             && !session_acr
-                .as_deref()
-                .is_some_and(|acr| auth::acr_satisfies(acr, ACR_AAL2))
+                .is_some_and(|acr| acr.satisfies(AuthenticationContextClass::MultiFactor))
         {
             return Err(AppError::from_code(TokenErrorCode::AuthCodeInvalid));
         }
+        // Report the most preferred requested class the live session meets.
+        let session_acr = reported_acr(session_acr, &data.acr_values);
         let protected_session_id = self
             .protected_session_id(data.session_oid, data.protected_session_id.as_deref())
             .await?;
@@ -501,7 +501,7 @@ impl TokenService {
                 protected_session_id: Some(&protected_session_id),
                 scope: &selection.scope,
                 auth_time: data.auth_time,
-                acr: session_acr.as_deref(),
+                acr: session_acr,
                 amr: &session_amr,
             })
             .await?;
@@ -519,7 +519,7 @@ impl TokenService {
                     scope: &data.scope,
                     nonce: data.nonce.as_deref(),
                     auth_time: data.auth_time,
-                    acr: session_acr.as_deref(),
+                    acr: session_acr,
                     amr: &session_amr,
                     access_token: Some(&access_token),
                     protected_session_id: Some(&protected_session_id),
@@ -551,6 +551,7 @@ impl TokenService {
                         auth_time: data.auth_time,
                         acr: session_acr,
                         amr: session_amr,
+                        acr_values: data.acr_values.clone(),
                         rotated_from: None,
                         authorization_code_oid: Some(record.oid.to_string()),
                         client_authentication_mode: Some(client_authentication_mode),

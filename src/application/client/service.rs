@@ -89,7 +89,7 @@ impl ClientManagementService {
         }
     }
 
-    /// Validate advanced metadata against the provider's live keys.
+    /// Validate advanced metadata against the provider's capabilities.
     #[must_use]
     pub fn with_provider(mut self, provider: Arc<OpenIdProviderService>) -> Self {
         self.provider = Some(provider);
@@ -98,7 +98,7 @@ impl ClientManagementService {
 
     async fn metadata_options(&self) -> Result<ClientMetadataOptions, AppError> {
         match &self.provider {
-            Some(provider) => provider.client_metadata_options().await,
+            Some(provider) => Ok(provider.client_metadata_options()),
             None => Ok(ClientMetadataOptions::from_capabilities(
                 &OpenIdProviderCapabilities::default(),
             )),

@@ -10,6 +10,7 @@ import {
   type ValueNode,
 } from 'graphql'
 
+import { AuthenticationContextClass, acrSatisfies } from './acr'
 import { schemaMetadata as defaultSchema } from './schema'
 import type {
   AccessPolicy,
@@ -122,7 +123,7 @@ function unknownOutcome(base: Outcome): Outcome {
 }
 
 function isAal2(acr: string | undefined): boolean {
-  return acr === 'aal2'
+  return acrSatisfies(acr, AuthenticationContextClass.MultiFactor)
 }
 
 /** A future auth_time is not fresh either; it cannot be a negative age. */
@@ -598,7 +599,7 @@ export function createPreflight(schema: SchemaMetadata) {
       requiredScopes: sortedScopes(outcome),
     }
     if (status === 'reauthentication') {
-      if (outcome.auth.aal2) result.acrValues = 'aal2'
+      if (outcome.auth.aal2) result.acrValues = AuthenticationContextClass.MultiFactor
       if (outcome.auth.recent) result.maxAge = outcome.auth.maxAge ?? DEFAULT_MAX_AGE
     }
     return result

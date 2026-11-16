@@ -345,7 +345,7 @@ impl TokenService {
                 protected_session_id: None,
                 scope: &scope_string,
                 auth_time: approval.auth_time,
-                acr: approval.acr.as_deref(),
+                acr: approval.acr,
                 amr: &approval.amr,
             })
             .await?;
@@ -364,7 +364,7 @@ impl TokenService {
                     scope: &scope.to_scope_string(),
                     nonce: None,
                     auth_time: approval.auth_time,
-                    acr: approval.acr.as_deref(),
+                    acr: approval.acr,
                     amr: &approval.amr,
                     access_token: Some(&access_token),
                     protected_session_id: None,
@@ -419,7 +419,8 @@ impl TokenService {
                     session_oid: None,
                     protected_session_id: None,
                     auth_time: approval.auth_time,
-                    acr: approval.acr.clone(),
+                    acr: approval.acr,
+                    acr_values: Vec::new(),
                     amr: approval.amr.clone(),
                     rotated_from: None,
                     authorization_code_oid: None,

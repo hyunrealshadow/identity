@@ -1,3 +1,4 @@
+import { AuthenticationContextClass } from '@identity/graphql-access'
 import { TableRowActions } from '#/components/table-row-actions'
 import { CursorPagination } from '#/components/cursor-pagination'
 import { DatePickerField } from '#/components/date-picker-field'
@@ -588,7 +589,7 @@ export function UsersListPage({ search }: { search: UsersSearch }) {
       <>
         {header}
         <StepUpPanel
-          stepUp={{ source: 'graphql', acrValues: 'aal2' }}
+          stepUp={{ source: 'graphql', acrValues: AuthenticationContextClass.MultiFactor }}
           hideDetails
           description={t('usersStepUpDescription')}
           note={t('usersStepUpNote')}

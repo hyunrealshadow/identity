@@ -97,6 +97,8 @@ export interface LoginStatusResponse {
   requires_reauthentication: boolean
   login_hint?: string
   challenge_uri?: string
+  /** Credential to add while `status` is `mfa_enrollment_required`. */
+  enrollment_method?: 'otp' | 'passkey'
   ui_locales?: Array<string>
   continue_uri?: string
 }
@@ -126,11 +128,18 @@ export interface SelectAccountResponse {
 export interface ChallengeResponse {
   preferred_credential_type?: string
   status: 'authenticated' | 'mfa_required' | 'mfa_enrollment_required'
+  enrollment_method?: 'otp' | 'passkey'
   continue_uri?: string
   sessions?: Array<string>
 }
 
-/** The TOTP enrollment pending on an AAL2 login, from `/api/auth/login/mfa-enrollment`. */
+/** Passkey registration for a `phr` login, from `/api/auth/login/passkey-enrollment`. */
+export interface PasskeyEnrollmentResponse {
+  options: { challenge_id: string; public_key: Record<string, unknown> }
+  recovery_codes: Array<string>
+}
+
+/** The TOTP enrollment pending on an `aal2` login, from `/api/auth/login/mfa-enrollment`. */
 export interface MfaEnrollmentResponse {
   secret: string
   otp_auth_uri: string

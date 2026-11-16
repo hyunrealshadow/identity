@@ -3,7 +3,10 @@
 //! All external `id` fields are encrypted login.oid values.
 
 use chrono::{DateTime, Utc};
-use identity_application::user::{CredentialType, OtpAlgorithm};
+use identity_application::{
+    authentication::passkey::{PasskeyAssertion, PasskeyOptions},
+    user::{CredentialType, OtpAlgorithm},
+};
 use identity_domain::auth::LoginStatus;
 use serde::{Deserialize, Serialize};
 
@@ -163,6 +166,10 @@ pub struct LoginStatusResponse {
     /// authorization server owns this policy decision; the UI only follows it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub challenge_uri: Option<String>,
+    /// Credential the user must add in the `mfa_enrollment_required` phase:
+    /// `otp`, or `passkey` when the request requires `phr`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enrollment_method: Option<CredentialType>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ui_locales: Option<Vec<String>>,
     /// Absolute OP `/oauth2/continue?login_id=X` URI, present only when authenticated.
@@ -236,6 +243,10 @@ pub struct ChallengeResponse {
     pub preferred_credential_type: Option<CredentialType>,
     /// `"authenticated"`, `"mfa_required"` or `"mfa_enrollment_required"`.
     pub status: LoginStatus,
+    /// Credential to enroll; present only when `status ==
+    /// "mfa_enrollment_required"`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enrollment_method: Option<CredentialType>,
     /// Present only when `status == "authenticated"`.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub session: Option<SessionInfo>,
@@ -286,6 +297,25 @@ pub struct MfaEnrollmentResponse {
     pub recovery_codes: Vec<String>,
     pub algorithm: OtpAlgorithm,
     pub expires_at: DateTime<Utc>,
+}
+
+/// `POST /api/auth/login/passkey-enrollment` response: registration options
+/// for a `phr` interaction and the recovery codes to save first.
+#[derive(Serialize)]
+pub struct PasskeyEnrollmentResponse {
+    pub options: PasskeyOptions,
+    /// Empty when the user already has recovery codes.
+    pub recovery_codes: Vec<String>,
+}
+
+/// `POST /api/auth/login/passkey-enrollment/confirm` request. Confirmation
+/// is answered with a [`ChallengeResponse`] asking for the new passkey.
+#[derive(Deserialize)]
+pub struct PasskeyEnrollmentConfirmRequest {
+    pub id: String,
+    pub name: String,
+    #[serde(flatten)]
+    pub registration: PasskeyAssertion,
 }
 
 // ─── Common Types ────────────────────────────────────────────────────────────

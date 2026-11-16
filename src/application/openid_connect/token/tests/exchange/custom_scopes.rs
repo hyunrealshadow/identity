@@ -65,6 +65,7 @@ async fn custom_scopes_round_trip_through_code_tokens_and_narrowed_refresh() {
                 auth_time: None,
                 acr: None,
                 amr: vec![],
+                acr_values: Vec::new(),
                 claims: None,
                 redirect_uri: "https://client.example.com/callback".into(),
                 redirect_uri_was_supplied: true,

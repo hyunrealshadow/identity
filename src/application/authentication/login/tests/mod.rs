@@ -4,8 +4,8 @@ use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use identity_domain::{
     auth::{
-        ACR_AAL1, ACR_AAL2, AMR_MFA, AMR_OTP, AMR_PASSWORD, LoginFailureReason, LoginStatus,
-        MAX_FAILED_ATTEMPTS, MAX_OTP_ATTEMPTS, SessionStatus,
+        AMR_MFA, AMR_OTP, AMR_PASSWORD, AuthenticationContextClass, LoginFailureReason,
+        LoginStatus, MAX_FAILED_ATTEMPTS, MAX_OTP_ATTEMPTS, SessionStatus,
         model::{ActiveSession, Login, Session, SessionOid},
         repository::{
             CreateSessionInput, LoginRepository, LoginRepositoryError, SessionPage,
@@ -169,7 +169,7 @@ fn test_login(user_oid: Uuid, failed_attempts: i32) -> Login {
         created_at: Utc::now(),
         expires_at: Utc::now() + Duration::minutes(5),
         acr: None,
-        requested_acr: None,
+        requested_acr_values: Vec::new(),
     }
 }
 
@@ -221,7 +221,7 @@ fn browser_session(user_oid: Uuid) -> ActiveSession {
         expires_at: Some(now + Duration::hours(1)),
         created_at: now - Duration::days(6),
         authenticated_at: now - Duration::days(6),
-        acr: Some(ACR_AAL1.to_owned()),
+        acr: Some(AuthenticationContextClass::SingleFactor),
         amr: vec![AMR_PASSWORD.to_owned()],
     }
 }

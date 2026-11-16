@@ -1,23 +1,86 @@
-use super::{LoginService, SessionContext};
+use super::{ChallengeOutcome, LoginService, SessionContext, requires_phishing_resistance};
 use crate::{
     error::{AppError, codes::auth::AuthErrorCode},
     user::model::User,
 };
 use chrono::{DateTime, Duration, Utc};
 use identity_domain::auth::{
-    ACR_AAL2, ELEVATED_AUTHENTICATION_TTL, RECENT_AUTHENTICATION_TTL, SESSION_EXPIRY,
+    AuthenticationContextClass, ELEVATED_AUTHENTICATION_TTL, LoginStatus,
+    RECENT_AUTHENTICATION_TTL, SESSION_EXPIRY,
     model::{Login, Session},
     repository::CreateSessionInput,
 };
+use tracing::error;
 use uuid::Uuid;
 
 impl LoginService {
+    /// Finish a verified second factor short of `phr`. A `phr` request then
+    /// asks the user to register a passkey on this device and authenticate
+    /// with it; any other request completes at the multi-factor class.
+    pub(super) async fn complete_second_factor(
+        &self,
+        login: Login,
+        user_oid: Uuid,
+        ctx: SessionContext,
+        amr: &[String],
+    ) -> Result<ChallengeOutcome, AppError> {
+        if requires_phishing_resistance(&login) {
+            self.login_repo
+                .update_status(login.oid, LoginStatus::MFA_ENROLLMENT_REQUIRED, None, None)
+                .await?;
+            if let Err(e) = self.login_repo.reset_failed_attempts(login.oid).await {
+                error!(error = %e, "failed to reset login failed attempts for passkey enrollment");
+            }
+            return Ok(ChallengeOutcome::MfaEnrollmentRequired { login });
+        }
+        self.complete_authentication(
+            login,
+            user_oid,
+            ctx,
+            AuthenticationContextClass::MultiFactor,
+            amr,
+        )
+        .await
+    }
+
+    /// Establish `acr` on a new or bound session and mark the login
+    /// authenticated. A forced reauthentication upgrades the bound session in
+    /// place.
+    pub(super) async fn complete_authentication(
+        &self,
+        login: Login,
+        user_oid: Uuid,
+        ctx: SessionContext,
+        acr: AuthenticationContextClass,
+        amr: &[String],
+    ) -> Result<ChallengeOutcome, AppError> {
+        let session = self
+            .complete_session(&login, user_oid, ctx, acr, amr)
+            .await?;
+        if let Err(e) = self
+            .login_repo
+            .update_status(
+                login.oid,
+                LoginStatus::AUTHENTICATED,
+                Some(session.oid),
+                Some(acr),
+            )
+            .await
+        {
+            error!(error = %e, "failed to update login status to authenticated");
+        }
+        Ok(ChallengeOutcome::Authenticated {
+            login,
+            session: Box::new(session),
+        })
+    }
+
     pub(super) async fn complete_session(
         &self,
         login: &Login,
         user_oid: Uuid,
         ctx: SessionContext,
-        acr: &str,
+        acr: AuthenticationContextClass,
         amr: &[String],
     ) -> Result<Session, AppError> {
         // A fresh login (including prompt=login) must complete its credential
@@ -60,7 +123,7 @@ impl LoginService {
                     user_agent: ctx.user_agent,
                     ip_address: ctx.ip_address,
                     expires_at: Some(expires_at),
-                    acr: Some(acr.to_owned()),
+                    acr: Some(acr),
                     acr_expires_at,
                     amr: amr.to_vec(),
                 },
@@ -85,8 +148,8 @@ impl LoginService {
     }
 }
 
-fn authentication_context_expires_at(acr: &str) -> DateTime<Utc> {
-    let ttl = if acr == ACR_AAL2 {
+fn authentication_context_expires_at(acr: AuthenticationContextClass) -> DateTime<Utc> {
+    let ttl = if acr.is_multi_factor() {
         ELEVATED_AUTHENTICATION_TTL
     } else {
         RECENT_AUTHENTICATION_TTL

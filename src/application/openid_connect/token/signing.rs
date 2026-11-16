@@ -1,6 +1,7 @@
 use std::time::{Duration, SystemTime};
 
 use identity_domain::{
+    auth::AuthenticationContextClass,
     client_authorization::AccessTokenPrincipal,
     key::{JwaSigningAlgorithm, JwsAlgorithm},
     openid_connect::{OpenIdConnectClient, ScopeSet},
@@ -38,7 +39,7 @@ pub(super) struct SignAccessTokenInput<'a> {
     pub protected_session_id: Option<&'a str>,
     pub scope: &'a str,
     pub auth_time: Option<i64>,
-    pub acr: Option<&'a str>,
+    pub acr: Option<AuthenticationContextClass>,
     pub amr: &'a [String],
 }
 
@@ -55,7 +56,7 @@ pub(super) struct SignIdTokenInput<'a> {
     pub scope: &'a str,
     pub nonce: Option<&'a str>,
     pub auth_time: Option<i64>,
-    pub acr: Option<&'a str>,
+    pub acr: Option<AuthenticationContextClass>,
     pub amr: &'a [String],
     pub access_token: Option<&'a str>,
     pub protected_session_id: Option<&'a str>,
@@ -121,7 +122,7 @@ impl TokenService {
         }
         if let Some(acr) = input.acr {
             payload
-                .set_claim(JwtClaimNames::ACR, Some(json!(acr)))
+                .set_claim(JwtClaimNames::ACR, Some(json!(acr.as_str())))
                 .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
         }
         if input.principal == AccessTokenPrincipal::User {
@@ -201,7 +202,7 @@ impl TokenService {
         }
         if let Some(acr) = input.acr {
             payload
-                .set_claim(JwtClaimNames::ACR, Some(json!(acr)))
+                .set_claim(JwtClaimNames::ACR, Some(json!(acr.as_str())))
                 .map_err(AppError::map_source(TokenErrorCode::SignIdTokenFailed))?;
         }
         if input.alg != JwsAlgorithm::None

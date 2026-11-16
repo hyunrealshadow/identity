@@ -171,7 +171,10 @@ pub(crate) fn to_metadata(
         )?,
         default_max_age: model.default_max_age,
         require_auth_time: model.require_auth_time,
-        default_acr_values: deserialize_optional_string_vec(model.default_acr_values.as_ref())?,
+        default_acr_values: parse_algorithms(
+            "default_acr_values",
+            deserialize_optional_string_vec(model.default_acr_values.as_ref())?,
+        )?,
         initiate_login_uri: parse_optional_url(model.initiate_login_uri.as_deref())?,
         request_uris: parse_optional_urls(model.request_uris.as_ref())?,
         settings,

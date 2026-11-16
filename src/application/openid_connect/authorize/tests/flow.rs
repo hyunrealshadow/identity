@@ -3,7 +3,7 @@ use std::{collections::HashMap, str};
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::Duration;
 use identity_domain::{
-    auth::{ACR_AAL1, ACR_AAL2, LoginStatus, model::Login},
+    auth::{AuthenticationContextClass, LoginStatus, model::Login},
     client_authorization::{ConsentState, SelectionSource},
     key::material::AsymmetricKeyData,
     openid_connect::{
@@ -258,7 +258,7 @@ async fn create_login_flow_returns_protected_id() {
         .await
         .unwrap();
     let login_id = service
-        .create_login_flow(request.client_id, authorization_request_id, None)
+        .create_login_flow(request.client_id, authorization_request_id, &[])
         .await
         .unwrap();
 
@@ -300,7 +300,7 @@ async fn restart_login_flow_creates_fresh_login_for_same_authorization() {
         created_at: Utc::now() - Duration::minutes(6),
         expires_at: Utc::now() - Duration::minutes(1),
         acr: None,
-        requested_acr: Some("aal2".to_owned()),
+        requested_acr_values: vec![AuthenticationContextClass::MultiFactor],
     }));
     let old_login_id = service.encrypt_login_id(old_login_oid).await.unwrap();
 
@@ -341,8 +341,8 @@ async fn switch_login_account_resets_the_same_login_for_same_authorization() {
         failed_attempts: 2,
         created_at: Utc::now(),
         expires_at: original_expires_at,
-        acr: Some("aal1".to_owned()),
-        requested_acr: Some("aal2".to_owned()),
+        acr: Some(AuthenticationContextClass::SingleFactor),
+        requested_acr_values: vec![AuthenticationContextClass::MultiFactor],
     }));
     let old_login_id = service.encrypt_login_id(old_login_oid).await.unwrap();
 
@@ -367,7 +367,10 @@ async fn switch_login_account_resets_the_same_login_for_same_authorization() {
         .unwrap();
     assert_eq!(reset_login.status, LoginStatus::CREATED);
     assert_eq!(reset_login.expires_at, original_expires_at);
-    assert_eq!(reset_login.requested_acr.as_deref(), Some("aal2"));
+    assert_eq!(
+        reset_login.requested_acr_values,
+        vec![AuthenticationContextClass::MultiFactor]
+    );
     assert!(reset_login.user_oid.is_none());
     assert!(reset_login.session_oid.is_none());
     assert!(reset_login.acr.is_none());
@@ -414,7 +417,7 @@ async fn switch_login_account_rejects_forced_reauthentication() {
         created_at: Utc::now(),
         expires_at: Utc::now() + Duration::minutes(5),
         acr: None,
-        requested_acr: None,
+        requested_acr_values: Vec::new(),
     }));
     let login_id = service.encrypt_login_id(login_oid).await.unwrap();
 
@@ -471,7 +474,7 @@ async fn restart_login_flow_preserves_reauthentication_subject_and_session() {
         created_at: Utc::now() - Duration::minutes(6),
         expires_at: Utc::now() - Duration::minutes(1),
         acr: None,
-        requested_acr: Some("aal2".to_owned()),
+        requested_acr_values: vec![AuthenticationContextClass::MultiFactor],
     }));
     let old_login_id = service.encrypt_login_id(old_login_oid).await.unwrap();
 
@@ -515,7 +518,7 @@ async fn restart_login_flow_rejects_a_login_that_is_still_in_progress() {
         created_at: Utc::now(),
         expires_at: Utc::now() + Duration::minutes(5),
         acr: None,
-        requested_acr: None,
+        requested_acr_values: Vec::new(),
     }));
     let old_login_id = service.encrypt_login_id(old_login_oid).await.unwrap();
 
@@ -567,14 +570,20 @@ async fn client_authentication_defaults_apply_and_request_values_override_them()
     );
     let (request, _) = service.validate_request(params("openid")).await.unwrap();
     assert_eq!(request.max_age, Some(300));
-    assert_eq!(request.acr_values, Some(vec![ACR_AAL2.to_owned()]));
+    assert_eq!(
+        request.acr_values,
+        Some(vec![AuthenticationContextClass::MultiFactor])
+    );
 
     let mut explicit = params("openid");
     explicit.max_age = Some("0".to_owned());
-    explicit.acr_values = Some(ACR_AAL1.to_owned());
+    explicit.acr_values = Some(AuthenticationContextClass::SingleFactor.to_string());
     let (request, _) = service.validate_request(explicit).await.unwrap();
     assert_eq!(request.max_age, Some(0));
-    assert_eq!(request.acr_values, Some(vec![ACR_AAL1.to_owned()]));
+    assert_eq!(
+        request.acr_values,
+        Some(vec![AuthenticationContextClass::SingleFactor])
+    );
 }
 
 #[tokio::test]

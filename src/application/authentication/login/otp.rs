@@ -7,7 +7,7 @@ use crate::{
     user::model::{CredentialData, CredentialType, OtpCredentialData},
 };
 use identity_domain::auth::{
-    ACR_AAL2, AMR_MFA, AMR_OTP, AMR_PASSWORD, LoginFailureReason, LoginStatus, MAX_FAILED_ATTEMPTS,
+    AMR_MFA, AMR_OTP, AMR_PASSWORD, LoginFailureReason, LoginStatus, MAX_FAILED_ATTEMPTS,
     MAX_OTP_ATTEMPTS, model::Login,
 };
 use tracing::error;
@@ -104,39 +104,18 @@ impl LoginService {
         }
 
         self.user_repo.reset_failed_attempts(user.oid).await?;
-        // Complete AAL2 authentication, reusing a bound session when this
-        // login interaction was created for forced reauthentication.
-        let session = self
-            .complete_session(
-                &login,
-                user.oid.into(),
-                ctx,
-                ACR_AAL2,
-                &[
-                    AMR_PASSWORD.to_owned(),
-                    AMR_OTP.to_owned(),
-                    AMR_MFA.to_owned(),
-                ],
-            )
-            .await?;
-
-        if let Err(e) = self
-            .login_repo
-            .update_status(
-                login.oid,
-                LoginStatus::AUTHENTICATED,
-                Some(session.oid),
-                Some(ACR_AAL2),
-            )
-            .await
-        {
-            error!(error = %e, "failed to update login status to authenticated");
-        }
-
-        Ok(ChallengeOutcome::Authenticated {
+        // A bound session from forced reauthentication is upgraded in place.
+        self.complete_second_factor(
             login,
-            session: Box::new(session),
-        })
+            user.oid.into(),
+            ctx,
+            &[
+                AMR_PASSWORD.to_owned(),
+                AMR_OTP.to_owned(),
+                AMR_MFA.to_owned(),
+            ],
+        )
+        .await
     }
 
     pub(super) async fn fail_login_for_too_many_otp_attempts(&self, login_oid: Uuid) {

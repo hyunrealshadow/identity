@@ -39,9 +39,12 @@ async fn passkey_completes_mfa_without_password_and_protects_password_fallback()
             .await
             .unwrap();
         let ChallengeOutcome::Authenticated { session, .. } = result else {
-            panic!("passkey must complete MFA");
+            panic!("passkey must complete phishing-resistant authentication");
         };
-        assert_eq!(session.acr.as_deref(), Some(ACR_AAL2));
+        assert_eq!(
+            session.acr,
+            Some(AuthenticationContextClass::PhishingResistant)
+        );
         assert!(session.amr.contains(&"passkey".to_owned()));
         assert_eq!(
             session.amr.contains(&AMR_PASSWORD.to_owned()),

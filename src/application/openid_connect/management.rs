@@ -8,7 +8,7 @@
 use std::sync::Arc;
 
 use identity_domain::{
-    auth::ACR_AAL2,
+    auth::AuthenticationContextClass,
     authorization::{
         ManagementAuthorityRepository, authority::UserPermissionAuthority, catalog::ManagementScope,
     },
@@ -21,11 +21,13 @@ use crate::{
     error::{AppError, codes::openid_connect::OpenIdConnectErrorCode},
 };
 
-/// Use the session's effective ACR. Historical AMR values survive the elevated
-/// session window and must never promote a downgraded session back to AAL2.
+/// Use the session's effective class. Historical AMR values survive the
+/// elevated session window and must never promote a lapsed session again.
 #[must_use]
-pub(crate) fn human_authentication_is_aal2(acr: Option<&str>, _amr: &[String]) -> bool {
-    acr == Some(ACR_AAL2)
+pub(crate) fn human_authentication_is_multi_factor(
+    acr: Option<AuthenticationContextClass>,
+) -> bool {
+    acr.is_some_and(|acr| acr.satisfies(AuthenticationContextClass::MultiFactor))
 }
 
 /// Ports needed to revalidate a management authorization snapshot against
@@ -174,8 +176,8 @@ mod tests {
     };
 
     use super::{
-        allowed_human_management_scopes, clipped_scope, human_authentication_is_aal2,
-        is_single_graphql_resource,
+        AuthenticationContextClass, allowed_human_management_scopes, clipped_scope,
+        human_authentication_is_multi_factor, is_single_graphql_resource,
     };
 
     fn authority(
@@ -227,12 +229,16 @@ mod tests {
             )
             .is_empty()
         );
-        assert!(human_authentication_is_aal2(Some("aal2"), &[]));
-        assert!(!human_authentication_is_aal2(None, &["mfa".to_owned()]));
-        assert!(!human_authentication_is_aal2(
-            Some("aal1"),
-            &["mfa".to_owned()]
-        ));
+        assert!(human_authentication_is_multi_factor(Some(
+            AuthenticationContextClass::MultiFactor
+        )));
+        assert!(human_authentication_is_multi_factor(Some(
+            AuthenticationContextClass::PhishingResistant
+        )));
+        assert!(!human_authentication_is_multi_factor(None));
+        assert!(!human_authentication_is_multi_factor(Some(
+            AuthenticationContextClass::SingleFactor
+        )));
     }
 
     #[test]

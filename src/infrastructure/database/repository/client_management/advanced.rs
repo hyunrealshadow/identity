@@ -51,7 +51,12 @@ pub(super) fn advanced_from_metadata(
         sector_identifier_uri: url(metadata.sector_identifier_uri.as_ref()),
         default_max_age: metadata.default_max_age,
         require_auth_time: metadata.require_auth_time.unwrap_or(false),
-        default_acr_values: metadata.default_acr_values.clone().unwrap_or_default(),
+        default_acr_values: metadata
+            .default_acr_values
+            .iter()
+            .flatten()
+            .map(ToString::to_string)
+            .collect(),
         id_token_signed_response_algs: names(metadata.id_token_signed_response_algs.as_ref()),
         id_token_encrypted_response_algs: names(metadata.id_token_encrypted_response_algs.as_ref()),
         id_token_encrypted_response_encs: names(metadata.id_token_encrypted_response_encs.as_ref()),

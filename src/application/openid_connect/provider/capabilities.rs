@@ -2,7 +2,7 @@ use crate::openid_connect::jose::{
     request_object_content_encryption_algorithms, request_object_encryption_algorithms,
 };
 use identity_domain::{
-    auth::{ACR_AAL1, ACR_AAL2},
+    auth::AuthenticationContextClass,
     key::{JwaEncryptionAlgorithm, JwaSigningAlgorithm, JweContentEncryption, JwsAlgorithm},
     openid_connect::{
         ApiScope, ClaimType, Display, GrantType, ResponseMode, ResponseType, SubjectType,
@@ -17,7 +17,7 @@ pub struct OpenIdProviderCapabilities {
     pub response_types_supported: Vec<ResponseType>,
     pub response_modes_supported: Vec<ResponseMode>,
     pub grant_types_supported: Vec<GrantType>,
-    pub acr_values_supported: Vec<String>,
+    pub acr_values_supported: Vec<AuthenticationContextClass>,
     pub subject_types_supported: Vec<SubjectType>,
     pub id_token_signing_alg_values_supported: Vec<JwsAlgorithm>,
     pub id_token_encryption_alg_values_supported: Vec<JwaEncryptionAlgorithm>,
@@ -77,7 +77,7 @@ impl Default for OpenIdProviderCapabilities {
                 GrantType::ClientCredentials,
                 GrantType::DeviceCode,
             ],
-            acr_values_supported: vec![ACR_AAL1.to_owned(), ACR_AAL2.to_owned()],
+            acr_values_supported: AuthenticationContextClass::ALL.to_vec(),
             subject_types_supported: vec![SubjectType::Public, SubjectType::Pairwise],
             id_token_signing_alg_values_supported: vec![JwsAlgorithm::Asymmetric(
                 JwaSigningAlgorithm::Es256,
@@ -187,7 +187,8 @@ fn supported_token_endpoint_auth_methods() -> Vec<TokenEndpointAuthMethod> {
     ]
 }
 
-fn supported_asymmetric_jws_algorithms() -> Vec<JwsAlgorithm> {
+/// Every asymmetric JWS algorithm the provider can sign with, given a key.
+pub(super) fn supported_asymmetric_jws_algorithms() -> Vec<JwsAlgorithm> {
     JwaSigningAlgorithm::all()
         .iter()
         .copied()

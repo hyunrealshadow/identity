@@ -1,7 +1,12 @@
 use std::{fmt, str::FromStr, time::Duration};
 
+pub mod acr;
 pub mod challenge;
 pub mod model;
+pub use acr::{
+    AuthenticationContextClass, UnsupportedAuthenticationContextClass, acr_satisfies_any,
+    reported_acr, required_acr,
+};
 pub use model::SessionOid;
 pub mod repository;
 
@@ -14,8 +19,9 @@ pub enum LoginStatus {
     Created,
     IdentifierVerified,
     MfaRequired,
-    /// Password verified for a request that requires AAL2, but the user has no
-    /// second factor yet; the interaction may only continue by enrolling one.
+    /// The established factors fall short of the requested class and the user
+    /// has no credential that could meet it; the interaction may only continue
+    /// by enrolling one (an authenticator app, or a passkey for `phr`).
     MfaEnrollmentRequired,
     Authenticated,
     Expired,
@@ -63,9 +69,14 @@ impl LoginStatus {
                             | Self::EXPIRED
                             | Self::FAILED
                     )
+                    // A verified second factor that still falls short of
+                    // `phr` leads to passkey enrollment.
                     | (
                         Self::MFA_REQUIRED,
-                        Self::AUTHENTICATED | Self::EXPIRED | Self::FAILED
+                        Self::MFA_ENROLLMENT_REQUIRED
+                            | Self::AUTHENTICATED
+                            | Self::EXPIRED
+                            | Self::FAILED
                     )
                     // A factor enrolled elsewhere meanwhile is challenged instead.
                     | (
@@ -163,56 +174,6 @@ impl LoginFailureReason {
     }
 }
 
-// ─── ACR (Authentication Context Class Reference) ────────────────────────────
-
-/// Application AAL1 authentication assurance policy.
-///
-/// The authentication methods used to satisfy this policy are reported
-/// separately through the OIDC `amr` claim.
-pub const ACR_AAL1: &str = "aal1";
-
-/// Application AAL2 authentication assurance policy.
-///
-/// This application-specific value is advertised through OIDC discovery.
-/// It can be satisfied by password plus OTP or a user-verified Passkey.
-pub const ACR_AAL2: &str = "aal2";
-
-/// Returns whether an established authentication context meets a requested
-/// assurance level. Higher assurance satisfies lower-assurance requirements;
-/// deployment-specific values remain exact matches.
-#[must_use]
-pub fn acr_satisfies(established: &str, requested: &str) -> bool {
-    established == requested || (established == ACR_AAL2 && requested == ACR_AAL1)
-}
-
-/// Returns whether an established authentication context meets a request
-/// that accepts any of `requested` (OpenID Connect `acr_values` and
-/// `default_acr_values`; RFC 9470 §3 "requires one of these values").
-#[must_use]
-pub fn acr_satisfies_any(established: Option<&str>, requested: &[String]) -> bool {
-    established.is_some_and(|established| {
-        requested
-            .iter()
-            .any(|value| acr_satisfies(established, value))
-    })
-}
-
-/// The context a new authentication must establish for a request that
-/// accepts any of `requested`.
-///
-/// Because a higher built-in level satisfies a lower one, the weakest built-in
-/// level named is enough: `[aal2, aal1]` asks for no second factor, exactly as
-/// an existing AAL1 session already satisfies it. Order expresses preference,
-/// never a stricter requirement. A list of only deployment-specific classes is
-/// left to its first value, which only an exact match can satisfy.
-#[must_use]
-pub fn required_acr(requested: &[String]) -> Option<&str> {
-    [ACR_AAL1, ACR_AAL2]
-        .into_iter()
-        .find(|level| requested.iter().any(|value| value == level))
-        .or_else(|| requested.first().map(String::as_str))
-}
-
 /// Returns whether an authentication timestamp is not in the future and is
 /// within the permitted age.
 #[must_use]
@@ -251,73 +212,17 @@ pub const SESSION_EXPIRY: Duration = Duration::from_secs(7 * 24 * 60 * 60);
 /// account operations without asking the user to authenticate again.
 pub const RECENT_AUTHENTICATION_TTL: Duration = Duration::from_secs(5 * 60);
 
-/// Duration for which AAL2 authentication remains valid within a session.
+/// Duration for which a multi-factor authentication context remains valid
+/// within a session.
 ///
-/// After this duration the session stays active but the `acr` field degrades
-/// back to [`ACR_AAL1`] and the caller must perform step-up authentication to
-/// regain AAL2.
+/// After this duration the session stays active but its class lapses to
+/// [`AuthenticationContextClass::SingleFactor`] and the caller must perform
+/// step-up authentication to regain a multi-factor class.
 pub const ELEVATED_AUTHENTICATION_TTL: Duration = Duration::from_secs(60 * 60); // 1 hour
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        ACR_AAL1, ACR_AAL2, LoginStatus, acr_satisfies, acr_satisfies_any, authentication_is_fresh,
-        required_acr,
-    };
-
-    #[test]
-    fn aal2_satisfies_aal1_and_aal2() {
-        assert!(acr_satisfies(ACR_AAL2, ACR_AAL1));
-        assert!(acr_satisfies(ACR_AAL2, ACR_AAL2));
-    }
-
-    #[test]
-    fn aal1_does_not_satisfy_aal2() {
-        assert!(!acr_satisfies(ACR_AAL1, ACR_AAL2));
-    }
-
-    #[test]
-    fn custom_acr_values_require_an_exact_match() {
-        assert!(acr_satisfies("custom", "custom"));
-        assert!(!acr_satisfies(ACR_AAL2, "custom"));
-    }
-
-    fn list(values: &[&str]) -> Vec<String> {
-        values.iter().map(|value| (*value).to_owned()).collect()
-    }
-
-    #[test]
-    fn a_new_authentication_needs_only_the_weakest_accepted_level() {
-        assert_eq!(required_acr(&list(&["aal2", "aal1"])), Some(ACR_AAL1));
-        assert_eq!(required_acr(&list(&["aal1", "aal2"])), Some(ACR_AAL1));
-        assert_eq!(required_acr(&list(&["custom", "aal2"])), Some(ACR_AAL2));
-        assert_eq!(required_acr(&list(&["aal2"])), Some(ACR_AAL2));
-        assert_eq!(required_acr(&list(&["custom"])), Some("custom"));
-        assert_eq!(required_acr(&[]), None);
-    }
-
-    /// A new login and an existing session judge the same request alike:
-    /// whatever a fresh login must reach is exactly enough for a session.
-    #[test]
-    fn new_and_existing_authentication_agree_for_every_built_in_request() {
-        let requests = [
-            list(&["aal1"]),
-            list(&["aal2"]),
-            list(&["aal1", "aal2"]),
-            list(&["aal2", "aal1"]),
-        ];
-        for requested in &requests {
-            let required = required_acr(requested).unwrap();
-            for established in [ACR_AAL1, ACR_AAL2] {
-                assert_eq!(
-                    acr_satisfies_any(Some(established), requested),
-                    acr_satisfies(established, required),
-                    "{requested:?} with {established}"
-                );
-            }
-        }
-        assert!(!acr_satisfies_any(None, &list(&["aal1"])));
-    }
+    use super::{LoginStatus, authentication_is_fresh};
 
     #[test]
     fn freshness_rejects_future_and_old_authentication_times() {

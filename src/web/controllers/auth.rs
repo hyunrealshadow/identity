@@ -6,7 +6,9 @@
 //! 3. `POST /api/auth/login/identifier` – validate identifier, create login
 //! 4. `POST /api/auth/login/challenge`  – verify credential, create session
 //! 5. `POST /api/auth/login/mfa-enrollment[/confirm]` – enroll a missing
-//!    second factor when the request requires AAL2
+//!    second factor when the request requires `aal2`
+//! 6. `POST /api/auth/login/passkey-enrollment[/confirm]` – register a passkey
+//!    when the request requires `phr`
 
 use http::{HeaderMap, StatusCode};
 use identity_domain::auth::LoginStatus;
@@ -27,6 +29,7 @@ use crate::{
         authentication::{login, login::ChallengeOutcome},
         error::{AppError, code::AppErrorCode, codes::auth::AuthErrorCode},
         openid_connect::authorize::stored_request_has_prompt,
+        user::CredentialType,
     },
     domain::{
         client_authorization::SelectionSource, openid_connect::PromptValue, user::model::UserOid,
@@ -36,9 +39,9 @@ use crate::{
         AccountItem, ActiveAccountsResponse, ChallengeRequest, ChallengeResponse,
         IdentifierRequest, IdentifierResponse, LoginClientDisplay, LoginStatusResponse,
         MfaEnrollmentAlgorithmRequest, MfaEnrollmentConfirmRequest, MfaEnrollmentRequest,
-        MfaEnrollmentResponse, RestartLoginRequest, RestartLoginResponse, SelectAccountRequest,
-        SelectAccountResponse, SessionInfo, SwitchLoginRequest, SwitchLoginResponse,
-        UserDisplayInfo,
+        MfaEnrollmentResponse, PasskeyEnrollmentConfirmRequest, PasskeyEnrollmentResponse,
+        RestartLoginRequest, RestartLoginResponse, SelectAccountRequest, SelectAccountResponse,
+        SessionInfo, SwitchLoginRequest, SwitchLoginResponse, UserDisplayInfo,
     },
 };
 
@@ -62,6 +65,11 @@ pub fn routes() -> Router {
         )
         .push(
             Router::with_path("api/auth/login/mfa-enrollment/confirm").post(confirm_mfa_enrollment),
+        )
+        .push(Router::with_path("api/auth/login/passkey-enrollment").post(passkey_enrollment))
+        .push(
+            Router::with_path("api/auth/login/passkey-enrollment/confirm")
+                .post(confirm_passkey_enrollment),
         )
 }
 
@@ -199,8 +207,10 @@ async fn login_status(
     let preferred_credential_type =
         login::preferred_credential_type(&login, &credential_types, mfa_preference);
     let credential_types = login::challenge_credential_types(&login, &credential_types);
-    let challenge_uri = if user.is_some() && login.status == LoginStatus::MFA_ENROLLMENT_REQUIRED {
-        Some(login_mfa_enrollment_uri(&id, ui_locales.as_deref()))
+    let enrollment_method = (login.status == LoginStatus::MFA_ENROLLMENT_REQUIRED)
+        .then(|| login::enrollment_method(&login));
+    let challenge_uri = if let Some(method) = enrollment_method.filter(|_| user.is_some()) {
+        Some(login_enrollment_uri(&id, method, ui_locales.as_deref()))
     } else if user.is_some()
         && (stored_request_has_prompt(Some(&prompt), PromptValue::Login)
             || requires_reauthentication)
@@ -234,6 +244,7 @@ async fn login_status(
             requires_reauthentication,
             login_hint,
             challenge_uri,
+            enrollment_method,
             ui_locales,
             continue_uri,
         },
@@ -241,13 +252,21 @@ async fn login_status(
     Ok(())
 }
 
-fn login_mfa_enrollment_uri(login_id: &str, ui_locales: Option<&[String]>) -> String {
+fn login_enrollment_uri(
+    login_id: &str,
+    method: CredentialType,
+    ui_locales: Option<&[String]>,
+) -> String {
+    let page = match method {
+        CredentialType::Passkey => "passkey-setup",
+        _ => "mfa-setup",
+    };
     let mut query = Serializer::new(String::new());
     query.append_pair("login_id", login_id);
     if let Some(ui_locales) = ui_locales.filter(|values| !values.is_empty()) {
         query.append_pair("ui_locales", &ui_locales.join(" "));
     }
-    format!("/login/mfa-setup?{}", query.finish())
+    format!("/login/{page}?{}", query.finish())
 }
 
 fn login_challenge_uri(
@@ -494,6 +513,7 @@ async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> 
                 ChallengeResponse {
                     preferred_credential_type: next_method,
                     status: LoginStatus::MfaRequired,
+                    enrollment_method: None,
                     session: None,
                     acr: None,
                     continue_uri: None,
@@ -501,13 +521,14 @@ async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> 
                 },
             );
         }
-        ChallengeOutcome::MfaEnrollmentRequired { .. } => {
+        ChallengeOutcome::MfaEnrollmentRequired { login: pending } => {
             render_json(
                 res,
                 StatusCode::OK,
                 ChallengeResponse {
                     preferred_credential_type: None,
                     status: LoginStatus::MfaEnrollmentRequired,
+                    enrollment_method: Some(login::enrollment_method(&pending)),
                     session: None,
                     acr: None,
                     continue_uri: None,
@@ -572,11 +593,12 @@ async fn render_authenticated(
         ChallengeResponse {
             preferred_credential_type: None,
             status: LoginStatus::Authenticated,
+            enrollment_method: None,
             session: Some(SessionInfo {
                 id: selected.protected_session_id.clone(),
                 expires_at: session.expires_at,
             }),
-            acr: session.acr.clone(),
+            acr: session.acr.map(|acr| acr.to_string()),
             continue_uri,
             sessions: Some(selected.protected_session_ids),
         },
@@ -688,6 +710,77 @@ async fn confirm_mfa_enrollment(
             Err(AppError::from_code(AuthErrorCode::InvalidLoginState).into())
         }
     }
+}
+
+/// `POST /api/auth/login/passkey-enrollment`
+///
+/// Registration options for a `phr` login whose user verified a second factor
+/// other than a passkey, with recovery codes to save first.
+#[handler]
+async fn passkey_enrollment(
+    depot: &mut Depot,
+    req: &mut Request,
+    res: &mut Response,
+) -> JsonWebResult<()> {
+    let ctx = app_state(depot)?;
+    let body: MfaEnrollmentRequest = parse_json(req).await?;
+    let login_oid = ctx
+        .services()
+        .oidc_authorize()
+        .decrypt_login_id(&body.id)
+        .await?;
+    let enrollment = ctx.services().login().passkey_enrollment(login_oid).await?;
+    render_json(
+        res,
+        StatusCode::OK,
+        PasskeyEnrollmentResponse {
+            options: enrollment.options,
+            recovery_codes: enrollment.recovery_codes,
+        },
+    );
+    Ok(())
+}
+
+/// `POST /api/auth/login/passkey-enrollment/confirm`
+///
+/// Store the new passkey. The login then asks for an assertion with it, which
+/// establishes `phr`; registration alone authenticates nothing.
+#[handler]
+async fn confirm_passkey_enrollment(
+    depot: &mut Depot,
+    req: &mut Request,
+    res: &mut Response,
+) -> JsonWebResult<()> {
+    let ctx = app_state(depot)?;
+    let body: PasskeyEnrollmentConfirmRequest = parse_json(req).await?;
+    let login_oid = ctx
+        .services()
+        .oidc_authorize()
+        .decrypt_login_id(&body.id)
+        .await?;
+    ctx.services()
+        .login()
+        .confirm_passkey_enrollment(
+            login_oid,
+            body.registration.challenge_id,
+            &body.name,
+            body.registration.credential,
+        )
+        .await?;
+    render_json(
+        res,
+        StatusCode::OK,
+        ChallengeResponse {
+            preferred_credential_type: Some(CredentialType::Passkey),
+            status: LoginStatus::MfaRequired,
+            enrollment_method: None,
+            session: None,
+            acr: None,
+            continue_uri: None,
+            sessions: None,
+        },
+    );
+    Ok(())
 }
 
 fn identifier_form_error(error: AppError) -> AppError {

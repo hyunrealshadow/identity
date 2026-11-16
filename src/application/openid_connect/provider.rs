@@ -24,7 +24,7 @@ mod client_options;
 mod discovery;
 mod signing;
 pub use capabilities::OpenIdProviderCapabilities;
-pub use client_options::ClientMetadataOptions;
+pub use client_options::{ActiveKeyAlgorithms, ClientMetadataOptions};
 pub use signing::SigningAlgorithmDetector;
 #[cfg(test)]
 mod tests;

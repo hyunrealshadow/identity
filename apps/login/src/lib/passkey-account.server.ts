@@ -1,3 +1,4 @@
+import { AuthenticationContextClass } from '@identity/graphql-access'
 import { accountOperations } from './account-operations'
 import { getRequestHeader } from '@tanstack/react-start/server'
 
@@ -66,7 +67,7 @@ export async function passkeyAccountAction(input: {
       if (!account) return { redirect: (await restartAccountSignIn(PASSKEY_MANAGEMENT_CONTINUATION)).toString() }
       const response = await startReauthorization(PASSKEY_MANAGEMENT_CONTINUATION, 'account', {
         loginHint: account.account.username,
-        acrValues: error.challenge?.acrValues ?? 'aal1',
+        acrValues: error.challenge?.acrValues ?? AuthenticationContextClass.SingleFactor,
         maxAge: error.challenge?.maxAge,
       })
       return { redirect: response.headers.get('location') ?? '/account/security' }

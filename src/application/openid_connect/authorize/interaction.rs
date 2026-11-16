@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::domain::{
     auth::{
-        LoginStatus, acr_satisfies_any, authentication_is_fresh,
+        AuthenticationContextClass, LoginStatus, acr_satisfies_any, authentication_is_fresh,
         model::{ActiveSession, Login, SessionOid},
     },
     client_authorization::{ConsentState, SelectionSource, StoredAuthorizationRequest},
@@ -21,7 +21,7 @@ pub enum ContinueAction {
         session_oid: SessionOid,
         user_oid: Uuid,
         auth_time: Option<i64>,
-        acr: Option<String>,
+        acr: Option<AuthenticationContextClass>,
         amr: Vec<String>,
     },
     Deny,
@@ -60,7 +60,7 @@ pub fn selected_session_satisfies_acr(
     request
         .acr_values
         .as_deref()
-        .is_none_or(|requested| acr_satisfies_any(selected_session.acr.as_deref(), requested))
+        .is_none_or(|requested| acr_satisfies_any(selected_session.acr, requested))
 }
 
 #[must_use]
@@ -83,7 +83,7 @@ fn approve_action(selected_session: &ActiveSession) -> ContinueAction {
         session_oid: selected_session.session_oid,
         user_oid: selected_session.user_oid,
         auth_time: Some(selected_session.authenticated_at.timestamp()),
-        acr: selected_session.acr.clone(),
+        acr: selected_session.acr,
         amr: selected_session.amr.clone(),
     }
 }

@@ -296,7 +296,7 @@ async fn consent_test_state_for(
         failure_reason: None,
         failed_attempts: 0,
         acr: None,
-        requested_acr: None,
+        requested_acr_values: serde_json::json!([]),
         created_at: now.into(),
         expires_at: (now + Duration::minutes(5)).into(),
         updated_at: None,

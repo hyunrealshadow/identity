@@ -184,6 +184,20 @@ impl PasskeyAuthenticator for FakeAuthenticator {
         })
     }
 }
+/// A passkey service for a user without passkeys, and the assertion signer.
+pub(in crate::authentication) fn passkeys_without_keys()
+-> (Arc<PasskeyService>, impl Fn(&PasskeyOptions) -> String) {
+    let repo = Arc::new(MemoryRepo::default());
+    let service = Arc::new(PasskeyService::new(
+        repo.clone(),
+        repo,
+        Arc::new(FakeAuthenticator),
+    ));
+    (service, |options| {
+        json!({"challenge_id": identity_domain::global_id::encode::<identity_domain::global_id::kind::PasskeyChallenge>(options.challenge_id), "credential": {"uv": true}}).to_string()
+    })
+}
+
 pub(in crate::authentication) async fn enrolled_passkey(
     user: UserOid,
 ) -> (Arc<PasskeyService>, impl Fn(&PasskeyOptions) -> String) {

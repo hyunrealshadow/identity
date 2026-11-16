@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
-use super::{ACR_AAL1, ACR_AAL2, LoginStatus, SessionStatus};
+use super::{AuthenticationContextClass, LoginStatus, SessionStatus, required_acr};
 
 #[derive(
     Debug,
@@ -34,9 +34,9 @@ pub struct Session {
     pub expires_at: Option<DateTime<Utc>>,
     pub revoked_at: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
-    /// Authentication Context Class Reference — set at session creation.
-    pub acr: Option<String>,
-    /// Internal upper bound for the session's AAL2 authentication context.
+    /// Authentication context class established by the latest authentication.
+    pub acr: Option<AuthenticationContextClass>,
+    /// Internal upper bound for the session's multi-factor context.
     /// RFC 9470 clients do not consume this value directly.
     pub acr_expires_at: Option<DateTime<Utc>>,
     /// Authentication methods used by the latest successful authentication event.
@@ -58,23 +58,34 @@ pub struct ActiveSession {
     /// from session creation when an existing session is reauthenticated.
     pub authenticated_at: DateTime<Utc>,
     /// Authentication context established by the latest authentication event.
-    pub acr: Option<String>,
+    pub acr: Option<AuthenticationContextClass>,
     /// Authentication methods used by the latest successful authentication event.
     pub amr: Vec<String>,
 }
 
 impl Session {
     #[must_use]
-    pub fn effective_acr(&self, now: DateTime<Utc>) -> Option<&str> {
-        if self.acr.as_deref() == Some(ACR_AAL2)
-            && self
-                .acr_expires_at
-                .is_some_and(|expires_at| expires_at <= now)
+    pub fn effective_acr(&self, now: DateTime<Utc>) -> Option<AuthenticationContextClass> {
+        effective_acr(self.acr, self.acr_expires_at, now)
+    }
+}
+
+/// A multi-factor class lapses to single-factor once its elevated window ends;
+/// the methods recorded in `amr` never promote it again.
+#[must_use]
+pub fn effective_acr(
+    acr: Option<AuthenticationContextClass>,
+    acr_expires_at: Option<DateTime<Utc>>,
+    now: DateTime<Utc>,
+) -> Option<AuthenticationContextClass> {
+    match acr {
+        Some(class)
+            if class.is_multi_factor()
+                && acr_expires_at.is_some_and(|expires_at| expires_at <= now) =>
         {
-            Some(ACR_AAL1)
-        } else {
-            self.acr.as_deref()
+            Some(AuthenticationContextClass::SingleFactor)
         }
+        other => other,
     }
 }
 
@@ -93,9 +104,25 @@ pub struct Login {
     pub created_at: DateTime<Utc>,
     /// Absolute deadline after which this login interaction cannot advance.
     pub expires_at: DateTime<Utc>,
-    /// ACR that was granted after the full authentication flow (set when
+    /// Class established by the full authentication flow (set when
     /// transitioning to `authenticated`).
-    pub acr: Option<String>,
-    /// ACR that was requested at the start of the login flow.
-    pub requested_acr: Option<String>,
+    pub acr: Option<AuthenticationContextClass>,
+    /// Classes the request accepts, in order of preference (`acr_values`, or
+    /// the client's `default_acr_values`). Empty when nothing was requested.
+    pub requested_acr_values: Vec<AuthenticationContextClass>,
+}
+
+impl Login {
+    /// The class a new authentication must establish: the weakest one listed.
+    #[must_use]
+    pub fn required_acr(&self) -> Option<AuthenticationContextClass> {
+        required_acr(&self.requested_acr_values)
+    }
+
+    /// The most preferred class. It orders the offered methods and never
+    /// makes the requirement stricter.
+    #[must_use]
+    pub fn preferred_acr(&self) -> Option<AuthenticationContextClass> {
+        self.requested_acr_values.first().copied()
+    }
 }

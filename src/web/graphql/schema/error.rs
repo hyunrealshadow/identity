@@ -228,7 +228,10 @@ pub(super) fn app_error(ctx: &Context<'_>, error: AppError) -> Error {
         if error.code() == AuthorizationErrorCode::MissingHumanAuthentication.code() {
             extensions.set("applicationCode", error.code());
             extensions.set("code", "insufficient_user_authentication");
-            extensions.set("acr_values", "aal2");
+            extensions.set(
+                "acr_values",
+                identity_domain::auth::AuthenticationContextClass::MultiFactor.as_str(),
+            );
             if error.params().get("required_authentication") == Some("recent_aal2") {
                 extensions.set("max_age", DEFAULT_RECENT_AAL2_TTL.as_secs());
             }

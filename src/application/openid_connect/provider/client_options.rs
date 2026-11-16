@@ -1,21 +1,27 @@
-//! Values a client may register, derived from the provider's live keys.
+//! Values a client may register in its advanced settings.
 //!
-//! Discovery, the management options query and client metadata validation all
-//! read these lists, so an administrator can choose only what this instance
-//! can honour now. Signing the provider performs follows its active signing
-//! keys; request objects can be encrypted only to its active encryption keys.
-//! Algorithms that use the client's own keys follow the static capabilities.
+//! These are the provider's static capabilities, independent of which keys
+//! are active now. An algorithm list is an order of preference: each issuance
+//! uses the first listed algorithm the provider currently has a key for, so
+//! rotating keys never invalidates stored client settings. Discovery still
+//! publishes only what the active keys can honour.
 
-use identity_domain::key::{JwaEncryptionAlgorithm, JwkAlgorithm, JwsAlgorithm};
+use identity_domain::{
+    auth::AuthenticationContextClass,
+    key::{JwaEncryptionAlgorithm, JwkAlgorithm, JwsAlgorithm},
+};
 
-use super::{OpenIdProviderCapabilities, OpenIdProviderService};
+use super::{
+    OpenIdProviderCapabilities, OpenIdProviderService,
+    capabilities::supported_asymmetric_jws_algorithms, signing::append_conformance_none_alg,
+};
 use crate::error::{AppError, codes::provider::ProviderErrorCode};
 
 /// Supported values for client registration metadata, as JOSE names.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct ClientMetadataOptions {
     pub subject_types: Vec<String>,
-    pub acr_values: Vec<String>,
+    pub acr_values: Vec<AuthenticationContextClass>,
     pub id_token_signing_algs: Vec<String>,
     pub id_token_encryption_algs: Vec<String>,
     pub id_token_encryption_encs: Vec<String>,
@@ -26,6 +32,13 @@ pub struct ClientMetadataOptions {
     pub request_object_encryption_algs: Vec<String>,
     pub request_object_encryption_encs: Vec<String>,
     pub token_endpoint_auth_signing_algs: Vec<String>,
+}
+
+/// Algorithms with an active provider key, as JOSE names.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ActiveKeyAlgorithms {
+    pub signing: Vec<String>,
+    pub request_object_encryption: Vec<String>,
 }
 
 fn names<T: ToString>(values: &[T]) -> Vec<String> {
@@ -100,19 +113,31 @@ impl OpenIdProviderService {
             .collect())
     }
 
-    /// The live supported values. Content encryption for request objects is
-    /// offered only while some key management algorithm is.
-    pub async fn client_metadata_options(&self) -> Result<ClientMetadataOptions, AppError> {
-        let signing = names(&self.compute_id_token_signing_algos().await?);
-        let request_object_encryption_algs =
-            names(&self.compute_request_object_encryption_algos().await?);
+    /// Algorithms the provider holds an active key for right now: provider
+    /// signing (ID Token, UserInfo) and request object decryption. Keys may
+    /// be revoked at any time, so this only informs the administrator; client
+    /// settings are never validated against it.
+    pub async fn active_key_algorithms(&self) -> Result<ActiveKeyAlgorithms, AppError> {
+        Ok(ActiveKeyAlgorithms {
+            signing: names(&self.compute_id_token_signing_algos().await?),
+            request_object_encryption: names(
+                &self.compute_request_object_encryption_algos().await?,
+            ),
+        })
+    }
+
+    /// Values a client may choose in its advanced settings: everything the
+    /// provider can sign or decrypt with given a key, not narrowed by the
+    /// active keys. The static discovery fallback (`ES256` alone) is not the
+    /// supported set, so provider signing lists every asymmetric algorithm.
+    #[must_use]
+    pub fn client_metadata_options(&self) -> ClientMetadataOptions {
+        let signing = names(&append_conformance_none_alg(
+            supported_asymmetric_jws_algorithms(),
+        ));
         let mut options = ClientMetadataOptions::from_capabilities(&self.capabilities);
         options.id_token_signing_algs = signing.clone();
         options.userinfo_signing_algs = signing;
-        if request_object_encryption_algs.is_empty() {
-            options.request_object_encryption_encs.clear();
-        }
-        options.request_object_encryption_algs = request_object_encryption_algs;
-        Ok(options)
+        options
     }
 }

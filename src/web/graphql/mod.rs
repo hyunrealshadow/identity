@@ -32,7 +32,7 @@ use identity_application::{
     },
     setting::application_origins,
 };
-use identity_domain::auth::ACR_AAL2;
+use identity_domain::auth::AuthenticationContextClass;
 use identity_infrastructure::{database::audit, i18n::error_i18n};
 use observability::RequestObservation;
 use schema::authorization::EffectivePermissionsProvider;
@@ -225,7 +225,10 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
         let auth_time = claims
             .auth_time
             .and_then(|time| DateTime::from_timestamp(time, 0));
-        let authentication = if claims.acr.as_deref() == Some(ACR_AAL2) {
+        let authentication = if claims
+            .acr
+            .is_some_and(|acr| acr.satisfies(AuthenticationContextClass::MultiFactor))
+        {
             HumanAuthenticationContext::aal2(auth_time)
         } else {
             HumanAuthenticationContext::aal1(auth_time)

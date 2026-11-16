@@ -255,7 +255,7 @@ pub(super) async fn approve_device_request(
         scope: approval.approved_scope.clone(),
         user_oid: approval.user_oid.clone(),
         auth_time: approval.auth_time,
-        acr: approval.acr.clone(),
+        acr: approval.acr,
         amr: approval.amr.clone(),
         request_oid,
         approved_at: decided_at,

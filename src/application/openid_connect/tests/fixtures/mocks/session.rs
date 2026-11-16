@@ -1,6 +1,6 @@
 use chrono::{DateTime, Utc};
 use identity_domain::auth::{
-    SessionOid,
+    AuthenticationContextClass, SessionOid,
     model::{ActiveSession, Session},
     repository::{
         CreateSessionInput, SessionPage, SessionPageDirection, SessionRepository,
@@ -31,7 +31,7 @@ mock! {
             &self,
             oid: SessionOid,
             expected_user_oid: Uuid,
-            acr: &str,
+            acr: AuthenticationContextClass,
             acr_expires_at: DateTime<Utc>,
             amr: &[String],
         ) -> Result<Session, SessionRepositoryError>;

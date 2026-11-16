@@ -34,9 +34,37 @@ export function loginChallengeDestination(
 }
 
 export const loginMfaSetupPath = '/login/mfa-setup'
+export const loginPasskeySetupPath = '/login/passkey-setup'
 
 /**
- * The enrollment step of an AAL2 sign-in whose account has no second factor:
+ * The enrollment step of a `phr` sign-in whose account has no usable passkey:
+ * save the recovery codes, create a passkey on this device, then sign in
+ * with it.
+ */
+export function loginPasskeySetupDestination(
+  loginId: string,
+  uiLocales?: string,
+  restart?: 'required' | 'unavailable',
+) {
+  const search = new URLSearchParams({ login_id: loginId })
+  if (uiLocales) search.set('ui_locales', uiLocales)
+  if (restart) search.set('restart', restart)
+  return `${loginPasskeySetupPath}?${search}`
+}
+
+/** The enrollment page for the credential the sign-in asks the user to add. */
+export function loginEnrollmentDestination(
+  loginId: string,
+  enrollmentMethod: string | undefined,
+  uiLocales?: string,
+) {
+  return enrollmentMethod === 'passkey'
+    ? loginPasskeySetupDestination(loginId, uiLocales)
+    : loginMfaSetupDestination(loginId, uiLocales)
+}
+
+/**
+ * The enrollment step of an `aal2` sign-in whose account has no second factor:
  * save the recovery codes, add the account to an authenticator, then verify.
  * `recoverySaved` identifies the pending enrollment whose recovery codes the
  * user already saved; `step` selects the verification screen after it.

@@ -4,7 +4,7 @@ use std::sync::Arc;
 use async_graphql::{Context, Object, Result, SimpleObject};
 use chrono::{DateTime, Utc};
 use identity_domain::auth::{
-    ACR_AAL2, RECENT_AUTHENTICATION_TTL, acr_satisfies, authentication_is_fresh,
+    AuthenticationContextClass, RECENT_AUTHENTICATION_TTL, authentication_is_fresh,
 };
 
 use crate::graphql::schema::{
@@ -45,8 +45,7 @@ impl AuthorizationQuery {
         let aal2 = request
             .claims
             .acr
-            .as_deref()
-            .is_some_and(|acr| acr_satisfies(acr, ACR_AAL2));
+            .is_some_and(|acr| acr.satisfies(AuthenticationContextClass::MultiFactor));
         let recent = aal2
             && request.claims.auth_time.is_some_and(|auth_time| {
                 authentication_is_fresh(auth_time, now, RECENT_AUTHENTICATION_TTL.as_secs())
@@ -61,7 +60,7 @@ impl AuthorizationQuery {
             granted_scopes,
             effective_scopes: view.effective_scopes,
             authentication: AuthenticationContext {
-                acr: request.claims.acr.clone(),
+                acr: request.claims.acr.map(|acr| acr.to_string()),
                 auth_time,
                 aal2,
                 recent,

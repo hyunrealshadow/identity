@@ -32,7 +32,7 @@ async fn repeated_fresh_logins_for_different_clients_reuse_the_browser_session()
             move |_, session_oid, input| {
                 *session_oid == Some(oid)
                     && input.user_oid == user_oid
-                    && input.acr.as_deref() == Some(ACR_AAL1)
+                    && input.acr == Some(AuthenticationContextClass::SingleFactor)
                     && input.amr == [AMR_PASSWORD.to_owned()]
             }
         })
@@ -137,7 +137,7 @@ async fn fresh_login_creates_a_session_when_no_valid_same_user_session_is_presen
                     browser_session_oids: presented.clone(),
                     ..Default::default()
                 },
-                ACR_AAL1,
+                AuthenticationContextClass::SingleFactor,
                 &[AMR_PASSWORD.to_owned()],
             )
             .await

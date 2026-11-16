@@ -3,7 +3,7 @@ use crate::error::codes::{auth::AuthErrorCode, authorize_http::AuthorizeHttpErro
 use crate::error::{AppError, codes::authorize::AuthorizeErrorCode};
 use chrono::{DateTime, Utc};
 use identity_domain::{
-    auth::{LoginStatus, SessionOid, model::Login},
+    auth::{AuthenticationContextClass, LoginStatus, SessionOid, model::Login},
     client_authorization::{SelectionSource, StoredAuthorizationRequest},
     openid_connect::OpenIdConnectClient,
 };
@@ -23,11 +23,11 @@ impl AuthorizeService {
         &self,
         client_oid: Uuid,
         authorization_request_id: Uuid,
-        requested_acr: Option<&str>,
+        requested_acr_values: &[AuthenticationContextClass],
     ) -> Result<String, AppError> {
         let login = self
             .login_repo
-            .create_pending(client_oid, authorization_request_id, requested_acr)
+            .create_pending(client_oid, authorization_request_id, requested_acr_values)
             .await
             .map_err(AppError::map_source(AuthorizeErrorCode::StoreLoginFailed))?;
 
@@ -119,7 +119,7 @@ impl AuthorizeService {
             .create_pending(
                 context.login.client_oid,
                 context.login.client_authorization_oid,
-                context.login.requested_acr.as_deref(),
+                &context.login.requested_acr_values,
             )
             .await
             .map_err(AppError::map_source(AuthorizeErrorCode::StoreLoginFailed))?;

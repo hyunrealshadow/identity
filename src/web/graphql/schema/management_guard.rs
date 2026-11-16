@@ -107,7 +107,10 @@ impl Guard for ManagementGuard {
                 error.extend_with(|_, extensions| {
                     extensions.set("applicationCode", 27021);
                     extensions.set("code", "insufficient_user_authentication");
-                    extensions.set("acr_values", "aal2");
+                    extensions.set(
+                        "acr_values",
+                        identity_domain::auth::AuthenticationContextClass::MultiFactor.as_str(),
+                    );
                     if recent {
                         extensions.set("max_age", DEFAULT_RECENT_AAL2_TTL.as_secs());
                     }

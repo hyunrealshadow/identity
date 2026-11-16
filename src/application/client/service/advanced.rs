@@ -6,7 +6,10 @@
 //! after its key is retired, so unrelated edits are not blocked; the
 //! administrator removes it explicitly.
 
-use identity_domain::openid_connect::{OpenIdConnectClientPlatformType, SubjectType};
+use identity_domain::{
+    auth::AuthenticationContextClass,
+    openid_connect::{OpenIdConnectClientPlatformType, SubjectType},
+};
 use url::Url;
 
 use super::super::model::{
@@ -186,10 +189,10 @@ pub(crate) fn validate_advanced_settings(
         MAX_DEFAULT_ACR_VALUES,
         "defaultAcrValues",
     )?;
-    if let Some(acr) = default_acr_values
-        .iter()
-        .find(|acr| !options.acr_values.contains(acr) && !current.default_acr_values.contains(acr))
-    {
+    if let Some(acr) = default_acr_values.iter().find(|acr| {
+        !acr.parse::<AuthenticationContextClass>()
+            .is_ok_and(|class| options.acr_values.contains(&class))
+    }) {
         return Err(AppError::from_code(ClientErrorCode::UnsupportedAcrValue)
             .with_param("acr", acr.clone())
             .with_field(field("defaultAcrValues")));
@@ -348,6 +351,7 @@ mod tests {
         error::{AppError, code::AppErrorCode, codes::client::ClientErrorCode},
         openid_connect::provider::ClientMetadataOptions,
     };
+    use identity_domain::auth::AuthenticationContextClass;
 
     /// What a provider with one ES256 and one PS256 signing key and an RSA
     /// encryption key would offer.
@@ -355,7 +359,7 @@ mod tests {
         let names = |values: &[&str]| values.iter().map(|value| (*value).to_owned()).collect();
         ClientMetadataOptions {
             subject_types: names(&["public", "pairwise"]),
-            acr_values: names(&["aal1", "aal2"]),
+            acr_values: AuthenticationContextClass::ALL.to_vec(),
             id_token_signing_algs: names(&["ES256", "PS256"]),
             id_token_encryption_algs: names(&["RSA-OAEP", "RSA-OAEP-256", "ECDH-ES"]),
             id_token_encryption_encs: names(&["A128CBC-HS256", "A256GCM"]),
@@ -396,8 +400,8 @@ mod tests {
     }
 
     #[test]
-    fn rejects_response_signing_without_a_key_algorithm() {
-        // RS256 is a valid JOSE name, but no active key signs with it.
+    fn rejects_response_signing_algorithms_outside_the_options() {
+        // RS256 is a valid JOSE name, but these options do not offer it.
         for alg in ["none", "HS256", "RS256", "nonsense"] {
             assert_eq!(
                 rejected(ClientAdvancedSettings {

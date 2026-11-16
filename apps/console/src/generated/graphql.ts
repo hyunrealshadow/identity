@@ -749,7 +749,7 @@ export type ConsoleClientMetadataQuery = { instanceMetadata: { issuer: string, o
 export type ConsoleClientMetadataOptionsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type ConsoleClientMetadataOptionsQuery = { clientMetadataOptions: { subjectTypes: Array<string>, acrValues: Array<string>, idTokenSigningAlgs: Array<string>, idTokenEncryptionAlgs: Array<string>, idTokenEncryptionEncs: Array<string>, userinfoSigningAlgs: Array<string>, userinfoEncryptionAlgs: Array<string>, userinfoEncryptionEncs: Array<string>, requestObjectSigningAlgs: Array<string>, requestObjectEncryptionAlgs: Array<string>, requestObjectEncryptionEncs: Array<string>, tokenEndpointAuthSigningAlgs: Array<string> } };
+export type ConsoleClientMetadataOptionsQuery = { clientMetadataOptions: { subjectTypes: Array<string>, acrValues: Array<string>, idTokenSigningAlgs: Array<string>, idTokenEncryptionAlgs: Array<string>, idTokenEncryptionEncs: Array<string>, userinfoSigningAlgs: Array<string>, userinfoEncryptionAlgs: Array<string>, userinfoEncryptionEncs: Array<string>, requestObjectSigningAlgs: Array<string>, requestObjectEncryptionAlgs: Array<string>, requestObjectEncryptionEncs: Array<string>, tokenEndpointAuthSigningAlgs: Array<string>, activeSigningAlgs: Array<string>, activeRequestObjectEncryptionAlgs: Array<string> } };
 
 export type ConsoleResourcesQueryVariables = Exact<{
   filter?: ResourceFilter | null | undefined;
@@ -1807,6 +1807,8 @@ export const ConsoleClientMetadataOptionsDocument = new TypedDocumentString(`
     requestObjectEncryptionAlgs
     requestObjectEncryptionEncs
     tokenEndpointAuthSigningAlgs
+    activeSigningAlgs
+    activeRequestObjectEncryptionAlgs
   }
 }
     `) as unknown as TypedDocumentString<ConsoleClientMetadataOptionsQuery, ConsoleClientMetadataOptionsQueryVariables>;

@@ -8,7 +8,10 @@ use crate::{
 };
 use chrono::{DateTime, Utc};
 use identity_domain::{
-    auth::{ACR_AAL2, AMR_MFA, AMR_OTP, AMR_PASSWORD, SessionOid, SessionStatus},
+    auth::{
+        AMR_MFA, AMR_OTP, AMR_PASSWORD, AuthenticationContextClass, SessionOid, SessionStatus,
+        reported_acr,
+    },
     openid_connect::AuthorizationRequestData,
     user::UserOid,
 };
@@ -26,7 +29,7 @@ pub struct AuthorizationApproval {
     pub user_oid: Uuid,
     pub protected_session_id: Option<String>,
     pub auth_time: Option<i64>,
-    pub acr: Option<String>,
+    pub acr: Option<AuthenticationContextClass>,
     pub amr: Vec<String>,
 }
 
@@ -76,9 +79,9 @@ impl AuthorizeService {
         session_oid: SessionOid,
         user_oid: Uuid,
         auth_time: Option<i64>,
-        acr: Option<String>,
+        acr: Option<AuthenticationContextClass>,
     ) -> Result<Url, AppError> {
-        let amr = default_amr_for_acr(acr.as_deref());
+        let amr = default_amr_for_acr(acr);
         self.approve_authorization_request_with_protected_session_id(
             authorization_request_id,
             AuthorizationApproval {
@@ -161,9 +164,9 @@ impl AuthorizeService {
         session_oid: SessionOid,
         user_oid: Uuid,
         auth_time: Option<i64>,
-        acr: Option<String>,
+        acr: Option<AuthenticationContextClass>,
         amr: Vec<String>,
-    ) -> Result<(Option<i64>, Option<String>, Vec<String>), AppError> {
+    ) -> Result<(Option<i64>, Option<AuthenticationContextClass>, Vec<String>), AppError> {
         let Some(session_repo) = &self.session_repo else {
             return Ok((auth_time, acr, amr));
         };
@@ -186,11 +189,7 @@ impl AuthorizeService {
                     .with_param("reason", "approval session is not active for the user"),
             );
         }
-        Ok((
-            auth_time,
-            session.effective_acr(now).map(str::to_owned),
-            session.amr,
-        ))
+        Ok((auth_time, session.effective_acr(now), session.amr))
     }
 
     async fn ensure_front_channel_user_enabled(&self, user_oid: Uuid) -> Result<(), AppError> {
@@ -234,15 +233,11 @@ impl AuthorizeService {
             .validated_approval_authentication(session_oid, user_oid, auth_time, acr, amr)
             .await?;
         let request = self
-            .clip_management_for_approval(
-                &request,
-                user_oid,
-                ApprovalAuthentication {
-                    acr: acr.as_deref(),
-                    amr: &amr,
-                },
-            )
+            .clip_management_for_approval(&request, user_oid, ApprovalAuthentication { acr })
             .await?;
+        // Management admission above uses the class actually established;
+        // the client sees the most preferred class it asked for that is met.
+        let acr = reported_acr(acr, request.acr_values.as_deref().unwrap_or_default());
         let rbac = self.clip_rbac_for_approval(&request, user_oid).await?;
         let request = rbac.request;
         let rbac_snapshot = rbac.snapshot;
@@ -269,7 +264,7 @@ impl AuthorizeService {
                 response_type,
                 AuthenticationContext {
                     auth_time,
-                    acr: acr.as_deref(),
+                    acr,
                     amr: &amr,
                 },
             )
@@ -288,7 +283,7 @@ impl AuthorizeService {
                 response_type,
                 AuthenticationContext {
                     auth_time,
-                    acr: acr.as_deref(),
+                    acr,
                     amr: &amr,
                 },
             )
@@ -303,7 +298,7 @@ impl AuthorizeService {
                     protected_session_id: &protected_session_id,
                     authentication: AuthenticationContext {
                         auth_time,
-                        acr: acr.as_deref(),
+                        acr,
                         amr: &amr,
                     },
                     rbac_snapshot: rbac_snapshot.as_ref(),
@@ -356,7 +351,7 @@ impl AuthorizeService {
         auth_time: Option<i64>,
     ) -> Result<Url, AppError> {
         let login = self.load_login_by_protected_id(protected_login_oid).await?;
-        let amr = default_amr_for_acr(login.acr.as_deref());
+        let amr = default_amr_for_acr(login.acr);
         self.approve_authorization_request_with_protected_session_id(
             login.client_authorization_oid,
             AuthorizationApproval {
@@ -381,9 +376,9 @@ impl AuthorizeService {
     }
 }
 
-fn default_amr_for_acr(acr: Option<&str>) -> Vec<String> {
+fn default_amr_for_acr(acr: Option<AuthenticationContextClass>) -> Vec<String> {
     let mut methods = vec![AMR_PASSWORD.to_owned()];
-    if acr == Some(ACR_AAL2) {
+    if acr.is_some_and(AuthenticationContextClass::is_multi_factor) {
         methods.push(AMR_OTP.to_owned());
         methods.push(AMR_MFA.to_owned());
     }

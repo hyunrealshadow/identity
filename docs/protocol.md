@@ -5,7 +5,10 @@
 
 This reference describes Identity's OAuth/OIDC client policy, resource model,
 pushed authorization requests, and HTTP APIs. Supported algorithms are advertised
-through discovery and depend on the active keys and client metadata. Who may call
+through discovery and depend on the active keys and client metadata. A client's
+algorithm settings may list anything the provider supports, whether or not a key
+for it is active: each list is an order of preference, and every issuance uses
+the first listed algorithm with an active key. Who may call
 what is covered by the [authorization model](authorization.md); the management API
 itself by the [GraphQL API](graphql.md).
 

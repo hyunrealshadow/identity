@@ -28,7 +28,8 @@ vi.mock('#/lib/auth/oidc', async (importOriginal) => {
   }
 })
 
-vi.mock('@identity/graphql-access', () => ({
+vi.mock('@identity/graphql-access', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@identity/graphql-access')>()),
   preflightOperation: mocks.preflightOperation,
 }))
 

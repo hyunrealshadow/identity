@@ -158,6 +158,7 @@ async fn refresh_token_checks_owner_expiry_revocation_and_unknown_tokens() {
                     auth_time: None,
                     acr: None,
                     amr: vec![],
+                    acr_values: Vec::new(),
                     rotated_from: None,
                     authorization_code_oid: None,
                     device_authorization_oid: None,

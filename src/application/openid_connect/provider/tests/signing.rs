@@ -189,7 +189,7 @@ async fn provider_with_bindings(bindings: Vec<JwkAlgorithm>) -> OpenIdProviderSe
 }
 
 #[tokio::test]
-async fn request_object_encryption_follows_active_encryption_keys() {
+async fn discovery_follows_active_keys_while_client_options_do_not() {
     use identity_domain::key::JwaEncryptionAlgorithm;
 
     let service = provider_with_bindings(vec![
@@ -207,19 +207,22 @@ async fn request_object_encryption_follows_active_encryption_keys() {
             .request_object_encryption_enc_values_supported
             .is_some_and(|values| !values.is_empty())
     );
-    let options = service.client_metadata_options().await.unwrap();
-    assert_eq!(options.request_object_encryption_algs, ["RSA-OAEP-256"]);
-    assert_eq!(
-        options.id_token_signing_algs,
-        expected_id_token_algorithms(&["RS256"])
-            .iter()
-            .map(ToString::to_string)
-            .collect::<Vec<_>>()
-    );
+    // A client may list algorithms the provider supports but has no key for
+    // now; each issuance picks the first listed algorithm with a key.
+    let options = service.client_metadata_options();
+    assert!(options.request_object_encryption_algs.len() > 1);
+    for algorithm in ["ES256", "PS256", "RS256", "EdDSA"] {
+        assert!(
+            options
+                .id_token_signing_algs
+                .contains(&algorithm.to_owned()),
+            "{algorithm}"
+        );
+    }
     assert_eq!(options.userinfo_signing_algs, options.id_token_signing_algs);
 
-    // Without an encryption key, neither discovery nor the options offer
-    // request object encryption.
+    // Without an encryption key discovery offers no request object
+    // encryption, but the client options stay the same.
     let signing_only =
         provider_with_bindings(vec![JwkAlgorithm::Signing(JwaSigningAlgorithm::Rs256)]).await;
     let metadata = signing_only.discovery_metadata().await.unwrap();
@@ -231,7 +234,5 @@ async fn request_object_encryption_follows_active_encryption_keys() {
         metadata.request_object_encryption_enc_values_supported,
         None
     );
-    let options = signing_only.client_metadata_options().await.unwrap();
-    assert!(options.request_object_encryption_algs.is_empty());
-    assert!(options.request_object_encryption_encs.is_empty());
+    assert_eq!(signing_only.client_metadata_options(), options);
 }

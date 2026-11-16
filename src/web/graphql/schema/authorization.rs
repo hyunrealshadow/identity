@@ -6,7 +6,7 @@ use identity_application::error::{
     AppError, codes::graphql::GraphqlErrorCode, params::ErrorParams,
 };
 use identity_domain::{
-    auth::{ACR_AAL2, acr_satisfies, authentication_is_fresh},
+    auth::{AuthenticationContextClass, authentication_is_fresh},
     openid_connect::ApiScope,
 };
 
@@ -99,12 +99,12 @@ impl Guard for ScopeGuard {
 /// window. The generic guard requires recent AAL1-or-better authentication
 /// within the ordinary recent window.
 pub(super) struct RecentAuthenticationGuard {
-    required_acr: Option<&'static str>,
+    required_acr: Option<AuthenticationContextClass>,
 }
 
 impl RecentAuthenticationGuard {
     pub(crate) fn policy(&self) -> AccessPolicy {
-        AccessPolicy::recent(self.required_acr == Some(ACR_AAL2))
+        AccessPolicy::recent(self.required_acr == Some(AuthenticationContextClass::MultiFactor))
     }
 
     pub(super) const fn new() -> Self {
@@ -113,7 +113,7 @@ impl RecentAuthenticationGuard {
 
     pub(super) const fn aal2() -> Self {
         Self {
-            required_acr: Some(ACR_AAL2),
+            required_acr: Some(AuthenticationContextClass::MultiFactor),
         }
     }
 }
@@ -137,8 +137,7 @@ impl Guard for RecentAuthenticationGuard {
             Some(required) => request
                 .claims
                 .acr
-                .as_deref()
-                .is_some_and(|acr| acr_satisfies(acr, required)),
+                .is_some_and(|acr| acr.satisfies(required)),
             None => request.claims.acr.is_some(),
         };
         if fresh && acr_satisfied {
@@ -154,7 +153,7 @@ impl Guard for RecentAuthenticationGuard {
             extensions.set("code", "insufficient_user_authentication");
             extensions.set("max_age", max_age);
             if let Some(required) = self.required_acr {
-                extensions.set("acr_values", required);
+                extensions.set("acr_values", required.as_str());
             }
             correlation.apply(extensions);
         }))

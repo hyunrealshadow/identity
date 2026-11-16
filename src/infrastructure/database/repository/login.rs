@@ -1,7 +1,8 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use identity_domain::auth::{
-    LOGIN_EXPIRY, LoginFailureReason, LoginStatus, SessionOid, SessionStatus,
+    AuthenticationContextClass, LOGIN_EXPIRY, LoginFailureReason, LoginStatus, SessionOid,
+    SessionStatus,
     challenge::ChallengeBinding,
     model::Login,
     repository::{LoginRepository, LoginRepositoryError},
@@ -27,6 +28,15 @@ use crate::database::{
     },
 };
 
+fn decode_acr(
+    value: Option<String>,
+) -> Result<Option<AuthenticationContextClass>, LoginRepositoryError> {
+    value
+        .map(|value| value.parse())
+        .transpose()
+        .map_err(|_| LoginRepositoryError::InvalidStoredAcr)
+}
+
 fn to_domain(
     m: login::Model,
     client_oid: Uuid,
@@ -48,8 +58,9 @@ fn to_domain(
         failed_attempts: m.failed_attempts,
         created_at: DateTime::<Utc>::from(m.created_at),
         expires_at: DateTime::<Utc>::from(m.expires_at),
-        acr: m.acr,
-        requested_acr: m.requested_acr,
+        acr: decode_acr(m.acr)?,
+        requested_acr_values: serde_json::from_value(m.requested_acr_values)
+            .map_err(|_| LoginRepositoryError::InvalidStoredAcr)?,
     })
 }
 
@@ -121,7 +132,7 @@ impl LoginRepository for LoginRepositoryImpl {
         &self,
         client_oid: Uuid,
         client_authorization_oid: Uuid,
-        requested_acr: Option<&str>,
+        requested_acr_values: &[AuthenticationContextClass],
     ) -> Result<Login, LoginRepositoryError> {
         let client = ClientEntity::find()
             .filter(ClientColumn::Oid.eq(client_oid))
@@ -147,7 +158,7 @@ impl LoginRepository for LoginRepositoryImpl {
             user_id: Set(None),
             status: Set(LoginStatus::CREATED.to_string()),
             failed_attempts: Set(0),
-            requested_acr: Set(requested_acr.map(str::to_owned)),
+            requested_acr_values: Set(serde_json::json!(requested_acr_values)),
             created_at: Set(now.into()),
             expires_at: Set((now + expiry_duration).into()),
             ..Default::default()
@@ -247,7 +258,7 @@ impl LoginRepository for LoginRepositoryImpl {
         login_oid: Uuid,
         status: LoginStatus,
         session_oid: Option<SessionOid>,
-        acr: Option<&str>,
+        acr: Option<AuthenticationContextClass>,
     ) -> Result<(), LoginRepositoryError> {
         let model = LoginEntity::find()
             .filter(LoginColumn::Oid.eq(login_oid))
@@ -290,7 +301,7 @@ impl LoginRepository for LoginRepositoryImpl {
 
         let status_changed = current_status != status;
         let session_changed = session_id.is_some_and(|sid| model.session_id != Some(sid));
-        let acr_changed = acr.is_some_and(|value| model.acr.as_deref() != Some(value));
+        let acr_changed = acr.is_some_and(|value| model.acr.as_deref() != Some(value.as_str()));
         let audit_action = if status_changed {
             Some(match status {
                 LoginStatus::Created => "login.created",
@@ -327,7 +338,7 @@ impl LoginRepository for LoginRepositoryImpl {
             update = update.col_expr(LoginColumn::SessionId, Expr::value(Some(sid)));
         }
         if let Some(a) = acr {
-            update = update.col_expr(LoginColumn::Acr, Expr::value(Some(a.to_owned())));
+            update = update.col_expr(LoginColumn::Acr, Expr::value(Some(a.to_string())));
         }
         let result = update
             .exec(&transaction)

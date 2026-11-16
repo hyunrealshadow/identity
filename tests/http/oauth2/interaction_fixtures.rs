@@ -166,7 +166,7 @@ pub(super) async fn authorize_first_hop_state() -> (AppState, Uuid) {
         failure_reason: None,
         failed_attempts: 0,
         acr: None,
-        requested_acr: None,
+        requested_acr_values: serde_json::json!([]),
         created_at: now.into(),
         expires_at: (now + Duration::minutes(5)).into(),
         updated_at: None,

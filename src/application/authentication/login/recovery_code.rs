@@ -8,11 +8,10 @@ use crate::{
     user::model::{CredentialData, CredentialType, RecoveryCodeCredentialData},
 };
 use identity_domain::auth::{
-    ACR_AAL2, AMR_MFA, AMR_PASSWORD, AMR_RECOVERY_CODE, LoginFailureReason, LoginStatus,
-    MAX_FAILED_ATTEMPTS, MAX_OTP_ATTEMPTS, model::Login,
+    AMR_MFA, AMR_PASSWORD, AMR_RECOVERY_CODE, LoginFailureReason, MAX_FAILED_ATTEMPTS,
+    MAX_OTP_ATTEMPTS, model::Login,
 };
 use subtle::ConstantTimeEq;
-use tracing::error;
 use uuid::Uuid;
 
 impl LoginService {
@@ -82,34 +81,16 @@ impl LoginService {
             return Err(AppError::from_code(AuthErrorCode::InvalidOtp));
         }
         self.user_repo.reset_failed_attempts(user_oid).await?;
-        let session = self
-            .complete_session(
-                &login,
-                Uuid::from(user_oid),
-                ctx,
-                ACR_AAL2,
-                &[
-                    AMR_PASSWORD.to_owned(),
-                    AMR_RECOVERY_CODE.to_owned(),
-                    AMR_MFA.to_owned(),
-                ],
-            )
-            .await?;
-        if let Err(error) = self
-            .login_repo
-            .update_status(
-                login.oid,
-                LoginStatus::AUTHENTICATED,
-                Some(session.oid),
-                Some(ACR_AAL2),
-            )
-            .await
-        {
-            error!(%error, "failed to authenticate recovery-code login");
-        }
-        Ok(ChallengeOutcome::Authenticated {
+        self.complete_second_factor(
             login,
-            session: Box::new(session),
-        })
+            Uuid::from(user_oid),
+            ctx,
+            &[
+                AMR_PASSWORD.to_owned(),
+                AMR_RECOVERY_CODE.to_owned(),
+                AMR_MFA.to_owned(),
+            ],
+        )
+        .await
     }
 }

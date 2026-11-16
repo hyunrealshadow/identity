@@ -2,6 +2,7 @@ use std::iter;
 
 use chrono::{DateTime, Duration};
 use identity_domain::{
+    auth::AuthenticationContextClass,
     client::model::ClientOid,
     client_authorization::{
         ClientAuthorization, ClientAuthorizationData, ClientAuthorizationType,
@@ -43,7 +44,7 @@ fn request_record_with_scope(
             user_oid: Uuid::nil().to_string(),
             approved_scope: scope.to_owned(),
             auth_time: Some(1_700_000_000),
-            acr: Some("aal1".to_owned()),
+            acr: Some(AuthenticationContextClass::SingleFactor),
             amr: vec!["pwd".to_owned()],
             device_authorization_oid: Uuid::parse_str("33333333-3333-3333-3333-333333333333")
                 .unwrap(),
@@ -94,7 +95,7 @@ fn relation_record_with_scope(revoked: bool, scope: &str) -> ClientAuthorization
             scope: scope.to_owned(),
             user_oid: Uuid::nil().to_string(),
             auth_time: Some(1_700_000_000),
-            acr: Some("aal1".to_owned()),
+            acr: Some(AuthenticationContextClass::SingleFactor),
             amr: vec!["pwd".to_owned()],
             request_oid: Uuid::parse_str("11111111-1111-1111-1111-111111111111").unwrap(),
             approved_at: Utc::now(),
@@ -719,6 +720,7 @@ async fn device_refresh_token(repo: &Arc<MockClientAuthorizationRepository>, sco
         auth_time: Some(1_700_000_000),
         acr: None,
         amr: vec!["pwd".to_owned()],
+        acr_values: Vec::new(),
         rotated_from: None,
         authorization_code_oid: None,
         device_authorization_oid: Some("33333333-3333-3333-3333-333333333333".to_owned()),
@@ -871,6 +873,7 @@ async fn refreshing_a_device_token_requires_a_live_relation() {
         auth_time: Some(1_700_000_000),
         acr: None,
         amr: vec!["pwd".to_owned()],
+        acr_values: Vec::new(),
         rotated_from: None,
         authorization_code_oid: None,
         device_authorization_oid: Some("33333333-3333-3333-3333-333333333333".to_owned()),
@@ -934,8 +937,9 @@ async fn a_live_relation_allows_refreshing_a_device_token() {
         session_oid: None,
         protected_session_id: None,
         auth_time: Some(1_700_000_000),
-        acr: Some("aal1".to_owned()),
+        acr: Some(AuthenticationContextClass::SingleFactor),
         amr: vec!["pwd".to_owned()],
+        acr_values: Vec::new(),
         rotated_from: None,
         authorization_code_oid: None,
         device_authorization_oid: Some("33333333-3333-3333-3333-333333333333".to_owned()),

@@ -12,11 +12,12 @@ use crate::{
     },
     observability::{BusinessEvent, EventValue},
     openid_connect::management::{
-        allowed_human_management_scopes, clipped_scope, human_authentication_is_aal2,
+        allowed_human_management_scopes, clipped_scope, human_authentication_is_multi_factor,
         is_single_graphql_resource,
     },
 };
 use identity_domain::{
+    auth::AuthenticationContextClass,
     client_authorization::ManagementAuthorizationSnapshotData,
     openid_connect::{AuthorizationRequestData, CodeChallengeMethod, ResponseType, ScopeSet},
     user::UserOid,
@@ -26,9 +27,8 @@ use uuid::Uuid;
 
 use super::AuthorizeService;
 
-pub(super) struct ApprovalAuthentication<'a> {
-    pub acr: Option<&'a str>,
-    pub amr: &'a [String],
+pub(super) struct ApprovalAuthentication {
+    pub acr: Option<AuthenticationContextClass>,
 }
 
 impl AuthorizeService {
@@ -47,7 +47,7 @@ impl AuthorizeService {
         &self,
         request: &AuthorizationRequestData,
         user_oid: Uuid,
-        authentication: ApprovalAuthentication<'_>,
+        authentication: ApprovalAuthentication,
     ) -> Result<AuthorizationRequestData, AppError> {
         let requested_scope = ScopeSet::parse(&request.scope)
             .map_err(AppError::map_source(AuthorizeErrorCode::ScopeInvalid))?;
@@ -119,7 +119,7 @@ impl AuthorizeService {
             .await
             .map_err(AppError::map_source(AuthorizeErrorCode::LoadRequestFailed))?;
 
-        let human_aal2 = human_authentication_is_aal2(authentication.acr, authentication.amr);
+        let human_aal2 = human_authentication_is_multi_factor(authentication.acr);
         let granted =
             allowed_human_management_scopes(&requested_scope, authority.as_ref(), human_aal2);
 

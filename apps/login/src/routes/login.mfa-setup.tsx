@@ -110,15 +110,17 @@ const loadMfaSetupPage = createServerFn({ method: 'GET' })
       if (status.status === 'expired') {
         return { ...page, restartRequired: true, error: translate(locale, 'challengeExpiredDescription') }
       }
-      if (status.status !== 'mfa_enrollment_required') {
+      if (status.status !== 'mfa_enrollment_required' || status.enrollment_method === 'passkey') {
         // The interaction moved on (completed elsewhere, or a factor was
-        // enrolled meanwhile): continue wherever it now stands.
+        // enrolled meanwhile) or asks for a passkey: continue wherever it now
+        // stands.
         const search = new URLSearchParams({ login_id: loginId })
         if (uiLocales) search.set('ui_locales', uiLocales)
         return {
           ...page,
           redirectTo:
             status.continue_uri ??
+            (status.enrollment_method === 'passkey' ? status.challenge_uri : undefined) ??
             (status.status === 'mfa_required' && status.preferred_credential_type
               ? loginChallengeDestination(loginId, status.preferred_credential_type, uiLocales)
               : `/login?${search}`),

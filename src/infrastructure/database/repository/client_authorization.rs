@@ -625,6 +625,7 @@ mod tests {
             protected_session_id: None,
             acr: None,
             amr: Vec::new(),
+            acr_values: Vec::new(),
             redirect_uri: "https://example.test/cb".to_owned(),
             redirect_uri_was_supplied: true,
             auth_time: None,

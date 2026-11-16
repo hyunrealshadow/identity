@@ -83,24 +83,23 @@ impl ClientQuery {
         Ok(connection)
     }
 
-    /// Values a client may register in its advanced settings, the same lists
-    /// discovery publishes. Provider signing follows the active signing keys
-    /// and request object encryption the active encryption keys.
+    /// Values a client may register in its advanced settings: everything the
+    /// provider supports, whether or not a key for it is active now. Each
+    /// issuance uses the first listed algorithm with an active key.
     #[graphql(
         guard = "ManagementGuard::new(ManagementScope::ClientsRead, ManagementTarget::instance())",
         directive = access::apply(ManagementGuard::policy(ManagementScope::ClientsRead))
     )]
     async fn client_metadata_options(&self, ctx: &Context<'_>) -> Result<ClientMetadataOptions> {
-        let options = request_context(ctx)?
-            .state
-            .services()
-            .oidc()
-            .client_metadata_options()
+        let provider = request_context(ctx)?.state.services().oidc();
+        let options = provider.client_metadata_options();
+        let active = provider
+            .active_key_algorithms()
             .await
             .map_err(|error| app_error(ctx, error))?;
         Ok(ClientMetadataOptions {
             subject_types: options.subject_types,
-            acr_values: options.acr_values,
+            acr_values: options.acr_values.iter().map(ToString::to_string).collect(),
             id_token_signing_algs: options.id_token_signing_algs,
             id_token_encryption_algs: options.id_token_encryption_algs,
             id_token_encryption_encs: options.id_token_encryption_encs,
@@ -111,6 +110,8 @@ impl ClientQuery {
             request_object_encryption_algs: options.request_object_encryption_algs,
             request_object_encryption_encs: options.request_object_encryption_encs,
             token_endpoint_auth_signing_algs: options.token_endpoint_auth_signing_algs,
+            active_signing_algs: active.signing,
+            active_request_object_encryption_algs: active.request_object_encryption,
         })
     }
 }
@@ -130,4 +131,10 @@ pub(crate) struct ClientMetadataOptions {
     request_object_encryption_algs: Vec<String>,
     request_object_encryption_encs: Vec<String>,
     token_endpoint_auth_signing_algs: Vec<String>,
+    /// Provider signing algorithms (ID Token, UserInfo) with an active key
+    /// now. Keys can be revoked at any time, so settings may list others; an
+    /// issuance skips listed algorithms without a key.
+    active_signing_algs: Vec<String>,
+    /// Request object encryption algorithms with an active decryption key now.
+    active_request_object_encryption_algs: Vec<String>,
 }

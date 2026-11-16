@@ -6,7 +6,7 @@ use strum::{AsRefStr, Display, EnumIter, IntoEnumIterator};
 use uuid::Uuid;
 
 use crate::{
-    auth::model::SessionOid,
+    auth::{AuthenticationContextClass, model::SessionOid},
     authorization::{
         authority::UserPermissionAuthority,
         catalog::ManagementScope,
@@ -396,9 +396,13 @@ pub struct AuthorizationCodeData {
     pub session_oid: SessionOid,
     #[serde(default)]
     pub protected_session_id: Option<String>,
-    pub acr: Option<String>,
+    pub acr: Option<AuthenticationContextClass>,
     #[serde(default)]
     pub amr: Vec<String>,
+    /// Classes the authorization request accepted, in order of preference;
+    /// the reported `acr` is chosen from them at every issuance.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub acr_values: Vec<AuthenticationContextClass>,
     pub redirect_uri: String,
     #[serde(default = "default_redirect_uri_was_supplied")]
     pub redirect_uri_was_supplied: bool,
@@ -428,9 +432,11 @@ pub struct RefreshTokenData {
     #[serde(default)]
     pub protected_session_id: Option<String>,
     pub auth_time: Option<i64>,
-    pub acr: Option<String>,
+    pub acr: Option<AuthenticationContextClass>,
     #[serde(default)]
     pub amr: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub acr_values: Vec<AuthenticationContextClass>,
     pub rotated_from: Option<String>,
     #[serde(default)]
     pub authorization_code_oid: Option<String>,

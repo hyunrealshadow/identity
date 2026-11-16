@@ -1,3 +1,4 @@
+import { AuthenticationContextClass } from '@identity/graphql-access'
 import type { ReactNode } from 'react'
 
 import { AsyncState } from '#/components/async-state'
@@ -81,7 +82,7 @@ export function RbacStepUp({
   const t = useTranslator()
   return (
     <StepUpPanel
-      stepUp={{ source: 'graphql', acrValues: 'aal2' }}
+      stepUp={{ source: 'graphql', acrValues: AuthenticationContextClass.MultiFactor }}
       hideDetails
       description={description ?? t('rbacStepUpDescription')}
       note={note ?? t('rbacStepUpNote')}

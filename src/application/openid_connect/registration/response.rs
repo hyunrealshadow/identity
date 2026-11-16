@@ -205,7 +205,10 @@ pub(super) fn response_from_client(
         require_pushed_authorization_requests: Some(
             metadata.settings.require_pushed_authorization_requests,
         ),
-        default_acr_values: metadata.default_acr_values.clone(),
+        default_acr_values: metadata
+            .default_acr_values
+            .as_ref()
+            .map(|values| values.iter().map(ToString::to_string).collect()),
         initiate_login_uri: metadata.initiate_login_uri.clone(),
         request_uris: metadata.request_uris.clone(),
         post_logout_redirect_uris: metadata.post_logout_redirect_uris.clone(),

@@ -220,6 +220,7 @@ async fn resource_selection_preserves_the_full_refresh_grant_and_rejects_expansi
                 auth_time: None,
                 acr: None,
                 amr: vec![],
+                acr_values: Vec::new(),
                 claims: None,
                 redirect_uri: "https://client.example.com/callback".to_owned(),
                 redirect_uri_was_supplied: true,
