@@ -184,7 +184,7 @@ impl TokenService {
                     session.revoked_at.is_none()
                         && session.status == SessionStatus::ACTIVE
                         && session.expires_at.is_none_or(|expiry| expiry > now)
-                        && Some(Uuid::from(session.user_oid)) == user_oid
+                        && Some(session.user_oid) == user_oid
                 });
             if !active {
                 return Ok(json!({"active": false}));

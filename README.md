@@ -67,7 +67,7 @@ checks, structured logs, optional OTLP export, and security audit records.
 
 ### Prerequisites
 
-- Rust **1.99.0**, pinned in [rust-toolchain.toml](rust-toolchain.toml).
+- Rust **1.100.0**, pinned in [rust-toolchain.toml](rust-toolchain.toml).
 - PostgreSQL with an existing database and a user allowed to run migrations.
 - Node.js **22** and pnpm **12.9.1**, as used by the deployment build.
 - OpenSSL and native build tools; Linux builds use `pkg-config` and `libssl-dev`.

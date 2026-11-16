@@ -508,7 +508,7 @@ impl UserInfoService {
                         let active = session.revoked_at.is_none()
                             && session.status == SessionStatus::ACTIVE
                             && session.expires_at.is_none_or(|expiry| expiry > now)
-                            && Uuid::from(session.user_oid) == Uuid::from(user_oid);
+                            && session.user_oid == Uuid::from(user_oid);
                         if !active {
                             return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken)
                                 .with_param("reason", "session is not active for the user"));
