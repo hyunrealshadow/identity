@@ -34,7 +34,7 @@ async fn service(console_origin: Option<&str>) -> Service {
         console: credentials(CONSOLE_TOKEN),
     })
     .unwrap();
-    Service::new(router::internal_router(state, &config, authenticator))
+    router::internal_router(state, &config, authenticator)
 }
 
 #[tokio::test]

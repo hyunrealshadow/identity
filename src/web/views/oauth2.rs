@@ -4,6 +4,7 @@ use identity_application::openid_connect::device::DeviceVerificationStatus;
 use identity_domain::openid_connect::{
     ScopeSet, model::claim::StandardScopes, scope_catalog::ScopeDescription,
 };
+use identity_infrastructure::observability::context::current_request_correlation;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -105,6 +106,33 @@ pub struct ErrorPageData {
     pub title: String,
     pub message: String,
     pub details: Vec<String>,
+    /// Correlation of the request that failed, for support.
+    pub request_id: Option<String>,
+    pub trace_id: Option<String>,
+}
+
+impl ErrorPageData {
+    /// Page data carrying the current request's real correlation IDs.
+    #[must_use]
+    pub fn new(
+        status_code: u16,
+        oauth_error_code: Option<String>,
+        error_code: Option<u32>,
+        title: String,
+        message: String,
+    ) -> Self {
+        let correlation = current_request_correlation();
+        Self {
+            status_code,
+            oauth_error_code,
+            error_code,
+            title,
+            message,
+            details: Vec::new(),
+            request_id: correlation.as_ref().map(|value| value.request_id.clone()),
+            trace_id: correlation.and_then(|value| value.trace_id),
+        }
+    }
 }
 
 pub fn build_scope_display(

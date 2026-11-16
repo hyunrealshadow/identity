@@ -27,10 +27,7 @@ use identity_infrastructure::{
     web::tera::{build_i18n, build_tera},
 };
 use identity_web::router;
-use salvo::{
-    Service,
-    test::{ResponseExt, TestClient},
-};
+use salvo::test::{ResponseExt, TestClient};
 use sea_orm::{ConnectionTrait, DbBackend, Statement};
 use serde_json::{Value, json};
 
@@ -64,7 +61,7 @@ async fn installation_persists_same_origin_console_path_and_bootstraps_both_work
             login: credential(login_token), console: credential(console_token),
         }).unwrap();
         let config: AppConfig = serde_json::from_value(json!({})).unwrap();
-        let app = Service::new(router::internal_router(state.clone(), &config, authenticator.clone()));
+        let app = router::internal_router(state.clone(), &config, authenticator.clone());
         let runtime = "http://localhost/internal/workloads/self/runtime-configuration";
         let mut response = TestClient::get("http://localhost/internal/installation/status")
             .add_header("Authorization", format!("Bearer {login_token}"), true).send(&app).await;
@@ -81,7 +78,7 @@ async fn installation_persists_same_origin_console_path_and_bootstraps_both_work
         });
         if let Ok(node) = env::var("IDENTITY_TEST_LOGIN_NODE") {
             login_installer::verify(&node,
-                Service::new(router::internal_router(state, &config, authenticator)),
+                router::internal_router(state, &config, authenticator),
                 login_token, &install).await;
         } else {
         let mut response = TestClient::post("http://localhost/internal/installation")

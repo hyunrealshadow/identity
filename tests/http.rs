@@ -5,6 +5,8 @@ extern crate identity_infrastructure as infrastructure;
 mod graphql;
 #[path = "http/metadata.rs"]
 mod metadata;
+#[path = "http/not_found.rs"]
+mod not_found;
 #[path = "http/oauth2/mod.rs"]
 mod oauth2;
 #[path = "http/openid.rs"]

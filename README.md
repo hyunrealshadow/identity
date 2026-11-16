@@ -90,6 +90,15 @@ cargo run --locked --bin identity
 
 The default [development configuration](config/development.yaml) applies
 database migrations automatically and generates a local TLS certificate.
+Identity's own error pages use a compiled stylesheet built from the shared UI
+theme. Build it once before starting, and again after changing
+`assets/styles/error.css`, `assets/views/error.html` or the theme tokens in
+`packages/ui/src/styles/theme.css`:
+
+```sh
+pnpm install --frozen-lockfile
+pnpm build:error-css
+```
 
 | Service | Development URL |
 | --- | --- |

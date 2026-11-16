@@ -3,10 +3,7 @@ use fixtures::{
     device_decision_test_state, device_verification_test_state, unknown_user_code_test_state,
 };
 use http::{StatusCode, header};
-use salvo::{
-    Service,
-    test::{ResponseExt, TestClient},
-};
+use salvo::test::{ResponseExt, TestClient};
 use serde_json::Value;
 
 use identity_web::router::app_router;

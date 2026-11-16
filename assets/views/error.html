@@ -3,35 +3,41 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <title>{{ title }} - {{ t(key="app-name") }}</title>
+  <script>if (matchMedia('(prefers-color-scheme: dark)').matches) document.documentElement.classList.add('dark')</script>
   <link rel="stylesheet" href="/static/css/error.css">
 </head>
 <body>
-  <main class="error-background flex min-h-screen items-center justify-center px-4 py-10 sm:px-6">
-    <article class="error-card w-full max-w-[460px] overflow-hidden rounded-lg border border-black/[0.07] bg-white/90 backdrop-blur-xl">
-      <header class="flex flex-col items-center px-7 pb-2 pt-9 text-center sm:px-10">
-        <svg class="error-item error-delay-1 size-8 text-red-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-          <circle cx="12" cy="12" r="9"/>
-          <path stroke-linecap="round" d="M12 7.75v5.5M12 16.5h.01"/>
-        </svg>
-        <h1 class="error-item error-delay-2 mt-4 text-[1.55rem] font-semibold tracking-tight text-zinc-950">{{ title }}</h1>
+  <main class="flex min-h-screen items-center justify-center px-4 py-10 sm:px-6">
+    <article data-slot="card" class="error-card flex w-full max-w-[520px] flex-col overflow-hidden rounded-xl bg-card text-sm text-card-foreground shadow-xs ring-1 ring-foreground/10">
+      <header class="flex flex-col items-center px-7 pt-9 pb-2 text-center min-[480px]:px-10">
+        <div class="mb-4 flex size-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+          <svg class="size-6" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" x2="12" y1="8" y2="12"/>
+            <line x1="12" x2="12.01" y1="16" y2="16"/>
+          </svg>
+        </div>
+        <h1 class="m-0 text-[1.55rem] font-semibold tracking-tight text-destructive">{{ title }}</h1>
       </header>
 
-      <div class="error-content px-7 pb-9 pt-6 sm:px-10">
-        <details class="group overflow-hidden rounded-lg border border-black/[0.06] bg-white text-sm" open>
-          <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 font-medium text-zinc-700 marker:content-none">
+      <div class="px-7 pt-6 pb-9 min-[480px]:px-10">
+        <details class="group rounded-lg border bg-card" open>
+          <summary class="flex list-none items-center justify-between gap-3 rounded-lg px-4 py-3 text-sm font-medium text-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
             <span class="flex items-center gap-2.5">
-              <svg class="size-4 text-zinc-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
-                <rect x="5" y="3" width="14" height="18" rx="2"/>
-                <path stroke-linecap="round" d="M9 8h6M9 12h6M9 16h3"/>
+              <svg class="size-4 text-muted-foreground" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
+                <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
+                <path d="M10 9H8M16 13H8M16 17H8"/>
               </svg>
               {{ t(key="error-page-details") }}
             </span>
-            <svg class="size-4 text-zinc-400 transition-transform group-open:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-              <path stroke-linecap="round" stroke-linejoin="round" d="m6 9 6 6 6-6"/>
+            <svg class="size-4 text-muted-foreground transition-transform group-open:rotate-180" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="m6 9 6 6 6-6"/>
             </svg>
           </summary>
-          <dl class="m-0 border-t border-zinc-100 px-4 py-2 text-xs">
+          <dl class="m-0 border-t px-4 py-1 text-xs">
             {% if oauth_error_code %}
             <div class="error-detail-row">
               <dt>{{ t(key="error-page-error-type") }}</dt>
@@ -60,10 +66,22 @@
               </dd>
             </div>
             {% endif %}
+            {% if request_id %}
+            <div class="error-detail-row">
+              <dt>{{ t(key="error-page-request-id") }}</dt>
+              <dd class="font-mono break-all select-all">{{ request_id }}</dd>
+            </div>
+            {% endif %}
+            {% if trace_id %}
+            <div class="error-detail-row">
+              <dt>{{ t(key="error-page-trace-id") }}</dt>
+              <dd class="font-mono break-all select-all">{{ trace_id }}</dd>
+            </div>
+            {% endif %}
           </dl>
         </details>
 
-        <p class="mt-5 text-center text-xs leading-5 text-zinc-400">{{ t(key="error-page-support-hint") }}</p>
+        <p class="mt-5 mb-0 text-center text-xs leading-5 text-muted-foreground">{{ t(key="error-page-support-hint") }}</p>
       </div>
     </article>
   </main>

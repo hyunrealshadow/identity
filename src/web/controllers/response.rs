@@ -2,7 +2,9 @@ use std::{error::Error as StdError, mem};
 
 use http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header};
 use identity_application::error::ErrorDiagnostics;
-use salvo::{Depot, Request, Response, Writer, async_trait, handler, prelude::Json, writing::Text};
+use salvo::{
+    Depot, FlowCtrl, Request, Response, Writer, async_trait, handler, prelude::Json, writing::Text,
+};
 use serde::{Serialize, de::DeserializeOwned};
 use tracing::{Level, error, event};
 use unic_langid::LanguageIdentifier;
@@ -337,14 +339,13 @@ pub fn render_error_page(res: &mut Response, headers: &HeaderMap, ctx: &AppState
     let locale = resolve_locale_from_headers(headers);
     let message = error_message(i18n, &locale, &error);
 
-    let data = ErrorPageData {
-        status_code: status.as_u16(),
-        oauth_error_code: None,
-        error_code: Some(error.code()),
-        title: i18n.t(&locale, "error-page-title"),
+    let data = ErrorPageData::new(
+        status.as_u16(),
+        None,
+        Some(error.code()),
+        i18n.t(&locale, "error-page-title"),
         message,
-        details: Vec::new(),
-    };
+    );
 
     match web_tera::render_view(ctx, headers, "error.html", data) {
         Ok(body) => render_html(res, status, body),
@@ -397,40 +398,67 @@ pub fn render_app_error_json(res: &mut Response, error: AppError) {
     }
 }
 
-#[handler]
-pub async fn handle_404(req: &mut Request, depot: &mut Depot, res: &mut Response) {
+/// Answer a request nothing served: an HTML page when the client accepts
+/// HTML, otherwise the standard JSON error body. Both carry the not-found
+/// error code; the page also shows the request's correlation IDs.
+pub fn render_not_found(req: &Request, depot: &Depot, res: &mut Response) {
     let status = StatusCode::NOT_FOUND;
+    let error = AppError::from_code(CommonErrorCode::NotFound);
+    let Ok(ctx) = app_state(depot) else {
+        render_app_error_json(res, error);
+        return;
+    };
+    let i18n = ctx.resources().i18n();
+    let locale = resolve_locale_from_headers(req.headers());
 
-    if accepts_html(req.headers())
-        && let Ok(ctx) = app_state(depot)
-    {
-        let i18n = ctx.resources().i18n();
-        let locale = resolve_locale_from_headers(req.headers());
-        let message = i18n.t(&locale, "error-404-message");
-
-        let data = ErrorPageData {
-            status_code: status.as_u16(),
-            oauth_error_code: None,
-            error_code: None,
-            title: i18n.t(&locale, "error-404-title"),
-            message,
-            details: Vec::new(),
-        };
-
+    if accepts_html(req.headers()) {
+        let data = ErrorPageData::new(
+            status.as_u16(),
+            None,
+            Some(error.code()),
+            i18n.t(&locale, "error-404-title"),
+            i18n.t(&locale, "error-404-message"),
+        );
         match web_tera::render_view(&ctx, req.headers(), "error.html", data) {
             Ok(body) => {
                 render_html(res, status, body);
                 return;
             }
-            Err(e) => error!(error = %e, "handle_404: template render failed"),
+            Err(e) => error!(error = %e, "not found page: template render failed"),
         }
     }
 
-    let body = BusinessErrorResponse::new(
-        status.as_u16().into(),
-        status.canonical_reason().unwrap_or("Not Found"),
+    let message = error_message(i18n, &locale, &error);
+    render_json(
+        res,
+        status,
+        BusinessErrorResponse::new(error.code(), message),
     );
-    render_json(res, status, body);
+}
+
+/// Route goal for paths that exist only as a prefix, such as `/`: they are
+/// not found for every method rather than method-not-allowed.
+#[handler]
+pub async fn not_found(res: &mut Response) {
+    res.status_code(StatusCode::NOT_FOUND);
+}
+
+/// Innermost service hoop: a 404 left without a body (no matching route, or
+/// a static file that does not exist) gets the not-found answer. Responses a
+/// handler already wrote, and every other status such as 405, are untouched.
+#[handler]
+pub async fn not_found_fallback(
+    req: &mut Request,
+    depot: &mut Depot,
+    res: &mut Response,
+    ctrl: &mut FlowCtrl,
+) {
+    ctrl.call_next(req, depot, res).await;
+    if res.status_code == Some(StatusCode::NOT_FOUND) && (res.body.is_none() || res.body.is_error())
+    {
+        res.take_body();
+        render_not_found(req, depot, res);
+    }
 }
 
 #[cfg(test)]

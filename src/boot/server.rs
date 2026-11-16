@@ -14,7 +14,7 @@ use identity_web::{
 };
 use rustls::crypto::{CryptoProvider, aws_lc_rs};
 use salvo::{
-    Listener, Router, Server,
+    Listener, Server, Service,
     affix_state::inject,
     conn::{
         Acceptor, TcpListener,
@@ -32,8 +32,8 @@ use super::AppResult;
 pub async fn start_servers(
     state: &AppState,
     config: &AppConfig,
-    app: Router,
-    internal: Router,
+    app: Service,
+    internal: Service,
 ) -> AppResult<()> {
     spawn_background_workers(state.clone(), config).await?;
     let shared_health = health::shares_listener(&config.health, &config.server);
@@ -72,12 +72,12 @@ pub async fn start_servers(
                 config.observability.trace_context.clone(),
             )));
         // The health probe stays plain TCP in both modes.
-        let health_app = Arc::new(health_app);
+        let health_app = Service::new(health_app);
         for address in listen_addresses(&health_address) {
             let listener = TcpListener::new(address).try_bind().await?;
             servers.spawn(serve_with_shutdown(
                 listener,
-                Arc::clone(&health_app),
+                copy_service(&health_app),
                 Arc::clone(&shutdown),
             ));
         }
@@ -135,9 +135,19 @@ pub async fn start_servers(
     Ok(())
 }
 
+/// A service sharing `service`'s router, hoops and catcher, for one more
+/// listener; `Service` is not `Clone`, but its parts are reference counted.
+fn copy_service(service: &Service) -> Service {
+    let mut copy = Service::new(Arc::clone(&service.router));
+    copy.hoops.clone_from(&service.hoops);
+    copy.catcher.clone_from(&service.catcher);
+    copy.allowed_media_types = Arc::clone(&service.allowed_media_types);
+    copy
+}
+
 async fn serve_with_shutdown<A>(
     acceptor: A,
-    app: Arc<Router>,
+    app: Service,
     lifecycle: Arc<AppLifecycle>,
 ) -> Result<(), Error>
 where
@@ -175,17 +185,17 @@ async fn spawn_app(
     config: &AppConfig,
     mode: ListenerMode,
     address: &str,
-    app: Router,
+    app: impl Into<Service>,
     shutdown: &Arc<AppLifecycle>,
 ) -> AppResult<()> {
-    let app = Arc::new(app);
+    let app: Service = app.into();
     for address in listen_addresses(address) {
         match mode {
             ListenerMode::UpstreamTls => {
                 let listener = build_upstream_tls_listener(&address).await?;
                 servers.spawn(serve_with_shutdown(
                     listener,
-                    Arc::clone(&app),
+                    copy_service(&app),
                     Arc::clone(shutdown),
                 ));
             }
@@ -193,7 +203,7 @@ async fn spawn_app(
                 let listener = build_https_listener(config, &address).await?;
                 servers.spawn(serve_with_shutdown(
                     listener,
-                    Arc::clone(&app),
+                    copy_service(&app),
                     Arc::clone(shutdown),
                 ));
             }

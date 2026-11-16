@@ -6,7 +6,7 @@ use identity_infrastructure::{
     config::{AppConfig, TlsTermination},
     observability::context::TraceTrustPolicy,
 };
-use salvo::{Router, affix_state::inject, serve_static::StaticDir};
+use salvo::{Router, Service, affix_state::inject, serve_static::StaticDir};
 
 use super::{
     controllers::{auth, install, oauth2, observability, openid, well_known, workload_runtime},
@@ -15,37 +15,22 @@ use super::{
         TraceContextMiddleware, require_login_workload, security_headers_middleware,
     },
 };
-use crate::{controllers::response::handle_404, graphql, health};
+use crate::{
+    controllers::response::{not_found, not_found_fallback},
+    graphql, health,
+};
 
 #[cfg(feature = "oidc-conformance")]
 use super::controllers::conformance;
 
-pub fn app_router(state: AppState, config: &AppConfig) -> Router {
+/// The public listener's service. The request-wide middleware is attached to
+/// the service rather than the root router, so it also runs for paths no
+/// route matches: those get the same correlation, security headers and
+/// not-found answer as every other request.
+pub fn app_router(state: AppState, config: &AppConfig) -> Service {
     let shared_health_listener = health::shares_listener(&config.health, &config.server);
-    let mut router = Router::new().hoop(RequestIdMiddleware::new(TraceTrustPolicy::new(
-        config.observability.trace_context.clone(),
-    )));
-    if config.server.tls.termination == TlsTermination::Upstream {
-        router = router.hoop(RequireUpstreamHttps::new(
-            &config.server.tls.trusted_proxies,
-            &config.server.tls.direct_http_clients,
-        ));
-    }
-    router = router
-        .hoop(ResolveClientIp::new(
-            &config.server.tls.trusted_proxies,
-            &config.server.tls.direct_http_clients,
-        ))
-        .hoop(TraceContextMiddleware::new(TraceTrustPolicy::new(
-            config.observability.trace_context.clone(),
-        )))
-        .hoop(security_headers_middleware)
-        .hoop(inject(state.clone()))
-        .hoop(inject(config.openid_connect.dynamic_registration.clone()))
-        .push(
-            Router::with_path("static/{**path}")
-                .get(StaticDir::new(["assets/static"]).fallback("404.html")),
-        );
+    let mut router = Router::new()
+        .push(Router::with_path("static/{**path}").get(StaticDir::new(["assets/static"])));
 
     router = router
         .push(oauth2::routes())
@@ -65,16 +50,36 @@ pub fn app_router(state: AppState, config: &AppConfig) -> Router {
         router = router.push(graphql::router(state.clone(), &config.graphql));
     }
 
-    router = router.goal(handle_404);
-
-    router
+    let mut service = Service::new(router.goal(not_found)).hoop(RequestIdMiddleware::new(
+        TraceTrustPolicy::new(config.observability.trace_context.clone()),
+    ));
+    if config.server.tls.termination == TlsTermination::Upstream {
+        service = service.hoop(RequireUpstreamHttps::new(
+            &config.server.tls.trusted_proxies,
+            &config.server.tls.direct_http_clients,
+        ));
+    }
+    service
+        .hoop(ResolveClientIp::new(
+            &config.server.tls.trusted_proxies,
+            &config.server.tls.direct_http_clients,
+        ))
+        .hoop(TraceContextMiddleware::new(TraceTrustPolicy::new(
+            config.observability.trace_context.clone(),
+        )))
+        .hoop(security_headers_middleware)
+        .hoop(inject(state))
+        .hoop(inject(config.openid_connect.dynamic_registration.clone()))
+        .hoop(not_found_fallback)
 }
 
+/// The internal workload listener's service; unmatched paths still require
+/// workload authentication before they are answered as not found.
 pub fn internal_router(
     state: AppState,
     config: &AppConfig,
     authenticator: Arc<dyn WorkloadAuthenticator>,
-) -> Router {
+) -> Service {
     let mut login = Router::new()
         .hoop(require_login_workload)
         .push(install::status_routes())
@@ -91,7 +96,7 @@ pub fn internal_router(
         .push(workload_runtime::routes())
         .push(login);
 
-    Router::new()
+    Service::new(Router::new().push(internal).goal(not_found))
         .hoop(RequestIdMiddleware::new(TraceTrustPolicy::new(
             config.observability.trace_context.clone(),
         )))
@@ -105,8 +110,7 @@ pub fn internal_router(
         )))
         .hoop(security_headers_middleware)
         .hoop(inject(state))
-        .push(internal)
-        .goal(handle_404)
+        .hoop(not_found_fallback)
 }
 
 /// Convert the configured self-metrics route into a path relative to the

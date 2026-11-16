@@ -7,7 +7,7 @@ use super::*;
 #[tokio::test]
 pub(super) async fn consent_get_is_a_json_api_without_content_negotiation() {
     let (state, protected_login_id, _) = consent_test_state().await;
-    let service = Service::new(app_router(state, &consent_test_config()));
+    let service = app_router(state, &consent_test_config());
 
     let mut response = TestClient::get(format!(
         "http://127.0.0.1:5800/oauth2/consent?login_id={protected_login_id}"
@@ -50,7 +50,7 @@ pub(super) async fn consent_get_is_a_json_api_without_content_negotiation() {
 pub(super) async fn consent_get_rejects_invalid_stored_scope() {
     let (state, protected_login_id, _) =
         consent_test_state_with_scope("openid unknown_scope").await;
-    let service = Service::new(app_router(state, &consent_test_config()));
+    let service = app_router(state, &consent_test_config());
 
     let response = TestClient::get(format!(
         "http://127.0.0.1:5800/oauth2/consent?login_id={protected_login_id}"
@@ -64,7 +64,7 @@ pub(super) async fn consent_get_rejects_invalid_stored_scope() {
 #[tokio::test]
 pub(super) async fn consent_get_displays_registered_custom_scope() {
     let (state, protected_login_id, _) = consent_test_state_with_scope("openid orders.read").await;
-    let service = Service::new(app_router(state, &consent_test_config()));
+    let service = app_router(state, &consent_test_config());
     let mut response = TestClient::get(format!(
         "http://127.0.0.1:5800/oauth2/consent?login_id={protected_login_id}"
     ))
@@ -80,7 +80,7 @@ pub(super) async fn consent_get_displays_registered_custom_scope() {
 pub(super) async fn consent_post_accepts_json_and_returns_continue_uri() {
     let (state, protected_login_id, _) = consent_test_state().await;
     let db = state.resources().db().clone();
-    let service = Service::new(app_router(state, &consent_test_config()));
+    let service = app_router(state, &consent_test_config());
 
     let mut context_response = TestClient::get(format!(
         "http://127.0.0.1:5800/oauth2/consent?login_id={protected_login_id}"
@@ -120,7 +120,7 @@ pub(super) async fn consent_post_accepts_json_and_returns_continue_uri() {
 pub(super) async fn consent_post_without_a_csrf_token_is_rejected() {
     let (state, protected_login_id, _) = consent_test_state().await;
     let db = state.resources().db().clone();
-    let service = Service::new(app_router(state, &consent_test_config()));
+    let service = app_router(state, &consent_test_config());
 
     // The device approval rides on this same route, so an unprotected POST
     // must not reach the decision handler for either interaction kind.
@@ -142,7 +142,7 @@ pub(super) async fn consent_post_without_a_csrf_token_is_rejected() {
 #[tokio::test]
 pub(super) async fn device_verification_reports_an_unknown_code_before_any_session_is_required() {
     let (state, _, _) = unknown_user_code_test_state().await;
-    let service = Service::new(app_router(state, &consent_test_config()));
+    let service = app_router(state, &consent_test_config());
 
     // The entry form checks the code first, so the answer must not depend on a
     // browser session: a code that matches no request is reported as unknown
@@ -160,7 +160,7 @@ pub(super) async fn device_verification_reports_an_unknown_code_before_any_sessi
 #[tokio::test]
 pub(super) async fn device_verification_checks_a_real_code_without_requiring_a_session() {
     let (state, _, _) = device_verification_test_state().await;
-    let service = Service::new(app_router(state, &consent_test_config()));
+    let service = app_router(state, &consent_test_config());
 
     let response = TestClient::get(format!(
         "http://127.0.0.1:5800/oauth2/consent?user_code={DEVICE_USER_CODE}"
@@ -174,7 +174,7 @@ pub(super) async fn device_verification_checks_a_real_code_without_requiring_a_s
 #[tokio::test]
 pub(super) async fn device_code_check_does_not_choose_an_account() {
     let (state, _, _) = device_verification_test_state().await;
-    let service = Service::new(app_router(state, &consent_test_config()));
+    let service = app_router(state, &consent_test_config());
 
     // The code check answers read-only and never chooses an account: it
     // returns only what the entry form needs to start the login flow, even
@@ -201,7 +201,7 @@ pub(super) async fn device_decision_is_recorded_against_the_bound_login() {
         .await
         .unwrap();
     let db = state.resources().db().clone();
-    let service = Service::new(app_router(state, &consent_test_config()));
+    let service = app_router(state, &consent_test_config());
 
     // The page is addressed by the login the device request was claimed with,
     // and it describes that login's account rather than picking one from the
@@ -249,7 +249,7 @@ pub(super) async fn device_decision_is_recorded_against_the_bound_login() {
 #[tokio::test]
 pub(super) async fn device_begin_preserves_unknown_code_error_for_the_entry_form() {
     let (bootstrap, _, _) = device_verification_test_state().await;
-    let bootstrap = Service::new(app_router(bootstrap, &consent_test_config()));
+    let bootstrap = app_router(bootstrap, &consent_test_config());
     let mut response = TestClient::get(format!(
         "http://127.0.0.1:5800/oauth2/consent?user_code={DEVICE_USER_CODE}"
     ))
@@ -257,7 +257,7 @@ pub(super) async fn device_begin_preserves_unknown_code_error_for_the_entry_form
     .await;
     let body: Value = from_str(&response.take_string().await.unwrap()).unwrap();
     let (state, _, _) = unknown_user_code_test_state().await;
-    let service = Service::new(app_router(state, &consent_test_config()));
+    let service = app_router(state, &consent_test_config());
     let mut response = TestClient::post("http://127.0.0.1:5800/oauth2/device/login")
         .add_header("x-csrf-token", body["csrf_token"].as_str().unwrap(), true)
         .raw_json(r#"{"user_code":"ZZZZ-ZZZZ"}"#)
@@ -275,7 +275,7 @@ pub(super) async fn device_begin_preserves_unknown_code_error_for_the_entry_form
 #[tokio::test]
 pub(super) async fn consent_route_rejects_ambiguous_or_missing_interaction_identifiers() {
     let (state, _, _) = consent_test_state().await;
-    let service = Service::new(app_router(state, &consent_test_config()));
+    let service = app_router(state, &consent_test_config());
 
     let both =
         TestClient::get("http://127.0.0.1:5800/oauth2/consent?login_id=abc&user_code=WDJB-MJHT")

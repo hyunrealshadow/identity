@@ -184,14 +184,13 @@ pub fn render_authorize_error_page(
     let oauth_error_code = authorize_oauth_error_code(&error);
     let message = error_message(i18n, &locale, &error);
 
-    let data = ErrorPageData {
-        status_code: status.as_u16(),
-        oauth_error_code: Some(oauth_error_code.to_string()),
-        error_code: Some(error.code()),
-        title: i18n.t(&locale, "error-page-title"),
+    let data = ErrorPageData::new(
+        status.as_u16(),
+        Some(oauth_error_code.to_string()),
+        Some(error.code()),
+        i18n.t(&locale, "error-page-title"),
         message,
-        details: Vec::new(),
-    };
+    );
 
     let mut response = Response::new();
     match web_tera::render_view(ctx, headers, "error.html", data) {
