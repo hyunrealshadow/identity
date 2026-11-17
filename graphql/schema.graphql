@@ -201,6 +201,13 @@ type Client implements Node {
 	"""
 	credentials: [ClientCredential!]! @access(policy: {scopes: ["management.client_credential.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	"""
+	Which supported algorithms the client's active credentials can serve:
+	response encryption needs a registered public key, request objects and
+	`private_key_jwt` assertions a key that verifies them. Derived from the
+	credentials, so it needs the same read access.
+	"""
+	keyCoverage: ClientKeyCoverage! @access(policy: {scopes: ["management.client_credential.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
 	API and protocol scopes assigned to this client.
 	"""
 	scopes(orderBy: ScopeOrder, first: Int, after: String, last: Int, before: String): ClientScopeConnection! @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
@@ -379,6 +386,32 @@ enum ClientGrantType {
 	CLIENT_CREDENTIALS
 	DEVICE_CODE
 	IMPLICIT
+}
+
+"""
+What a client's active credentials can serve, by JOSE algorithm name.
+"""
+type ClientKeyCoverage {
+	"""
+	ID Token and UserInfo encryption algorithms the client has a
+	registered public key for.
+	"""
+	encryptionAlgs: [String!]!
+	"""
+	Signature algorithms a stored client public key can verify, for
+	request objects and `private_key_jwt` assertions.
+	"""
+	verificationAlgs: [String!]!
+	"""
+	Whether a JWKS URI is registered. Assertion verification also fetches
+	it, so assertion algorithms outside `verificationAlgs` may still work.
+	"""
+	remoteKeys: Boolean!
+	"""
+	Whether an active client secret can verify `client_secret_jwt`
+	assertions (HMAC algorithms).
+	"""
+	secret: Boolean!
 }
 
 """

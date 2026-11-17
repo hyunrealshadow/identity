@@ -22,6 +22,7 @@ use identity_application::{
         authorize::{AuthorizeService, AuthorizeServiceDependencies},
         client_authentication::{ClientAuthenticator, ClientAuthenticatorDependencies},
         device::{DeviceAuthorizationService, DeviceAuthorizationServiceDependencies},
+        key_coverage::ClientKeyCoverageService,
         login_runtime::LoginRuntimeService,
         logout::{LogoutService, LogoutServiceDependencies},
         par::PushedAuthorizationService,
@@ -138,6 +139,7 @@ pub struct AppServices {
     device_authorization: AppDeviceAuthorizationService,
     login_runtime: LoginRuntimeService,
     console_runtime: ConsoleRuntimeService,
+    client_key_coverage: ClientKeyCoverageService,
     workload_authenticator: Arc<dyn WorkloadAuthenticator>,
     oidc_client_repo: Arc<dyn OpenIdConnectClientRepository>,
     oidc_credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
@@ -451,6 +453,7 @@ impl AppServices {
                 settings.store(),
             ),
             console_runtime: ConsoleRuntimeService::new(settings.store()),
+            client_key_coverage: ClientKeyCoverageService::new(oidc_credential_repo.clone()),
             workload_authenticator,
             oidc_client_repo,
             oidc_credential_repo,
@@ -589,6 +592,11 @@ impl AppServices {
     #[must_use]
     pub fn console_runtime(&self) -> &ConsoleRuntimeService {
         &self.console_runtime
+    }
+
+    #[must_use]
+    pub fn client_key_coverage(&self) -> &ClientKeyCoverageService {
+        &self.client_key_coverage
     }
 
     #[must_use]

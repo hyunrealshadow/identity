@@ -228,6 +228,20 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "Boolean",
           "policies": []
         },
+        "keyCoverage": {
+          "name": "keyCoverage",
+          "returnType": "ClientKeyCoverage",
+          "policies": [
+            {
+              "scopes": [
+                "management.client_credential.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
+        },
         "name": {
           "name": "name",
           "returnType": "String",
@@ -540,6 +554,33 @@ export const schemaMetadata: SchemaMetadata = {
         "node": {
           "name": "node",
           "returnType": "Client",
+          "policies": []
+        }
+      }
+    },
+    "ClientKeyCoverage": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "encryptionAlgs": {
+          "name": "encryptionAlgs",
+          "returnType": "String",
+          "policies": []
+        },
+        "remoteKeys": {
+          "name": "remoteKeys",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "secret": {
+          "name": "secret",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "verificationAlgs": {
+          "name": "verificationAlgs",
+          "returnType": "String",
           "policies": []
         }
       }

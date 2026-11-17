@@ -5,6 +5,7 @@ pub mod device;
 pub mod dto;
 pub mod jose;
 pub mod jwt_checks;
+pub mod key_coverage;
 pub mod login_runtime;
 pub mod logout;
 pub(crate) mod management;

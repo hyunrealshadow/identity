@@ -8,7 +8,13 @@ pushed authorization requests, and HTTP APIs. Supported algorithms are advertise
 through discovery and depend on the active keys and client metadata. A client's
 algorithm settings may list anything the provider supports, whether or not a key
 for it is active: each list is an order of preference, and every issuance uses
-the first listed algorithm with an active key. Who may call
+the first listed algorithm with an active key. Some settings depend on the
+client's own credentials instead: response encryption needs a registered public
+encryption key, and signed request objects and `private_key_jwt` assertions need
+a registered key that verifies them (`client_secret_jwt` uses an active secret).
+The management API reports this per client as `Client.keyCoverage`, computed with
+the same key selection the runtime uses, so the Console can warn before such a
+setting fails. Who may call
 what is covered by the [authorization model](authorization.md); the management API
 itself by the [GraphQL API](graphql.md).
 

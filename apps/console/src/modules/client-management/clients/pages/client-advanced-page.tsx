@@ -16,6 +16,7 @@ import {
   ParRow,
   ScopedClaimRows,
 } from '../components/client-settings-fields'
+import { useClientKeyCoverage } from '../hooks/use-client-key-coverage'
 import { useClientMetadataOptions } from '../hooks/use-client-metadata-options'
 import { useClientEditor } from '../hooks/use-client-editor'
 import { formSeed } from '../lib/client-form'
@@ -47,6 +48,7 @@ function ClientAdvanced({ client }: { client: ConsoleClient }) {
   const t = useTranslator()
   const editor = useClientEditor(client)
   const metadata = useClientMetadataOptions()
+  const clientKeys = useClientKeyCoverage(client.id)
   const isDisabled = editor.pending || !useClientEditable(client)
   const settings = {
     draft: editor.settings,
@@ -60,6 +62,8 @@ function ClientAdvanced({ client }: { client: ConsoleClient }) {
     errors: editor.errors.advanced,
     isDisabled,
     options: metadata.options,
+    clientId: client.id,
+    clientKeys,
   }
 
   return (

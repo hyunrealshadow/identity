@@ -81,6 +81,17 @@ export type ClientAdvancedSettingsInput = {
   userinfoSignedResponseAlgs?: Array<string>;
 };
 
+/**
+ * Token endpoint client authentication. Derived from the client's active
+ * credentials and its public flow switch; it is never set directly.
+ */
+export type ClientAuthMethod =
+  | 'CLIENT_SECRET_BASIC'
+  | 'CLIENT_SECRET_JWT'
+  | 'CLIENT_SECRET_POST'
+  | 'NONE'
+  | 'PRIVATE_KEY_JWT';
+
 export type ClientCredentialKind =
   | 'CLIENT_SECRET'
   | 'JWKS_URI'
@@ -644,6 +655,13 @@ export type ConsoleClientCredentialsQueryVariables = Exact<{
 
 
 export type ConsoleClientCredentialsQuery = { client: { id: string, version: string, credentials: Array<{ id: string, type: ClientCredentialKind, hint: string, expiresAt: string | null, active: boolean, createdAt: string }> } | null };
+
+export type ConsoleClientKeyCoverageQueryVariables = Exact<{
+  id: string | number;
+}>;
+
+
+export type ConsoleClientKeyCoverageQuery = { client: { id: string, tokenEndpointAuthMethods: Array<ClientAuthMethod>, keyCoverage: { encryptionAlgs: Array<string>, verificationAlgs: Array<string>, remoteKeys: boolean, secret: boolean } } | null };
 
 export type ConsoleClientScopesQueryVariables = Exact<{
   id: string | number;
@@ -1602,6 +1620,20 @@ export const ConsoleClientCredentialsDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ConsoleClientCredentialsQuery, ConsoleClientCredentialsQueryVariables>;
+export const ConsoleClientKeyCoverageDocument = new TypedDocumentString(`
+    query ConsoleClientKeyCoverage($id: ID!) {
+  client(id: $id) {
+    id
+    tokenEndpointAuthMethods
+    keyCoverage {
+      encryptionAlgs
+      verificationAlgs
+      remoteKeys
+      secret
+    }
+  }
+}
+    `) as unknown as TypedDocumentString<ConsoleClientKeyCoverageQuery, ConsoleClientKeyCoverageQueryVariables>;
 export const ConsoleClientScopesDocument = new TypedDocumentString(`
     query ConsoleClientScopes($id: ID!, $orderBy: ScopeOrder, $first: Int, $after: String, $last: Int, $before: String) {
   client(id: $id) {

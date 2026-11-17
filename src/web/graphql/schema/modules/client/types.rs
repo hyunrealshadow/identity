@@ -475,6 +475,49 @@ impl ClientNode {
         Ok(records.into_iter().map(ClientCredentialNode::new).collect())
     }
 
+    /// Which supported algorithms the client's active credentials can serve:
+    /// response encryption needs a registered public key, request objects and
+    /// `private_key_jwt` assertions a key that verifies them. Derived from the
+    /// credentials, so it needs the same read access.
+    #[graphql(
+        guard = "ManagementGuard::new(ManagementScope::ClientCredentialsRead, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::ClientCredentialsRead))
+    )]
+    async fn key_coverage(&self, ctx: &Context<'_>) -> GraphqlResult<ClientKeyCoverageNode> {
+        let services = request_context(ctx)?.state.services();
+        let options = services.oidc().client_metadata_options();
+        let union = |lists: [&Vec<String>; 2]| {
+            let mut values = Vec::<String>::new();
+            for value in lists.into_iter().flatten() {
+                if !values.contains(value) {
+                    values.push(value.clone());
+                }
+            }
+            values
+        };
+        let coverage = services
+            .client_key_coverage()
+            .coverage(
+                self.record.oid,
+                &union([
+                    &options.id_token_encryption_algs,
+                    &options.userinfo_encryption_algs,
+                ]),
+                &union([
+                    &options.request_object_signing_algs,
+                    &options.token_endpoint_auth_signing_algs,
+                ]),
+            )
+            .await
+            .map_err(|error| app_error(ctx, error))?;
+        Ok(ClientKeyCoverageNode {
+            encryption_algs: coverage.encryption_algs,
+            verification_algs: coverage.verification_algs,
+            remote_keys: coverage.remote_keys,
+            secret: coverage.secret,
+        })
+    }
+
     /// API and protocol scopes assigned to this client.
     #[graphql(
         guard = "ManagementGuard::new(ManagementScope::ClientsRead, ManagementTarget::instance())",
@@ -561,6 +604,24 @@ impl From<ClientSettingsInput> for ClientProtocolSettings {
             include_scoped_claims_in_access_token: input.include_scoped_claims_in_access_token,
         }
     }
+}
+
+/// What a client's active credentials can serve, by JOSE algorithm name.
+#[derive(SimpleObject)]
+#[graphql(name = "ClientKeyCoverage")]
+pub(crate) struct ClientKeyCoverageNode {
+    /// ID Token and UserInfo encryption algorithms the client has a
+    /// registered public key for.
+    encryption_algs: Vec<String>,
+    /// Signature algorithms a stored client public key can verify, for
+    /// request objects and `private_key_jwt` assertions.
+    verification_algs: Vec<String>,
+    /// Whether a JWKS URI is registered. Assertion verification also fetches
+    /// it, so assertion algorithms outside `verificationAlgs` may still work.
+    remote_keys: bool,
+    /// Whether an active client secret can verify `client_secret_jwt`
+    /// assertions (HMAC algorithms).
+    secret: bool,
 }
 
 /// Advanced OpenID Connect metadata. Algorithm lists take registered JOSE

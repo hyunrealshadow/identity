@@ -125,6 +125,19 @@ query ConsoleClientCredentials($id: ID!) {
   }
 }
 
+query ConsoleClientKeyCoverage($id: ID!) {
+  client(id: $id) {
+    id
+    tokenEndpointAuthMethods
+    keyCoverage {
+      encryptionAlgs
+      verificationAlgs
+      remoteKeys
+      secret
+    }
+  }
+}
+
 query ConsoleClientScopes(
   $id: ID!
   $orderBy: ScopeOrder
