@@ -16,7 +16,7 @@ import {
   Menu,
   Settings,
   Shield,
-  Users,
+  UserRound,
   UsersRound,
   type LucideIcon,
 } from 'lucide-react'
@@ -58,7 +58,7 @@ const groups: NavGroup[] = [
   {
     label: 'navUserManagement',
     entries: [
-      { label: 'navUsers', to: '/users', icon: Users },
+      { label: 'navUsers', to: '/users', icon: UserRound },
       { label: 'navGroups', to: '/groups', icon: UsersRound },
       { label: 'navRoles', to: '/roles', icon: Shield },
     ],

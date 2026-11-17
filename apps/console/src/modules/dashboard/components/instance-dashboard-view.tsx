@@ -12,7 +12,7 @@ import {
   Boxes,
   Lock,
   Monitor,
-  Users,
+  UserRound,
   type LucideIcon,
 } from 'lucide-react'
 import { useId } from 'react'
@@ -345,7 +345,7 @@ export function InstanceDashboardView({
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           title={t('dashboardUsersTitle')}
-          icon={Users}
+          icon={UserRound}
           included={scope.users}
           value={users?.total}
           onRetry={onRefresh}

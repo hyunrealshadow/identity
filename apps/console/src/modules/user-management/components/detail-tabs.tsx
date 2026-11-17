@@ -182,7 +182,7 @@ export function RoleDetailTabs({
         {
           label: 'roleTabUsers',
           to: '/roles/$roleId/users',
-          icon: UsersRound,
+          icon: UserRound,
         },
         {
           label: 'roleTabGroups',
