@@ -5,85 +5,77 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="light dark">
   <title>{{ title }} - {{ t(key="app-name") }}</title>
-  <script>if (matchMedia('(prefers-color-scheme: dark)').matches) document.documentElement.classList.add('dark')</script>
-  <link rel="stylesheet" href="/static/css/error.css">
+  <link rel="stylesheet" href="{{ asset(path='css/error.css') }}">
 </head>
 <body>
-  <main class="flex min-h-screen items-center justify-center px-4 py-10 sm:px-6">
-    <article data-slot="card" class="error-card flex w-full max-w-[520px] flex-col overflow-hidden rounded-xl bg-card text-sm text-card-foreground shadow-xs ring-1 ring-foreground/10">
-      <header class="flex flex-col items-center px-7 pt-9 pb-2 text-center min-[480px]:px-10">
-        <div class="mb-4 flex size-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
-          <svg class="size-6" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <circle cx="12" cy="12" r="10"/>
-            <line x1="12" x2="12" y1="8" y2="12"/>
-            <line x1="12" x2="12.01" y1="16" y2="16"/>
-          </svg>
-        </div>
-        <h1 class="m-0 text-[1.55rem] font-semibold tracking-tight text-destructive">{{ title }}</h1>
-      </header>
-
-      <div class="px-7 pt-6 pb-9 min-[480px]:px-10">
-        <details class="group rounded-lg border bg-card" open>
-          <summary class="flex list-none items-center justify-between gap-3 rounded-lg px-4 py-3 text-sm font-medium text-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50 [&::-webkit-details-marker]:hidden">
-            <span class="flex items-center gap-2.5">
-              <svg class="size-4 text-muted-foreground" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/>
-                <path d="M14 2v4a2 2 0 0 0 2 2h4"/>
-                <path d="M10 9H8M16 13H8M16 17H8"/>
-              </svg>
-              {{ t(key="error-page-details") }}
-            </span>
-            <svg class="size-4 text-muted-foreground transition-transform group-open:rotate-180" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="m6 9 6 6 6-6"/>
+  <main class="flex min-h-screen flex-col px-4 py-6 sm:px-6">
+    <div class="flex flex-1 items-center justify-center py-4">
+      <article data-slot="card" class="error-card flex w-full max-w-[520px] flex-col overflow-hidden rounded-xl bg-card text-sm text-card-foreground">
+        <header class="error-stagger flex flex-col items-center px-7 pt-9 pb-2 text-center min-[480px]:px-10">
+          <div class="mb-4 flex size-12 items-center justify-center rounded-full bg-destructive/10 text-destructive">
+            <svg class="size-6" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" x2="12" y1="8" y2="12"/>
+              <line x1="12" x2="12.01" y1="16" y2="16"/>
             </svg>
-          </summary>
-          <dl class="m-0 border-t px-4 py-1 text-xs">
-            {% if oauth_error_code %}
-            <div class="error-detail-row">
-              <dt>{{ t(key="error-page-error-type") }}</dt>
-              <dd class="font-mono">{{ oauth_error_code }}</dd>
-            </div>
-            {% endif %}
-            {% if error_code %}
-            <div class="error-detail-row">
-              <dt>{{ t(key="error-page-error-code") }}</dt>
-              <dd class="font-mono">E{{ error_code }}</dd>
-            </div>
-            {% endif %}
-            <div class="error-detail-row">
-              <dt>{{ t(key="error-page-description") }}</dt>
-              <dd class="wrap-break-word">{{ message }}</dd>
-            </div>
-            {% if details %}
-            <div class="error-detail-row">
-              <dt>{{ t(key="error-page-additional-info") }}</dt>
-              <dd>
-                <ul class="m-0 list-none space-y-1 p-0">
-                  {% for detail in details %}
-                  <li class="wrap-break-word">{{ detail }}</li>
-                  {% endfor %}
-                </ul>
-              </dd>
-            </div>
-            {% endif %}
-            {% if request_id %}
-            <div class="error-detail-row">
-              <dt>{{ t(key="error-page-request-id") }}</dt>
-              <dd class="font-mono break-all select-all">{{ request_id }}</dd>
-            </div>
-            {% endif %}
-            {% if trace_id %}
-            <div class="error-detail-row">
-              <dt>{{ t(key="error-page-trace-id") }}</dt>
-              <dd class="font-mono break-all select-all">{{ trace_id }}</dd>
-            </div>
-            {% endif %}
-          </dl>
-        </details>
+          </div>
+          <h1 class="m-0 text-[1.55rem] font-semibold tracking-tight text-foreground">{{ title }}</h1>
+          <p class="mt-2 mb-0 max-w-sm text-sm leading-6 text-balance wrap-break-word text-muted-foreground">{{ message }}</p>
+        </header>
 
-        <p class="mt-5 mb-0 text-center text-xs leading-5 text-muted-foreground">{{ t(key="error-page-support-hint") }}</p>
-      </div>
-    </article>
+        <div class="error-stagger flex flex-col gap-5 px-7 pt-6 pb-9 min-[480px]:px-10">
+          {% if details %}
+          <div role="alert" class="grid w-full grid-cols-[auto_1fr] gap-x-2.5 gap-y-0.5 rounded-lg border bg-card px-4 py-3 text-left text-sm text-destructive">
+            <svg class="row-span-2 size-4 translate-y-0.5" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"/>
+              <line x1="12" x2="12" y1="8" y2="12"/>
+              <line x1="12" x2="12.01" y1="16" y2="16"/>
+            </svg>
+            <div class="col-start-2 font-medium">{{ t(key="error-page-additional-info") }}</div>
+            <ul class="col-start-2 m-0 list-none space-y-1 p-0 text-destructive/90">
+              {% for detail in details %}
+              <li class="wrap-break-word">{{ detail }}</li>
+              {% endfor %}
+            </ul>
+          </div>
+          {% endif %}
+
+          {% if oauth_error_code or error_code or request_id or trace_id %}
+          <section aria-labelledby="error-details-title">
+            <h2 id="error-details-title" class="m-0 mb-2 text-xs font-medium text-muted-foreground">{{ t(key="error-page-details") }}</h2>
+            <dl class="m-0 divide-y divide-border rounded-lg bg-muted/50 px-4 text-xs">
+              {% if oauth_error_code %}
+              <div class="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-3 py-2.5">
+                <dt class="text-muted-foreground">{{ t(key="error-page-error-type") }}</dt>
+                <dd class="m-0 font-mono break-all text-foreground">{{ oauth_error_code }}</dd>
+              </div>
+              {% endif %}
+              {% if error_code %}
+              <div class="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-3 py-2.5">
+                <dt class="text-muted-foreground">{{ t(key="error-page-error-code") }}</dt>
+                <dd class="m-0 font-mono text-foreground">E{{ error_code }}</dd>
+              </div>
+              {% endif %}
+              {% if request_id %}
+              <div class="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-3 py-2.5">
+                <dt class="text-muted-foreground">{{ t(key="error-page-request-id") }}</dt>
+                <dd class="m-0 font-mono break-all text-foreground select-all">{{ request_id }}</dd>
+              </div>
+              {% endif %}
+              {% if trace_id %}
+              <div class="grid grid-cols-[6.5rem_minmax(0,1fr)] gap-3 py-2.5">
+                <dt class="text-muted-foreground">{{ t(key="error-page-trace-id") }}</dt>
+                <dd class="m-0 font-mono break-all text-foreground select-all">{{ trace_id }}</dd>
+              </div>
+              {% endif %}
+            </dl>
+          </section>
+          {% endif %}
+
+          <p class="m-0 text-center text-xs leading-5 text-muted-foreground">{{ t(key="error-page-support-hint") }}</p>
+        </div>
+      </article>
+    </div>
   </main>
 </body>
 </html>

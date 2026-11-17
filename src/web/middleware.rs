@@ -407,6 +407,45 @@ impl Handler for RequireUpstreamHttps {
     }
 }
 
+/// Whether a static file name carries the build's content hash
+/// (`name.<16 hex>.ext`, as written by `pnpm build:error-css`).
+fn is_content_hashed(path: &str) -> bool {
+    let file = path.rsplit('/').next().unwrap_or(path);
+    let mut parts = file.rsplit('.');
+    let (Some(_extension), Some(hash), Some(stem)) = (parts.next(), parts.next(), parts.next())
+    else {
+        return false;
+    };
+    !stem.is_empty()
+        && hash.len() == 16
+        && hash
+            .bytes()
+            .all(|byte| matches!(byte, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+/// Cache content-hashed static files permanently: a new build gets a new
+/// name. Anything else must be revalidated so a rebuilt file is not served
+/// stale from a browser cache.
+#[handler]
+pub async fn static_cache_control(
+    req: &mut Request,
+    depot: &mut Depot,
+    res: &mut Response,
+    ctrl: &mut FlowCtrl,
+) {
+    let immutable = is_content_hashed(req.uri().path());
+    ctrl.call_next(req, depot, res).await;
+    if !res.status_code.unwrap_or(StatusCode::OK).is_success() {
+        return;
+    }
+    let value = if immutable {
+        HeaderValue::from_static("public, max-age=31536000, immutable")
+    } else {
+        HeaderValue::from_static("no-cache")
+    };
+    res.headers_mut().insert(header::CACHE_CONTROL, value);
+}
+
 #[handler]
 pub async fn security_headers_middleware(
     req: &mut Request,
@@ -474,8 +513,8 @@ mod tests {
     use uuid::Uuid;
 
     use super::{
-        RequireUpstreamHttps, RequireWorkload, TraceContextMiddleware, resolve_client_ip,
-        security_headers_middleware,
+        RequireUpstreamHttps, RequireWorkload, TraceContextMiddleware, is_content_hashed,
+        resolve_client_ip, security_headers_middleware,
     };
 
     struct StubWorkloadAuthenticator {
@@ -492,6 +531,26 @@ mod tests {
     #[handler]
     async fn ok(res: &mut Response) {
         res.status_code(StatusCode::OK);
+    }
+
+    #[test]
+    fn only_build_fingerprints_count_as_content_hashed() {
+        for hashed in [
+            "/static/css/error.fbf6de46402edd3c.css",
+            "/static/fonts/inter-latin-wght-normal.3100e775e8616cd2.woff2",
+        ] {
+            assert!(is_content_hashed(hashed), "{hashed}");
+        }
+        for plain in [
+            "/static/css/error.css",
+            "/static/manifest.json",
+            "/static/css/.fbf6de46402edd3c.css",
+            "/static/css/error.FBF6DE46402EDD3C.css",
+            "/static/css/error.fbf6de46402edd3.css",
+            "/static/fbf6de46402edd3c.css",
+        ] {
+            assert!(!is_content_hashed(plain), "{plain}");
+        }
     }
 
     #[tokio::test]

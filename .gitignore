@@ -25,6 +25,8 @@ node_modules
 
 assets/static/css
 assets/static/js
+assets/static/fonts
+assets/static/manifest.json
 **/dist/**
 
 ref

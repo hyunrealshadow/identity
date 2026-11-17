@@ -23,7 +23,6 @@ error-page-title = 发生了一些错误
 error-page-details = 错误详情
 error-page-error-type = 错误类型
 error-page-error-code = 错误代码
-error-page-description = 错误描述
 error-page-request-id = 请求 ID
 error-page-trace-id = 追踪 ID
 error-page-additional-info = 补充信息

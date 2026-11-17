@@ -4,6 +4,9 @@
 @import "@fontsource-variable/inter";
 @import "./theme.css";
 
+/* The applications set `.dark` on the root element. */
+@custom-variant dark (&:is(.dark, .dark *));
+
 /* Scan all of packages/ui/src: shared modules such as data-table.tsx live at its root. */
 @source "..";
 

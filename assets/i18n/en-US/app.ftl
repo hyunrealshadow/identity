@@ -23,7 +23,6 @@ error-page-title = Something went wrong
 error-page-details = Error details
 error-page-error-type = Error type
 error-page-error-code = Error code
-error-page-description = Description
 error-page-request-id = Request ID
 error-page-trace-id = Trace ID
 error-page-additional-info = Additional information

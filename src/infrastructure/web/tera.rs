@@ -1,4 +1,7 @@
-use std::{error::Error as StdError, io::Error as IoError, path::PathBuf, sync::Arc};
+use std::{
+    collections::HashMap, error::Error as StdError, fs, io::Error as IoError, path::PathBuf,
+    sync::Arc,
+};
 
 use fluent_templates::{
     ArcLoader, FluentBundle, Loader,
@@ -130,6 +133,47 @@ pub(crate) fn register_list_function<R>(bundle: &mut FluentBundle<R>) {
         .expect("registering LIST() Fluent function");
 }
 
+/// URL of a built static asset: `asset(path="css/error.css")` answers its
+/// content-hashed file from `assets/static/manifest.json`, which
+/// `pnpm build:error-css` writes. A path missing from the manifest keeps its
+/// plain `/static/` URL.
+struct StaticAssetUrls {
+    files: HashMap<String, String>,
+}
+
+impl StaticAssetUrls {
+    fn load() -> Self {
+        let path = workspace_path("assets/static/manifest.json");
+        let files = match fs::read_to_string(&path) {
+            Ok(content) => Self::parse(&content).unwrap_or_else(|e| {
+                warn!(error = %e, "static asset manifest is invalid; using unversioned URLs");
+                HashMap::new()
+            }),
+            Err(e) => {
+                warn!(error = %e, "static asset manifest is missing; run `pnpm build:error-css`");
+                HashMap::new()
+            }
+        };
+        Self { files }
+    }
+
+    fn parse(content: &str) -> serde_json::Result<HashMap<String, String>> {
+        serde_json::from_str(content)
+    }
+
+    fn url(&self, path: &str) -> String {
+        let file = self.files.get(path).map_or(path, String::as_str);
+        format!("/static/{file}")
+    }
+}
+
+impl Function<TeraResult<Value>> for StaticAssetUrls {
+    fn call(&self, args: Kwargs, _: &State) -> TeraResult<Value> {
+        let path = args.must_get::<String>("path")?;
+        Ok(Value::from(self.url(&path)))
+    }
+}
+
 pub fn build_tera(
     loader: Option<Arc<ArcLoader>>,
 ) -> Result<Arc<Tera>, Box<dyn StdError + Send + Sync + 'static>> {
@@ -142,6 +186,7 @@ pub fn build_tera(
             default_locale: langid!("en-US"),
         },
     );
+    tera.register_function("asset", StaticAssetUrls::load());
     tera.load_from_glob(template_glob.to_string_lossy().as_ref())?;
     Ok(Arc::new(tera))
 }
@@ -237,7 +282,7 @@ mod tests {
     use identity_application::error::params::ErrorParams;
     use unic_langid::langid;
 
-    use super::{build_i18n, build_tera};
+    use super::{StaticAssetUrls, build_i18n, build_tera};
 
     #[test]
     fn build_tera_loads_runtime_templates_from_assets_views() {
@@ -267,5 +312,19 @@ mod tests {
             translated,
             "The account does not exist. Enter a different email or username."
         );
+    }
+
+    #[test]
+    fn asset_urls_follow_the_manifest_and_keep_unknown_paths() {
+        let urls = StaticAssetUrls {
+            files: StaticAssetUrls::parse(r#"{"css/error.css":"css/error.0123456789abcdef.css"}"#)
+                .unwrap(),
+        };
+
+        assert_eq!(
+            urls.url("css/error.css"),
+            "/static/css/error.0123456789abcdef.css"
+        );
+        assert_eq!(urls.url("css/other.css"), "/static/css/other.css");
     }
 }

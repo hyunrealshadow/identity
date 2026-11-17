@@ -52,7 +52,17 @@ async fn authorize_renders_html_error_page_for_missing_required_fields() {
     assert_eq!(response.status_code, Some(StatusCode::BAD_REQUEST));
     let body = response_body_text(response).await;
     assert!(body.contains("Something went wrong"), "{body}");
-    assert!(body.contains("href=\"/static/css/error.css\""), "{body}");
+    // The stylesheet URL carries the build's content hash when the assets
+    // have been built, and stays plain otherwise.
+    let stylesheet = body
+        .split("rel=\"stylesheet\" href=\"")
+        .nth(1)
+        .and_then(|rest| rest.split('"').next())
+        .expect("error page links its stylesheet");
+    assert!(
+        stylesheet.starts_with("/static/css/error.") && stylesheet.ends_with(".css"),
+        "{stylesheet}"
+    );
     assert!(body.contains("E22002"), "{body}");
     assert!(body.contains("invalid_request"), "{body}");
     assert!(body.contains("Error type"), "{body}");

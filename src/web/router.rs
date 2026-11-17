@@ -13,6 +13,7 @@ use super::{
     middleware::{
         RequestIdMiddleware, RequireUpstreamHttps, RequireWorkload, ResolveClientIp,
         TraceContextMiddleware, require_login_workload, security_headers_middleware,
+        static_cache_control,
     },
 };
 use crate::{
@@ -29,8 +30,11 @@ use super::controllers::conformance;
 /// not-found answer as every other request.
 pub fn app_router(state: AppState, config: &AppConfig) -> Service {
     let shared_health_listener = health::shares_listener(&config.health, &config.server);
-    let mut router = Router::new()
-        .push(Router::with_path("static/{**path}").get(StaticDir::new(["assets/static"])));
+    let mut router = Router::new().push(
+        Router::with_path("static/{**path}")
+            .hoop(static_cache_control)
+            .get(StaticDir::new(["assets/static"])),
+    );
 
     router = router
         .push(oauth2::routes())

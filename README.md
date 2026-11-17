@@ -91,7 +91,11 @@ cargo run --locked --bin identity
 The default [development configuration](config/development.yaml) applies
 database migrations automatically and generates a local TLS certificate.
 Identity's own error pages use a compiled stylesheet built from the shared UI
-theme. Build it once before starting, and again after changing
+theme, plus Login's Inter font files copied into `assets/static/fonts`. They
+follow the system light/dark preference without JavaScript. Every built file is
+named by its content hash and served with a one-year immutable cache; Identity
+reads `assets/static/manifest.json` at startup to link the current files. Build
+them once before starting, and again (then restart Identity) after changing
 `assets/styles/error.css`, `assets/views/error.html` or the theme tokens in
 `packages/ui/src/styles/theme.css`:
 

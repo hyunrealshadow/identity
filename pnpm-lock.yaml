@@ -191,6 +191,9 @@ importers:
 
   .:
     devDependencies:
+      '@fontsource-variable/inter':
+        specifier: 5.3.0
+        version: 5.3.0
       '@tailwindcss/cli':
         specifier: 4.3.3
         version: 4.3.3
