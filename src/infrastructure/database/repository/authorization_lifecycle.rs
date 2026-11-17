@@ -114,10 +114,27 @@ RETURNING version
 /// is then visible to the following artifact UPDATE) or blocks until this
 /// transaction commits. That closes the consume-then-withdraw window where a
 /// newly minted child could otherwise escape tombstoning.
-#[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "withdraw_user_authority"))]
 pub(crate) async fn withdraw_user_authority_in_txn(
     txn: &DatabaseTransaction,
     user_id: i64,
+) -> Result<AuthorizationVersion, DbErr> {
+    withdraw_user_authority_for_enrollment_in_txn(txn, user_id, None).await
+}
+
+/// [`withdraw_user_authority_in_txn`] for a credential enrolled while a
+/// sign-in interaction is waiting on it.
+///
+/// The pending authorization or device request bound to `enrolling_login`
+/// has not issued anything yet: the user completes its authentication with
+/// the credential being added, so withdrawing it would end the very sign-in
+/// that requires the enrollment. The request is spared only while that login
+/// belongs to the user and is still in the enrollment phase. Every other
+/// artifact, including other pending interactions, is withdrawn as usual.
+#[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "withdraw_user_authority"))]
+pub(crate) async fn withdraw_user_authority_for_enrollment_in_txn(
+    txn: &DatabaseTransaction,
+    user_id: i64,
+    enrolling_login: Option<Uuid>,
 ) -> Result<AuthorizationVersion, DbErr> {
     let version = renew_user_version_in_txn(txn, user_id).await?;
     txn.execute_raw(Statement::from_sql_and_values(
@@ -153,8 +170,16 @@ WHERE subject.id = $1
             AND relation.data->>'user_oid' = subject.oid::text
       )
   )
+  AND NOT EXISTS (
+      SELECT 1 FROM login enrolling
+      WHERE enrolling.oid = $2
+        AND enrolling.user_id = subject.id
+        AND enrolling.status = 'mfa_enrollment_required'
+        AND enrolling.client_authorization_id = artifact.id
+        AND artifact.type IN ('authorization_request', 'device_authorization_request')
+  )
 "#,
-        [user_id.into()],
+        [user_id.into(), enrolling_login.into()],
     ))
     .await?;
     Ok(version)

@@ -80,6 +80,12 @@ Rules that keep the stages honest:
   `MfaEnrollmentRequired`, and never when the interaction was opened as forced
   reauthentication. A restart is allowed only from `Expired` and keeps the
   already-selected account, so it cannot become an account switch.
+- **Enrollment keeps its own interaction.** Adding an authenticator app or a
+  passkey withdraws credentials issued under the user's earlier credential set.
+  When it is enrolled inside `MfaEnrollmentRequired`, the pending
+  authorization or device request of that interaction is kept so the sign-in
+  can complete; the user's other pending interactions and issued tokens are
+  still withdrawn.
 - **Failures are bounded.** Challenge errors report `invalid_credential`,
   `too_many_attempts`, `account_locked`, `account_disabled`, `login_expired`, or
   `invalid_state`. They do not reveal whether an identifier exists.

@@ -41,6 +41,7 @@ impl PasskeyCredentialRepository for MemoryRepo {
         user: UserOid,
         key: StoredPasskey,
         _recovery_codes: Vec<RecoveryCodeCredentialData>,
+        _enrolling_login: Option<Uuid>,
     ) -> Result<(), AppError> {
         let mut keys = self.keys.lock().unwrap();
         if keys

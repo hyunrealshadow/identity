@@ -265,6 +265,10 @@ impl PasskeyService {
                     },
                 },
                 state.recovery_codes,
+                match context.binding {
+                    ChallengeBinding::Login(login) => Some(login),
+                    ChallengeBinding::Session(_) => None,
+                },
             )
             .await?;
         self.record_change(user, "passkey_registered");

@@ -365,6 +365,7 @@ async fn factor_enrolled_elsewhere_moves_the_login_to_a_challenge() {
                     last_used_counter: None,
                 },
                 Vec::new(),
+                None,
             )
             .await
             .unwrap()

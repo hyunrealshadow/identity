@@ -234,6 +234,33 @@ impl MfaService {
         enrollment_token: &str,
         code: &str,
     ) -> Result<ConfirmTotpEnrollment, AppError> {
+        self.confirm_pending_totp(user_oid, enrollment_token, code, None)
+            .await
+    }
+
+    /// Confirm an authenticator enrolled inside the sign-in interaction
+    /// `login_oid`. Existing authority is withdrawn as for any enrollment, but
+    /// the interaction's own pending request survives so the sign-in that the
+    /// enrollment completes can continue.
+    #[tracing::instrument(skip_all, name = "mfa.enrollment.confirm")]
+    pub async fn confirm_totp_enrollment_for_login(
+        &self,
+        user_oid: UserOid,
+        enrollment_token: &str,
+        code: &str,
+        login_oid: Uuid,
+    ) -> Result<ConfirmTotpEnrollment, AppError> {
+        self.confirm_pending_totp(user_oid, enrollment_token, code, Some(login_oid))
+            .await
+    }
+
+    async fn confirm_pending_totp(
+        &self,
+        user_oid: UserOid,
+        enrollment_token: &str,
+        code: &str,
+        enrolling_login: Option<Uuid>,
+    ) -> Result<ConfirmTotpEnrollment, AppError> {
         if self.status(user_oid).await?.totp_enabled {
             return Err(AppError::from_code(AuthErrorCode::TotpAlreadyEnabled));
         }
@@ -246,7 +273,12 @@ impl MfaService {
         let recovery_codes = pending.recovery_codes;
         if !self
             .credential_repo
-            .enable_totp_if_disabled(user_oid, otp_credential, pending.recovery_credentials)
+            .enable_totp_if_disabled(
+                user_oid,
+                otp_credential,
+                pending.recovery_credentials,
+                enrolling_login,
+            )
             .await?
         {
             return Err(AppError::from_code(AuthErrorCode::TotpAlreadyEnabled));
@@ -522,6 +554,7 @@ mod tests {
             _user_oid: UserOid,
             otp: OtpCredentialData,
             recovery_codes: Vec<RecoveryCodeCredentialData>,
+            _enrolling_login: Option<Uuid>,
         ) -> Result<bool, UserCredentialRepositoryError> {
             let mut credentials = self.credentials.lock().unwrap();
             if credentials

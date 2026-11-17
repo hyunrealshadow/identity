@@ -49,6 +49,7 @@ impl PasskeyCredentialRepository for MemoryRepo {
         user: UserOid,
         key: StoredPasskey,
         recovery_codes: Vec<RecoveryCodeCredentialData>,
+        _enrolling_login: Option<Uuid>,
     ) -> Result<(), AppError> {
         let mut keys = self.keys.lock().unwrap();
         if keys
@@ -213,6 +214,7 @@ pub(in crate::authentication) async fn enrolled_passkey(
             },
         },
         Vec::new(),
+        None,
     )
     .await
     .unwrap();

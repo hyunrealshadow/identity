@@ -680,3 +680,102 @@ async fn mfa_enrollment_login_keeps_its_registration_until_authenticated() {
     })
     .await;
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured PostgreSQL test database"]
+async fn credential_enrolled_during_sign_in_keeps_that_interaction() {
+    use identity_application::user::{
+        OtpAlgorithm, OtpCredentialData,
+        credential::{PasskeyCredentialData, StoredPasskey},
+        recovery_code::RecoveryCodeCredentialData,
+        repository::PasskeyCredentialRepository,
+    };
+
+    for credential in ["totp", "passkey"] {
+        for request_type in ["authorization_request", "device_authorization_request"] {
+            common::isolated(move |db| async move {
+                let case = format!("{credential} / {request_type}");
+                let user = Uuid::new_v4();
+                let client = Uuid::new_v4();
+                let current = Uuid::new_v4();
+                let other = Uuid::new_v4();
+                let enrolling = Uuid::new_v4();
+                let elsewhere = Uuid::new_v4();
+                let token = Uuid::new_v4();
+                // Both requests reference the user the way an interaction with
+                // an existing browser session (or a claimed device request) does.
+                let data = |login: Uuid| {
+                    format!(
+                        r#"{{"interaction":{{"selected_user_oid":"{user}"}},"claimed_login_oid":"{login}"}}"#
+                    )
+                };
+                sql(&db, &format!(r#"
+                    INSERT INTO "user" (oid,name,name_normalized,email,email_normalized) VALUES ('{user}','{user}','{user}','{user}@example.test','{user}@example.test');
+                    INSERT INTO client (oid,name,protocol) VALUES ('{client}','enrollment-test','openid_connect');
+                    INSERT INTO client_authorization (oid,client_id,type,data,expires_at)
+                      SELECT '{current}',id,'{request_type}','{}',now()+interval '1 day' FROM client WHERE oid='{client}';
+                    INSERT INTO client_authorization (oid,client_id,type,data,expires_at)
+                      SELECT '{other}',id,'{request_type}','{}',now()+interval '1 day' FROM client WHERE oid='{client}';
+                    INSERT INTO client_authorization (oid,client_id,type,data,expires_at)
+                      SELECT '{token}',id,'access_token','{{"user_oid":"{user}"}}',now()+interval '1 day' FROM client WHERE oid='{client}';
+                    INSERT INTO login (oid,client_id,client_authorization_id,user_id,status,requested_acr_values,expires_at)
+                      SELECT l.oid,c.id,a.id,u.id,'mfa_enrollment_required','["aal2"]'::jsonb,now()+interval '5 minutes'
+                      FROM client c,"user" u,(VALUES ('{enrolling}'::uuid,'{current}'::uuid),('{elsewhere}'::uuid,'{other}'::uuid)) l(oid,request),client_authorization a
+                      WHERE c.oid='{client}' AND u.oid='{user}' AND a.oid=l.request;
+                "#, data(enrolling), data(elsewhere))).await;
+
+                let repo = UserCredentialRepositoryImpl::new(db.clone());
+                let recovery = vec![RecoveryCodeCredentialData { hash: "recovery".to_owned() }];
+                if credential == "totp" {
+                    let enabled = repo
+                        .enable_totp_if_disabled(
+                            UserOid(user),
+                            OtpCredentialData {
+                                secret: "JBSWY3DPEHPK3PXP".to_owned(),
+                                digits: 6,
+                                period: 30,
+                                algorithm: OtpAlgorithm::Sha256,
+                                last_used_counter: Some(1),
+                            },
+                            recovery,
+                            Some(enrolling),
+                        )
+                        .await
+                        .unwrap();
+                    assert!(enabled, "{case}");
+                } else {
+                    PasskeyCredentialRepository::insert(
+                        &repo,
+                        UserOid(user),
+                        StoredPasskey {
+                            id: Uuid::new_v4(),
+                            data: PasskeyCredentialData {
+                                name: "Laptop".to_owned(),
+                                credential_id: user.simple().to_string(),
+                                key: serde_json::json!({}),
+                            },
+                        },
+                        recovery,
+                        Some(enrolling),
+                    )
+                    .await
+                    .unwrap();
+                }
+
+                let withdrawn = |oid: Uuid| {
+                    format!(
+                        "SELECT count(*)::bigint n FROM client_authorization WHERE oid='{oid}' \
+                         AND (revoked_at IS NOT NULL OR data->>'_authority_withdrawn'='true')"
+                    )
+                };
+                // The sign-in completing with the new credential continues.
+                assert_eq!(scalar(&db, &withdrawn(current)).await, 0, "{case}");
+                // Everything else issued under the earlier credential set is
+                // gone, including another interaction waiting on the same user.
+                assert_eq!(scalar(&db, &withdrawn(other)).await, 1, "{case}");
+                assert_eq!(scalar(&db, &withdrawn(token)).await, 1, "{case}");
+            })
+            .await;
+        }
+    }
+}

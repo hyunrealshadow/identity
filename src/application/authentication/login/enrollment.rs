@@ -163,7 +163,7 @@ impl LoginService {
 
         match enrollment
             .mfa
-            .confirm_totp_enrollment(user.oid, &token, code)
+            .confirm_totp_enrollment_for_login(user.oid, &token, code, login.oid)
             .await
         {
             Ok(_) => {}

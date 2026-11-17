@@ -109,11 +109,16 @@ pub trait UserCredentialRepository: Send + Sync {
 
     /// Enables TOTP only when disabled, preserving existing recovery codes or
     /// installing the prepared batch if absent, within the same transaction.
+    ///
+    /// The change withdraws the user's existing authority. `enrolling_login`
+    /// names a sign-in interaction that is completing with this authenticator;
+    /// its pending request stays usable so that sign-in can continue.
     async fn enable_totp_if_disabled(
         &self,
         user_oid: UserOid,
         otp: OtpCredentialData,
         recovery_codes: Vec<RecoveryCodeCredentialData>,
+        enrolling_login: Option<Uuid>,
     ) -> Result<bool, UserCredentialRepositoryError>;
 
     /// Removes TOTP and removes recovery codes only if no active MFA remains.
@@ -143,11 +148,16 @@ pub trait PasskeyCredentialRepository: Send + Sync {
     /// Enforces globally unique credential IDs and the per-user active Passkey
     /// limit atomically, preserving existing recovery codes or installing a
     /// prepared batch if absent. Missing or stale recovery enrollment fails.
+    ///
+    /// The addition withdraws the user's existing authority. `enrolling_login`
+    /// names a sign-in interaction that is completing with this passkey; its
+    /// pending request stays usable so that sign-in can continue.
     async fn insert(
         &self,
         user: UserOid,
         key: StoredPasskey,
         recovery_codes: Vec<RecoveryCodeCredentialData>,
+        enrolling_login: Option<Uuid>,
     ) -> Result<(), AppError>;
     /// Compare-and-swap must reject revoked, expired, or concurrently changed credentials.
     async fn update(

@@ -26,7 +26,7 @@ use uuid::Uuid;
 use super::{
     authorization_lifecycle::{
         ensure_recoverable_authorization_administrator, lock_owner_lifecycle,
-        withdraw_user_authority_in_txn,
+        withdraw_user_authority_for_enrollment_in_txn, withdraw_user_authority_in_txn,
     },
     shared::lock_user_credentials,
 };
@@ -338,6 +338,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         user_oid: UserOid,
         otp: OtpCredentialData,
         recovery_codes: Vec<RecoveryCodeCredentialData>,
+        enrolling_login: Option<Uuid>,
     ) -> Result<bool, UserCredentialRepositoryError> {
         let otp = to_value(otp).map_err(UserCredentialRepositoryError::Serialization)?;
         let txn = audit::begin(&self.db, "security.enable_totp_if_disabled")
@@ -391,8 +392,9 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
         // Adding a fingerprinted OTP credential is an authority boundary even
         // though this path is reached only when TOTP was disabled. Any artifact
-        // issued under the earlier credential set must stay withdrawn.
-        withdraw_user_authority_in_txn(&txn, user.id)
+        // issued under the earlier credential set must stay withdrawn, except
+        // the pending request of the sign-in this enrollment completes.
+        withdraw_user_authority_for_enrollment_in_txn(&txn, user.id, enrolling_login)
             .await
             .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
         audit::record(
@@ -595,6 +597,7 @@ impl PasskeyCredentialRepository for UserCredentialRepositoryImpl {
         user_oid: UserOid,
         key: StoredPasskey,
         recovery_codes: Vec<RecoveryCodeCredentialData>,
+        enrolling_login: Option<Uuid>,
     ) -> Result<(), AppError> {
         let txn = audit::begin(&self.db, "security.insert")
             .await
@@ -648,8 +651,9 @@ impl PasskeyCredentialRepository for UserCredentialRepositoryImpl {
         .map_err(AppError::internal)?;
         // A new passkey is a fingerprinted credential addition. Permanently
         // withdraw authority so artifacts from the prior credential set cannot
-        // be revived by later removal/replacement.
-        withdraw_user_authority_in_txn(&txn, user_id)
+        // be revived by later removal/replacement. A passkey registered inside
+        // a sign-in keeps the pending request of that interaction.
+        withdraw_user_authority_for_enrollment_in_txn(&txn, user_id, enrolling_login)
             .await
             .map_err(AppError::internal)?;
         audit::record(&txn, "security.insert", "user_credential", passkey_oid)
@@ -815,6 +819,7 @@ mod passkey_tests {
                 user,
                 key,
                 Vec::new(),
+                None,
             )
             .await;
             if count < MAX_PASSKEYS_PER_USER {

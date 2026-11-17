@@ -131,6 +131,7 @@ impl UserCredentialRepository for TestCredentialRepo {
         _user_oid: UserOid,
         otp: OtpCredentialData,
         recovery_codes: Vec<RecoveryCodeCredentialData>,
+        _enrolling_login: Option<Uuid>,
     ) -> Result<bool, UserCredentialRepositoryError> {
         let mut credentials = self.credentials.lock().unwrap();
         if credentials
