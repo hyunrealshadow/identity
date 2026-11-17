@@ -1,7 +1,7 @@
 Identity release {{ include "identity.fullname" . }} has been installed.
 
 Public application addresses are entered on Login's /install page and stored
-in Identity settings. Console is served at /console on the Login hostname.
+in Identity settings.{{- if .Values.console.enabled }} Console is served at /console on the Login hostname.{{- end }}
 Gateway hostnames and TLS remain deployment configuration.
 
 Service endpoints:
@@ -10,6 +10,9 @@ Service endpoints:
   Identity internal API: {{ ternary "https" "http" .Values.identity.tls.enabled }}://{{ include "identity.fullname" . }}-server-internal:{{ .Values.identity.service.internalPort }}
   Identity health: http://{{ include "identity.fullname" . }}-server:{{ .Values.identity.service.healthPort }}/health
   Login: {{ ternary "https" "http" .Values.login.tls.enabled }}://{{ include "identity.fullname" . }}-login:{{ .Values.login.service.port }}
+{{- if .Values.console.enabled }}
+  Console: {{ ternary "https" "http" .Values.console.tls.enabled }}://{{ include "identity.fullname" . }}-console:{{ .Values.console.service.port }}
+{{- end }}
 
 Pod transport:
   Identity: {{ ternary "HTTPS" "HTTP; public traffic requires a trusted HTTPS proxy" .Values.identity.tls.enabled }}
@@ -20,6 +23,9 @@ Pod transport:
 
 Workload authentication:
   Login subject: system:serviceaccount:{{ .Release.Namespace }}:{{ include "identity.loginServiceAccountName" . }}
+{{- if .Values.console.enabled }}
+  Console subject: system:serviceaccount:{{ .Release.Namespace }}:{{ include "identity.consoleServiceAccountName" . }}
+{{- end }}
   Kubernetes issuer: {{ .Values.identity.workload.issuer }}
 {{- if .Values.identity.workload.issuerCa.enabled }}
   Issuer CA: ConfigMap/{{ .Values.identity.workload.issuerCa.configMapName }} key {{ .Values.identity.workload.issuerCa.key }}
@@ -31,13 +37,20 @@ Workload authentication:
 Gateway API: {{ ternary "enabled" "disabled" .Values.gatewayApi.enabled }}
 {{- if .Values.gatewayApi.enabled }}
   Parent: Gateway/{{ .Values.gatewayApi.parentRef.name }}{{ with .Values.gatewayApi.parentRef.namespace }} in namespace {{ . }}{{ end }}
+{{- if .Values.gatewayApi.identity.enabled }}
+  Identity hosts: {{ join ", " .Values.gatewayApi.identity.hostnames }}
+{{- end }}
+{{- if .Values.gatewayApi.login.enabled }}
+  Login hosts: {{ join ", " .Values.gatewayApi.login.hostnames }}
+{{- end }}
+{{- if and .Values.console.enabled .Values.gatewayApi.console.enabled }}
+  Console hosts: {{ join ", " (default .Values.gatewayApi.login.hostnames .Values.gatewayApi.console.hostnames) }} (/console)
+{{- end }}
 {{- end }}
 
 Rollout status:
   kubectl rollout status deployment/{{ include "identity.fullname" . }}-server -n {{ .Release.Namespace }}
   kubectl rollout status deployment/{{ include "identity.fullname" . }}-login -n {{ .Release.Namespace }}
-
 {{- if .Values.console.enabled }}
-  Console subject: system:serviceaccount:{{ .Release.Namespace }}:{{ include "identity.consoleServiceAccountName" . }}
   kubectl rollout status deployment/{{ include "identity.fullname" . }}-console -n {{ .Release.Namespace }}
 {{- end }}
