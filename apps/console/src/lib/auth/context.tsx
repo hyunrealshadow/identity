@@ -11,7 +11,10 @@ import {
 } from 'react'
 
 import { ReauthenticationPopup } from '#/components/reauthentication-popup'
-import { SessionVersionContext } from '#/lib/auth/session-version'
+import {
+  SessionVersionContext,
+  useSessionVersionCounter,
+} from '#/lib/auth/session-version'
 import { clearCurrentDrafts } from '#/lib/draft-storage'
 import { queryClient } from '#/lib/graphql/query-client'
 
@@ -171,15 +174,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [endSessionEndpoint, setEndSessionEndpoint] = useState<
     string | undefined
   >(() => getAuthSession()?.endSessionEndpoint)
-  const [sessionVersion, setSessionVersion] = useState(0)
+  const [sessionVersion, replaceSessionVersion] = useSessionVersionCounter(queryClient)
   const [popupPrompt, setPopupPrompt] =
     useState<PopupReauthenticationPrompt | null>(null)
-
-  useEffect(() => {
-    // Every usable session replacement starts with an empty read cache, so a
-    // page can never render capabilities or entities of its predecessor.
-    queryClient.clear()
-  }, [sessionVersion])
 
   const startedRef = useRef(false)
   const redirectInFlightRef = useRef<Promise<void> | null>(null)
@@ -798,8 +795,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setClaims(session.claims)
         setEndSessionEndpoint(session.endSessionEndpoint)
         setErrorCode(undefined)
-        // Refetch consumers with the new session without unmounting the workspace.
-        setSessionVersion((version) => version + 1)
+        // Refetch consumers with the new session without unmounting the
+        // workspace. The read cache is emptied first, so a page can never
+        // render capabilities or entities of its predecessor.
+        replaceSessionVersion()
         closePopupPrompt()
         setStatus('authenticated')
       } catch (error) {
@@ -821,6 +820,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       closePopupPrompt,
       closePopupWindow,
       config,
+      replaceSessionVersion,
       updatePopupPrompt,
     ],
   )
@@ -984,7 +984,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setClaims(session.claims)
         setEndSessionEndpoint(session.endSessionEndpoint)
         setStatus('authenticated')
-        setSessionVersion((version) => version + 1)
+        replaceSessionVersion()
         return sanitizeReturnTo(transaction.returnTo)
       } catch (error) {
         const code = errorCodeOf(error, 'exchange_failed')
@@ -993,7 +993,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw error
       }
     },
-    [applyAccountLocale, applyAccountTimeZone, config],
+    [applyAccountLocale, applyAccountTimeZone, config, replaceSessionVersion],
   )
 
   const expire = useCallback(() => {
