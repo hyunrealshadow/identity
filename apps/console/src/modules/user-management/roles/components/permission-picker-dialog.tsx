@@ -553,7 +553,7 @@ export function PermissionPickerDialog({
                       <li key={item.id}>
                         <label
                           htmlFor={checkboxId}
-                          className="flex min-h-14 w-full cursor-pointer items-center gap-3 px-3 py-2 text-start"
+                          className="flex min-h-14 w-full items-center gap-3 px-3 py-2 text-start"
                         >
                           <Checkbox
                             id={checkboxId}

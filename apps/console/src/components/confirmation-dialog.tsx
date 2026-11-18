@@ -7,7 +7,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@identity/ui/components/dialog'
-import { Spinner } from '@identity/ui/components/spinner'
 import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
 import type { ReactNode } from 'react'
 
@@ -64,10 +63,9 @@ export function ConfirmationDialog({
           <Button
             type="button"
             variant={destructive ? 'destructive' : 'default'}
-            disabled={pending}
+            loading={pending}
             onClick={onConfirm}
           >
-            {pending ? <Spinner aria-label={t('working')} /> : null}
             {confirmLabel ?? t('confirm')}
           </Button>
         </DialogFooter>

@@ -33,7 +33,7 @@ export function SignInAgainButton({ label, begin }: SignInAgainButtonProps) {
   return (
     <Button
       type="button"
-      disabled={starting}
+      loading={starting}
       onClick={() => void start()}
       className="mt-6 w-full"
     >

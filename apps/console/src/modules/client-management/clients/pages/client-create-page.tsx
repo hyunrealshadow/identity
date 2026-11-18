@@ -1,5 +1,4 @@
 import { Button } from '@identity/ui/components/button'
-import { Spinner } from '@identity/ui/components/spinner'
 import { useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, ArrowRight, Plus } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -378,14 +377,10 @@ export function ClientCreatePage({ search }: { search: CreateSearch }) {
                   {t('clientsCreatePrevious')}
                 </Button>
               )}
-              <Button type="submit" disabled={pending}>
+              <Button type="submit" loading={last && pending} disabled={!last && pending}>
                 {last ? (
                   <>
-                    {pending ? (
-                      <Spinner aria-label={t('clientsCreatePending')} />
-                    ) : (
-                      <Plus aria-hidden="true" />
-                    )}
+                    {pending ? null : <Plus aria-hidden="true" />}
                     {t('clientsCreateAction')}
                   </>
                 ) : (

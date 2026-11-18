@@ -1,6 +1,5 @@
 import { withUiLocales } from '#/lib/ui-locale'
 import { Button } from '@identity/ui/components/button'
-import { Spinner } from '@identity/ui/components/spinner'
 import { createServerFn } from '@tanstack/react-start'
 import { Fingerprint } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -91,8 +90,8 @@ export function PasskeyLogin({ loginId, csrfToken, locale, uiLocales, primary = 
   }, [primary, signIn])
 
   return <div className="space-y-2">
-    <Button className="w-full" variant={primary ? 'default' : 'outline'} disabled={!supported || busy} aria-busy={busy || undefined} onClick={() => void signIn()}>
-      {busy ? <Spinner aria-hidden="true" role="presentation" /> : <Fingerprint aria-hidden="true" />}{t('usePasskey')}
+    <Button className="w-full" variant={primary ? 'default' : 'outline'} disabled={!supported} loading={busy} onClick={() => void signIn()}>
+      {busy ? null : <Fingerprint aria-hidden="true" />}{t('usePasskey')}
     </Button>
     <p className="no-js-only text-xs text-muted-foreground">{t('passkeyRequiresJavascript')}</p>
     {!supported ? <p className="js-only text-xs text-muted-foreground">{t('passkeyUnsupported')}</p> : null}

@@ -8,7 +8,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@identity/ui/components/dialog'
-import { Spinner } from '@identity/ui/components/spinner'
 import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
 import { useNavigate } from '@tanstack/react-router'
 import { Save, Power, PowerOff, TriangleAlert } from 'lucide-react'
@@ -489,16 +488,14 @@ export function RoleDetailPage() {
                   <Button
                     type="button"
                     disabled={
-                      pending ||
                       !scope.rolesWrite ||
                       !versionReady ||
                       !metadataChanged
                     }
+                    loading={pending}
                     onClick={() => void submit()}
                   >
-                    {pending ? (
-                      <Spinner aria-label={t('saving')} />
-                    ) : (
+                    {pending ? null : (
                       <Save className="size-4" aria-hidden="true" />
                     )}
                     {t('roleSettingsSaveAction')}
@@ -674,10 +671,10 @@ function RoleStateDialog({
             </Button>
             <Button
               variant={action === 'disable' ? 'destructive' : 'default'}
-              disabled={pending || !role.version}
+              disabled={!role.version}
+              loading={pending}
               onClick={() => void submit()}
             >
-              {pending ? <Spinner aria-label={t('working')} /> : null}
               {t(
                 action === 'enable'
                   ? 'rolesEnableConfirm'

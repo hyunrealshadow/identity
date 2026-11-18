@@ -82,6 +82,7 @@ export function ProgressiveForm({
 
   async function enhance(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (pendingSubmitter !== undefined) return
     setEnhancementError(undefined)
 
     const form = event.currentTarget

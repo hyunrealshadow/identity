@@ -155,7 +155,7 @@ export function ResourceTable<T extends { id: string }>({
             variant="outline"
             size="icon"
             aria-label={t('tableRefresh')}
-            disabled={refreshing}
+            loading={refreshing}
             onClick={onRefresh}
           >
             <RefreshCw className="size-4" aria-hidden="true" />

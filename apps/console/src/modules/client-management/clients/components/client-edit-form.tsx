@@ -4,7 +4,6 @@ import {
   AlertTitle,
 } from '@identity/ui/components/alert'
 import { Button } from '@identity/ui/components/button'
-import { Spinner } from '@identity/ui/components/spinner'
 import { Info, Save } from 'lucide-react'
 import type { ReactNode } from 'react'
 
@@ -71,12 +70,8 @@ export function ClientEditForm({
                 {t('clientsSettingsWithdrawNote')}
               </span>
             ) : null}
-            <Button type="submit" disabled={editor.pending || !editor.dirty}>
-              {editor.pending ? (
-                <Spinner aria-label={t('clientsSavePending')} />
-              ) : (
-                <Save className="size-4" aria-hidden="true" />
-              )}
+            <Button type="submit" disabled={!editor.dirty} loading={editor.pending}>
+              {editor.pending ? null : <Save className="size-4" aria-hidden="true" />}
               {t('clientsSave')}
             </Button>
           </div>

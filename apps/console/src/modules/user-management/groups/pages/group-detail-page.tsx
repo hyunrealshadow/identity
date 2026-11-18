@@ -12,7 +12,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@identity/ui/components/dialog'
-import { Spinner } from '@identity/ui/components/spinner'
 import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
 import { useNavigate } from '@tanstack/react-router'
 import { Save, Trash2, Power, PowerOff, TriangleAlert } from 'lucide-react'
@@ -475,12 +474,11 @@ export function GroupDetailPage() {
                 <DialogFooter>
                   <Button
                     type="button"
-                    disabled={pending || !versionReady || !changed}
+                    disabled={!versionReady || !changed}
+                    loading={pending}
                     onClick={() => void submit()}
                   >
-                    {pending ? (
-                      <Spinner aria-label={t('saving')} />
-                    ) : (
+                    {pending ? null : (
                       <Save className="size-4" aria-hidden="true" />
                     )}
                     {t('groupSettingsSaveAction')}
@@ -662,10 +660,10 @@ function GroupStateDialog({
             <Button
               type="button"
               variant={action === 'disable' ? 'destructive' : 'default'}
-              disabled={pending || !group.version}
+              disabled={!group.version}
+              loading={pending}
               onClick={() => void submit()}
             >
-              {pending ? <Spinner aria-label={t('working')} /> : null}
               {t(
                 action === 'enable'
                   ? 'groupsEnableConfirm'
@@ -784,10 +782,10 @@ function GroupDeleteDialog({
             <Button
               type="button"
               variant="destructive"
-              disabled={pending || !group.version}
+              disabled={!group.version}
+              loading={pending}
               onClick={() => void submit()}
             >
-              {pending ? <Spinner aria-label={t('working')} /> : null}
               {t('groupsDeleteConfirm')}
             </Button>
           </DialogFooter>

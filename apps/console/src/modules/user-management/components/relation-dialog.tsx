@@ -6,7 +6,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@identity/ui/components/dialog'
-import { Spinner } from '@identity/ui/components/spinner'
 import type { ReactNode } from 'react'
 
 import { useTranslator, type MessageKey } from '#/lib/i18n'
@@ -121,15 +120,14 @@ export function RelationDialog({
           <Button
             type="button"
             variant={danger ? 'destructive' : 'default'}
+            loading={pending}
             disabled={
-              pending ||
               reloadPending ||
               disabled ||
               Boolean(feedback && rbacConflict(feedback.errors).conflict)
             }
             onClick={onSubmit}
           >
-            {pending ? <Spinner aria-label={t('working')} /> : null}
             {confirm}
           </Button>
         </DialogFooter>

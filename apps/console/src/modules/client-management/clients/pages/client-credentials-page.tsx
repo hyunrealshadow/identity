@@ -11,7 +11,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@identity/ui/components/dialog'
-import { Spinner } from '@identity/ui/components/spinner'
 import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
 import { DataTable, type DataTableColumn } from '@identity/ui/data-table'
 import { Plus, TriangleAlert } from 'lucide-react'
@@ -338,11 +337,10 @@ export function ClientCredentialsPage() {
           </div>
           <Button
             disabled={pending || full}
+            loading={pending && !target}
             onClick={() => void issue()}
           >
-            {pending && !target ? (
-              <Spinner aria-label={t('working')} />
-            ) : (
+            {pending && !target ? null : (
               <Plus className="size-4" aria-hidden="true" />
             )}
             {t('clientsSecretCreate')}
@@ -646,8 +644,7 @@ function AddCredentialDialog({
             >
               {t('cancel')}
             </Button>
-            <Button type="submit" disabled={pending}>
-              {pending ? <Spinner aria-label={t('working')} /> : null}
+            <Button type="submit" loading={pending}>
               {t('clientsCredentialAddSubmit')}
             </Button>
           </DialogFooter>

@@ -5,7 +5,6 @@ import {
 } from '@identity/ui/components/alert'
 import { Button } from '@identity/ui/components/button'
 import { Card, CardContent } from '@identity/ui/components/card'
-import { Spinner } from '@identity/ui/components/spinner'
 import { useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, ChevronDown, Plus, TriangleAlert } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -535,10 +534,8 @@ export function UserCreatePage() {
           </section>
 
           <div className="flex flex-wrap items-center gap-2 border-t border-border pt-6">
-            <Button type="submit" disabled={pending}>
-              {pending ? (
-                <Spinner aria-label={t('usersCreatePending')} />
-              ) : (
+            <Button type="submit" loading={pending}>
+              {pending ? null : (
                 <Plus className="size-4" aria-hidden="true" />
               )}
               {t('usersCreateAction')}

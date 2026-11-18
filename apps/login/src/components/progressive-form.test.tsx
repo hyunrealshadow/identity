@@ -146,13 +146,16 @@ describe('ProgressiveForm', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Use this account' }))
     const form = screen.getByRole('button', { name: 'Use this account' }).closest('form')
     await waitFor(() => expect(form?.getAttribute('aria-busy')).toBe('true'))
-    expect(screen.getByRole('button', { name: 'Use this account' }).hasAttribute('data-pending')).toBe(true)
+    const button = screen.getByRole('button', { name: 'Use this account' }) as HTMLButtonElement
+    expect(button.hasAttribute('data-pending')).toBe(true)
+    expect(button.disabled).toBe(true)
 
     const restored = new Event('pageshow')
     Object.defineProperty(restored, 'persisted', { value: true })
     window.dispatchEvent(restored)
 
     await waitFor(() => expect(form?.getAttribute('aria-busy')).toBe('false'))
-    expect(screen.getByRole('button', { name: 'Use this account' }).hasAttribute('data-pending')).toBe(false)
+    expect(button.hasAttribute('data-pending')).toBe(false)
+    expect(button.disabled).toBe(false)
   })
 })

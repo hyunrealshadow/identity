@@ -3,7 +3,6 @@ import { Alert, AlertDescription, AlertTitle } from '@identity/ui/components/ale
 import { Badge } from '@identity/ui/components/badge'
 import { Button } from '@identity/ui/components/button'
 import { Skeleton } from '@identity/ui/components/skeleton'
-import { Spinner } from '@identity/ui/components/spinner'
 import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
 import { useNavigate } from '@tanstack/react-router'
 import { Check, CircleCheck, Save, TriangleAlert } from 'lucide-react'
@@ -565,12 +564,11 @@ export function RolePermissionsPage({ roleId }: { roleId: string }) {
               <div className="flex flex-wrap items-center gap-2">
                 <Button
                   type="button"
-                  disabled={!availability.allowed || !canWrite || pending}
+                  disabled={!availability.allowed || !canWrite}
+                  loading={pending}
                   onClick={confirmState.open}
                 >
-                  {pending ? (
-                    <Spinner aria-label={t('saving')} />
-                  ) : (
+                  {pending ? null : (
                     <Save className="size-4" aria-hidden="true" />
                   )}
                   {t('rolePermissionsSaveAction')}

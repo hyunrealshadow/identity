@@ -13,7 +13,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@identity/ui/components/dropdown-menu'
-import { Spinner } from '@identity/ui/components/spinner'
 import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
 import { Ellipsis, LockOpen, Power, PowerOff, TriangleAlert } from 'lucide-react'
 import { useRef, useState } from 'react'
@@ -426,9 +425,9 @@ function UserStateDialog({
             type="button"
             variant={action === 'disable' ? 'destructive' : 'default'}
             disabled={busy || !versionAvailable}
+            loading={pending}
             onClick={() => void submit()}
           >
-            {pending ? <Spinner aria-label={t('usersStatePending')} /> : null}
             {t(meta.confirm)}
           </Button>
         </DialogFooter>

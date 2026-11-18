@@ -1,5 +1,4 @@
 import { Button } from '@identity/ui/components/button'
-import { Spinner } from '@identity/ui/components/spinner'
 import { RefreshCw } from 'lucide-react'
 import { useMemo } from 'react'
 
@@ -48,12 +47,10 @@ function LastUpdated({
         size="sm"
         variant="outline"
         aria-label={t('dashboardRefreshLabel')}
-        disabled={refreshing}
+        loading={refreshing}
         onClick={onRefresh}
       >
-        {refreshing ? (
-          <Spinner aria-label={t('dashboardRefreshing')} />
-        ) : (
+        {refreshing ? null : (
           <RefreshCw className="size-4" aria-hidden="true" />
         )}
         <span>{t('refresh')}</span>

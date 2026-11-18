@@ -1,5 +1,4 @@
 import { Button } from '@identity/ui/components/button'
-import { Spinner } from '@identity/ui/components/spinner'
 import { RotateCcw, Save } from 'lucide-react'
 
 import { useTranslator } from '#/lib/i18n'
@@ -24,10 +23,8 @@ export function SettingsFormFooter({
         <RotateCcw className="size-4" aria-hidden="true" />
         {t('settingsDiscard')}
       </Button>
-      <Button type="submit" disabled={pending || !dirty}>
-        {pending ? (
-          <Spinner aria-label={t('settingsSavePending')} />
-        ) : (
+      <Button type="submit" disabled={!dirty} loading={pending}>
+        {pending ? null : (
           <Save className="size-4" aria-hidden="true" />
         )}
         {t('settingsSave')}

@@ -37,11 +37,22 @@
       [role="checkbox"],
       [role="switch"],
       [role="tab"]
-    ):not(:disabled, [aria-disabled="true"], [data-disabled], input, textarea) {
+    ):not(:disabled, [aria-disabled="true"], [data-disabled], [aria-busy="true"], [data-loading], [data-pending], input, textarea) {
     cursor: pointer;
   }
 
-  :is(button, [role="button"], [role="option"], [role="radio"], [role="checkbox"], [role="switch"], [role="tab"]):is(:disabled, [aria-disabled="true"], [data-disabled]) {
+  :is(button, [role="button"], [role="option"], [role="radio"], [role="checkbox"], [role="switch"], [role="tab"]):is(:disabled, [aria-disabled="true"], [data-disabled], [aria-busy="true"], [data-loading], [data-pending]) {
+    cursor: not-allowed;
+  }
+
+  label:has(:is([role="radio"], [role="checkbox"], [role="switch"], input[type="checkbox"], input[type="radio"]):not(:disabled, [aria-disabled="true"], [data-disabled])),
+  [data-slot="field"]:not([data-disabled="true"]):has(:is([role="radio"], [role="checkbox"], [role="switch"], input[type="checkbox"], input[type="radio"]):not(:disabled, [aria-disabled="true"], [data-disabled])) > label {
+    cursor: pointer;
+  }
+
+  label:has(:is([role="radio"], [role="checkbox"], [role="switch"], input[type="checkbox"], input[type="radio"]):is(:disabled, [aria-disabled="true"], [data-disabled])),
+  [data-slot="field"]:has(:is([role="radio"], [role="checkbox"], [role="switch"], input[type="checkbox"], input[type="radio"]):is(:disabled, [aria-disabled="true"], [data-disabled])) > label,
+  [data-slot="field"][data-disabled="true"] > label {
     cursor: not-allowed;
   }
 }

@@ -38,6 +38,7 @@ export function AccountReauthProvider({ locale, access, children }: { locale: Lo
   const retrying = useRef(false)
   const [request, setRequest] = useState<AccountReauthRequest>()
   const [notice, setNotice] = useState<'blocked' | 'error'>()
+  const [isRetrying, setIsRetrying] = useState(false)
   const t = (key: Parameters<typeof translate>[1]) => translate(locale, key)
 
   const cancel = useCallback(() => {
@@ -126,6 +127,7 @@ export function AccountReauthProvider({ locale, access, children }: { locale: Lo
     const current = pending.current
     if (!current || retrying.current) return
     retrying.current = true
+    setIsRetrying(true)
     try {
       const result = await execute({ data: { action: 'retry-reauthentication', values: { state: current.state } } })
       if (pending.current !== current) return
@@ -134,7 +136,10 @@ export function AccountReauthProvider({ locale, access, children }: { locale: Lo
       else { popup.current?.close(); popup.current = null; setNotice('error') }
     } catch {
       if (pending.current === current) { popup.current?.close(); popup.current = null; setNotice('error') }
-    } finally { retrying.current = false }
+    } finally {
+      retrying.current = false
+      setIsRetrying(false)
+    }
   }, [cancel, execute, requestReauth])
 
   const value = useMemo(() => ({ requestReauth, executeAction, prepareAction }), [requestReauth, executeAction, prepareAction])
@@ -145,7 +150,7 @@ export function AccountReauthProvider({ locale, access, children }: { locale: Lo
       <AlertDescription>
         <p>{t(notice === 'blocked' ? 'accountReauthPopupBlocked' : 'accountReauthFailed')}</p>
         <div className="mt-3 flex flex-wrap gap-2">
-          <Button size="sm" onClick={() => void retry()}>{t('accountReauthPopupContinue')}</Button>
+          <Button size="sm" loading={isRetrying} onClick={() => void retry()}>{t('accountReauthPopupContinue')}</Button>
           <Button size="sm" variant="ghost" onClick={() => window.location.assign(request.url)}>{t('accountReauthOpenWindow')}</Button>
           <Button size="sm" variant="ghost" onClick={cancel}>{t('close')}</Button>
         </div>

@@ -12,7 +12,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@identity/ui/components/dialog'
-import { Spinner } from '@identity/ui/components/spinner'
 import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
 import { useNavigate } from '@tanstack/react-router'
 import {
@@ -613,14 +612,11 @@ export function PermissionDetailPage({
                 <DialogFooter>
                   <Button
                     type="button"
-                    disabled={
-                      pending || !versionReady || !metadataChanged
-                    }
+                    disabled={!versionReady || !metadataChanged}
+                    loading={pending}
                     onClick={() => void submit()}
                   >
-                    {pending ? (
-                      <Spinner aria-label={t('saving')} />
-                    ) : (
+                    {pending ? null : (
                       <Save className="size-4" aria-hidden="true" />
                     )}
                     {t('permissionSettingsSaveAction')}
@@ -881,12 +877,10 @@ export function PermissionStateDialog({
             </Button>
             <Button
               variant={action === 'disable' ? 'destructive' : 'default'}
-              disabled={pending || !expectedVersion.current}
+              disabled={!expectedVersion.current}
+              loading={pending}
               onClick={() => void submit()}
             >
-              {pending ? (
-                <Spinner aria-label={t('working')} />
-              ) : null}
               {t(
                 action === 'enable'
                   ? 'permissionsEnableConfirm'

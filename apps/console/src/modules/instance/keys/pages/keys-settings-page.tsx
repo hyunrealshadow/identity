@@ -8,7 +8,6 @@ import {
   DialogTitle,
 } from '@identity/ui/components/dialog'
 import { Skeleton } from '@identity/ui/components/skeleton'
-import { Spinner } from '@identity/ui/components/spinner'
 import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
 import { useNavigate } from '@tanstack/react-router'
 import { Plus } from 'lucide-react'
@@ -533,8 +532,8 @@ function AddSigningKeyDialog({
             <Button type="button" variant="outline" disabled={pending} onClick={() => state.close()}>
               {t('tableCancel')}
             </Button>
-            <Button type="submit" disabled={pending || !selected}>
-              {pending ? <Spinner aria-label={t('keysAddPending')} /> : <Plus className="size-4" aria-hidden="true" />}
+            <Button type="submit" disabled={!selected} loading={pending}>
+              {pending ? null : <Plus className="size-4" aria-hidden="true" />}
               {t('keysAdd')}
             </Button>
           </DialogFooter>

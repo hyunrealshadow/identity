@@ -1,7 +1,6 @@
 import { Button } from '@identity/ui/components/button'
 import { Field, FieldLabel } from '@identity/ui/components/field'
 import { Input } from '@identity/ui/components/input'
-import { Spinner } from '@identity/ui/components/spinner'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@identity/ui/components/tooltip'
 import { useRouter } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
@@ -179,7 +178,7 @@ export function PasskeySettings({ locale, keys, loginHint, openRequested, totpEn
         title={t('passkeys')}
         description={t('passkeysDescription')}
         detail={t('passkeyCount', { count: keys.length, limit: MAX_PASSKEYS_PER_ACCOUNT })}
-        action={<Button variant="outline" onClick={() => void prepare()} disabled={busy || pending}>{pending ? <Spinner aria-hidden="true" role="presentation" /> : null}{t('passkeyManage')}</Button>}
+        action={<Button variant="outline" onClick={() => void prepare()} disabled={busy} loading={pending}>{t('passkeyManage')}</Button>}
       />
       <AccountDialog
         state={modal}
@@ -209,7 +208,7 @@ export function PasskeySettings({ locale, keys, loginHint, openRequested, totpEn
                             {keys.length === 1 && !totpEnabled ? <p className="text-sm text-destructive">{t('mfaLastMethodRecoveryWarning')}</p> : null}
                             <div className="flex justify-end gap-2">
                               <Button variant="outline" onClick={() => setDeleting(null)} disabled={busy}>{t('cancel')}</Button>
-                              <Button variant="destructive" onClick={() => void remove(key.id)} disabled={busy}>{busy ? <Spinner aria-hidden="true" role="presentation" /> : null}{t('passkeyConfirmDelete')}</Button>
+                              <Button variant="destructive" onClick={() => void remove(key.id)} loading={busy}>{t('passkeyConfirmDelete')}</Button>
                             </div>
                           </div> : null}
                         </li>)}
@@ -235,7 +234,7 @@ export function PasskeySettings({ locale, keys, loginHint, openRequested, totpEn
                         {!supported ? <p className="text-xs text-muted-foreground">{t('passkeyUnsupported')}</p> : null}
                         <div className="flex items-center justify-between gap-2">
                           {hasRecoveryStep || keys.length ? <Button type="button" variant="ghost" onClick={() => hasRecoveryStep ? setRecoverySaved(false) : setView('manage')} disabled={busy}>{t('accountMfaBack')}</Button> : <span />}
-                          <Button type="submit" disabled={!supported || busy || atLimit || !name.trim() || !recoveryReady}>{busy ? <Spinner aria-hidden="true" role="presentation" /> : null}{t('passkeyAdd')}</Button>
+                          <Button type="submit" disabled={!supported || atLimit || !name.trim() || !recoveryReady} loading={busy}>{t('passkeyAdd')}</Button>
                         </div>
                       </form>}
                     </div>}

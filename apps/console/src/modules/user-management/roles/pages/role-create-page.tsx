@@ -7,7 +7,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@identity/ui/components/card'
-import { Spinner } from '@identity/ui/components/spinner'
 import { useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, Plus, TriangleAlert } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -372,10 +371,8 @@ function RoleCreateForm({
           </Card>
 
           <div className="flex flex-wrap gap-2">
-            <Button type="submit" disabled={pending || disabled}>
-              {pending ? (
-                <Spinner aria-label={t('rolesCreatePending')} />
-              ) : (
+            <Button type="submit" disabled={disabled} loading={pending}>
+              {pending ? null : (
                 <Plus className="size-4" aria-hidden="true" />
               )}
               {t('rolesCreateAction')}

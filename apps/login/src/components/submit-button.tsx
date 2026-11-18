@@ -1,5 +1,4 @@
 import { Button } from '@identity/ui/components/button'
-import { Spinner } from '@identity/ui/components/spinner'
 import { cn } from '@identity/ui/lib/utils'
 import {
   createContext,
@@ -24,13 +23,14 @@ type SubmitButtonProps = Omit<ComponentProps<typeof Button>, 'type'> & {
 
 /**
  * Native submit button wired to the enclosing ProgressiveForm. While the
- * enhanced request is in flight, the clicked button shows a spinner; sibling
- * submit buttons stay dimmed via the form-level `aria-busy` styles.
+ * enhanced request is in flight, all submit buttons in the form are disabled
+ * and the clicked button shows a spinner.
  */
 export function SubmitButton({
   children,
   value,
   fullWidth = false,
+  disabled = false,
   className,
   ...props
 }: SubmitButtonProps) {
@@ -42,12 +42,12 @@ export function SubmitButton({
     <Button
       type="submit"
       value={value}
+      disabled={disabled || isPending}
+      loading={isCurrent}
       data-pending={isCurrent ? '' : undefined}
-      aria-busy={isCurrent || undefined}
       className={cn(fullWidth && 'w-full', className)}
       {...props}
     >
-      {isCurrent ? <Spinner aria-hidden="true" role="presentation" /> : null}
       {children}
     </Button>
   )

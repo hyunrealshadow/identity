@@ -4,7 +4,6 @@ import {
   AlertTitle,
 } from '@identity/ui/components/alert'
 import { Button } from '@identity/ui/components/button'
-import { Spinner } from '@identity/ui/components/spinner'
 import { CircleAlert, CircleCheck, TriangleAlert } from 'lucide-react'
 
 import { ErrorDetails } from '#/components/error-details'
@@ -71,12 +70,9 @@ export function RbacMutationFeedback({
             <Button
               size="sm"
               variant="outline"
-              disabled={reloadPending}
+              loading={reloadPending}
               onClick={onReload}
             >
-              {reloadPending ? (
-                <Spinner aria-label={t('rbacReloading')} />
-              ) : null}
               {t('rbacReload')}
             </Button>
           </div>

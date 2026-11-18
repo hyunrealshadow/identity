@@ -1,7 +1,6 @@
 import { Button } from '@identity/ui/components/button'
 import { Field, FieldLabel } from '@identity/ui/components/field'
 import { Input } from '@identity/ui/components/input'
-import { Spinner } from '@identity/ui/components/spinner'
 import { createFileRoute, redirect } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { ArrowLeft, CircleAlert, Fingerprint } from 'lucide-react'
@@ -340,10 +339,10 @@ function PasskeySetupPage() {
           <Button
             type="submit"
             className="w-full"
-            disabled={!supported || busy || !name.trim()}
-            aria-busy={busy || undefined}
+            disabled={!supported || !name.trim()}
+            loading={busy}
           >
-            {busy ? <Spinner aria-hidden="true" role="presentation" /> : <Fingerprint aria-hidden="true" />}
+            {busy ? null : <Fingerprint aria-hidden="true" />}
             {t('passkeySetupCreate')}
           </Button>
           <p className="no-js-only text-xs text-muted-foreground">{t('passkeyRequiresJavascript')}</p>

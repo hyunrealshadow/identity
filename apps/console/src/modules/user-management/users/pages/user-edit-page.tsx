@@ -4,7 +4,6 @@ import {
   AlertTitle,
 } from '@identity/ui/components/alert'
 import { Button } from '@identity/ui/components/button'
-import { Spinner } from '@identity/ui/components/spinner'
 import { useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, Save, TriangleAlert } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -591,11 +590,10 @@ export function UserEditPage({ userId }: { userId: string }) {
             <div className="flex flex-wrap items-center gap-2 border-t border-border pt-5">
               <Button
                 type="submit"
-                disabled={pending || !dirty || !versionReady}
+                disabled={!dirty || !versionReady}
+                loading={pending}
               >
-                {pending ? (
-                  <Spinner aria-label={t('usersEditPending')} />
-                ) : (
+                {pending ? null : (
                   <Save className="size-4" aria-hidden="true" />
                 )}
                 {t('usersEditSaveAction')}

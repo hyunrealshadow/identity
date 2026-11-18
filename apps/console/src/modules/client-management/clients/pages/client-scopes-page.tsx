@@ -4,7 +4,6 @@ import {
   AlertTitle,
 } from '@identity/ui/components/alert'
 import { Button } from '@identity/ui/components/button'
-import { Spinner } from '@identity/ui/components/spinner'
 import { Switch } from '@identity/ui/components/switch'
 import { DataTable } from '@identity/ui/data-table'
 import { Info, Save, TriangleAlert } from 'lucide-react'
@@ -454,10 +453,8 @@ export function ClientScopesPage() {
           {dirty ? (
             <span className="text-xs text-muted-foreground">{t('clientsScopesUnsaved')}</span>
           ) : null}
-          <Button disabled={pending || !dirty} onClick={() => void save()}>
-            {pending ? (
-              <Spinner aria-label={t('working')} />
-            ) : (
+          <Button disabled={!dirty} loading={pending} onClick={() => void save()}>
+            {pending ? null : (
               <Save className="size-4" aria-hidden="true" />
             )}
             {t('clientsScopesSave')}

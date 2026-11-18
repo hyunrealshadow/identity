@@ -330,19 +330,7 @@ details[open] > .appearance-menu {
   transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-[data-slot="button"][data-pending] {
-  cursor: progress;
-}
-
-/* Busy progressive form: freeze every submit, dim the inactive ones. */
-.progressive-form[aria-busy="true"] [data-slot="button"][type="submit"] {
-  pointer-events: none;
-}
-
-.progressive-form[aria-busy="true"] [data-slot="button"][type="submit"]:not([data-pending]) {
-  opacity: 0.55;
-}
-
+/* Busy progressive form: keep inputs non-editable while preserving their submitted values. */
 .progressive-form[aria-busy="true"] :is(input, textarea) {
   pointer-events: none;
 }
