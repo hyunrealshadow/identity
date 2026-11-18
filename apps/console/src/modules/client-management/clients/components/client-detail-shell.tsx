@@ -11,7 +11,7 @@ import { createContext, useContext, useMemo } from 'react'
 
 import { AsyncState } from '#/components/async-state'
 import { useBreadcrumbLabel } from '#/components/app-breadcrumbs'
-import { CopyButton } from '#/components/copy-button'
+import { CopyableValue } from '#/components/copy-button'
 import {
   ConsoleClientDocument,
   type ConsoleClientQuery,
@@ -59,14 +59,14 @@ const tabs: ReadonlyArray<{
     | '/clients/$clientId/credentials'
     | '/clients/$clientId/scopes'
     | '/clients/$clientId/advanced'
-    | '/clients/$clientId/metadata'
+    | '/clients/$clientId/endpoints'
   label: MessageKey
   match: (path: string) => boolean
 }> = [
   {
     to: '/clients/$clientId',
     label: 'clientsTabGeneral',
-    match: (path) => !/\/(integration|credentials|scopes|advanced|metadata)$/u.test(path),
+    match: (path) => !/\/(integration|credentials|scopes|advanced|endpoints)$/u.test(path),
   },
   {
     to: '/clients/$clientId/integration',
@@ -89,9 +89,9 @@ const tabs: ReadonlyArray<{
     match: (path) => path.endsWith('/advanced'),
   },
   {
-    to: '/clients/$clientId/metadata',
-    label: 'clientsTabMetadata',
-    match: (path) => path.endsWith('/metadata'),
+    to: '/clients/$clientId/endpoints',
+    label: 'clientsTabEndpoints',
+    match: (path) => path.endsWith('/endpoints'),
   },
 ]
 
@@ -162,8 +162,7 @@ export function ClientDetailShell({ clientId }: { clientId: string }) {
           {client ? (
             <div className="flex min-w-0 items-center gap-1 text-muted-foreground">
               <span className="text-xs">{t('clientsClientId')}</span>
-              <code className="break-all text-xs">{client.id}</code>
-              <CopyButton value={client.id} label={t('clientsClientId')} />
+              <CopyableValue value={client.id} label={t('clientsClientId')} />
             </div>
           ) : loading ? (
             <Skeleton className="h-4 w-80 rounded-lg" />

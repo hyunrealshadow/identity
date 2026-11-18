@@ -1,6 +1,7 @@
+import { cn } from '@identity/ui/lib/utils'
 import { NumberedPagination } from '#/components/numbered-pagination'
 import { TableRowActions } from '#/components/table-row-actions'
-import { CopyButton } from '#/components/copy-button'
+import { CopyableValue } from '#/components/copy-button'
 import { DataTable } from '@identity/ui/data-table'
 import { Badge } from '@identity/ui/components/badge'
 import { Undo2, X } from 'lucide-react'
@@ -179,21 +180,15 @@ export function RolePermissionTable({
                     </span>
                     <PermissionBuiltInChip builtIn={row.builtIn} />
                   </div>
-                  <div className="flex items-center gap-1">
-                    <span
-                      className={
-                        removed
-                          ? 'mt-0.5 block break-all font-mono text-[11px] text-muted-foreground line-through'
-                          : 'mt-0.5 block break-all font-mono text-[11px] text-muted-foreground'
-                      }
-                    >
-                      {row.code}
-                    </span>
-                    <CopyButton
-                      value={row.code}
-                      label={t('permissionCodeLabel')}
-                    />
-                  </div>
+                  <CopyableValue
+                    value={row.code}
+                    label={t('permissionCodeLabel')}
+                    className="mt-0.5"
+                    valueClassName={cn(
+                      'text-[11px]',
+                      removed && 'text-muted-foreground line-through',
+                    )}
+                  />
                 </DataTable.Cell>
                 <DataTable.Cell className="py-2">
                   <span

@@ -26,7 +26,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
 import { useBreadcrumbLabel } from '#/components/app-breadcrumbs'
-import { CopyButton } from '#/components/copy-button'
+import { CopyableValue } from '#/components/copy-button'
 import { ErrorDetails } from '#/components/error-details'
 import { LocalizedTextField } from '#/components/localized-text-field'
 import { PageHeader } from '#/components/page-header'
@@ -479,13 +479,11 @@ export function PermissionDetailPage({
                   <dt className="mb-2 text-sm text-muted-foreground">
                     {t('permissionsColumnPermission')}
                   </dt>
-                  <dd className="flex items-center gap-1">
-                    <code className="break-all text-sm">
-                      {readyPermission.code}
-                    </code>
-                    <CopyButton
+                  <dd>
+                    <CopyableValue
                       value={readyPermission.code}
                       label={t('permissionCodeLabel')}
+                      size="sm"
                     />
                   </dd>
                 </div>

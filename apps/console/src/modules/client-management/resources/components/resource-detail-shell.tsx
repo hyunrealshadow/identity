@@ -11,7 +11,7 @@ import { ArrowLeft } from 'lucide-react'
 import { createContext, useContext, useMemo } from 'react'
 import { AsyncState } from '#/components/async-state'
 import { useBreadcrumbLabel } from '#/components/app-breadcrumbs'
-import { CopyButton } from '#/components/copy-button'
+import { CopyableValue } from '#/components/copy-button'
 import {
   ConsoleResourceDocument,
   type ConsoleResourceQuery,
@@ -100,10 +100,7 @@ export function ResourceDetailShell({ resourceId }: { resourceId: string }) {
             ) : null}
           </div>
           {resource ? (
-            <div className="flex min-w-0 items-center gap-1 text-muted-foreground">
-              <code className="break-all text-xs">{resource.uri}</code>
-              <CopyButton value={resource.uri} label={t('audienceLabel')} />
-            </div>
+            <CopyableValue value={resource.uri} label={t('audienceLabel')} />
           ) : null}
         </div>
       </header>

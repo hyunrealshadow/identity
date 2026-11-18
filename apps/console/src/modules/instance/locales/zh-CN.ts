@@ -113,6 +113,7 @@ const messages = {
   keysRevokeSigningDescription:
     '此密钥将从发布的密钥集中移除，其签署的令牌无法通过验证。指定此算法的客户端将无法获取令牌，除非另有同算法密钥。此操作不可恢复',
   keysRevokeEncryptionDescription: '此密钥保护的数据将无法读取，相关会话和令牌随之失效。此操作不可恢复',
+  keysSignInAgainNotice: '完成后将重新登录控制台',
   keysRotatedToast: '密钥已轮换',
   keysRotatedAndRevokedToast: '密钥已轮换，旧密钥已撤销',
   keysRevokedToast: '密钥已撤销',

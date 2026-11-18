@@ -17,7 +17,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { AccountAvatar } from '#/components/account-avatar'
 import { useBreadcrumbLabel } from '#/components/app-breadcrumbs'
 import { AsyncState } from '#/components/async-state'
-import { CopyButton } from '#/components/copy-button'
+import { CopyableValue } from '#/components/copy-button'
 import { ErrorDetails } from '#/components/error-details'
 import { RequestCorrelation } from '#/components/request-correlation'
 import { StepUpPanel } from '#/components/step-up-panel'
@@ -254,10 +254,12 @@ export function UserDetailLayout({
             {user ? (
               <div className="flex min-w-0 flex-col justify-center self-stretch border-l border-border pl-6">
                 <p className="text-xs text-muted-foreground">{t('usersUserIdLabel')}</p>
-                <div className="flex min-w-0 items-center gap-1">
-                  <code className="break-all text-sm">{user.id}</code>
-                  <CopyButton value={user.id} label={t('usersUserIdLabel')} />
-                </div>
+                <CopyableValue
+                  value={user.id}
+                  label={t('usersUserIdLabel')}
+                  size="sm"
+                  className="mt-1 self-start"
+                />
               </div>
             ) : null}
           </div>

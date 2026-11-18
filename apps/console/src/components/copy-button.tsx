@@ -1,9 +1,18 @@
 import { Button } from '@identity/ui/components/button'
+import { cn } from '@identity/ui/lib/utils'
 import { Check, Copy } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useTranslator } from '#/lib/i18n'
 
-export function CopyButton({ value, label }: { value: string; label: string }) {
+export function CopyButton({
+  value,
+  label,
+  className,
+}: {
+  value: string
+  label: string
+  className?: string
+}) {
   const t = useTranslator()
   const [status, setStatus] = useState<'idle' | 'copied' | 'failed'>('idle')
   const [pending, setPending] = useState(false)
@@ -28,7 +37,7 @@ export function CopyButton({ value, label }: { value: string; label: string }) {
         type="button"
         size="icon-xs"
         variant="ghost"
-        className="shrink-0"
+        className={cn('shrink-0', className)}
         aria-label={t('copyValue', { label })}
         disabled={pending}
         onClick={async () => {
@@ -57,6 +66,61 @@ export function CopyButton({ value, label }: { value: string; label: string }) {
           {feedback}
         </span>
       ) : null}
+    </span>
+  )
+}
+
+/**
+ * A copyable value and its copy button on one tinted surface, so everything a
+ * person can copy reads the same across Console. `inline` hugs the value for
+ * table cells and headers; `block` fills its row for values that stand alone.
+ * `children` replaces the displayed text, for example with a link, while the
+ * copied text is always `value`.
+ */
+export function CopyableValue({
+  value,
+  label,
+  children,
+  layout = 'inline',
+  size = 'xs',
+  wrap = 'break',
+  className,
+  valueClassName,
+}: {
+  value: string
+  label: string
+  children?: ReactNode
+  layout?: 'inline' | 'block'
+  size?: 'xs' | 'sm'
+  /** `truncate` keeps one line and shows the full value on hover. */
+  wrap?: 'break' | 'truncate'
+  className?: string
+  valueClassName?: string
+}) {
+  return (
+    <span
+      className={cn(
+        'max-w-full min-w-0 items-center gap-1 rounded-md bg-muted py-0.5 pr-0.5 pl-2 text-foreground',
+        layout === 'block' ? 'flex w-full py-1.5 pl-3' : 'inline-flex',
+        className,
+      )}
+    >
+      <code
+        className={cn(
+          'min-w-0 flex-1 font-mono',
+          size === 'sm' ? 'text-sm' : 'text-xs',
+          wrap === 'truncate' ? 'truncate' : 'break-all',
+          valueClassName,
+        )}
+        title={wrap === 'truncate' ? value : undefined}
+      >
+        {children ?? value}
+      </code>
+      <CopyButton
+        value={value}
+        label={label}
+        className="self-start not-disabled:hover:bg-background dark:not-disabled:hover:bg-background/60"
+      />
     </span>
   )
 }

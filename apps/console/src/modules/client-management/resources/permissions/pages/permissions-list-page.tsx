@@ -3,7 +3,7 @@ import { Button } from '@identity/ui/components/button'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { useMemo } from 'react'
 import { AsyncState } from '#/components/async-state'
-import { CopyButton } from '#/components/copy-button'
+import { CopyableValue } from '#/components/copy-button'
 import { CursorPagination } from '#/components/cursor-pagination'
 import { ResourceTable, type ResourceColumn } from '#/components/resource-table'
 import { type ConsoleResourcePermissionsQueryVariables } from '#/generated/graphql'
@@ -262,17 +262,19 @@ export function PermissionsListPage({
                 render: (permission) => (
                   <div className="min-w-48">
                     <div className="flex items-center gap-2">
-                      <Link
-                        to="/resources/$resourceId/permissions/$permissionId"
-                        params={{ resourceId, permissionId: permission.id }}
-                        className="font-mono text-sm hover:underline"
-                      >
-                        {permission.code}
-                      </Link>
-                      <CopyButton
+                      <CopyableValue
                         value={permission.code}
                         label={t('permissionCodeLabel')}
-                      />
+                        size="sm"
+                      >
+                        <Link
+                          to="/resources/$resourceId/permissions/$permissionId"
+                          params={{ resourceId, permissionId: permission.id }}
+                          className="hover:underline"
+                        >
+                          {permission.code}
+                        </Link>
+                      </CopyableValue>
                       {!readOnly ? (
                         <PermissionBuiltInChip builtIn={permission.builtIn} />
                       ) : null}

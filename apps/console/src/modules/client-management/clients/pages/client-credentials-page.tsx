@@ -19,7 +19,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 
 import { AsyncState } from '#/components/async-state'
 import { ConfirmationDialog } from '#/components/confirmation-dialog'
-import { CopyButton } from '#/components/copy-button'
+import { CopyableValue } from '#/components/copy-button'
 import { DatePickerField } from '#/components/date-picker-field'
 import { TableRowActions } from '#/components/table-row-actions'
 import {
@@ -392,17 +392,13 @@ export function ClientCredentialsPage() {
             return (
               <DataTable.Row key={credential.id} id={credential.id}>
                 <DataTable.Cell>
-                  <div className="flex min-w-0 items-center gap-1">
-                    <code
-                      className="min-w-0 break-all font-mono text-xs"
-                      title={credential.type === 'CLIENT_SECRET' ? undefined : credential.hint}
-                    >
-                      {label}
-                    </code>
-                    {credential.type === 'CLIENT_SECRET' ? null : (
-                      <CopyButton value={credential.hint} label={t(current.column)} />
-                    )}
-                  </div>
+                  {credential.type === 'CLIENT_SECRET' ? (
+                    <code className="min-w-0 break-all font-mono text-xs">{label}</code>
+                  ) : (
+                    <CopyableValue value={credential.hint} label={t(current.column)}>
+                      <span title={credential.hint}>{label}</span>
+                    </CopyableValue>
+                  )}
                 </DataTable.Cell>
                 <DataTable.Cell>
                   <CredentialStatus credential={credential} />
@@ -512,10 +508,12 @@ export function ClientCredentialsPage() {
             </Alert>
             {issued ? (
               <>
-                <div className="flex items-start gap-1 rounded-lg bg-muted p-3">
-                  <code className="min-w-0 flex-1 break-all text-sm">{issued.secret}</code>
-                  <CopyButton value={issued.secret} label={t('clientsSecret')} />
-                </div>
+                <CopyableValue
+                  value={issued.secret}
+                  label={t('clientsSecret')}
+                  layout="block"
+                  size="sm"
+                />
                 {issued.expiresAt ? (
                   <p className="text-xs text-muted-foreground">
                     {t('clientsSecretIssuedExpires', {

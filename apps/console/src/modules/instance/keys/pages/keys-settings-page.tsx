@@ -16,7 +16,7 @@ import { useMemo, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
 import { ConfirmationDialog } from '#/components/confirmation-dialog'
-import { CopyButton } from '#/components/copy-button'
+import { CopyableValue } from '#/components/copy-button'
 import { CursorPagination } from '#/components/cursor-pagination'
 import { ResourceTable, type ResourceColumn } from '#/components/resource-table'
 import { TableRowActions, type TableRowAction } from '#/components/table-row-actions'
@@ -32,6 +32,7 @@ import {
   type ConsoleSigningKeyAlgorithmsQueryVariables,
   type KeyUse,
 } from '#/generated/graphql'
+import { useAuth } from '#/lib/auth/context'
 import { formatDateTime } from '#/lib/format'
 import { failureDescriptionKey, failureTitleKey } from '#/lib/graphql/presentation'
 import { useConsoleQuery } from '#/lib/graphql/use-console-query'
@@ -112,6 +113,7 @@ function KeysSection({ use, search }: { use: KeyUse; search: KeysSearch }) {
   const { locale, timeZone } = useLocale()
   const navigate = useNavigate()
   const { keys: scope } = useInstanceSettings()
+  const { signIn } = useAuth()
   const copy = COPY[use]
   const mutations = useKeyMutations()
   const confirmDialog = useOverlayState()
@@ -193,6 +195,12 @@ function KeysSection({ use, search }: { use: KeyUse; search: KeysSearch }) {
               : 'keysRevokedToast',
         ),
       )
+      // The change can end the tokens and sessions this console holds, and a
+      // rotation moves signing to the new key. Sign in again right away, so
+      // the page continues on a session the new key set issued instead of
+      // failing on the next request. An SSO session that survived returns
+      // here without a prompt.
+      void signIn()
     } catch {
       setFeedback(networkFeedback(`${action}_key_request_failed`))
     } finally {
@@ -250,10 +258,7 @@ function KeysSection({ use, search }: { use: KeyUse; search: KeysSearch }) {
       label: t('keysColumnKeyId'),
       primary: true,
       render: (key) => (
-        <div className="flex min-w-0 items-center gap-1">
-          <code className="break-all rounded-md bg-muted px-1.5 py-0.5 text-xs">{key.keyId}</code>
-          <CopyButton value={key.keyId} label={t('keysColumnKeyId')} />
-        </div>
+        <CopyableValue value={key.keyId} label={t('keysColumnKeyId')} />
       ),
     },
     {
@@ -351,10 +356,7 @@ function KeysSection({ use, search }: { use: KeyUse; search: KeysSearch }) {
             <div className="mt-1.5 flex h-7 min-w-0 items-center gap-1">
               <span className="text-xs text-muted-foreground">{t('keysJwksUri')}</span>
               {jwksUri ? (
-                <>
-                  <code className="truncate rounded-md bg-muted px-1.5 py-0.5 text-xs">{jwksUri}</code>
-                  <CopyButton value={jwksUri} label={t('keysJwksUri')} />
-                </>
+                <CopyableValue value={jwksUri} label={t('keysJwksUri')} wrap="truncate" />
               ) : (
                 <Skeleton className="h-5 w-72 rounded-md" />
               )}
@@ -437,9 +439,12 @@ function KeysSection({ use, search }: { use: KeyUse; search: KeysSearch }) {
         onConfirm={() => void confirm()}
       >
         {target ? (
-          <code className="break-all rounded-md bg-muted px-1.5 py-0.5 text-xs">
-            {target.key.keyId}
-          </code>
+          <div className="space-y-2">
+            <code className="break-all rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs">
+              {target.key.keyId}
+            </code>
+            <p className="text-muted-foreground">{t('keysSignInAgainNotice')}</p>
+          </div>
         ) : null}
       </ConfirmationDialog>
       {signing && scope.create ? (

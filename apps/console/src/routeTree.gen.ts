@@ -36,8 +36,8 @@ import { Route as AppuserManagementUsersNewRouteImport } from './routes/_app/(us
 import { Route as AppclientManagementClientsClientIdIndexRouteImport } from './routes/_app/(client-management)/clients/$clientId/index'
 import { Route as AppclientManagementClientsClientIdAdvancedRouteImport } from './routes/_app/(client-management)/clients/$clientId/advanced'
 import { Route as AppclientManagementClientsClientIdCredentialsRouteImport } from './routes/_app/(client-management)/clients/$clientId/credentials'
+import { Route as AppclientManagementClientsClientIdEndpointsRouteImport } from './routes/_app/(client-management)/clients/$clientId/endpoints'
 import { Route as AppclientManagementClientsClientIdIntegrationRouteImport } from './routes/_app/(client-management)/clients/$clientId/integration'
-import { Route as AppclientManagementClientsClientIdMetadataRouteImport } from './routes/_app/(client-management)/clients/$clientId/metadata'
 import { Route as AppclientManagementClientsClientIdScopesRouteImport } from './routes/_app/(client-management)/clients/$clientId/scopes'
 import { Route as AppclientManagementResourcesResourceIdIndexRouteImport } from './routes/_app/(client-management)/resources/$resourceId/index'
 import { Route as AppuserManagementGroupsGroupIdIndexRouteImport } from './routes/_app/(user-management)/groups/$groupId/index'
@@ -213,16 +213,16 @@ const AppclientManagementClientsClientIdCredentialsRoute =
     path: '/credentials',
     getParentRoute: () => AppclientManagementClientsClientIdRouteRoute,
   } as any)
+const AppclientManagementClientsClientIdEndpointsRoute =
+  AppclientManagementClientsClientIdEndpointsRouteImport.update({
+    id: '/endpoints',
+    path: '/endpoints',
+    getParentRoute: () => AppclientManagementClientsClientIdRouteRoute,
+  } as any)
 const AppclientManagementClientsClientIdIntegrationRoute =
   AppclientManagementClientsClientIdIntegrationRouteImport.update({
     id: '/integration',
     path: '/integration',
-    getParentRoute: () => AppclientManagementClientsClientIdRouteRoute,
-  } as any)
-const AppclientManagementClientsClientIdMetadataRoute =
-  AppclientManagementClientsClientIdMetadataRouteImport.update({
-    id: '/metadata',
-    path: '/metadata',
     getParentRoute: () => AppclientManagementClientsClientIdRouteRoute,
   } as any)
 const AppclientManagementClientsClientIdScopesRoute =
@@ -356,8 +356,8 @@ export interface FileRoutesByFullPath {
   '/users/': typeof AppuserManagementUsersIndexRoute
   '/clients/$clientId/advanced': typeof AppclientManagementClientsClientIdAdvancedRoute
   '/clients/$clientId/credentials': typeof AppclientManagementClientsClientIdCredentialsRoute
+  '/clients/$clientId/endpoints': typeof AppclientManagementClientsClientIdEndpointsRoute
   '/clients/$clientId/integration': typeof AppclientManagementClientsClientIdIntegrationRoute
-  '/clients/$clientId/metadata': typeof AppclientManagementClientsClientIdMetadataRoute
   '/clients/$clientId/scopes': typeof AppclientManagementClientsClientIdScopesRoute
   '/groups/$groupId/members': typeof AppuserManagementGroupsGroupIdMembersRoute
   '/groups/$groupId/roles': typeof AppuserManagementGroupsGroupIdRolesRoute
@@ -397,8 +397,8 @@ export interface FileRoutesByTo {
   '/users': typeof AppuserManagementUsersIndexRoute
   '/clients/$clientId/advanced': typeof AppclientManagementClientsClientIdAdvancedRoute
   '/clients/$clientId/credentials': typeof AppclientManagementClientsClientIdCredentialsRoute
+  '/clients/$clientId/endpoints': typeof AppclientManagementClientsClientIdEndpointsRoute
   '/clients/$clientId/integration': typeof AppclientManagementClientsClientIdIntegrationRoute
-  '/clients/$clientId/metadata': typeof AppclientManagementClientsClientIdMetadataRoute
   '/clients/$clientId/scopes': typeof AppclientManagementClientsClientIdScopesRoute
   '/groups/$groupId/members': typeof AppuserManagementGroupsGroupIdMembersRoute
   '/groups/$groupId/roles': typeof AppuserManagementGroupsGroupIdRolesRoute
@@ -446,8 +446,8 @@ export interface FileRoutesById {
   '/_app/(user-management)/users/': typeof AppuserManagementUsersIndexRoute
   '/_app/(client-management)/clients/$clientId/advanced': typeof AppclientManagementClientsClientIdAdvancedRoute
   '/_app/(client-management)/clients/$clientId/credentials': typeof AppclientManagementClientsClientIdCredentialsRoute
+  '/_app/(client-management)/clients/$clientId/endpoints': typeof AppclientManagementClientsClientIdEndpointsRoute
   '/_app/(client-management)/clients/$clientId/integration': typeof AppclientManagementClientsClientIdIntegrationRoute
-  '/_app/(client-management)/clients/$clientId/metadata': typeof AppclientManagementClientsClientIdMetadataRoute
   '/_app/(client-management)/clients/$clientId/scopes': typeof AppclientManagementClientsClientIdScopesRoute
   '/_app/(user-management)/groups/$groupId/members': typeof AppuserManagementGroupsGroupIdMembersRoute
   '/_app/(user-management)/groups/$groupId/roles': typeof AppuserManagementGroupsGroupIdRolesRoute
@@ -495,8 +495,8 @@ export interface FileRouteTypes {
     | '/users/'
     | '/clients/$clientId/advanced'
     | '/clients/$clientId/credentials'
+    | '/clients/$clientId/endpoints'
     | '/clients/$clientId/integration'
-    | '/clients/$clientId/metadata'
     | '/clients/$clientId/scopes'
     | '/groups/$groupId/members'
     | '/groups/$groupId/roles'
@@ -536,8 +536,8 @@ export interface FileRouteTypes {
     | '/users'
     | '/clients/$clientId/advanced'
     | '/clients/$clientId/credentials'
+    | '/clients/$clientId/endpoints'
     | '/clients/$clientId/integration'
-    | '/clients/$clientId/metadata'
     | '/clients/$clientId/scopes'
     | '/groups/$groupId/members'
     | '/groups/$groupId/roles'
@@ -584,8 +584,8 @@ export interface FileRouteTypes {
     | '/_app/(user-management)/users/'
     | '/_app/(client-management)/clients/$clientId/advanced'
     | '/_app/(client-management)/clients/$clientId/credentials'
+    | '/_app/(client-management)/clients/$clientId/endpoints'
     | '/_app/(client-management)/clients/$clientId/integration'
-    | '/_app/(client-management)/clients/$clientId/metadata'
     | '/_app/(client-management)/clients/$clientId/scopes'
     | '/_app/(user-management)/groups/$groupId/members'
     | '/_app/(user-management)/groups/$groupId/roles'
@@ -803,18 +803,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppclientManagementClientsClientIdCredentialsRouteImport
       parentRoute: typeof AppclientManagementClientsClientIdRouteRoute
     }
+    '/_app/(client-management)/clients/$clientId/endpoints': {
+      id: '/_app/(client-management)/clients/$clientId/endpoints'
+      path: '/endpoints'
+      fullPath: '/clients/$clientId/endpoints'
+      preLoaderRoute: typeof AppclientManagementClientsClientIdEndpointsRouteImport
+      parentRoute: typeof AppclientManagementClientsClientIdRouteRoute
+    }
     '/_app/(client-management)/clients/$clientId/integration': {
       id: '/_app/(client-management)/clients/$clientId/integration'
       path: '/integration'
       fullPath: '/clients/$clientId/integration'
       preLoaderRoute: typeof AppclientManagementClientsClientIdIntegrationRouteImport
-      parentRoute: typeof AppclientManagementClientsClientIdRouteRoute
-    }
-    '/_app/(client-management)/clients/$clientId/metadata': {
-      id: '/_app/(client-management)/clients/$clientId/metadata'
-      path: '/metadata'
-      fullPath: '/clients/$clientId/metadata'
-      preLoaderRoute: typeof AppclientManagementClientsClientIdMetadataRouteImport
       parentRoute: typeof AppclientManagementClientsClientIdRouteRoute
     }
     '/_app/(client-management)/clients/$clientId/scopes': {
@@ -966,8 +966,8 @@ const AppinstanceSettingsRouteRouteWithChildren =
 interface AppclientManagementClientsClientIdRouteRouteChildren {
   AppclientManagementClientsClientIdAdvancedRoute: typeof AppclientManagementClientsClientIdAdvancedRoute
   AppclientManagementClientsClientIdCredentialsRoute: typeof AppclientManagementClientsClientIdCredentialsRoute
+  AppclientManagementClientsClientIdEndpointsRoute: typeof AppclientManagementClientsClientIdEndpointsRoute
   AppclientManagementClientsClientIdIntegrationRoute: typeof AppclientManagementClientsClientIdIntegrationRoute
-  AppclientManagementClientsClientIdMetadataRoute: typeof AppclientManagementClientsClientIdMetadataRoute
   AppclientManagementClientsClientIdScopesRoute: typeof AppclientManagementClientsClientIdScopesRoute
   AppclientManagementClientsClientIdIndexRoute: typeof AppclientManagementClientsClientIdIndexRoute
 }
@@ -978,10 +978,10 @@ const AppclientManagementClientsClientIdRouteRouteChildren: AppclientManagementC
       AppclientManagementClientsClientIdAdvancedRoute,
     AppclientManagementClientsClientIdCredentialsRoute:
       AppclientManagementClientsClientIdCredentialsRoute,
+    AppclientManagementClientsClientIdEndpointsRoute:
+      AppclientManagementClientsClientIdEndpointsRoute,
     AppclientManagementClientsClientIdIntegrationRoute:
       AppclientManagementClientsClientIdIntegrationRoute,
-    AppclientManagementClientsClientIdMetadataRoute:
-      AppclientManagementClientsClientIdMetadataRoute,
     AppclientManagementClientsClientIdScopesRoute:
       AppclientManagementClientsClientIdScopesRoute,
     AppclientManagementClientsClientIdIndexRoute:

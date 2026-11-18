@@ -302,7 +302,7 @@ mutation ConsoleSetClientScopes($input: SetClientScopesInput!) {
   }
 }
 
-query ConsoleClientMetadata {
+query ConsoleClientEndpoints {
   instanceMetadata {
     issuer
     openidConfigurationUrl

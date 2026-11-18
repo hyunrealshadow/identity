@@ -4,7 +4,7 @@ import { Plus } from 'lucide-react'
 import { useMemo } from 'react'
 
 import { AsyncState } from '#/components/async-state'
-import { CopyButton } from '#/components/copy-button'
+import { CopyableValue } from '#/components/copy-button'
 import { CursorPagination } from '#/components/cursor-pagination'
 import { PageHeader } from '#/components/page-header'
 import { ResourceTable } from '#/components/resource-table'
@@ -247,10 +247,7 @@ export function ClientsListPage({ search }: { search: ClientsSearch }) {
                   id: 'clientId',
                   label: t('clientsClientId'),
                   render: (client) => (
-                    <div className="flex items-center gap-1">
-                      <code className="break-all text-xs">{client.id}</code>
-                      <CopyButton value={client.id} label={t('clientsClientId')} />
-                    </div>
+                    <CopyableValue value={client.id} label={t('clientsClientId')} />
                   ),
                 },
                 {

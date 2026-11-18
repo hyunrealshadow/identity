@@ -1,5 +1,5 @@
 import { TableRowActions } from '#/components/table-row-actions'
-import { CopyButton } from '#/components/copy-button'
+import { CopyableValue } from '#/components/copy-button'
 import { Badge } from '@identity/ui/components/badge'
 import { Button } from '@identity/ui/components/button'
 import { Link, useNavigate } from '@tanstack/react-router'
@@ -237,13 +237,7 @@ export function ResourcesListPage({ search }: { search: ResourcesSearch }) {
                   label: t('resourcesIdentifier'),
                   sort: 'URI',
                   render: (resource) => (
-                    <div className="flex items-center gap-1">
-                      <code className="break-all text-xs">{resource.uri}</code>
-                      <CopyButton
-                        value={resource.uri}
-                        label={t('audienceLabel')}
-                      />
-                    </div>
+                    <CopyableValue value={resource.uri} label={t('audienceLabel')} />
                   ),
                 },
                 {

@@ -119,6 +119,7 @@ const messages = {
     'The key leaves the published key set and tokens it signed stop validating. Clients that ask for its algorithm cannot get tokens unless another key has it. This cannot be undone.',
   keysRevokeEncryptionDescription:
     'Data protected by this key can no longer be read, so the sessions and tokens it protected end. This cannot be undone.',
+  keysSignInAgainNotice: 'Console signs you in again afterwards.',
   keysRotatedToast: 'Key rotated',
   keysRotatedAndRevokedToast: 'Key rotated and the previous key revoked',
   keysRevokedToast: 'Key revoked',

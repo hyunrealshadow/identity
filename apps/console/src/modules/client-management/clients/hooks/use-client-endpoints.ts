@@ -1,20 +1,20 @@
 import { useMemo } from 'react'
 
 import {
-  ConsoleClientMetadataDocument,
-  type ConsoleClientMetadataQuery,
-  type ConsoleClientMetadataQueryVariables,
+  ConsoleClientEndpointsDocument,
+  type ConsoleClientEndpointsQuery,
+  type ConsoleClientEndpointsQueryVariables,
 } from '#/generated/graphql'
 import type { GraphQLFailure, GraphQLIssue } from '#/lib/graphql/transport'
 import { useConsoleQuery } from '#/lib/graphql/use-console-query'
 
-export type ClientMetadata = NonNullable<
-  ConsoleClientMetadataQuery['instanceMetadata']
+export type ClientEndpoints = NonNullable<
+  ConsoleClientEndpointsQuery['instanceMetadata']
 >
 
-export interface ClientMetadataState {
+export interface ClientEndpointsState {
   status: 'loading' | 'ready' | 'error'
-  data: ClientMetadata | null
+  data: ClientEndpoints | null
   errors: GraphQLIssue[]
   failure?: GraphQLFailure
   requestId?: string
@@ -26,13 +26,13 @@ export interface ClientMetadataState {
  * Endpoint URLs this client uses, taken from the provider's discovery data so
  * the tab cannot drift from what the well-known documents publish.
  */
-export function useClientMetadata(): ClientMetadataState {
-  const variables = useMemo<ConsoleClientMetadataQueryVariables>(() => ({}), [])
+export function useClientEndpoints(): ClientEndpointsState {
+  const variables = useMemo<ConsoleClientEndpointsQueryVariables>(() => ({}), [])
   const query = useConsoleQuery<
-    ConsoleClientMetadataQuery,
-    ConsoleClientMetadataQueryVariables
+    ConsoleClientEndpointsQuery,
+    ConsoleClientEndpointsQueryVariables
   >(
-    ConsoleClientMetadataDocument,
+    ConsoleClientEndpointsDocument,
     variables,
     true,
     'missing_instance_metadata',

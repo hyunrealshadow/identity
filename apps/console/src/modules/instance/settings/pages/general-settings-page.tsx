@@ -1,4 +1,4 @@
-import { CopyButton } from '#/components/copy-button'
+import { CopyableValue } from '#/components/copy-button'
 import {
   SettingsGroup,
   SettingsGroupSkeleton,
@@ -11,10 +11,7 @@ import { useInstanceSettings, useSettingsBlocker } from '../components/settings-
 function AddressValue({ value, label }: { value: string | null | undefined; label: string }) {
   if (!value) return null
   return (
-    <div className="flex min-w-0 items-center gap-1">
-      <code className="break-all text-xs">{value}</code>
-      <CopyButton value={value} label={label} />
-    </div>
+    <CopyableValue value={value} label={label} />
   )
 }
 

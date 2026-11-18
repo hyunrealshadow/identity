@@ -759,10 +759,10 @@ export type ConsoleSetClientScopesMutationVariables = Exact<{
 
 export type ConsoleSetClientScopesMutation = { setClientScopes: { clientId: string, version: string, scopeIds: Array<string>, clientGrantedScopeIds: Array<string> } };
 
-export type ConsoleClientMetadataQueryVariables = Exact<{ [key: string]: never; }>;
+export type ConsoleClientEndpointsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type ConsoleClientMetadataQuery = { instanceMetadata: { issuer: string, openidConfigurationUrl: string, oauthAuthorizationServerMetadataUrl: string, jwksUri: string, authorizationEndpoint: string, tokenEndpoint: string | null, pushedAuthorizationRequestEndpoint: string | null, userinfoEndpoint: string | null, deviceAuthorizationEndpoint: string | null, revocationEndpoint: string, introspectionEndpoint: string, endSessionEndpoint: string | null, checkSessionIframe: string | null, registrationEndpoint: string | null } };
+export type ConsoleClientEndpointsQuery = { instanceMetadata: { issuer: string, openidConfigurationUrl: string, oauthAuthorizationServerMetadataUrl: string, jwksUri: string, authorizationEndpoint: string, tokenEndpoint: string | null, pushedAuthorizationRequestEndpoint: string | null, userinfoEndpoint: string | null, deviceAuthorizationEndpoint: string | null, revocationEndpoint: string, introspectionEndpoint: string, endSessionEndpoint: string | null, checkSessionIframe: string | null, registrationEndpoint: string | null } };
 
 export type ConsoleClientMetadataOptionsQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -1804,8 +1804,8 @@ export const ConsoleSetClientScopesDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<ConsoleSetClientScopesMutation, ConsoleSetClientScopesMutationVariables>;
-export const ConsoleClientMetadataDocument = new TypedDocumentString(`
-    query ConsoleClientMetadata {
+export const ConsoleClientEndpointsDocument = new TypedDocumentString(`
+    query ConsoleClientEndpoints {
   instanceMetadata {
     issuer
     openidConfigurationUrl
@@ -1823,7 +1823,7 @@ export const ConsoleClientMetadataDocument = new TypedDocumentString(`
     registrationEndpoint
   }
 }
-    `) as unknown as TypedDocumentString<ConsoleClientMetadataQuery, ConsoleClientMetadataQueryVariables>;
+    `) as unknown as TypedDocumentString<ConsoleClientEndpointsQuery, ConsoleClientEndpointsQueryVariables>;
 export const ConsoleClientMetadataOptionsDocument = new TypedDocumentString(`
     query ConsoleClientMetadataOptions {
   clientMetadataOptions {

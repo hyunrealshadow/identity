@@ -1,6 +1,6 @@
 import { Skeleton } from '@identity/ui/components/skeleton'
 import { AsyncState } from '#/components/async-state'
-import { CopyButton } from '#/components/copy-button'
+import { CopyableValue } from '#/components/copy-button'
 import { useLocale, useTranslator } from '#/lib/i18n'
 import { formatDateTime } from '#/lib/format'
 import { useResourceContext } from '../components/resource-detail-shell'
@@ -29,9 +29,8 @@ export function ResourceDetailPage() {
       </div>
       <div>
         <dt className="mb-2 text-sm text-muted-foreground">{t('resourcesIdentifier')}</dt>
-        <dd className="flex items-center gap-1">
-          <code className="break-all text-sm">{resource.uri}</code>
-          <CopyButton value={resource.uri} label={t('audienceLabel')} />
+        <dd>
+          <CopyableValue value={resource.uri} label={t('audienceLabel')} size="sm" />
         </dd>
       </div>
       <div>

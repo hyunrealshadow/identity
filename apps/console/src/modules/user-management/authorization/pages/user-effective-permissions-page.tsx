@@ -8,7 +8,7 @@ import { TriangleAlert } from 'lucide-react'
 import { useMemo } from 'react'
 
 import { AsyncState } from '#/components/async-state'
-import { CopyButton } from '#/components/copy-button'
+import { CopyableValue } from '#/components/copy-button'
 import { CursorPagination } from '#/components/cursor-pagination'
 import { CollectionToolbar, ResourceTable } from '#/components/resource-table'
 import {
@@ -323,7 +323,11 @@ export function UserEffectivePermissionsPage({
                       : undefined
                   return (
                     <div className="min-w-48">
-                      <div className="flex items-center gap-1">
+                      <CopyableValue
+                        value={row.code}
+                        label={t('permissionCodeLabel')}
+                        size="sm"
+                      >
                         {scope.permissionRead ? (
                           <Link
                             to="/resources/$resourceId/permissions/$permissionId"
@@ -331,18 +335,12 @@ export function UserEffectivePermissionsPage({
                               resourceId: row.resourceId,
                               permissionId: row.id,
                             }}
-                            className="font-mono text-sm hover:underline"
+                            className="hover:underline"
                           >
                             {row.code}
                           </Link>
-                        ) : (
-                          <span className="font-mono text-sm">{row.code}</span>
-                        )}
-                        <CopyButton
-                          value={row.code}
-                          label={t('permissionCodeLabel')}
-                        />
-                      </div>
+                        ) : null}
+                      </CopyableValue>
                       {name && name !== row.code ? (
                         <p className="mt-1 text-xs text-muted-foreground">{name}</p>
                       ) : null}
