@@ -1,21 +1,11 @@
 import { Button } from '@identity/ui/components/button'
-import {
-  Field,
-  FieldDescription,
-  FieldLabel,
-} from '@identity/ui/components/field'
-import {
-  RadioGroup,
-  RadioGroupItem,
-} from '@identity/ui/components/radio-group'
 import { Spinner } from '@identity/ui/components/spinner'
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowLeft, Plus } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Plus } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { LocalizedTextField } from '#/components/localized-text-field'
-import { SettingsGroup, SettingsRow } from '#/components/settings-section'
 import { PageHeader } from '#/components/page-header'
+import { Stepper } from '#/components/stepper'
 import { clearDraft, readDraft, writeDraft } from '#/lib/draft-storage'
 import { useTranslator, type MessageKey } from '#/lib/i18n'
 import {
@@ -29,25 +19,31 @@ import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-
 import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
 import type { RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
-import {
-  PublicClientFlowRow,
-  CorsRow,
-  GrantTypeRows,
-  ParRow,
-  RedirectUriRows,
-} from '../components/client-settings-fields'
+import { CreateAccessStep } from '../components/create/create-access-step'
+import { CreateDetailsStep } from '../components/create/create-details-step'
+import { CLIENT_KINDS, CreateKindStep } from '../components/create/create-kind-step'
+import { CreateRedirectsStep } from '../components/create/create-redirects-step'
+import { CREATE_STEP_LABELS, CreateReviewStep } from '../components/create/create-review-step'
 import { useClientMutations } from '../hooks/client-mutations'
 import {
   clientFieldErrors,
-  settingsForKind,
   kindUsesSecret,
+  settingsForKind,
   settingsInput,
-  validateSettings,
   type ClientFieldErrors,
   type ClientKind,
   type ClientSettingsDraft,
 } from '../lib/client-form'
 import { clientScope } from '../lib/client-scope'
+import {
+  reachableStep,
+  stepForField,
+  stepsFor,
+  validateStep,
+  type CreateDraftShape,
+  type CreateSearch,
+  type CreateStep,
+} from '../lib/create-steps'
 
 const DRAFT_KEY = 'identity.console.client-create.draft'
 
@@ -57,16 +53,17 @@ interface CreateDraft {
   settings: ClientSettingsDraft
 }
 
-const KINDS: ReadonlyArray<{ id: ClientKind; label: MessageKey; hint: MessageKey }> = [
-  { id: 'web', label: 'clientsKindWeb', hint: 'clientsKindWebHint' },
-  { id: 'spa', label: 'clientsKindSpa', hint: 'clientsKindSpaHint' },
-  { id: 'native', label: 'clientsKindNative', hint: 'clientsKindNativeHint' },
-  { id: 'machine', label: 'clientsKindMachine', hint: 'clientsKindMachineHint' },
-]
+const STEP_HINTS: Record<CreateStep, MessageKey> = {
+  kind: 'clientsCreateStepKindHint',
+  details: 'clientsCreateStepDetailsHint',
+  redirects: 'clientsCreateStepRedirectsHint',
+  access: 'clientsCreateStepAccessHint',
+  review: 'clientsCreateStepReviewHint',
+}
 
 function restoreDraft(): CreateDraft {
   const stored = readDraft<Partial<CreateDraft>>(DRAFT_KEY)
-  const kind = KINDS.some((entry) => entry.id === stored?.kind)
+  const kind = CLIENT_KINDS.some((entry) => entry.id === stored?.kind)
     ? (stored?.kind as ClientKind)
     : 'web'
   return {
@@ -76,9 +73,13 @@ function restoreDraft(): CreateDraft {
   }
 }
 
+function shapeOf(draft: CreateDraft): CreateDraftShape {
+  return { kind: draft.kind, name: draft.text.name, settings: draft.settings }
+}
+
 const noErrors: ClientFieldErrors = { settings: {}, text: {} }
 
-export function ClientCreatePage() {
+export function ClientCreatePage({ search }: { search: CreateSearch }) {
   const t = useTranslator()
   const navigate = useNavigate()
   const workspace = useWorkspace()
@@ -90,13 +91,43 @@ export function ClientCreatePage() {
   const submitting = useRef(false)
   const [draft, setDraft] = useState<CreateDraft>(restoreDraft)
   const [errors, setErrors] = useState<ClientFieldErrors>(noErrors)
-  const [nameError, setNameError] = useState<MessageKey | null>(null)
   const [feedback, setFeedback] = useState<RbacFeedbackState | null>(null)
   const [pending, setPending] = useState(false)
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  const draftRef = useRef(draft)
+  draftRef.current = draft
 
   useEffect(() => {
     writeDraft(DRAFT_KEY, draft)
   }, [draft])
+
+  const requested = search.step ?? 'kind'
+  // Opening a later step (a bookmark, a reload, a hand-edited address) stops
+  // at the first earlier step that is not finished. It is checked when the
+  // address changes, not on every edit, so changing a setting never moves
+  // the person off the step they are on.
+  const step = useMemo(
+    () => reachableStep(requested, shapeOf(draftRef.current)),
+    [requested],
+  )
+  useEffect(() => {
+    if (search.step && step !== search.step) {
+      void navigate({ to: '/clients/new', search: { step }, replace: true })
+    }
+  }, [navigate, search.step, step])
+
+  const firstRender = useRef(true)
+  useEffect(() => {
+    if (firstRender.current) {
+      firstRender.current = false
+      return
+    }
+    headingRef.current?.focus()
+  }, [step])
+
+  const shape = shapeOf(draft)
+  const steps = stepsFor(shape)
+  const index = Math.max(0, steps.indexOf(step))
 
   const header = (
     <PageHeader
@@ -135,21 +166,54 @@ export function ClientCreatePage() {
     setDraft((current) => ({ ...current, ...next }))
     setFeedback(null)
     setErrors(noErrors)
-    setNameError(null)
+  }
+
+  function changeKind(kind: ClientKind) {
+    // Keep entered addresses; reset only the kind-specific defaults.
+    const preset = settingsForKind(kind)
+    update({
+      kind,
+      settings: {
+        ...preset,
+        webRedirectUris: draft.settings.webRedirectUris,
+        nativeRedirectUris: draft.settings.nativeRedirectUris,
+        postLogoutRedirectUris: draft.settings.postLogoutRedirectUris,
+      },
+    })
+  }
+
+  function goTo(target: CreateStep) {
+    setFeedback(null)
+    void navigate({ to: '/clients/new', search: { step: target } })
+  }
+
+  function showLocalErrors(local: ReturnType<typeof validateStep>) {
+    const { name, ...settings } = local
+    setErrors({
+      settings: Object.fromEntries(
+        Object.entries(settings).map(([field, key]) => [field, t(key)]),
+      ),
+      text: name ? { name: t(name) } : {},
+    })
+  }
+
+  function next() {
+    const local = validateStep(step, shape)
+    if (Object.keys(local).length > 0) {
+      showLocalErrors(local)
+      return
+    }
+    const following = steps[index + 1]
+    if (following) goTo(following)
   }
 
   async function submit() {
     if (submitting.current) return
-    const local = validateSettings(draft.settings)
-    const missingName = draft.text.name.trim() === ''
-    if (missingName || Object.keys(local).length > 0) {
-      setNameError(missingName ? 'clientsNameRequired' : null)
-      setErrors({
-        settings: Object.fromEntries(
-          Object.entries(local).map(([field, key]) => [field, t(key)]),
-        ),
-        text: {},
-      })
+    const local = validateStep('review', shape)
+    if (Object.keys(local).length > 0) {
+      showLocalErrors(local)
+      const target = Object.keys(local).map(stepForField).find(Boolean)
+      if (target) goTo(target)
       return
     }
     submitting.current = true
@@ -166,7 +230,8 @@ export function ClientCreatePage() {
       })
       const payload = result.data?.createClient ?? null
       if (!payload) {
-        setErrors(clientFieldErrors(result.errors))
+        const fieldErrors = clientFieldErrors(result.errors)
+        setErrors(fieldErrors)
         setFeedback({
           errors: result.errors,
           failure: result.failure ?? {
@@ -180,14 +245,19 @@ export function ClientCreatePage() {
           traceId: result.traceId,
           forbidden: result.forbidden,
         })
+        // Lead back to the step that shows the first rejected field.
+        const target = [...Object.keys(fieldErrors.text), ...Object.keys(fieldErrors.settings)]
+          .map(stepForField)
+          .find(Boolean)
+        if (target && target !== step) {
+          void navigate({ to: '/clients/new', search: { step: target } })
+        }
         return
       }
       clearDraft(DRAFT_KEY)
       const needsSecret = kindUsesSecret(draft.kind)
       toast.success(t('clientsCreatedToast'), {
-        description: t(
-          needsSecret ? 'clientsCreatedNeedsSecret' : 'clientsCreatedCommitted',
-        ),
+        description: t(needsSecret ? 'clientsCreatedNeedsSecret' : 'clientsCreatedCommitted'),
       })
       void navigate({
         to:
@@ -209,8 +279,9 @@ export function ClientCreatePage() {
     }
   }
 
-  const fieldProps = {
-    draft: draft.settings,
+  const last = step === 'review'
+  const settingsProps = {
+    settings: draft.settings,
     onChange: (settings: ClientSettingsDraft) => update({ settings }),
     errors: errors.settings,
     isDisabled: pending,
@@ -220,133 +291,109 @@ export function ClientCreatePage() {
     <div className="w-full">
       {header}
       <ConsoleWorkspaceGate>
-        <div className="space-y-4">
-          {feedback ? <RbacMutationFeedback feedback={feedback} /> : null}
+        <div className="space-y-6">
+          <Stepper
+            label={t('clientsCreateStepsLabel')}
+            steps={steps.map((id) => ({ id, label: t(CREATE_STEP_LABELS[id]) }))}
+            current={step}
+            progress={t('clientsCreateStepProgress', {
+              current: index + 1,
+              total: steps.length,
+            })}
+            canSelect={(id) =>
+              !pending &&
+              (steps.indexOf(id) < index || reachableStep(id, shape) === id)
+            }
+            onSelect={goTo}
+          />
           <form
             noValidate
             aria-busy={pending}
+            aria-labelledby="client-create-step-title"
             onSubmit={(event) => {
               event.preventDefault()
-              void submit()
+              if (last) void submit()
+              else next()
             }}
             className="space-y-6"
           >
-            <SettingsGroup title={t('clientsKind')}>
-              <SettingsRow description={t('clientsKindHint')}>
-                <RadioGroup
-                  name="client-kind"
-                  aria-label={t('clientsKind')}
-                  value={draft.kind}
-                  disabled={pending}
-                  onValueChange={(value: string) => {
-                    const kind = value as ClientKind
-                    // Keep entered addresses; reset only the kind-specific defaults.
-                    const preset = settingsForKind(kind)
-                    update({
-                      kind,
-                      settings: {
-                        ...preset,
-                        webRedirectUris: draft.settings.webRedirectUris,
-                        nativeRedirectUris: draft.settings.nativeRedirectUris,
-                        postLogoutRedirectUris: draft.settings.postLogoutRedirectUris,
-                      },
-                    })
-                  }}
-                >
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {KINDS.map((kind) => (
-                      <Field key={kind.id} orientation="horizontal">
-                        <RadioGroupItem
-                          value={kind.id}
-                          id={`client-kind-${kind.id}`}
-                        />
-                        <div className="min-w-0">
-                          <FieldLabel
-                            htmlFor={`client-kind-${kind.id}`}
-                            className="font-normal"
-                          >
-                            {t(kind.label)}
-                          </FieldLabel>
-                          <FieldDescription>{t(kind.hint)}</FieldDescription>
-                        </div>
-                      </Field>
-                    ))}
-                  </div>
-                </RadioGroup>
-              </SettingsRow>
-            </SettingsGroup>
-            <SettingsGroup title={t('clientsBasicSection')}>
-              <SettingsRow>
-                <LocalizedTextField
-                  name="names"
-                  label={t('localizedName')}
-                  defaultValue={draft.text.name}
-                  onDefaultValueChange={(name) =>
-                    update({ text: { ...draft.text, name } })
-                  }
-                  value={draft.text.names}
-                  onChange={(names) => update({ text: { ...draft.text, names } })}
-                  isDisabled={pending}
-                  isRequired
-                  maxLength={256}
-                  error={
-                    nameError ? t(nameError) : (errors.text.name ?? errors.text.names)
-                  }
-                />
-              </SettingsRow>
-              <SettingsRow>
-                <LocalizedTextField
-                  name="descriptions"
-                  label={t('localizedDescription')}
-                  defaultValue={draft.text.description}
-                  onDefaultValueChange={(description) =>
-                    update({ text: { ...draft.text, description } })
-                  }
-                  value={draft.text.descriptions}
-                  onChange={(descriptions) =>
-                    update({ text: { ...draft.text, descriptions } })
-                  }
-                  isDisabled={pending}
-                  multiline
-                  maxLength={1024}
-                  error={errors.text.description ?? errors.text.descriptions}
-                />
-              </SettingsRow>
-            </SettingsGroup>
-            <SettingsGroup title={t('clientsRedirectSection')}>
-              <RedirectUriRows {...fieldProps} />
-            </SettingsGroup>
-            <SettingsGroup title={t('clientsCorsSection')}>
-              <CorsRow {...fieldProps} />
-            </SettingsGroup>
-            <SettingsGroup title={t('clientsGrantTypes')}>
-              <GrantTypeRows {...fieldProps} />
-            </SettingsGroup>
-            <SettingsGroup
-              title={t('clientsPublicClientSection')}
-              description={t('clientsPublicClientSectionHint')}
-            >
-              <PublicClientFlowRow {...fieldProps} />
-            </SettingsGroup>
-            <SettingsGroup title={t('clientsAuthorizationRequestsSection')}>
-              <ParRow {...fieldProps} />
-            </SettingsGroup>
-            <div className="flex flex-wrap justify-end gap-2">
-              <Button type="submit" disabled={pending}>
-                {pending ? (
-                  <Spinner aria-label={t('clientsCreatePending')} />
-                ) : (
-                  <Plus className="size-4" aria-hidden="true" />
-                )}
-                {t('clientsCreateAction')}
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={pending}
-                onClick={() => void navigate({ to: '/clients' })}
+            <div>
+              <h2
+                id="client-create-step-title"
+                ref={headingRef}
+                tabIndex={-1}
+                className="text-lg font-semibold tracking-tight outline-none"
               >
-                {t('cancel')}
+                {t(CREATE_STEP_LABELS[step])}
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                {t(STEP_HINTS[step])}
+              </p>
+            </div>
+            {feedback ? <RbacMutationFeedback feedback={feedback} /> : null}
+
+            {step === 'kind' ? (
+              <CreateKindStep kind={draft.kind} onChange={changeKind} isDisabled={pending} />
+            ) : step === 'details' ? (
+              <CreateDetailsStep
+                text={draft.text}
+                onChange={(text) => update({ text })}
+                nameError={errors.text.name ?? errors.text.names}
+                descriptionError={errors.text.description ?? errors.text.descriptions}
+                isDisabled={pending}
+              />
+            ) : step === 'redirects' ? (
+              <CreateRedirectsStep kind={draft.kind} {...settingsProps} />
+            ) : step === 'access' ? (
+              <CreateAccessStep {...settingsProps} />
+            ) : (
+              <CreateReviewStep
+                kind={draft.kind}
+                text={draft.text}
+                settings={draft.settings}
+                steps={steps}
+                onEdit={goTo}
+                isDisabled={pending}
+              />
+            )}
+
+            <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border pt-6">
+              {index === 0 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={pending}
+                  onClick={() => void navigate({ to: '/clients' })}
+                >
+                  {t('cancel')}
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={pending}
+                  onClick={() => goTo(steps[index - 1] ?? 'kind')}
+                >
+                  <ArrowLeft aria-hidden="true" />
+                  {t('clientsCreatePrevious')}
+                </Button>
+              )}
+              <Button type="submit" disabled={pending}>
+                {last ? (
+                  <>
+                    {pending ? (
+                      <Spinner aria-label={t('clientsCreatePending')} />
+                    ) : (
+                      <Plus aria-hidden="true" />
+                    )}
+                    {t('clientsCreateAction')}
+                  </>
+                ) : (
+                  <>
+                    {t('clientsCreateNext')}
+                    <ArrowRight aria-hidden="true" />
+                  </>
+                )}
               </Button>
             </div>
           </form>

@@ -56,7 +56,7 @@ function setter(draft: ClientSettingsDraft, onChange: FieldsProps['onChange']) {
     onChange({ ...draft, [key]: value })
 }
 
-type RedirectRow = 'webRedirectUris' | 'nativeRedirectUris' | 'postLogoutRedirectUris'
+export type RedirectRow = 'webRedirectUris' | 'nativeRedirectUris' | 'postLogoutRedirectUris'
 
 const ALL_REDIRECT_ROWS: readonly RedirectRow[] = [
   'webRedirectUris',

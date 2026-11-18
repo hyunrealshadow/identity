@@ -32,7 +32,8 @@ export function SettingsGroup({
   footer,
   children,
 }: {
-  title: string
+  /** Optional when the surrounding page already names the list. */
+  title?: string
   description?: string
   action?: ReactNode
   tone?: 'default' | 'danger'
@@ -44,15 +45,21 @@ export function SettingsGroup({
   const danger = tone === 'danger'
   return (
     <section>
-      <div className="mb-2 flex min-h-8 items-center justify-between gap-3 px-1">
-        <div className="min-w-0">
-          <h2 className={`text-sm font-semibold ${danger ? 'text-destructive' : ''}`}>{title}</h2>
-          {description ? (
-            <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{description}</p>
-          ) : null}
+      {title || description || action ? (
+        <div className="mb-2 flex min-h-8 items-center justify-between gap-3 px-1">
+          <div className="min-w-0">
+            {title ? (
+              <h2 className={`text-sm font-semibold ${danger ? 'text-destructive' : ''}`}>
+                {title}
+              </h2>
+            ) : null}
+            {description ? (
+              <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{description}</p>
+            ) : null}
+          </div>
+          {action}
         </div>
-        {action}
-      </div>
+      ) : null}
       <div
         className={`divide-y divide-border overflow-hidden rounded-xl border bg-card ${
           danger ? 'console-card-danger border-destructive' : 'console-card border-border'
