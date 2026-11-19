@@ -35,8 +35,8 @@ configuration contains public values only; it does not contain the workload toke
 
 The file is a snapshot: refetch it whenever this repository changes the scopes
 the Console requests, because a stale snapshot silently drops the newer request.
-`scope` must stay `openid profile email account.read management.*`; without
-`account.read` the Console cannot read the operator's account theme and keeps
+`scope` must stay `openid profile email user.read management.*`; without
+`user.read` the Console cannot read the operator's account theme and keeps
 the system palette, and development logs
 `[console] account theme is unavailable`.
 

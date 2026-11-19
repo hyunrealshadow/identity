@@ -152,9 +152,9 @@ impl RoleNode {
     }
 
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::GroupsRead, ManagementTarget::instance()).and(ManagementGuard::new(ManagementScope::GroupRolesRead, ManagementTarget::instance()))",
+        guard = "ManagementGuard::new(ManagementScope::GroupsRead, ManagementTarget::instance()).and(ManagementGuard::new(ManagementScope::RoleAssignmentsRead, ManagementTarget::instance()))",
         directive = access::apply(ManagementGuard::policy(ManagementScope::GroupsRead)),
-        directive = access::apply(ManagementGuard::policy(ManagementScope::GroupRolesRead)),
+        directive = access::apply(ManagementGuard::policy(ManagementScope::RoleAssignmentsRead)),
         complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
     )]
     #[allow(clippy::too_many_arguments)]

@@ -175,7 +175,7 @@ async fn postgres_key_lifecycle_always_keeps_a_key_in_use() {
         let repo = KeyManagementRepositoryImpl::new(db.clone());
         let owner = administrator(
             &db,
-            &[ManagementScope::KeysRotate, ManagementScope::KeysRevoke],
+            &[ManagementScope::KeysWrite, ManagementScope::KeysRevoke],
         )
         .await;
         let original = symmetric_key(&db).await;
@@ -188,7 +188,7 @@ async fn postgres_key_lifecycle_always_keeps_a_key_in_use() {
         );
 
         // Rotation is human-only.
-        let robot = machine(&db, &[ManagementScope::KeysRotate]).await;
+        let robot = machine(&db, &[ManagementScope::KeysWrite]).await;
         let denied = rotate(&db, &robot, original).await.unwrap_err();
         assert!(
             matches!(denied, KeyManagementRepositoryError::Authorization(_)),
@@ -284,7 +284,7 @@ async fn postgres_signing_key_rotation_publishes_new_key_ids() {
     isolated(|db| async move {
         seed::run_all(&db).await.unwrap();
         owner(&db).await;
-        let owner = administrator(&db, &[ManagementScope::KeysRotate]).await;
+        let owner = administrator(&db, &[ManagementScope::KeysWrite]).await;
         let data = AsymmetricKeyGeneratorImpl
             .generate(&AsymmetricKeySpec {
                 algorithm: AsymmetricKeyAlgorithm::EcdsaP256,
@@ -320,7 +320,7 @@ async fn postgres_signing_key_rotation_publishes_new_key_ids() {
         // key in use can be revoked without leaving signing without a key.
         let creator = administrator(
             &db,
-            &[ManagementScope::KeysCreate, ManagementScope::KeysRevoke],
+            &[ManagementScope::KeysWrite, ManagementScope::KeysRevoke],
         )
         .await;
         let repo = KeyManagementRepositoryImpl::new(db.clone());
@@ -389,7 +389,7 @@ async fn postgres_signing_key_rotation_publishes_new_key_ids() {
                     .collect::<Vec<_>>()
             };
         assert_eq!(signing_algorithms(&ps256), ["PS256"]);
-        let rotator = administrator(&db, &[ManagementScope::KeysRotate]).await;
+        let rotator = administrator(&db, &[ManagementScope::KeysWrite]).await;
         let rotated_rsa = rotate(&db, &rotator, ps256.oid).await.unwrap();
         assert_eq!(signing_algorithms(&rotated_rsa.successor), ["PS256"]);
 

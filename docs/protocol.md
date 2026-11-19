@@ -182,7 +182,7 @@ it cannot declare arbitrary API permissions. Registration metadata updates retai
 existing exact scope IDs and cannot turn delegated user authority into a new
 client-credentials grant.
 
-Request selectors such as `account.*`, `session.*` and `management.*` expand only
+Request selectors such as `user.*`, `session.*` and `management.*` expand only
 against registered scopes at the requested resource. A selector can be used at
 any hierarchy level, includes descendants rather than the prefix itself, and
 cannot create a permission. Persistent assignments contain concrete scope IDs,

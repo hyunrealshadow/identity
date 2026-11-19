@@ -29,7 +29,7 @@ function configError(value: unknown): string | undefined {
 
 describe('console runtime configuration', () => {
   it('accepts wildcard selectors at arbitrary prefix depth and rejects malformed ones', () => {
-    expect(validateRuntimeConfig({ ...baseConfig(), scope: 'openid management.user.profile.* account.* session.*' }).scope).toBe('openid management.user.profile.* account.* session.*')
+    expect(validateRuntimeConfig({ ...baseConfig(), scope: 'openid management.user.profile.* user.* session.*' }).scope).toBe('openid management.user.profile.* user.* session.*')
     expect(configError({ ...baseConfig(), scope: 'openid management.*.read' })).toBe('config_invalid_scope')
   })
   it('accepts a separate account center URL without credentials, query, or fragment', () => {

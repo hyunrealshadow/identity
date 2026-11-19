@@ -26,7 +26,7 @@ const messages = {
   clientsNoReadTitle: '无法读取客户端',
   clientsNoReadDescription: '此账户没有 management.client.read，未请求任何客户端',
   clientsCreateNoPermissionTitle: '你无法创建客户端',
-  clientsCreateNoPermissionDescription: '此账户没有 management.client.create',
+  clientsCreateNoPermissionDescription: '此账户没有 management.client.write',
   clientsTabs: '客户端详情',
   clientsTabCredentials: '凭据',
   clientsTabScopes: '权限范围',

@@ -417,7 +417,8 @@ impl GroupManagementRepositoryImpl {
         let txn = self.db.begin().await.map_err(storage)?;
         lock_owner_lifecycle(&txn).await.map_err(storage)?;
         let _actor_permissions =
-            recheck_group_authority(&txn, &command.authority, ManagementScope::GroupsWrite).await?;
+            recheck_group_authority(&txn, &command.authority, ManagementScope::GroupsDelete)
+                .await?;
         let group_id = group_id_by_oid_locked(&txn, command.group_oid).await?;
         let current = load_group_by_id_locked(&txn, group_id).await?;
         if current.built_in {
@@ -490,12 +491,9 @@ impl GroupManagementRepositoryImpl {
     ) -> Result<GroupMembershipMutationResult, GroupManagementRepositoryError> {
         let txn = self.db.begin().await.map_err(storage)?;
         lock_owner_lifecycle(&txn).await.map_err(storage)?;
-        let actor_permissions = recheck_group_authority(
-            &txn,
-            &command.authority,
-            ManagementScope::GroupMembershipsWrite,
-        )
-        .await?;
+        let actor_permissions =
+            recheck_group_authority(&txn, &command.authority, ManagementScope::GroupMembersWrite)
+                .await?;
         let group_id = group_id_by_oid_locked(&txn, command.group_oid).await?;
         let current = load_group_by_id_locked(&txn, group_id).await?;
         check_version(current.version, command.expected_version)?;
@@ -504,8 +502,7 @@ impl GroupManagementRepositoryImpl {
         }
         let proposed = management_scopes_for_group(&txn, group_id).await?;
         ensure_delegation_subset(&actor_permissions, &proposed)?;
-        let actor_oid =
-            require_actor_user(&command.authority, ManagementScope::GroupMembershipsWrite)?;
+        let actor_oid = require_actor_user(&command.authority, ManagementScope::GroupMembersWrite)?;
         let permission_ids = group_permission_ids(&txn, group_id).await?;
         ensure_delegable_permission_ids(
             &txn,
@@ -577,12 +574,9 @@ impl GroupManagementRepositoryImpl {
     ) -> Result<GroupMembershipMutationResult, GroupManagementRepositoryError> {
         let txn = self.db.begin().await.map_err(storage)?;
         lock_owner_lifecycle(&txn).await.map_err(storage)?;
-        let _actor_permissions = recheck_group_authority(
-            &txn,
-            &command.authority,
-            ManagementScope::GroupMembershipsWrite,
-        )
-        .await?;
+        let _actor_permissions =
+            recheck_group_authority(&txn, &command.authority, ManagementScope::GroupMembersWrite)
+                .await?;
         let group_id = group_id_by_oid_locked(&txn, command.group_oid).await?;
         let current = load_group_by_id_locked(&txn, group_id).await?;
         check_version(current.version, command.expected_version)?;
@@ -635,9 +629,12 @@ impl GroupManagementRepositoryImpl {
     ) -> Result<GroupRoleMutationResult, GroupManagementRepositoryError> {
         let txn = self.db.begin().await.map_err(storage)?;
         lock_owner_lifecycle(&txn).await.map_err(storage)?;
-        let actor_permissions =
-            recheck_group_authority(&txn, &command.authority, ManagementScope::GroupRolesWrite)
-                .await?;
+        let actor_permissions = recheck_group_authority(
+            &txn,
+            &command.authority,
+            ManagementScope::RoleAssignmentsWrite,
+        )
+        .await?;
         let group_id = group_id_by_oid_locked(&txn, command.group_oid).await?;
         let current = load_group_by_id_locked(&txn, group_id).await?;
         if current.built_in {
@@ -681,7 +678,8 @@ impl GroupManagementRepositoryImpl {
         }
         let added_scopes = management_scopes_for_roles(&txn, &added_ids).await?;
         ensure_delegation_subset(&actor_permissions, &added_scopes)?;
-        let actor_oid = require_actor_user(&command.authority, ManagementScope::GroupRolesWrite)?;
+        let actor_oid =
+            require_actor_user(&command.authority, ManagementScope::RoleAssignmentsWrite)?;
         let added_permissions = roles_permission_ids(&txn, &added_ids).await?;
         ensure_delegable_permission_ids(
             &txn,

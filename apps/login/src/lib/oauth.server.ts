@@ -30,11 +30,11 @@ import {
 
 const API_RESOURCE = 'urn:identity:graphql'
 const SCOPES =
-  'openid profile email offline_access account.* session.* password.change'
+  'openid profile email offline_access user.* session.* password.change'
 const REAUTHENTICATION_SCOPES = {
   password: 'openid password.change',
-  account: 'openid account.*',
-  mfa: 'openid account.*',
+  account: 'openid user.*',
+  mfa: 'openid user.*',
 } as const
 
 interface TokenResponse {

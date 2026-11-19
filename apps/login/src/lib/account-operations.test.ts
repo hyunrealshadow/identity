@@ -3,7 +3,7 @@ import { preflightAccountAction } from './account-operations'
 
 function access(age: number, mfaEnabled = true) {
   const context = {
-    scopes: ['account.read', 'account.update', 'password.change'], user: true,
+    scopes: ['user.read', 'user.write', 'password.change'], user: true,
     acr: 'aal2', authTime: Math.floor(Date.now() / 1000) - age, mfaEnabled,
   }
   return { default: context, elevated: context }

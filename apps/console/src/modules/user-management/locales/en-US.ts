@@ -50,7 +50,7 @@ const enUS = {
   usersClearFilters: 'Clear filters',
   usersNoReadTitle: 'User records cannot be read',
   usersNoReadWriteOnlyDescription:
-    'This account has user write grants but does not have users.read. No user records were requested, displayed, or inferred. You can still create a user when users.create is granted.',
+    'This account has user write grants but does not have management.user.read. No user records were requested, displayed, or inferred. You can still create a user when management.user.write is granted.',
   usersNoManagementTitle: 'You do not have user management access',
   usersNoManagementDescription:
     'This account can sign in, but it does not have any effective user management permission.',
@@ -60,7 +60,7 @@ const enUS = {
     'After authenticating, return to this page and continue. No action was replayed automatically.',
   usersCreateNoPermissionTitle: 'You cannot create users',
   usersCreateNoPermissionDescription:
-    'This account does not have the users.create permission.',
+    'This account does not have the management.user.write permission.',
   usersCreateOnlyAccessTitle: 'Write-only user access',
   usersCreateReadWarning:
     'This account can create users but cannot read user records. After creation, only the new user ID and version will be shown.',
@@ -236,7 +236,7 @@ const enUS = {
   usersEditCommitted: 'Changes saved.',
   usersEditNoPermissionTitle: 'You cannot edit this user',
   usersEditNoPermissionDescription:
-    'This account does not have the users.update permission.',
+    'This account does not have the management.user.write permission.',
   usersBackToDetail: 'Back to user details',
 
   rbacStepUpTitle: 'Stronger authentication is required',

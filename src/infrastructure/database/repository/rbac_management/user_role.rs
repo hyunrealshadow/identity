@@ -3,10 +3,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use identity_application::rbac::{
-    AssignUserRolesTransaction, AuthorizationSource, EffectiveGroupPermissionSourceRecord,
-    EffectivePermissionPageData, EffectivePermissionPageEntry, EffectivePermissionQuery,
-    EffectivePermissionRecord, EffectivePermissionSourceRecord, InheritedUserRoleRecord,
-    RbacEntityKind, RbacManagementRepositoryError, RevokeUserRolesTransaction, UserRoleGrant,
+    AccountPermissionPageEntry, AccountPermissionQuery, AccountPermissionRecord, AccountRoleGrant,
+    AccountRolePageEntry, AccountRoleQuery, AssignUserRolesTransaction, AuthorizationSource,
+    EffectiveGroupPermissionSourceRecord, EffectivePermissionPageData,
+    EffectivePermissionPageEntry, EffectivePermissionQuery, EffectivePermissionRecord,
+    EffectivePermissionSourceRecord, InheritedUserRoleRecord, RbacEntityKind,
+    RbacManagementRepositoryError, RbacPageData, RevokeUserRolesTransaction, UserRoleGrant,
     UserRoleGrantPageData, UserRoleGrantPageEntry, UserRoleGrantQuery, UserRoleMutationResult,
     UserRolePageData, UserRolePageEntry, UserRoleQuery, UserRoleRecord,
     cursor::{RbacPageDirection, RbacSortKey, RbacTie},
@@ -34,7 +36,7 @@ use super::{
     delegation,
     support::{
         Binds, CursorComparison, corrupt, keyset_condition, not_found, order_is_descending,
-        page_flags, storage, utc,
+        page_flags, parse_localized_metadata, storage, utc,
     },
 };
 
@@ -229,6 +231,191 @@ fn group_grant_select(user_placeholder: &str) -> String {
          JOIN \"role\" r ON r.id = grb.role_id \
          WHERE gm.user_id = {user_placeholder} AND gm.enabled = true AND gm.revoked_at IS NULL"
     )
+}
+
+async fn active_user_id_by_oid<C: ConnectionTrait>(
+    db: &C,
+    user_oid: UserOid,
+) -> Result<Option<i64>, RbacManagementRepositoryError> {
+    let row = db
+        .query_one_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            "SELECT id FROM \"user\" WHERE oid = $1 AND enabled = true",
+            [Uuid::from(user_oid).into()],
+        ))
+        .await
+        .map_err(storage)?;
+    row.map(|row| row.try_get::<i64>("", "id").map_err(storage))
+        .transpose()
+}
+
+fn account_role_union(user_placeholder: &str, source: Option<AuthorizationSource>) -> String {
+    let direct = format!(
+        "SELECT 'direct' AS kind, urb.oid AS tie_oid, urb.created_at AS granted_at, \
+                r.oid AS role_oid, NULL::uuid AS group_oid \
+         FROM user_role urb \
+         JOIN \"role\" r ON r.id = urb.role_id AND r.enabled = true \
+         WHERE urb.user_id = {user_placeholder} \
+           AND urb.enabled = true AND urb.revoked_at IS NULL"
+    );
+    let group = format!(
+        "SELECT 'group' AS kind, grb.oid AS tie_oid, \
+                GREATEST(gm.created_at, grb.created_at) AS granted_at, \
+                r.oid AS role_oid, ug.oid AS group_oid \
+         FROM group_membership gm \
+         JOIN user_group ug ON ug.id = gm.group_id AND ug.enabled = true AND ug.deleted_at IS NULL \
+         JOIN group_role grb ON grb.group_id = ug.id AND grb.enabled = true AND grb.revoked_at IS NULL \
+         JOIN \"role\" r ON r.id = grb.role_id AND r.enabled = true \
+         WHERE gm.user_id = {user_placeholder} \
+           AND gm.enabled = true AND gm.revoked_at IS NULL"
+    );
+    match source {
+        None => format!("{direct} UNION ALL {group}"),
+        Some(AuthorizationSource::Direct) => direct,
+        Some(AuthorizationSource::Group) => group,
+    }
+}
+
+fn account_permission_conditions(
+    user_id: i64,
+    resource_oid: Option<ResourceOid>,
+    source: Option<AuthorizationSource>,
+    binds: &mut Binds,
+) -> Vec<String> {
+    let user_placeholder = binds.push(user_id);
+    let api_resource_placeholder = binds.push(API_RESOURCE);
+    let trusted = ManagementScope::ALL
+        .into_iter()
+        .map(|scope| {
+            let oid = binds.push(rbac::built_in_permission_oid(scope).0);
+            let name = binds.push(scope.name().to_owned());
+            format!("(s.oid = {oid} AND s.code = {name})")
+        })
+        .collect::<Vec<_>>()
+        .join(" OR ");
+    let mut conditions = vec![
+        "res.enabled = true".to_owned(),
+        "s.enabled = true".to_owned(),
+        format!("(res.uri <> {api_resource_placeholder} OR (s.built_in = true AND ({trusted})))"),
+        effective_source_condition(&user_placeholder, source),
+    ];
+    if let Some(resource_oid) = resource_oid {
+        conditions.push(format!(
+            "s.resource_id = {}",
+            binds.push(Uuid::from(resource_oid))
+        ));
+    }
+    conditions
+}
+
+async fn load_direct_permission_sources(
+    txn: &DatabaseTransaction,
+    user_id: i64,
+    permission_ids: &[i64],
+) -> Result<BTreeMap<i64, Vec<EffectivePermissionSourceRecord>>, RbacManagementRepositoryError> {
+    if permission_ids.is_empty() {
+        return Ok(BTreeMap::new());
+    }
+    let mut source_binds = Binds::new();
+    let user_placeholder = source_binds.push(user_id);
+    let placeholders = permission_ids
+        .iter()
+        .map(|id| source_binds.push(*id))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let source_rows = txn
+        .query_all_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            format!(
+                "SELECT urb.oid AS user_role_oid, r.oid AS role_oid, \
+                        rp_membership.scope_id \
+                 FROM user_role urb \
+                 JOIN \"role\" r ON r.id = urb.role_id AND r.enabled = true \
+                 JOIN role_permission rp_membership ON rp_membership.role_id = r.id \
+                 WHERE urb.user_id = {user_placeholder} AND urb.enabled = true \
+                   AND urb.revoked_at IS NULL \
+                   AND rp_membership.scope_id IN ({placeholders})"
+            ),
+            source_binds.into_values(),
+        ))
+        .await
+        .map_err(storage)?;
+    let mut map: BTreeMap<i64, Vec<EffectivePermissionSourceRecord>> = BTreeMap::new();
+    for row in source_rows {
+        let permission_id = row.try_get::<i64>("", "scope_id").map_err(storage)?;
+        let source = EffectivePermissionSourceRecord {
+            user_role_oid: UserRoleOid(row.try_get::<Uuid>("", "user_role_oid").map_err(storage)?),
+            role_oid: RoleOid(row.try_get::<Uuid>("", "role_oid").map_err(storage)?),
+        };
+        map.entry(permission_id).or_default().push(source);
+    }
+    for sources in map.values_mut() {
+        sources.sort_by_key(|source| (source.role_oid.0, source.user_role_oid.0));
+    }
+    Ok(map)
+}
+
+async fn load_group_permission_sources(
+    txn: &DatabaseTransaction,
+    user_id: i64,
+    permission_ids: &[i64],
+) -> Result<BTreeMap<i64, Vec<EffectiveGroupPermissionSourceRecord>>, RbacManagementRepositoryError>
+{
+    let mut group_sources: BTreeMap<i64, Vec<EffectiveGroupPermissionSourceRecord>> =
+        BTreeMap::new();
+    if permission_ids.is_empty() {
+        return Ok(group_sources);
+    }
+    let mut source_binds = Binds::new();
+    let user_placeholder = source_binds.push(user_id);
+    let placeholders = permission_ids
+        .iter()
+        .map(|id| source_binds.push(*id))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let source_rows = txn
+        .query_all_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            format!(
+                "SELECT rp.scope_id, ug.oid AS group_oid, gm.oid AS membership_oid, \
+                        grb.oid AS group_role_oid, r.oid AS role_oid \
+                 FROM group_membership gm \
+                 JOIN user_group ug ON ug.id = gm.group_id AND ug.enabled = true AND ug.deleted_at IS NULL \
+                 JOIN group_role grb ON grb.group_id = ug.id AND grb.enabled = true AND grb.revoked_at IS NULL \
+                 JOIN \"role\" r ON r.id = grb.role_id AND r.enabled = true \
+                 JOIN role_permission rp ON rp.role_id = r.id \
+                 WHERE gm.user_id = {user_placeholder} AND gm.enabled = true AND gm.revoked_at IS NULL \
+                   AND rp.scope_id IN ({placeholders})"
+            ),
+            source_binds.into_values(),
+        ))
+        .await
+        .map_err(storage)?;
+    for row in source_rows {
+        let permission_id = row.try_get::<i64>("", "scope_id").map_err(storage)?;
+        group_sources.entry(permission_id).or_default().push(
+            EffectiveGroupPermissionSourceRecord {
+                group_oid: GroupOid(row.try_get::<Uuid>("", "group_oid").map_err(storage)?),
+                membership_oid: GroupMembershipOid(
+                    row.try_get::<Uuid>("", "membership_oid").map_err(storage)?,
+                ),
+                group_role_oid: GroupRoleOid(
+                    row.try_get::<Uuid>("", "group_role_oid").map_err(storage)?,
+                ),
+                role_oid: RoleOid(row.try_get::<Uuid>("", "role_oid").map_err(storage)?),
+            },
+        );
+    }
+    for sources in group_sources.values_mut() {
+        sources.sort_by_key(|source| {
+            (
+                source.group_oid.0,
+                source.membership_oid.0,
+                source.group_role_oid.0,
+            )
+        });
+    }
+    Ok(group_sources)
 }
 
 impl RbacManagementRepositoryImpl {
@@ -654,97 +841,8 @@ impl RbacManagementRepositoryImpl {
             .map(|row| row.try_get::<i64>("", "id"))
             .collect::<Result<Vec<_>, _>>()
             .map_err(storage)?;
-        let sources = if permission_ids.is_empty() {
-            BTreeMap::new()
-        } else {
-            let mut source_binds = Binds::new();
-            let user_placeholder = source_binds.push(user_id);
-            let placeholders = permission_ids
-                .iter()
-                .map(|id| source_binds.push(*id))
-                .collect::<Vec<_>>()
-                .join(", ");
-            let source_rows = txn
-                .query_all_raw(Statement::from_sql_and_values(
-                    DbBackend::Postgres,
-                    format!(
-                        "SELECT urb.oid AS user_role_oid, r.oid AS role_oid, \
-                                rp_membership.scope_id \
-                         FROM user_role urb \
-                  JOIN \"role\" r ON r.id = urb.role_id AND r.enabled = true \
-                         JOIN role_permission rp_membership ON rp_membership.role_id = r.id \
-                         WHERE urb.user_id = {user_placeholder} AND urb.enabled = true \
-                           AND urb.revoked_at IS NULL \
-                           AND rp_membership.scope_id IN ({placeholders})"
-                    ),
-                    source_binds.into_values(),
-                ))
-                .await
-                .map_err(storage)?;
-            let mut map: BTreeMap<i64, Vec<EffectivePermissionSourceRecord>> = BTreeMap::new();
-            for row in source_rows {
-                let permission_id = row.try_get::<i64>("", "scope_id").map_err(storage)?;
-                let source = EffectivePermissionSourceRecord {
-                    user_role_oid: UserRoleOid(
-                        row.try_get::<Uuid>("", "user_role_oid").map_err(storage)?,
-                    ),
-                    role_oid: RoleOid(row.try_get::<Uuid>("", "role_oid").map_err(storage)?),
-                };
-                map.entry(permission_id).or_default().push(source);
-            }
-            for sources in map.values_mut() {
-                sources.sort_by_key(|source| (source.role_oid.0, source.user_role_oid.0));
-            }
-            map
-        };
-        let mut group_sources: BTreeMap<i64, Vec<EffectiveGroupPermissionSourceRecord>> =
-            BTreeMap::new();
-        if !permission_ids.is_empty() {
-            let mut source_binds = Binds::new();
-            let user_placeholder = source_binds.push(user_id);
-            let placeholders = permission_ids
-                .iter()
-                .map(|id| source_binds.push(*id))
-                .collect::<Vec<_>>()
-                .join(", ");
-            let source_rows = txn.query_all_raw(Statement::from_sql_and_values(
-                DbBackend::Postgres,
-                format!("SELECT rp.scope_id, ug.oid AS group_oid, gm.oid AS membership_oid, \
-                    grb.oid AS group_role_oid, r.oid AS role_oid \
-                    FROM group_membership gm \
-                    JOIN user_group ug ON ug.id = gm.group_id AND ug.enabled = true AND ug.deleted_at IS NULL \
-                    JOIN group_role grb ON grb.group_id = ug.id AND grb.enabled = true AND grb.revoked_at IS NULL \
-                    JOIN \"role\" r ON r.id = grb.role_id AND r.enabled = true \
-                    JOIN role_permission rp ON rp.role_id = r.id \
-                    WHERE gm.user_id = {user_placeholder} AND gm.enabled = true AND gm.revoked_at IS NULL \
-                    AND rp.scope_id IN ({placeholders})"),
-                source_binds.into_values(),
-            )).await.map_err(storage)?;
-            for row in source_rows {
-                let permission_id = row.try_get::<i64>("", "scope_id").map_err(storage)?;
-                group_sources.entry(permission_id).or_default().push(
-                    EffectiveGroupPermissionSourceRecord {
-                        group_oid: GroupOid(row.try_get::<Uuid>("", "group_oid").map_err(storage)?),
-                        membership_oid: GroupMembershipOid(
-                            row.try_get::<Uuid>("", "membership_oid").map_err(storage)?,
-                        ),
-                        group_role_oid: GroupRoleOid(
-                            row.try_get::<Uuid>("", "group_role_oid").map_err(storage)?,
-                        ),
-                        role_oid: RoleOid(row.try_get::<Uuid>("", "role_oid").map_err(storage)?),
-                    },
-                );
-            }
-            for sources in group_sources.values_mut() {
-                sources.sort_by_key(|source| {
-                    (
-                        source.group_oid.0,
-                        source.membership_oid.0,
-                        source.group_role_oid.0,
-                    )
-                });
-            }
-        }
+        let sources = load_direct_permission_sources(&txn, user_id, &permission_ids).await?;
+        let group_sources = load_group_permission_sources(&txn, user_id, &permission_ids).await?;
         let mut items = Vec::with_capacity(rows.len());
         for row in rows {
             let id = row.try_get::<i64>("", "id").map_err(storage)?;
@@ -780,6 +878,301 @@ impl RbacManagementRepositoryImpl {
             has_previous_page,
             has_next_page,
             user_version: version,
+        })
+    }
+
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.operation = "account_roles.count"))]
+    pub(crate) async fn account_role_count(
+        &self,
+        user_oid: UserOid,
+        source: Option<AuthorizationSource>,
+    ) -> Result<u64, RbacManagementRepositoryError> {
+        let Some(user_id) = active_user_id_by_oid(&self.db, user_oid).await? else {
+            return Ok(0);
+        };
+        let mut binds = Binds::new();
+        let user_placeholder = binds.push(user_id);
+        let union_sql = account_role_union(&user_placeholder, source);
+        let row = self
+            .db
+            .query_one_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                format!("SELECT count(*)::bigint AS total_count FROM ({union_sql}) g"),
+                binds.into_values(),
+            ))
+            .await
+            .map_err(storage)?
+            .ok_or_else(corrupt)?;
+        let total = row.try_get::<i64>("", "total_count").map_err(storage)?;
+        u64::try_from(total).map_err(|_| corrupt())
+    }
+
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.operation = "account_roles.list"))]
+    pub(crate) async fn account_role_list(
+        &self,
+        query: AccountRoleQuery,
+    ) -> Result<RbacPageData<AccountRolePageEntry>, RbacManagementRepositoryError> {
+        let Some(user_id) = active_user_id_by_oid(&self.db, query.user_oid).await? else {
+            return Ok(RbacPageData {
+                items: Vec::new(),
+                has_previous_page: false,
+                has_next_page: false,
+            });
+        };
+        let descending = order_is_descending(query.order.is_descending(), query.direction);
+        let ascending = !query.order.is_descending();
+        let mut binds = Binds::new();
+        let user_placeholder = binds.push(user_id);
+        let union_sql = account_role_union(&user_placeholder, query.source);
+        let mut conditions = vec!["1=1".to_owned()];
+        if let Some(after) = &query.after {
+            conditions.push(keyset_condition(
+                "g.granted_at",
+                "g.tie_oid",
+                after,
+                CursorComparison::After,
+                ascending,
+                &mut binds,
+            ));
+        }
+        if let Some(before) = &query.before {
+            conditions.push(keyset_condition(
+                "g.granted_at",
+                "g.tie_oid",
+                before,
+                CursorComparison::Before,
+                ascending,
+                &mut binds,
+            ));
+        }
+        let direction_sql = if descending { "DESC" } else { "ASC" };
+        let limit_placeholder = binds.push((query.limit + 1) as i64);
+        let sql = format!(
+            "SELECT g.* FROM ({union_sql}) g WHERE {} \
+             ORDER BY g.granted_at {direction_sql}, g.tie_oid {direction_sql} LIMIT {limit_placeholder}",
+            conditions.join(" AND ")
+        );
+        let rows = self
+            .db
+            .query_all_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                sql,
+                binds.into_values(),
+            ))
+            .await
+            .map_err(storage)?;
+        let has_more = rows.len() > query.limit;
+        let mut rows = rows;
+        rows.truncate(query.limit);
+        if query.direction == RbacPageDirection::Backward {
+            rows.reverse();
+        }
+        let mut items = Vec::with_capacity(rows.len());
+        for row in rows {
+            let tie_oid = row.try_get::<Uuid>("", "tie_oid").map_err(storage)?;
+            let granted_at = utc(row
+                .try_get::<chrono::DateTime<chrono::FixedOffset>>("", "granted_at")
+                .map_err(storage)?);
+            let role_oid = RoleOid(row.try_get::<Uuid>("", "role_oid").map_err(storage)?);
+            let kind = row.try_get::<String>("", "kind").map_err(storage)?;
+            let grant = match kind.as_str() {
+                "direct" => AccountRoleGrant::Direct {
+                    role_oid,
+                    granted_at,
+                },
+                "group" => AccountRoleGrant::Group {
+                    role_oid,
+                    group_oid: GroupOid(
+                        row.try_get::<Option<Uuid>>("", "group_oid")
+                            .map_err(storage)?
+                            .ok_or_else(corrupt)?,
+                    ),
+                    granted_at,
+                },
+                _ => return Err(corrupt()),
+            };
+            let sort_key = RbacSortKey::CreatedAt {
+                created_at: granted_at,
+                tie: RbacTie::Oid(tie_oid),
+            };
+            items.push(AccountRolePageEntry { sort_key, grant });
+        }
+        let (has_previous_page, has_next_page) = page_flags(
+            query.direction,
+            has_more,
+            query.after.is_some(),
+            query.before.is_some(),
+        );
+        Ok(RbacPageData {
+            items,
+            has_previous_page,
+            has_next_page,
+        })
+    }
+
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.operation = "account_permissions.count"))]
+    pub(crate) async fn account_permission_count(
+        &self,
+        user_oid: UserOid,
+        resource_oid: Option<ResourceOid>,
+        source: Option<AuthorizationSource>,
+    ) -> Result<u64, RbacManagementRepositoryError> {
+        let txn = self.db.begin().await.map_err(storage)?;
+        let Some(user_id) = active_user_id_by_oid(&txn, user_oid).await? else {
+            txn.commit().await.map_err(storage)?;
+            return Ok(0);
+        };
+        let mut binds = Binds::new();
+        let conditions = account_permission_conditions(user_id, resource_oid, source, &mut binds);
+        let row = txn
+            .query_one_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                format!(
+                    "SELECT count(*)::bigint AS total_count \
+                     FROM \"scope\" s \
+                     JOIN resource res ON res.oid = s.resource_id \
+                     WHERE {}",
+                    conditions.join(" AND ")
+                ),
+                binds.into_values(),
+            ))
+            .await
+            .map_err(storage)?
+            .ok_or_else(corrupt)?;
+        let total = u64::try_from(row.try_get::<i64>("", "total_count").map_err(storage)?)
+            .map_err(|_| corrupt())?;
+        txn.commit().await.map_err(storage)?;
+        Ok(total)
+    }
+
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.operation = "account_permissions.list"))]
+    pub(crate) async fn account_permission_list(
+        &self,
+        query: AccountPermissionQuery,
+    ) -> Result<RbacPageData<AccountPermissionPageEntry>, RbacManagementRepositoryError> {
+        let txn = self.db.begin().await.map_err(storage)?;
+        txn.execute_raw(Statement::from_string(
+            DbBackend::Postgres,
+            "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ".to_owned(),
+        ))
+        .await
+        .map_err(storage)?;
+        let Some(user_id) = active_user_id_by_oid(&txn, query.user_oid).await? else {
+            txn.commit().await.map_err(storage)?;
+            return Ok(RbacPageData {
+                items: Vec::new(),
+                has_previous_page: false,
+                has_next_page: false,
+            });
+        };
+        let descending = order_is_descending(query.order.is_descending(), query.direction);
+        let ascending = !query.order.is_descending();
+        let mut binds = Binds::new();
+        let mut conditions =
+            account_permission_conditions(user_id, query.resource_oid, query.source, &mut binds);
+        if let Some(after) = &query.after {
+            conditions.push(keyset_condition(
+                "s.code",
+                "s.id",
+                after,
+                CursorComparison::After,
+                ascending,
+                &mut binds,
+            ));
+        }
+        if let Some(before) = &query.before {
+            conditions.push(keyset_condition(
+                "s.code",
+                "s.id",
+                before,
+                CursorComparison::Before,
+                ascending,
+                &mut binds,
+            ));
+        }
+        let direction_sql = if descending { "DESC" } else { "ASC" };
+        let limit_placeholder = binds.push((query.limit + 1) as i64);
+        let where_sql = conditions.join(" AND ");
+        let sql = format!(
+            "SELECT s.id, s.oid AS permission_oid, s.resource_id, \
+                    res.uri AS resource_uri, res.name AS resource_name, \
+                    s.code, s.name, s.names, s.description, s.descriptions, s.built_in \
+             FROM \"scope\" s \
+             JOIN resource res ON res.oid = s.resource_id \
+             WHERE {where_sql} \
+             ORDER BY s.code {direction_sql}, s.id {direction_sql} LIMIT {limit_placeholder}"
+        );
+        let rows = txn
+            .query_all_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                sql,
+                binds.into_values(),
+            ))
+            .await
+            .map_err(storage)?;
+        let has_more = rows.len() > query.limit;
+        let mut rows = rows;
+        rows.truncate(query.limit);
+        if query.direction == RbacPageDirection::Backward {
+            rows.reverse();
+        }
+        let permission_ids = rows
+            .iter()
+            .map(|row| row.try_get::<i64>("", "id"))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(storage)?;
+        let sources = load_direct_permission_sources(&txn, user_id, &permission_ids).await?;
+        let group_sources = load_group_permission_sources(&txn, user_id, &permission_ids).await?;
+        let mut items = Vec::with_capacity(rows.len());
+        for row in rows {
+            let id = row.try_get::<i64>("", "id").map_err(storage)?;
+            let metadata = parse_localized_metadata(
+                row.try_get::<serde_json::Value>("", "names")
+                    .map_err(storage)?,
+                row.try_get::<serde_json::Value>("", "descriptions")
+                    .map_err(storage)?,
+            )?;
+            let code = row.try_get::<String>("", "code").map_err(storage)?;
+            let record = AccountPermissionRecord {
+                permission_oid: ResourcePermissionOid(
+                    row.try_get::<Uuid>("", "permission_oid").map_err(storage)?,
+                ),
+                resource_oid: ResourceOid(
+                    row.try_get::<Option<Uuid>>("", "resource_id")
+                        .map_err(storage)?
+                        .ok_or_else(corrupt)?,
+                ),
+                resource_uri: row.try_get::<String>("", "resource_uri").map_err(storage)?,
+                resource_name: row
+                    .try_get::<String>("", "resource_name")
+                    .map_err(storage)?,
+                scope: code.clone(),
+                code,
+                name: row.try_get::<String>("", "name").map_err(storage)?,
+                names: metadata.names,
+                description: row.try_get::<String>("", "description").map_err(storage)?,
+                descriptions: metadata.descriptions,
+                built_in: row.try_get::<bool>("", "built_in").map_err(storage)?,
+                sources: sources.get(&id).cloned().unwrap_or_default(),
+                group_sources: group_sources.get(&id).cloned().unwrap_or_default(),
+            };
+            let sort_key = RbacSortKey::Text {
+                value: record.code.clone(),
+                tie: RbacTie::Id(id),
+            };
+            items.push(AccountPermissionPageEntry { sort_key, record });
+        }
+        let (has_previous_page, has_next_page) = page_flags(
+            query.direction,
+            has_more,
+            query.after.is_some(),
+            query.before.is_some(),
+        );
+        txn.commit().await.map_err(storage)?;
+        Ok(RbacPageData {
+            items,
+            has_previous_page,
+            has_next_page,
         })
     }
 

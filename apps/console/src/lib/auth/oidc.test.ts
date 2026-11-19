@@ -104,7 +104,7 @@ describe('authorization request', () => {
       config,
       locale: 'zh-CN',
       returnTo: '/users?filter=a#section',
-      stepUp: { acrValues: 'aal2', maxAge: 0, requiredScopes: ['management.user.update'] },
+      stepUp: { acrValues: 'aal2', maxAge: 0, requiredScopes: ['management.user.write'] },
       loginHint: 'user-a',
       expectedSubject: 'user-a',
       fetchImpl: discoveryFetch(),

@@ -17,6 +17,7 @@ mod user_role;
 
 use async_trait::async_trait;
 use identity_application::rbac::{
+    AccountPermissionPageEntry, AccountPermissionQuery, AccountRolePageEntry, AccountRoleQuery,
     ApiResourceRecord, AssignUserRolesTransaction, AuthorizationSource, ClientScopePageEntry,
     ClientScopeQuery, ClientScopeSetResult, CreateResourceTransaction, CreateRoleTransaction,
     CreateScopeTransaction, EffectivePermissionPageData, EffectivePermissionQuery,
@@ -222,6 +223,38 @@ impl RbacManagementRepository for RbacManagementRepositoryImpl {
         query: EffectivePermissionQuery,
     ) -> Result<EffectivePermissionPageData, RbacManagementRepositoryError> {
         self.effective_list(query).await
+    }
+
+    async fn count_account_roles(
+        &self,
+        user_oid: UserOid,
+        source: Option<AuthorizationSource>,
+    ) -> Result<u64, RbacManagementRepositoryError> {
+        self.account_role_count(user_oid, source).await
+    }
+
+    async fn list_account_roles(
+        &self,
+        query: AccountRoleQuery,
+    ) -> Result<RbacPageData<AccountRolePageEntry>, RbacManagementRepositoryError> {
+        self.account_role_list(query).await
+    }
+
+    async fn count_account_permissions(
+        &self,
+        user_oid: UserOid,
+        resource_oid: Option<ResourceOid>,
+        source: Option<AuthorizationSource>,
+    ) -> Result<u64, RbacManagementRepositoryError> {
+        self.account_permission_count(user_oid, resource_oid, source)
+            .await
+    }
+
+    async fn list_account_permissions(
+        &self,
+        query: AccountPermissionQuery,
+    ) -> Result<RbacPageData<AccountPermissionPageEntry>, RbacManagementRepositoryError> {
+        self.account_permission_list(query).await
     }
 
     async fn assign_user_roles(

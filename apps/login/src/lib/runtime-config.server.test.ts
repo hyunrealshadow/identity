@@ -222,4 +222,78 @@ describe('login runtime configuration', () => {
       reason: 'invalid-secret-expiry',
     })
   })
+
+  it('loads the Console HTTPS URL on cold start including its path segment', async () => {
+    vi.stubEnv('IDENTITY_WORKLOAD_TOKEN', 'workload-token-with-32-characters-minimum')
+    vi.stubEnv('IDENTITY_INTERNAL_API_URL', 'https://identity.internal:5151')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            ...runtimeConfiguration,
+            applications: {
+              ...runtimeConfiguration.applications,
+              console_domain: 'https://identity.example/console',
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      ),
+    )
+
+    const { loadConsoleUrl } = await importModule()
+
+    await expect(loadConsoleUrl()).resolves.toBe('https://identity.example/console')
+  })
+
+  it('returns undefined when console_domain is missing or non-HTTPS', async () => {
+    vi.stubEnv('IDENTITY_WORKLOAD_TOKEN', 'workload-token-with-32-characters-minimum')
+    vi.stubEnv('IDENTITY_INTERNAL_API_URL', 'https://identity.internal:5151')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof globalThis.fetch>().mockResolvedValueOnce(
+        new Response(JSON.stringify(runtimeConfiguration), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        }),
+      ),
+    )
+
+    const { loadConsoleUrl } = await importModule()
+    await expect(loadConsoleUrl()).resolves.toBeUndefined()
+
+    vi.resetModules()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof globalThis.fetch>().mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            ...runtimeConfiguration,
+            applications: {
+              ...runtimeConfiguration.applications,
+              console_domain: 'http://identity.example/console',
+            },
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        ),
+      ),
+    )
+
+    const { loadConsoleUrl: loadNonHttpsConsoleUrl } = await importModule()
+    await expect(loadNonHttpsConsoleUrl()).resolves.toBeUndefined()
+  })
+
+  it('returns undefined without throwing when runtime configuration is unavailable', async () => {
+    vi.stubEnv('IDENTITY_WORKLOAD_TOKEN', 'workload-token-with-32-characters-minimum')
+    vi.stubEnv('IDENTITY_INTERNAL_API_URL', 'https://identity.internal:5151')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response(null, { status: 503 })),
+    )
+
+    const { loadConsoleUrl } = await importModule()
+
+    await expect(loadConsoleUrl()).resolves.toBeUndefined()
+  })
 })

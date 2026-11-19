@@ -210,7 +210,7 @@ async fn machine_access_token_introspects_with_the_client_subject() {
         .create(
             Uuid::nil(),
             ClientAuthorizationData::AccessToken(AccessTokenData {
-                scope: "account.read".to_owned(),
+                scope: "user.read".to_owned(),
                 resources: Vec::new(),
                 user_oid: None,
                 principal: AccessTokenPrincipal::Client,
@@ -253,7 +253,7 @@ async fn machine_access_token_introspects_with_the_client_subject() {
             client: &client,
             user: None,
             protected_session_id: None,
-            scope: "account.read",
+            scope: "user.read",
             auth_time: None,
             acr: None,
             amr: &[],
@@ -264,7 +264,7 @@ async fn machine_access_token_introspects_with_the_client_subject() {
     let result = service.introspect_token(request(token)).await.unwrap();
     assert_eq!(result["active"], true);
     assert_eq!(result["sub"], client_id);
-    assert_eq!(result["scope"], "account.read");
+    assert_eq!(result["scope"], "user.read");
 }
 
 #[tokio::test]

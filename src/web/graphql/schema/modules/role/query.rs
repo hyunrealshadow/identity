@@ -4,9 +4,7 @@ use async_graphql::{
     connection::{Connection, Edge},
 };
 use identity_application::{authorization::ManagementTarget, rbac::EffectivePermissionPageRequest};
-use identity_domain::{
-    authorization::ManagementScope, openid_connect::ApiScope, rbac::ResourceOid, user::UserOid,
-};
+use identity_domain::{authorization::ManagementScope, rbac::ResourceOid, user::UserOid};
 
 use super::{
     connection::{EffectivePermissionConnection, EffectivePermissionEdge},
@@ -19,7 +17,7 @@ use super::{
 };
 use crate::graphql::schema::{
     RequestContext,
-    authorization::{ScopeGuard, UserPrincipalGuard, request_context},
+    authorization::request_context,
     connection,
     connection::ConnectionTotal,
     error::app_error,
@@ -71,41 +69,6 @@ impl RoleQuery {
             request,
             filter.unwrap_or_default(),
             order_by.unwrap_or_else(RoleOrder::default_order),
-            page,
-        )
-        .await
-    }
-
-    /// Self-only account summary. This field deliberately carries only the
-    /// existing `account.read` self-service scope and accepts no caller-supplied
-    /// user identity.
-    #[graphql(
-        guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::AccountRead))",
-        directive = access::apply(ScopeGuard::policy(ApiScope::AccountRead)),
-        complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * (1 + child_complexity)"
-    )]
-    #[allow(clippy::too_many_arguments)]
-    async fn account_permissions(
-        &self,
-        ctx: &Context<'_>,
-        resource_id: ID,
-        order_by: Option<EffectivePermissionOrder>,
-        #[graphql(validator(minimum = 1, maximum = 100))] first: Option<i32>,
-        after: Option<String>,
-        #[graphql(validator(minimum = 1, maximum = 100))] last: Option<i32>,
-        before: Option<String>,
-    ) -> Result<EffectivePermissionConnection> {
-        let page = page_args(ctx, first, after, last, before)?;
-        let request = request_context(ctx)?;
-        let user_oid = request.user_oid()?;
-        let resource_oid = decode_resource_oid(ctx, &resource_id)?;
-        load_effective_permission_connection(
-            ctx,
-            request,
-            user_oid,
-            resource_oid,
-            None,
-            order_by.unwrap_or_else(EffectivePermissionOrder::default_order),
             page,
         )
         .await

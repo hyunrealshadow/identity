@@ -6,12 +6,13 @@ it('keeps write-only user capabilities separate from reading users', () => {
   const scope = userManagementScope({
     effectiveScopes: [],
     grantedScopes: [],
-    requestableScopes: ['management.user.create'],
+    requestableScopes: ['management.user.write'],
     authentication: { acr: 'aal1', authTime: null, aal2: false, recent: false },
   })
   expect(scope.create).toBe(true)
+  expect(scope.update).toBe(true)
+  expect(scope.state).toBe(true)
   expect(scope.read).toBe(false)
-  expect(scope.state).toBe(false)
 })
 
 it('matches the current subject only when the global id is unambiguous', () => {

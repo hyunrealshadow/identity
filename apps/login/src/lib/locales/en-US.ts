@@ -50,6 +50,7 @@ const enUS = {
   signedOutDescription: 'You have been signed out on this device. You can safely close this page or sign in again.',
   signInAgain: 'Sign in again',
   accountConsole: 'Identity account',
+  consoleLabel: 'Console',
   accountSettings: 'Account settings',
   accountSecurity: 'Security',
   accountProfileDescription: 'Personal details and display preferences.',

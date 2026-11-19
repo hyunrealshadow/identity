@@ -447,7 +447,7 @@ mod tests {
         assert!(
             super::ensure_delegation_subset(
                 &stripped,
-                &scopes(&[ManagementScope::GroupRolesWrite])
+                &scopes(&[ManagementScope::RoleAssignmentsWrite])
             )
             .is_err()
         );
@@ -468,7 +468,7 @@ mod tests {
         let issued = UserPermissionAuthority::new(
             user,
             AuthorizationVersion::fresh(),
-            [ManagementScope::GroupRolesWrite],
+            [ManagementScope::RoleAssignmentsWrite],
         );
         let policy_version = PolicyVersion::fresh();
         let snapshot =
@@ -476,7 +476,7 @@ mod tests {
         let current = UserPermissionAuthority::new(
             user,
             AuthorizationVersion::fresh(),
-            [ManagementScope::GroupRolesWrite],
+            [ManagementScope::RoleAssignmentsWrite],
         );
         let current = CurrentManagementAuthority::UserPermissions(current);
         let actor = ActorContext::for_user(
@@ -485,12 +485,12 @@ mod tests {
             RequestId::new("group-stale-snapshot").expect("request id"),
             None,
         );
-        let token_scopes = scopes(&[ManagementScope::GroupRolesWrite]);
+        let token_scopes = scopes(&[ManagementScope::RoleAssignmentsWrite]);
         let now = Utc.timestamp_opt(1_000, 0).single().expect("timestamp");
         let request = ManagementAuthorizationRequest {
             actor: &actor,
             token_scopes: &token_scopes,
-            required: ManagementScope::GroupRolesWrite,
+            required: ManagementScope::RoleAssignmentsWrite,
             target: ManagementTarget::instance(),
             current_authority: Some(&current),
             snapshot: Some(&snapshot),

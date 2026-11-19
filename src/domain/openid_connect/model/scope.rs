@@ -14,9 +14,9 @@ pub enum ResourceScopeCoverage {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ApiScope {
-    Account,
-    AccountUpdate,
-    AccountRead,
+    User,
+    UserWrite,
+    UserRead,
     Session,
     SessionRevoke,
     SessionRead,
@@ -24,9 +24,9 @@ pub enum ApiScope {
 }
 
 impl ApiScope {
-    pub const ACCOUNT: &'static str = "account.*";
-    pub const ACCOUNT_UPDATE: &'static str = "account.update";
-    pub const ACCOUNT_READ: &'static str = "account.read";
+    pub const USER: &'static str = "user.*";
+    pub const USER_WRITE: &'static str = "user.write";
+    pub const USER_READ: &'static str = "user.read";
     pub const SESSION: &'static str = "session.*";
     pub const SESSION_REVOKE: &'static str = "session.revoke";
     pub const SESSION_READ: &'static str = "session.read";
@@ -35,9 +35,9 @@ impl ApiScope {
     #[must_use]
     pub fn name(self) -> &'static str {
         match self {
-            Self::Account => Self::ACCOUNT,
-            Self::AccountUpdate => Self::ACCOUNT_UPDATE,
-            Self::AccountRead => Self::ACCOUNT_READ,
+            Self::User => Self::USER,
+            Self::UserWrite => Self::USER_WRITE,
+            Self::UserRead => Self::USER_READ,
             Self::Session => Self::SESSION,
             Self::SessionRevoke => Self::SESSION_REVOKE,
             Self::SessionRead => Self::SESSION_READ,
@@ -47,9 +47,9 @@ impl ApiScope {
 
     fn parse(value: &str) -> Option<Self> {
         Some(match value {
-            Self::ACCOUNT => Self::Account,
-            Self::ACCOUNT_UPDATE => Self::AccountUpdate,
-            Self::ACCOUNT_READ => Self::AccountRead,
+            Self::USER => Self::User,
+            Self::USER_WRITE => Self::UserWrite,
+            Self::USER_READ => Self::UserRead,
             Self::SESSION => Self::Session,
             Self::SESSION_REVOKE => Self::SessionRevoke,
             Self::SESSION_READ => Self::SessionRead,
@@ -62,7 +62,7 @@ impl ApiScope {
 /// First segments owned by the API scope namespace. A pattern below one of
 /// these namespaces is an API pattern even when the current catalog has no
 /// matching leaf yet; expansion still happens only against known names.
-const API_SCOPE_NAMESPACES: [&str; 3] = ["account", "session", "password"];
+const API_SCOPE_NAMESPACES: [&str; 3] = ["user", "session", "password"];
 
 /// Returns the prefix of a syntactically valid trailing `.*` pattern.
 ///
@@ -550,22 +550,22 @@ mod tests {
     #[test]
     fn resource_coverage_preserves_controls_and_intersects_exact_leaves() {
         let granted =
-            ScopeSet::parse("openid profile email address phone offline_access account.*").unwrap();
+            ScopeSet::parse("openid profile email address phone offline_access user.*").unwrap();
         let resources = [
-            ScopeSet::parse("account.* email").unwrap(),
-            ScopeSet::parse("account.read").unwrap(),
+            ScopeSet::parse("user.* email").unwrap(),
+            ScopeSet::parse("user.read").unwrap(),
         ];
         assert_eq!(
             granted
                 .for_resources(&resources, ResourceScopeCoverage::All)
                 .to_scope_string(),
-            "openid profile email address phone offline_access account.read"
+            "openid profile email address phone offline_access user.read"
         );
         assert_eq!(
             granted
                 .for_resources(&resources, ResourceScopeCoverage::Any)
                 .to_scope_string(),
-            "openid profile email address phone offline_access account.read"
+            "openid profile email address phone offline_access user.read"
         );
         let controls =
             ScopeSet::parse("openid profile email address phone offline_access").unwrap();
@@ -578,36 +578,36 @@ mod tests {
 
     #[test]
     fn resource_intersection_does_not_manufacture_wildcards() {
-        let granted = ScopeSet::parse("openid account.* orders.*").unwrap();
+        let granted = ScopeSet::parse("openid user.* orders.*").unwrap();
         assert_eq!(
             granted
                 .for_resources(
-                    &[ScopeSet::parse("account.read orders.read").unwrap()],
+                    &[ScopeSet::parse("user.read orders.read").unwrap()],
                     ResourceScopeCoverage::All,
                 )
                 .to_scope_string(),
-            "openid account.read orders.read"
+            "openid user.read orders.read"
         );
         // A pattern-only ceiling yields no manufactured wildcard grant.
         assert_eq!(
             granted
                 .for_resources(
-                    &[ScopeSet::parse("account.* orders.*").unwrap()],
+                    &[ScopeSet::parse("user.* orders.*").unwrap()],
                     ResourceScopeCoverage::All,
                 )
                 .to_scope_string(),
             "openid"
         );
         // Exact leaves may still intersect a pattern ceiling.
-        let exact = ScopeSet::parse("openid account.read orders.read").unwrap();
+        let exact = ScopeSet::parse("openid user.read orders.read").unwrap();
         assert_eq!(
             exact
                 .for_resources(
-                    &[ScopeSet::parse("account.* orders.*").unwrap()],
+                    &[ScopeSet::parse("user.* orders.*").unwrap()],
                     ResourceScopeCoverage::All,
                 )
                 .to_scope_string(),
-            "openid account.read orders.read"
+            "openid user.read orders.read"
         );
     }
 
@@ -679,25 +679,19 @@ mod tests {
 
     #[test]
     fn wildcard_patterns_match_descendants_at_segment_boundaries() {
-        let scope =
-            ScopeSet::parse("account.* session.* management.user.* orders.items.*").unwrap();
+        let scope = ScopeSet::parse("user.* session.* management.user.* orders.items.*").unwrap();
 
         assert!(scope.has_patterns());
         assert_eq!(
             scope.patterns(),
-            vec![
-                "account.*",
-                "management.user.*",
-                "orders.items.*",
-                "session.*"
-            ]
+            vec!["management.user.*", "orders.items.*", "session.*", "user.*"]
         );
-        assert!(scope.matches("account.read"));
-        assert!(scope.matches("account.update.deep"));
-        assert!(!scope.matches("account"));
-        assert!(!scope.matches("account."));
-        assert!(!scope.matches("accountish.read"));
-        assert!(!scope.matches("accounting.read"));
+        assert!(scope.matches("user.read"));
+        assert!(scope.matches("user.write.deep"));
+        assert!(!scope.matches("user"));
+        assert!(!scope.matches("user."));
+        assert!(!scope.matches("userish.read"));
+        assert!(!scope.matches("users.read"));
         assert!(scope.matches("session.revoke"));
         assert!(scope.matches("orders.items.create"));
         assert!(!scope.matches("orders.item.create"));
@@ -722,72 +716,72 @@ mod tests {
 
     #[test]
     fn literal_leaves_do_not_inherit_or_cover_open_patterns() {
-        let scope = ScopeSet::parse("account.update session.revoke").unwrap();
-        assert!(scope.allows(ApiScope::AccountUpdate));
-        assert!(!scope.allows(ApiScope::AccountRead));
+        let scope = ScopeSet::parse("user.write session.revoke").unwrap();
+        assert!(scope.allows(ApiScope::UserWrite));
+        assert!(!scope.allows(ApiScope::UserRead));
         assert!(scope.allows(ApiScope::SessionRevoke));
         assert!(!scope.allows(ApiScope::SessionRead));
 
-        let exact = ScopeSet::parse("account.read").unwrap();
-        assert!(exact.matches("account.read"));
-        assert!(!exact.matches("account"));
-        assert!(!exact.matches("account.update"));
-        assert!(!exact.covers(&ScopeSet::parse("account.*").unwrap()));
+        let exact = ScopeSet::parse("user.read").unwrap();
+        assert!(exact.matches("user.read"));
+        assert!(!exact.matches("user"));
+        assert!(!exact.matches("user.write"));
+        assert!(!exact.covers(&ScopeSet::parse("user.*").unwrap()));
     }
 
     #[test]
     fn api_wildcards_allow_their_descendant_scopes() {
-        let scope = ScopeSet::parse("openid account.* session.* password.*").unwrap();
+        let scope = ScopeSet::parse("openid user.* session.* password.*").unwrap();
         assert!(scope.has_api_scopes());
-        assert!(scope.allows(ApiScope::AccountRead));
-        assert!(scope.allows(ApiScope::AccountUpdate));
+        assert!(scope.allows(ApiScope::UserRead));
+        assert!(scope.allows(ApiScope::UserWrite));
         assert!(scope.allows(ApiScope::SessionRead));
         assert!(scope.allows(ApiScope::SessionRevoke));
         assert!(scope.allows(ApiScope::PasswordChange));
         assert_eq!(
             scope.to_scope_string(),
-            "openid account.* password.* session.*"
+            "openid password.* session.* user.*"
         );
     }
 
     #[test]
-    fn bare_account_and_session_are_not_api_aliases() {
-        for name in ["account", "session"] {
+    fn bare_user_and_session_are_not_api_aliases() {
+        for name in ["user", "session"] {
             let scope = ScopeSet::parse(name).unwrap();
             assert!(!scope.has_api_scopes(), "{name}");
             assert!(scope.has_custom_scopes(), "{name}");
             assert_eq!(scope.to_scope_string(), name);
         }
-        assert!(ScopeSet::parse("account.*").unwrap().has_api_scopes());
+        assert!(ScopeSet::parse("user.*").unwrap().has_api_scopes());
         assert!(ScopeSet::parse("session.*").unwrap().has_api_scopes());
     }
 
     #[test]
     fn covers_subset_and_hierarchical_wildcard_scopes() {
-        let granted = ScopeSet::parse("openid profile account.*").unwrap();
+        let granted = ScopeSet::parse("openid profile user.*").unwrap();
 
         assert!(granted.covers(&ScopeSet::parse("openid").unwrap()));
-        assert!(granted.covers(&ScopeSet::parse("openid account.read").unwrap()));
-        assert!(granted.covers(&ScopeSet::parse("openid account.update").unwrap()));
-        assert!(!granted.covers(&ScopeSet::parse("openid account").unwrap()));
+        assert!(granted.covers(&ScopeSet::parse("openid user.read").unwrap()));
+        assert!(granted.covers(&ScopeSet::parse("openid user.write").unwrap()));
+        assert!(!granted.covers(&ScopeSet::parse("openid user").unwrap()));
         assert!(!granted.covers(&ScopeSet::parse("openid email").unwrap()));
     }
 
     #[test]
     fn management_scopes_are_exact_and_separate_from_custom_scopes() {
-        let scope = ScopeSet::parse("openid management.user.read management.audit.read").unwrap();
+        let scope = ScopeSet::parse("openid management.user.read management.session.read").unwrap();
         assert!(scope.has_management_scopes());
         assert_eq!(
             scope.management_scopes(),
-            vec![ManagementScope::UsersRead, ManagementScope::AuditRead]
+            vec![ManagementScope::UsersRead, ManagementScope::SessionsRead]
         );
         assert!(scope.has_management_scope(ManagementScope::UsersRead));
-        assert!(!scope.has_management_scope(ManagementScope::UsersCreate));
+        assert!(!scope.has_management_scope(ManagementScope::UsersWrite));
         assert!(!scope.has_custom_scopes());
         assert!(scope.has_resource_permissions());
         assert_eq!(
             scope.to_scope_string(),
-            "openid management.user.read management.audit.read"
+            "openid management.user.read management.session.read"
         );
         assert_eq!(
             scope.without_management_scopes().to_scope_string(),
@@ -812,20 +806,15 @@ mod tests {
         let users = ScopeSet::parse("management.user.*").unwrap();
         assert_eq!(
             users.management_scopes(),
-            vec![
-                ManagementScope::UsersRead,
-                ManagementScope::UsersCreate,
-                ManagementScope::UsersUpdate,
-                ManagementScope::UsersState,
-                ManagementScope::UsersRevokeAccess,
-            ]
+            vec![ManagementScope::UsersRead, ManagementScope::UsersWrite]
         );
         assert!(!users.has_management_scope(ManagementScope::ClientsRead));
     }
 
     #[test]
     fn management_pattern_removal_and_replacement_preserve_other_patterns() {
-        let scope = ScopeSet::parse("openid management.* management.audit.read orders.*").unwrap();
+        let scope =
+            ScopeSet::parse("openid management.* management.session.read orders.*").unwrap();
 
         let without = scope.without_management_scopes();
         assert!(!without.has_management_scopes());
@@ -842,7 +831,7 @@ mod tests {
         );
         assert_eq!(replaced.patterns(), vec!["orders.*"]);
         assert!(replaced.has_management_scope(ManagementScope::UsersRead));
-        assert!(!replaced.has_management_scope(ManagementScope::AuditRead));
+        assert!(!replaced.has_management_scope(ManagementScope::SessionsRead));
         assert!(replaced.matches("orders.read"));
     }
 
@@ -869,13 +858,13 @@ mod tests {
     fn covers_management_scopes_exactly_and_through_patterns() {
         let granted = ScopeSet::parse("openid management.user.read").unwrap();
         assert!(granted.covers(&ScopeSet::parse("management.user.read").unwrap()));
-        assert!(!granted.covers(&ScopeSet::parse("management.user.create").unwrap()));
+        assert!(!granted.covers(&ScopeSet::parse("management.user.write").unwrap()));
         assert!(!granted.covers(&ScopeSet::parse("management.user.*").unwrap()));
         assert!(ScopeSet::parse("management.users").is_err());
 
         let wildcard = ScopeSet::parse("management.user.*").unwrap();
         assert!(wildcard.covers(&ScopeSet::parse("management.user.read").unwrap()));
-        assert!(wildcard.covers(&ScopeSet::parse("management.user.create").unwrap()));
+        assert!(wildcard.covers(&ScopeSet::parse("management.user.write").unwrap()));
         assert!(!wildcard.covers(&ScopeSet::parse("management.client.read").unwrap()));
         assert!(!wildcard.covers(&ScopeSet::parse("management.*").unwrap()));
         assert!(
@@ -903,11 +892,11 @@ mod tests {
     fn malformed_wildcards_are_rejected() {
         for invalid in [
             "*",
-            "account*",
-            "account.**",
-            "account.*.*",
-            "account.*.read",
-            "account..*",
+            "user*",
+            "user.**",
+            "user.*.*",
+            "user.*.read",
+            "user..*",
             ".*",
             "..*",
             "management.*.*",
@@ -916,7 +905,7 @@ mod tests {
             assert!(ScopeSet::parse(invalid).is_err(), "{invalid}");
         }
         for valid in [
-            "account.*",
+            "user.*",
             "a.b.c.*",
             "orders.*",
             "management.*",
@@ -925,8 +914,8 @@ mod tests {
             assert!(is_scope_pattern(valid), "{valid}");
             assert!(ScopeSet::parse(valid).is_ok(), "{valid}");
         }
-        assert!(!is_scope_pattern("account"));
-        assert!(!is_scope_pattern("account.read"));
+        assert!(!is_scope_pattern("user"));
+        assert!(!is_scope_pattern("user.read"));
         assert!(!is_scope_pattern("*"));
     }
 

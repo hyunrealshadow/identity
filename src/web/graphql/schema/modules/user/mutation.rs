@@ -28,8 +28,8 @@ pub(crate) struct UserManagementMutation;
 #[Object]
 impl UserManagementMutation {
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::UsersCreate, ManagementTarget::instance())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::UsersCreate))
+        guard = "ManagementGuard::new(ManagementScope::UsersWrite, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::UsersWrite))
     )]
     async fn create_user(
         &self,
@@ -64,8 +64,8 @@ impl UserManagementMutation {
     }
 
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::UsersUpdate, ManagementTarget::instance())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::UsersUpdate))
+        guard = "ManagementGuard::new(ManagementScope::UsersWrite, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::UsersWrite))
     )]
     async fn update_user(
         &self,
@@ -91,7 +91,7 @@ impl UserManagementMutation {
 
         let request = request_context(ctx)?;
         ManagementGuard::new(
-            ManagementScope::UsersUpdate,
+            ManagementScope::UsersWrite,
             ManagementTarget::user(user, false),
         )
         .check(ctx)
@@ -114,8 +114,8 @@ impl UserManagementMutation {
     }
 
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::UsersState, ManagementTarget::instance())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::UsersState))
+        guard = "ManagementGuard::new(ManagementScope::UsersWrite, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::UsersWrite))
     )]
     async fn enable_user(
         &self,
@@ -131,7 +131,7 @@ impl UserManagementMutation {
         let (user, reason) = state_fields(ctx, &id, &reason)?;
         let request = request_context(ctx)?;
         ManagementGuard::new(
-            ManagementScope::UsersState,
+            ManagementScope::UsersWrite,
             ManagementTarget::user(user, false),
         )
         .check(ctx)
@@ -149,8 +149,8 @@ impl UserManagementMutation {
     }
 
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::UsersState, ManagementTarget::instance())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::UsersState))
+        guard = "ManagementGuard::new(ManagementScope::UsersWrite, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::UsersWrite))
     )]
     async fn disable_user(
         &self,
@@ -166,7 +166,7 @@ impl UserManagementMutation {
         let (user, reason) = state_fields(ctx, &id, &reason)?;
         let request = request_context(ctx)?;
         ManagementGuard::new(
-            ManagementScope::UsersState,
+            ManagementScope::UsersWrite,
             ManagementTarget::user(user, false),
         )
         .check(ctx)
@@ -184,8 +184,8 @@ impl UserManagementMutation {
     }
 
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::UsersState, ManagementTarget::instance())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::UsersState))
+        guard = "ManagementGuard::new(ManagementScope::UsersWrite, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::UsersWrite))
     )]
     async fn unlock_user(
         &self,
@@ -201,7 +201,7 @@ impl UserManagementMutation {
         let (user, reason) = state_fields(ctx, &id, &reason)?;
         let request = request_context(ctx)?;
         ManagementGuard::new(
-            ManagementScope::UsersState,
+            ManagementScope::UsersWrite,
             ManagementTarget::user(user, false),
         )
         .check(ctx)

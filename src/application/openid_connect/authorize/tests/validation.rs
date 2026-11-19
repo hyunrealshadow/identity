@@ -496,8 +496,8 @@ async fn api_scopes_require_graphql_resource() {
         Arc::new(ScopedClientRepository {
             assigned_scopes: vec![
                 "openid".to_string(),
-                "account.read".to_string(),
-                "account.update".to_string(),
+                "user.read".to_string(),
+                "user.write".to_string(),
             ],
         }),
         Arc::new(empty_cred_repo()),
@@ -505,7 +505,7 @@ async fn api_scopes_require_graphql_resource() {
     );
 
     let error = service
-        .validate_request(params("openid account.*"))
+        .validate_request(params("openid user.*"))
         .await
         .unwrap_err();
 
@@ -514,20 +514,20 @@ async fn api_scopes_require_graphql_resource() {
 
 #[tokio::test]
 async fn api_scopes_accept_graphql_resource() {
-    // Persisted client ceilings are concrete scope rows; `account.*` remains a
+    // Persisted client ceilings are concrete scope rows; `user.*` remains a
     // request selector that expands against the GraphQL resource catalog.
     let service = build_test_service(
         Arc::new(ScopedClientRepository {
             assigned_scopes: vec![
                 "openid".to_string(),
-                "account.read".to_string(),
-                "account.update".to_string(),
+                "user.read".to_string(),
+                "user.write".to_string(),
             ],
         }),
         Arc::new(empty_cred_repo()),
         Arc::new(mock_login_repo()),
     );
-    let mut request = params("openid account.*");
+    let mut request = params("openid user.*");
     request.resources = vec![API_RESOURCE.to_string()];
 
     assert!(service.validate_request(request).await.is_ok());

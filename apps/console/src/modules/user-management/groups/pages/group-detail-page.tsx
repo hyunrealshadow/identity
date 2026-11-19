@@ -507,23 +507,23 @@ export function GroupDetailPage() {
           <div className="space-y-4">
             <div className="flex flex-wrap gap-2">
               {!builtIn && scope.groupsWrite ? (
-                <>
-                  <GroupStateDialog
-                    action={readyGroup.enabled ? 'disable' : 'enable'}
-                    group={readyGroup}
-                    onCommitted={() => void reloadGroup()}
-                    onReload={() => void reloadGroup()}
-                  />
-                  <GroupDeleteDialog
-                    group={readyGroup}
-                    onCommitted={() => {
-                      clearDraft(draftKey(readyGroup.id))
-                      toast.success(t('groupsDeletedToast'))
-                      void navigate({ to: '/groups' })
-                    }}
-                    onReload={() => void reloadGroup()}
-                  />
-                </>
+                <GroupStateDialog
+                  action={readyGroup.enabled ? 'disable' : 'enable'}
+                  group={readyGroup}
+                  onCommitted={() => void reloadGroup()}
+                  onReload={() => void reloadGroup()}
+                />
+              ) : null}
+              {!builtIn && scope.groupsDelete ? (
+                <GroupDeleteDialog
+                  group={readyGroup}
+                  onCommitted={() => {
+                    clearDraft(draftKey(readyGroup.id))
+                    toast.success(t('groupsDeletedToast'))
+                    void navigate({ to: '/groups' })
+                  }}
+                  onReload={() => void reloadGroup()}
+                />
               ) : null}
             </div>
           </div>

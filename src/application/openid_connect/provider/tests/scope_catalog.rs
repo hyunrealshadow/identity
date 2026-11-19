@@ -43,20 +43,20 @@ async fn wildcard_requests_expand_known_names_at_any_depth_without_crossing_boun
     let provider = OpenIdProviderService::new(Arc::new(SettingsSnapshot::default()))
         .with_scope_catalog(Arc::new(TestScopeCatalog(vec![
             "openid".into(),
-            "account.read".into(),
-            "account.update".into(),
+            "user.read".into(),
+            "user.write".into(),
             "orders.read".into(),
             "orders.item.read".into(),
             "orders2.read".into(),
             "management.unknown".into(),
         ])));
     let scopes = provider
-        .resolve_scope("openid account.* orders.*")
+        .resolve_scope("openid user.* orders.*")
         .await
         .unwrap();
     assert!(!scopes.has_patterns());
-    assert!(scopes.allows(ApiScope::AccountRead));
-    assert!(scopes.allows(ApiScope::AccountUpdate));
+    assert!(scopes.allows(ApiScope::UserRead));
+    assert!(scopes.allows(ApiScope::UserWrite));
     assert!(scopes.matches("orders.read"));
     assert!(scopes.matches("orders.item.read"));
     assert!(!scopes.matches("orders2.read"));

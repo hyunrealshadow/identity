@@ -603,7 +603,7 @@ it('checks live access even when a stale page supplies a login hint', async () =
 
 it('keeps permission denial separate from authentication recovery', async () => {
   mocks.identityGraphql.mockRejectedValueOnce(new GraphqlRequestError([
-    { message: 'Permission denied', extensions: { code: 'insufficient_scope', requiredScope: 'account.update' } },
+    { message: 'Permission denied', extensions: { code: 'insufficient_scope', requiredScope: 'user.write' } },
   ]))
   expect(await executeAccountAction({ action: 'update-username', values: { username: 'someone' } })).toEqual({ ok: false })
   expect(mocks.startPopupReauthorization).not.toHaveBeenCalled()

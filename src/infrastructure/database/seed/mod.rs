@@ -27,6 +27,20 @@ pub trait Seed: Send + Sync {
     async fn run(&self, db: &DatabaseConnection) -> Result<(), AppError>;
 }
 
+pub struct BuiltInClientScopesSeed;
+
+#[async_trait]
+impl Seed for BuiltInClientScopesSeed {
+    fn name(&self) -> &'static str {
+        "built_in_client_scopes"
+    }
+
+    async fn run(&self, db: &DatabaseConnection) -> Result<(), AppError> {
+        login::ensure_login_client(db).await?;
+        console::ensure_console_client_scopes(db).await
+    }
+}
+
 pub async fn run_all(db: &DatabaseConnection) -> Result<(), AppError> {
     let seeds: Vec<Box<dyn Seed>> = vec![
         Box::new(setting::SettingDefaultsSeed),
@@ -35,6 +49,7 @@ pub async fn run_all(db: &DatabaseConnection) -> Result<(), AppError> {
         Box::new(oauth_resource::OAuthResourceDefaultsSeed),
         Box::new(scope::BuiltInScopeSeed),
         Box::new(UnifiedRbacSeed::new()),
+        Box::new(BuiltInClientScopesSeed),
         #[cfg(feature = "oidc-conformance")]
         Box::new(conformance::ConformanceSeed),
     ];

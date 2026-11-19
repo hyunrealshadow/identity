@@ -1,5 +1,3 @@
-use std::collections::BTreeSet;
-
 use super::*;
 
 use crate::rbac::role::RoleRecord;
@@ -87,11 +85,78 @@ impl RbacManagementService {
     /// Roles referenced by one page of relation edges.
     #[tracing::instrument(skip_all, name = "rbac.role.find_many")]
     pub async fn find_roles(&self, oids: Vec<RoleOid>) -> Result<Vec<RoleRecord>, AppError> {
-        let oids = dedupe_batch(oids)?;
+        let oids = dedupe_batch_lookups(oids, RbacErrorCode::InvalidCollectionSize)?;
         self.repository
             .find_roles(oids)
             .await
             .map_err(map_repository_error)
+    }
+
+    #[tracing::instrument(skip_all, name = "rbac.account_roles.count", fields(source = ?source))]
+    pub async fn count_account_roles(
+        &self,
+        user_oid: UserOid,
+        source: Option<AuthorizationSource>,
+    ) -> Result<u64, AppError> {
+        self.repository
+            .count_account_roles(user_oid, source)
+            .await
+            .map_err(map_repository_error)
+    }
+
+    #[tracing::instrument(skip_all, name = "rbac.account_roles.list", fields(source = ?request.source))]
+    pub async fn list_account_roles(
+        &self,
+        request: AccountRolePageRequest,
+    ) -> Result<AccountRolePage, AppError> {
+        let order = request.order;
+        let fingerprint_input = (request.user_oid, request.source);
+        let prepared = prepare_page(
+            self.data_protector.as_ref(),
+            CURSOR_KIND_ACCOUNT_ROLE,
+            order.as_u8(),
+            &fingerprint_input,
+            PageArguments {
+                first: request.first,
+                after: request.after,
+                last: request.last,
+                before: request.before,
+            },
+        )
+        .await?;
+        let data = self
+            .repository
+            .list_account_roles(AccountRoleQuery {
+                user_oid: request.user_oid,
+                source: request.source,
+                order,
+                direction: prepared.direction,
+                after: prepared.after,
+                before: prepared.before,
+                limit: prepared.limit,
+            })
+            .await
+            .map_err(map_repository_error)?;
+        let mut items = Vec::with_capacity(data.items.len());
+        for entry in data.items {
+            let cursor = encode_cursor(
+                self.data_protector.as_ref(),
+                CURSOR_KIND_ACCOUNT_ROLE,
+                order.as_u8(),
+                &prepared.filter_fingerprint,
+                &entry.sort_key,
+            )
+            .await?;
+            items.push(AccountRolePageItem {
+                grant: entry.grant,
+                cursor,
+            });
+        }
+        Ok(AccountRolePage {
+            items,
+            has_previous_page: data.has_previous_page,
+            has_next_page: data.has_next_page,
+        })
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -227,6 +292,75 @@ impl RbacManagementService {
         })
     }
 
+    #[tracing::instrument(skip_all, name = "rbac.account_permissions.count", fields(source = ?source))]
+    pub async fn count_account_permissions(
+        &self,
+        user_oid: UserOid,
+        resource_oid: Option<ResourceOid>,
+        source: Option<AuthorizationSource>,
+    ) -> Result<u64, AppError> {
+        self.repository
+            .count_account_permissions(user_oid, resource_oid, source)
+            .await
+            .map_err(map_repository_error)
+    }
+
+    #[tracing::instrument(skip_all, name = "rbac.account_permissions.list", fields(source = ?request.source))]
+    pub async fn list_account_permissions(
+        &self,
+        request: AccountPermissionPageRequest,
+    ) -> Result<AccountPermissionPage, AppError> {
+        let order = request.order;
+        let fingerprint_input = (request.user_oid, request.resource_oid, request.source);
+        let prepared = prepare_page(
+            self.data_protector.as_ref(),
+            CURSOR_KIND_ACCOUNT_PERMISSION,
+            order.as_u8(),
+            &fingerprint_input,
+            PageArguments {
+                first: request.first,
+                after: request.after,
+                last: request.last,
+                before: request.before,
+            },
+        )
+        .await?;
+        let data = self
+            .repository
+            .list_account_permissions(AccountPermissionQuery {
+                user_oid: request.user_oid,
+                resource_oid: request.resource_oid,
+                source: request.source,
+                order,
+                direction: prepared.direction,
+                after: prepared.after,
+                before: prepared.before,
+                limit: prepared.limit,
+            })
+            .await
+            .map_err(map_repository_error)?;
+        let mut items = Vec::with_capacity(data.items.len());
+        for entry in data.items {
+            let cursor = encode_cursor(
+                self.data_protector.as_ref(),
+                CURSOR_KIND_ACCOUNT_PERMISSION,
+                order.as_u8(),
+                &prepared.filter_fingerprint,
+                &entry.sort_key,
+            )
+            .await?;
+            items.push(AccountPermissionPageItem {
+                record: entry.record,
+                cursor,
+            });
+        }
+        Ok(AccountPermissionPage {
+            items,
+            has_previous_page: data.has_previous_page,
+            has_next_page: data.has_next_page,
+        })
+    }
+
     #[tracing::instrument(skip_all, name = "rbac.user_roles.assign")]
     pub async fn assign_user_roles(
         &self,
@@ -282,14 +416,4 @@ impl RbacManagementService {
         self.emit_result("rbac.user_roles.revoke", &result, "user_oid");
         result
     }
-}
-
-/// Deduplicate a page-bounded batch lookup and reject oversized input.
-fn dedupe_batch<T: Ord>(oids: Vec<T>) -> Result<Vec<T>, AppError> {
-    let oids = oids.into_iter().collect::<BTreeSet<_>>();
-    if oids.len() > MAX_BATCH_LOOKUPS {
-        return Err(AppError::from_code(RbacErrorCode::InvalidCollectionSize)
-            .with_param("max", MAX_BATCH_LOOKUPS.to_string()));
-    }
-    Ok(oids.into_iter().collect())
 }

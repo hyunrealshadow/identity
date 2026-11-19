@@ -25,8 +25,8 @@ impl KeyMutation {
     /// signing key; existing keys keep serving clients that ask for their
     /// algorithm.
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::KeysCreate, ManagementTarget::instance())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::KeysCreate))
+        guard = "ManagementGuard::new(ManagementScope::KeysWrite, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::KeysWrite))
     )]
     async fn create_signing_key(
         &self,
@@ -60,8 +60,8 @@ impl KeyMutation {
     /// retires: it keeps verifying signatures or decrypting existing data
     /// until it expires.
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::KeysRotate, ManagementTarget::instance())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::KeysRotate))
+        guard = "ManagementGuard::new(ManagementScope::KeysWrite, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::KeysWrite))
     )]
     async fn rotate_key(
         &self,
@@ -73,9 +73,9 @@ impl KeyMutation {
 
     /// Rotate a key in use and revoke it at once. Tokens it signed stop
     /// validating and data it protected can no longer be read, so sessions and
-    /// tokens it protected end. Requires both rotate and revoke permissions.
+    /// tokens it protected end. Requires both key write and revoke permissions.
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::KeysRotate, ManagementTarget::instance()).and(ManagementGuard::new(ManagementScope::KeysRevoke, ManagementTarget::instance()))",
+        guard = "ManagementGuard::new(ManagementScope::KeysWrite, ManagementTarget::instance()).and(ManagementGuard::new(ManagementScope::KeysRevoke, ManagementTarget::instance()))",
         directive = access::apply(rotate_and_revoke_policy())
     )]
     async fn rotate_and_revoke_key(
@@ -150,7 +150,7 @@ async fn replace(
 
 /// Both requirements of `rotateAndRevokeKey`, published as one policy.
 fn rotate_and_revoke_policy() -> AccessPolicy {
-    let mut policy = ManagementGuard::policy(ManagementScope::KeysRotate);
+    let mut policy = ManagementGuard::policy(ManagementScope::KeysWrite);
     policy
         .scopes
         .push(ManagementScope::KeysRevoke.name().to_owned());

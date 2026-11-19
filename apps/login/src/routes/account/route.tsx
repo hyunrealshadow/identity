@@ -1,3 +1,4 @@
+import { hasManagementAccess } from '@identity/graphql-access'
 import { Alert, AlertAction, AlertDescription, AlertTitle } from '@identity/ui/components/alert'
 import { Button } from '@identity/ui/components/button'
 import { queryOptions, useSuspenseQuery } from '@tanstack/react-query'
@@ -16,6 +17,7 @@ import { translate } from '#/lib/i18n'
 import { requestLocale } from '#/lib/i18n.server'
 import { mfaUiState, storeTotpEnabled } from '#/lib/oauth.server'
 import { consumeAccountFlash } from '#/lib/oauth-session.server'
+import { loadConsoleUrl } from '#/lib/runtime-config.server'
 import { applyTheme, type ThemePreference } from '#/lib/appearance'
 
 export interface AccountSession {
@@ -38,6 +40,7 @@ export interface AccountData {
   account: { id: string; username: string; email: string; emailVerified: boolean; givenName?: string; familyName?: string; nickname?: string; picture?: string; website?: string; birthdate?: string; zoneInfo?: string; locale?: string; theme?: string; createdAt: string }
   sessions: { edges: Array<{ node: AccountSession }> }
   security: { mfaEnabled: boolean; totpEnabled: boolean; recoveryCodesRemaining: number; preferredMfaMethod: 'passkey' | 'otp' }
+  effectivePermissions: { requestableScopes: string[]; effectiveScopes: string[] }
 }
 
 const ACCOUNT_QUERY = `query AccountHome {
@@ -45,6 +48,7 @@ const ACCOUNT_QUERY = `query AccountHome {
   sessions(first: 50) { edges { node { id status current deviceName deviceType osName osVersion browserName browserVersion ipAddress lastActiveAt createdAt } } }
   security { mfaEnabled totpEnabled recoveryCodesRemaining preferredMfaMethod }
   passkeys { id name }
+  effectivePermissions { requestableScopes effectiveScopes }
 }`
 
 const loadAccountData = createServerFn({ method: 'GET' }).handler(async () => {
@@ -52,6 +56,9 @@ const loadAccountData = createServerFn({ method: 'GET' }).handler(async () => {
   try {
     const [data, mfa] = await Promise.all([identityGraphql<AccountData>(ACCOUNT_QUERY), mfaUiState()])
     if (data) await storeTotpEnabled(data.security.totpEnabled)
+    const consoleUrl = hasManagementAccess(data?.effectivePermissions)
+      ? await loadConsoleUrl()
+      : undefined
     return {
       locale: resolveAccountLocale(
         data?.account.locale,
@@ -60,6 +67,7 @@ const loadAccountData = createServerFn({ method: 'GET' }).handler(async () => {
       theme: accountTheme(data?.account.theme),
       data,
       access: await accountAccessContext(data?.security.mfaEnabled),
+      consoleUrl,
       mfa,
       error: undefined as string | undefined,
     }
@@ -69,6 +77,7 @@ const loadAccountData = createServerFn({ method: 'GET' }).handler(async () => {
       theme: 'system' as const,
       data: undefined,
       access: undefined,
+      consoleUrl: undefined as string | undefined,
       mfa: { enrollment: undefined },
       error: error instanceof GraphqlRequestError ? error.message : error instanceof Error ? error.message : translate(browserLocale, 'temporaryError'),
     }
@@ -174,6 +183,8 @@ function AccountLayout() {
                 <UserMenu
                   user={{ name: displayName, email: account.email, picture: account.picture }}
                   menuLabel={t('accountMenuLabel')}
+                  consoleUrl={current.consoleUrl}
+                  consoleLabel={t('consoleLabel')}
                   signOutLabel={t('accountSignOut')}
                   switchAccountLabel={t('switchAccount')}
                   requestFailedLabel={t('accountRequestFailed')}

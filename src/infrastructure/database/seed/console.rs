@@ -8,7 +8,7 @@
 //! - `token_endpoint_auth_methods = ["none"]` with the public flow enabled;
 //! - S256 PKCE is required by the public code flow;
 //! - no client secret or any other credential is inserted;
-//! - allowed scope ceiling: `openid profile email`, `account.read` (to follow
+//! - allowed scope ceiling: `openid profile email`, `user.read` (to follow
 //!   the operator's account preferences such as the theme) and the exact
 //!   trusted management scopes, reconciled on every start so upgrades keep the
 //!   system-managed client usable;
@@ -39,7 +39,7 @@ use crate::{
         setting::ConsoleClientIdSetting,
     },
     database::{
-        audit,
+        audit, client_authorization_boundary,
         entity::{
             client,
             client::{Column as ClientColumn, Entity as ClientEntity},
@@ -70,7 +70,7 @@ pub fn console_scope_names() -> Vec<&'static str> {
         StandardScopes::OPENID,
         StandardScopes::PROFILE,
         StandardScopes::EMAIL,
-        ApiScope::ACCOUNT_READ,
+        ApiScope::USER_READ,
     ];
     names.extend(ManagementScope::ALL.into_iter().map(|scope| scope.name()));
     names
@@ -191,6 +191,51 @@ impl Seed for ConsoleClientSeed {
     }
 }
 
+/// Reconcile only the installed Console client's scope ceiling against the
+/// current catalog. Does nothing before installation.
+pub async fn ensure_console_client_scopes(db: &DatabaseConnection) -> Result<(), AppError> {
+    let txn = db.begin().await.map_err(AppError::internal)?;
+    ensure_console_client_scopes_in_transaction(&txn).await?;
+    txn.commit().await.map_err(AppError::internal)
+}
+
+async fn ensure_console_client_scopes_in_transaction(
+    db: &DatabaseTransaction,
+) -> Result<(), AppError> {
+    let Some(oid) = read_setting::<ConsoleClientIdSetting, _>(db).await? else {
+        return Ok(());
+    };
+    let existing = ClientEntity::find()
+        .filter(ClientColumn::Oid.eq(oid))
+        .one(db)
+        .await
+        .map_err(AppError::internal)?
+        .ok_or_else(|| AppError::from_code(CommonErrorCode::InternalError))?;
+    if !existing.built_in || existing.protocol != CONSOLE_CLIENT_PROTOCOL {
+        return Err(AppError::from_code(CommonErrorCode::Forbidden));
+    }
+    validate_catalog().map_err(AppError::internal)?;
+    let graphql_resource_oid = graphql_resource_oid(db).await?;
+    let scope_names = console_scope_names();
+    let scope_ids = ensure_scope_rows(db, &scope_names, graphql_resource_oid).await?;
+    if replace_client_scopes(db, existing.id, &scope_ids).await? {
+        db.execute_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            "UPDATE client SET version = gen_random_uuid(), updated_at = now() WHERE id = $1",
+            [existing.id.into()],
+        ))
+        .await
+        .map_err(AppError::internal)?;
+        client_authorization_boundary::withdraw_client_authorizations(db, existing.id)
+            .await
+            .map_err(AppError::internal)?;
+        audit::record(db, "client.update", "client", oid)
+            .await
+            .map_err(AppError::internal)?;
+    }
+    Ok(())
+}
+
 /// Idempotently reconciles the Console client, its metadata/platform,
 /// scope assignments and GraphQL resource coverage. Credentials are never
 /// written.
@@ -278,6 +323,18 @@ async fn configure_console_client(
     material_change |= cors.rows_affected() > 0;
 
     if material_change {
+        if !created {
+            db.execute_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                "UPDATE client SET version = gen_random_uuid(), updated_at = now() WHERE id = $1",
+                [client_id.into()],
+            ))
+            .await
+            .map_err(AppError::internal)?;
+            client_authorization_boundary::withdraw_client_authorizations(db, client_id)
+                .await
+                .map_err(AppError::internal)?;
+        }
         audit::record(db, "client.update", "client", console_oid)
             .await
             .map_err(AppError::internal)?;
@@ -291,7 +348,7 @@ pub(super) async fn ensure_scope_rows(
     graphql_resource_oid: uuid::Uuid,
 ) -> Result<Vec<i64>, AppError> {
     // Names may be exact concrete codes or trusted input selectors such as
-    // `account.*` and `management.*`; only concrete rows are assigned.
+    // `user.*` and `management.*`; only concrete rows are assigned.
     resolve_builtin_scope_ids(db, names, graphql_resource_oid).await
 }
 

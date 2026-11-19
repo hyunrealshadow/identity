@@ -175,8 +175,8 @@ async fn client_credentials_rejects_user_scope_and_unassigned_scope() {
     for scope in [
         "openid",
         "offline_access",
-        "account.read",
-        "account.update",
+        "user.read",
+        "user.write",
         "session.read",
     ] {
         let error = service
@@ -198,7 +198,7 @@ async fn client_credentials_requires_confidential_client_and_grant_permission() 
         Uuid::new_v4(),
         Arc::new(RegisteredPublicClientRepository),
     );
-    let mut public_request = request("account.read");
+    let mut public_request = request("user.read");
     public_request.client_secret = None;
     let error = public_service
         .exchange_client_credentials(public_request)
@@ -228,7 +228,7 @@ async fn client_credentials_enforces_registered_authentication_method() {
         Uuid::new_v4(),
         Arc::new(MachineClientRepository),
     );
-    let mut posted_secret = request("account.read");
+    let mut posted_secret = request("user.read");
     posted_secret.client_secret_basic = false;
     let error = basic_service
         .exchange_client_credentials(posted_secret)

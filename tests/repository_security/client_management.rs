@@ -160,11 +160,9 @@ async fn postgres_client_management_rechecks_authority_and_withdraws_on_boundary
         seed::run_all(&db).await.unwrap();
         owner(&db).await;
         let authority = machine(&db, &[
-            ManagementScope::ClientsCreate,
-            ManagementScope::ClientsUpdate,
-            ManagementScope::ClientsState,
+            ManagementScope::ClientsWrite,
             ManagementScope::ClientsDelete,
-            ManagementScope::ClientCredentialsCreate,
+            ManagementScope::ClientCredentialsWrite,
         ]).await;
         let repo = ClientManagementRepositoryImpl::new(db.clone());
         let protocol = OpenIdConnectClientRepositoryImpl::new(db.clone());
@@ -306,14 +304,7 @@ async fn postgres_client_advanced_settings_withdraw_only_on_semantic_boundary_ch
     isolated(|db| async move {
         seed::run_all(&db).await.unwrap();
         owner(&db).await;
-        let authority = machine(
-            &db,
-            &[
-                ManagementScope::ClientsCreate,
-                ManagementScope::ClientsUpdate,
-            ],
-        )
-        .await;
+        let authority = machine(&db, &[ManagementScope::ClientsWrite]).await;
         let repo = ClientManagementRepositoryImpl::new(db.clone());
         let protocol = OpenIdConnectClientRepositoryImpl::new(db.clone());
         let created = repo
@@ -521,7 +512,7 @@ async fn postgres_client_protocol_scopes_default_on_create_and_replace_with_the_
     isolated(|db| async move {
         seed::run_all(&db).await.unwrap();
         owner(&db).await;
-        let authority = machine(&db, &[ManagementScope::ClientsCreate, ManagementScope::ClientsScopes]).await;
+        let authority = machine(&db, &[ManagementScope::ClientsWrite]).await;
         let clients = ClientManagementRepositoryImpl::new(db.clone());
         let rbac = RbacManagementRepositoryImpl::new(db.clone());
 
@@ -615,6 +606,187 @@ async fn postgres_seed_removes_retired_management_scopes_and_their_relations() {
     }).await;
 }
 
+#[tokio::test]
+#[ignore = "requires explicitly configured PostgreSQL test database"]
+async fn postgres_seed_reconciles_renamed_scopes_presets_and_built_in_clients() {
+    isolated(|db| async move {
+        seed::run_all(&db).await.unwrap();
+        owner(&db).await;
+
+        let owner_role_oid = identity_domain::rbac::OWNER_PRESET.role_oid.0;
+        let owner_group_oid = identity_domain::rbac::OWNER_PRESET.group_oid.0;
+        let admin_role_oid = identity_domain::rbac::ADMIN_PRESET.role_oid.0;
+        let admin_group_oid = identity_domain::rbac::ADMIN_PRESET.group_oid.0;
+        let viewer_role_oid = identity_domain::rbac::VIEWER_PRESET.role_oid.0;
+
+        sql(&db, &format!(r#"
+            INSERT INTO "user"(oid,name,name_normalized,email,email_normalized,email_verified)
+                VALUES(gen_random_uuid(),'bob','bob','bob@example.test','bob@example.test',true);
+            INSERT INTO group_membership(oid,group_id,user_id,reason,enabled)
+                SELECT gen_random_uuid(),g.id,u.id,'',true
+                FROM user_group g, "user" u
+                WHERE g.oid='{owner_group_oid}' AND u.name='owner';
+            INSERT INTO group_membership(oid,group_id,user_id,reason,enabled,revoked_at)
+                SELECT gen_random_uuid(),g.id,u.id,'revoked',false,now()
+                FROM user_group g, "user" u
+                WHERE g.oid='{admin_group_oid}' AND u.name='bob';
+
+            INSERT INTO scope(oid,resource_id,code,name,names,description,descriptions,built_in,enabled,version)
+            SELECT gen_random_uuid(),res.resource_id,legacy.code,legacy.code,'{{}}'::jsonb,'','{{}}'::jsonb,true,true,gen_random_uuid()
+            FROM (SELECT DISTINCT resource_id FROM scope WHERE built_in=true AND code='management.user.read') res
+            CROSS JOIN (VALUES
+                ('account.read'),
+                ('account.update'),
+                ('management.user.create'),
+                ('management.group_membership.read'),
+                ('management.group_membership.write'),
+                ('management.group_role.read'),
+                ('management.audit.read')
+            ) AS legacy(code);
+
+            INSERT INTO "role"(oid,name,names,description,descriptions,built_in,enabled,version)
+                VALUES(gen_random_uuid(),'LegacyEditors','{{}}'::jsonb,'','{{}}'::jsonb,false,true,gen_random_uuid());
+            INSERT INTO role_permission(oid,role_id,scope_id)
+                SELECT gen_random_uuid(),r.id,s.id FROM "role" r, scope s
+                WHERE r.name='LegacyEditors'
+                  AND s.code IN (
+                      'management.user.create',
+                      'management.group_membership.read',
+                      'management.group_membership.write',
+                      'management.group_role.read',
+                      'management.audit.read'
+                  );
+
+            INSERT INTO client(oid,name,protocol,built_in)
+                VALUES(gen_random_uuid(),'legacy-app','openid_connect',false),
+                      (gen_random_uuid(),'Login','openid_connect',true),
+                      (gen_random_uuid(),'Console','openid_connect',true);
+
+            UPDATE setting SET value = to_jsonb(c.oid::text)
+                FROM client c WHERE setting.key = 'app.login_client_id' AND c.name = 'Login';
+            UPDATE setting SET value = to_jsonb(c.oid::text)
+                FROM client c WHERE setting.key = 'app.console_client_id' AND c.name = 'Console';
+
+            INSERT INTO client_scope(client_id,scope_id,client_granted)
+                SELECT c.id,s.id,v.granted
+                FROM client c
+                JOIN (VALUES
+                    ('account.read', true),
+                    ('account.update', false),
+                    ('management.group_membership.read', true),
+                    ('management.group_membership.write', true),
+                    ('management.user.create', true)
+                ) AS v(code, granted) ON true
+                JOIN scope s ON s.code=v.code
+                WHERE c.name='legacy-app';
+
+            INSERT INTO user_client_consent(user_id,client_id,scope_id)
+                SELECT u.id,c.id,s.id
+                FROM "user" u, client c, scope s
+                WHERE u.name='owner' AND c.name='legacy-app'
+                  AND s.code IN ('account.read','management.group_membership.read');
+
+            INSERT INTO client_scope(client_id,scope_id,client_granted)
+                SELECT c.id,s.id,false FROM client c, scope s
+                WHERE c.name='Login' AND s.code IN ('account.read','account.update');
+            INSERT INTO client_scope(client_id,scope_id,client_granted)
+                SELECT c.id,s.id,false FROM client c, scope s
+                WHERE c.name='Console' AND s.code IN ('account.read','management.user.create');
+
+            DELETE FROM role_permission rp
+                USING "role" r, scope s
+                WHERE rp.role_id=r.id AND rp.scope_id=s.id
+                  AND r.oid='{owner_role_oid}' AND s.code='management.setting.write';
+            UPDATE scope SET enabled=false WHERE built_in=true AND code='management.user.read';
+        "#)).await;
+
+        let legacy_app_oid = scalar::<Uuid>(&db, "SELECT oid AS value FROM client WHERE name='legacy-app'").await;
+        let login_oid = scalar::<Uuid>(&db, "SELECT oid AS value FROM client WHERE name='Login'").await;
+        let console_oid = scalar::<Uuid>(&db, "SELECT oid AS value FROM client WHERE name='Console'").await;
+
+        seed::run_all(&db).await.unwrap();
+
+        assert_eq!(
+            scalar::<i64>(&db, "SELECT count(*)::bigint AS value FROM scope WHERE code IN ('account.read','account.update','management.user.create','management.group_membership.read','management.group_membership.write','management.group_role.read','management.audit.read')").await,
+            0
+        );
+        assert!(scalar::<bool>(&db, "SELECT enabled AS value FROM scope WHERE built_in=true AND code='management.user.read'").await);
+
+        let role_codes = db
+            .query_all_raw(Statement::from_string(
+                DbBackend::Postgres,
+                "SELECT s.code AS code FROM role_permission rp JOIN \"role\" r ON r.id=rp.role_id JOIN scope s ON s.id=rp.scope_id WHERE r.name='LegacyEditors' ORDER BY s.code".to_owned(),
+            ))
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|row| row.try_get::<String>("", "code").unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(role_codes, vec!["management.group_member.read", "management.group_member.write"]);
+
+        let legacy_client_scopes = db
+            .query_all_raw(Statement::from_string(
+                DbBackend::Postgres,
+                "SELECT s.code AS code, cs.client_granted AS granted FROM client_scope cs JOIN client c ON c.id=cs.client_id JOIN scope s ON s.id=cs.scope_id WHERE c.name='legacy-app' ORDER BY s.code".to_owned(),
+            ))
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|row| (row.try_get::<String>("", "code").unwrap(), row.try_get::<bool>("", "granted").unwrap()))
+            .collect::<Vec<_>>();
+        assert_eq!(
+            legacy_client_scopes,
+            vec![
+                ("management.group_member.read".to_owned(), true),
+                ("management.group_member.write".to_owned(), false),
+                ("user.read".to_owned(), false),
+                ("user.write".to_owned(), false),
+            ]
+        );
+
+        let consent_codes = db
+            .query_all_raw(Statement::from_string(
+                DbBackend::Postgres,
+                "SELECT s.code AS code FROM user_client_consent ucc JOIN \"user\" u ON u.id=ucc.user_id JOIN client c ON c.id=ucc.client_id JOIN scope s ON s.id=ucc.scope_id WHERE u.name='owner' AND c.name='legacy-app' ORDER BY s.code".to_owned(),
+            ))
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|row| row.try_get::<String>("", "code").unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(consent_codes, vec!["management.group_member.read", "user.read"]);
+
+        assert!(audit_count(&db, "client.update", legacy_app_oid).await >= 1);
+        assert!(audit_count(&db, "client.update", login_oid).await >= 1);
+        assert!(audit_count(&db, "client.update", console_oid).await >= 1);
+
+        assert_eq!(scalar::<i64>(&db, &format!("SELECT count(*)::bigint AS value FROM role_permission rp JOIN \"role\" r ON r.id=rp.role_id WHERE r.oid='{owner_role_oid}'")).await, 28);
+        assert_eq!(scalar::<i64>(&db, &format!("SELECT count(*)::bigint AS value FROM role_permission rp JOIN \"role\" r ON r.id=rp.role_id WHERE r.oid='{admin_role_oid}'")).await, 24);
+        assert_eq!(scalar::<i64>(&db, &format!("SELECT count(*)::bigint AS value FROM role_permission rp JOIN \"role\" r ON r.id=rp.role_id WHERE r.oid='{viewer_role_oid}'")).await, 12);
+
+        assert_eq!(scalar::<i64>(&db, &format!("SELECT count(*)::bigint AS value FROM group_membership gm JOIN user_group g ON g.id=gm.group_id JOIN \"user\" u ON u.id=gm.user_id WHERE g.oid='{owner_group_oid}' AND u.name='owner' AND gm.enabled=true AND gm.revoked_at IS NULL")).await, 1);
+        assert_eq!(scalar::<i64>(&db, &format!("SELECT count(*)::bigint AS value FROM group_membership gm JOIN user_group g ON g.id=gm.group_id JOIN \"user\" u ON u.id=gm.user_id WHERE g.oid='{admin_group_oid}' AND u.name='bob' AND gm.enabled=true AND gm.revoked_at IS NULL")).await, 0);
+        assert_eq!(scalar::<i64>(&db, &format!("SELECT count(*)::bigint AS value FROM group_membership gm JOIN user_group g ON g.id=gm.group_id JOIN \"user\" u ON u.id=gm.user_id WHERE g.oid='{admin_group_oid}' AND u.name='bob' AND gm.enabled=false AND gm.revoked_at IS NOT NULL")).await, 1);
+
+        assert_eq!(scalar::<i64>(&db, &format!("SELECT count(*)::bigint AS value FROM client_scope cs JOIN client c ON c.id=cs.client_id WHERE c.oid='{login_oid}'")).await, 9);
+        assert_eq!(scalar::<i64>(&db, &format!("SELECT count(*)::bigint AS value FROM client_scope cs JOIN client c ON c.id=cs.client_id JOIN scope s ON s.id=cs.scope_id WHERE c.oid='{login_oid}' AND s.code IN ('user.read','user.write')")).await, 2);
+        assert_eq!(scalar::<i64>(&db, &format!("SELECT count(*)::bigint AS value FROM client_scope cs JOIN client c ON c.id=cs.client_id WHERE c.oid='{console_oid}'")).await, 32);
+        assert_eq!(scalar::<i64>(&db, &format!("SELECT count(*)::bigint AS value FROM client_scope cs JOIN client c ON c.id=cs.client_id JOIN scope s ON s.id=cs.scope_id WHERE c.oid='{console_oid}' AND (s.code='user.read' OR s.code LIKE 'management.%')")).await, 29);
+
+        let role_ver = scalar::<Uuid>(&db, "SELECT version AS value FROM \"role\" WHERE name='LegacyEditors'").await;
+        let app_ver = scalar::<Uuid>(&db, &format!("SELECT version AS value FROM client WHERE oid='{legacy_app_oid}'")).await;
+        let login_ver = scalar::<Uuid>(&db, &format!("SELECT version AS value FROM client WHERE oid='{login_oid}'")).await;
+        let console_ver = scalar::<Uuid>(&db, &format!("SELECT version AS value FROM client WHERE oid='{console_oid}'")).await;
+
+        seed::run_all(&db).await.unwrap();
+
+        assert_eq!(scalar::<Uuid>(&db, "SELECT version AS value FROM \"role\" WHERE name='LegacyEditors'").await, role_ver);
+        assert_eq!(scalar::<Uuid>(&db, &format!("SELECT version AS value FROM client WHERE oid='{legacy_app_oid}'")).await, app_ver);
+        assert_eq!(scalar::<Uuid>(&db, &format!("SELECT version AS value FROM client WHERE oid='{login_oid}'")).await, login_ver);
+        assert_eq!(scalar::<Uuid>(&db, &format!("SELECT version AS value FROM client WHERE oid='{console_oid}'")).await, console_ver);
+    }).await;
+}
+
 /// The recoverable owner acting through an issuing client with a fresh AAL2
 /// sign-in, which credential writes require.
 pub(super) async fn administrator(
@@ -689,10 +861,8 @@ async fn postgres_client_auth_methods_follow_credentials_within_their_limits() {
         let authority = administrator(
             &db,
             &[
-                ManagementScope::ClientsCreate,
-                ManagementScope::ClientsUpdate,
-                ManagementScope::ClientCredentialsCreate,
-                ManagementScope::ClientCredentialsRotate,
+                ManagementScope::ClientsWrite,
+                ManagementScope::ClientCredentialsWrite,
                 ManagementScope::ClientCredentialsRevoke,
             ],
         )

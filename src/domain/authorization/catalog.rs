@@ -99,24 +99,13 @@ impl ManagementScopeDefinition {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, strum::EnumCount)]
 pub enum ManagementScope {
     UsersRead,
-    UsersCreate,
-    UsersUpdate,
-    UsersState,
-    UsersRevokeAccess,
+    UsersWrite,
     SessionsRead,
-    SessionsRevoke,
-    CredentialsRead,
-    CredentialsRevoke,
-    CredentialsReset,
     ClientsRead,
-    ClientsCreate,
-    ClientsUpdate,
-    ClientsState,
+    ClientsWrite,
     ClientsDelete,
-    ClientsScopes,
     ClientCredentialsRead,
-    ClientCredentialsCreate,
-    ClientCredentialsRotate,
+    ClientCredentialsWrite,
     ClientCredentialsRevoke,
     ResourcesRead,
     ResourcesWrite,
@@ -125,46 +114,30 @@ pub enum ManagementScope {
     SettingsRead,
     SettingsWrite,
     KeysRead,
-    KeysCreate,
-    KeysRotate,
+    KeysWrite,
     KeysRevoke,
-    AuditRead,
-    PermissionRead,
-    PermissionWrite,
     RolesRead,
     RolesWrite,
     RoleAssignmentsRead,
     RoleAssignmentsWrite,
     GroupsRead,
     GroupsWrite,
-    GroupMembershipsRead,
-    GroupMembershipsWrite,
-    GroupRolesRead,
-    GroupRolesWrite,
+    GroupsDelete,
+    GroupMembersRead,
+    GroupMembersWrite,
     PermissionDelegate,
 }
 
 impl ManagementScope {
     pub const ALL: [Self; MANAGEMENT_SCOPE_COUNT] = [
         Self::UsersRead,
-        Self::UsersCreate,
-        Self::UsersUpdate,
-        Self::UsersState,
-        Self::UsersRevokeAccess,
+        Self::UsersWrite,
         Self::SessionsRead,
-        Self::SessionsRevoke,
-        Self::CredentialsRead,
-        Self::CredentialsRevoke,
-        Self::CredentialsReset,
         Self::ClientsRead,
-        Self::ClientsCreate,
-        Self::ClientsUpdate,
-        Self::ClientsState,
+        Self::ClientsWrite,
         Self::ClientsDelete,
-        Self::ClientsScopes,
         Self::ClientCredentialsRead,
-        Self::ClientCredentialsCreate,
-        Self::ClientCredentialsRotate,
+        Self::ClientCredentialsWrite,
         Self::ClientCredentialsRevoke,
         Self::ResourcesRead,
         Self::ResourcesWrite,
@@ -173,22 +146,17 @@ impl ManagementScope {
         Self::SettingsRead,
         Self::SettingsWrite,
         Self::KeysRead,
-        Self::KeysCreate,
-        Self::KeysRotate,
+        Self::KeysWrite,
         Self::KeysRevoke,
-        Self::AuditRead,
-        Self::PermissionRead,
-        Self::PermissionWrite,
         Self::RolesRead,
         Self::RolesWrite,
         Self::RoleAssignmentsRead,
         Self::RoleAssignmentsWrite,
         Self::GroupsRead,
         Self::GroupsWrite,
-        Self::GroupMembershipsRead,
-        Self::GroupMembershipsWrite,
-        Self::GroupRolesRead,
-        Self::GroupRolesWrite,
+        Self::GroupsDelete,
+        Self::GroupMembersRead,
+        Self::GroupMembersWrite,
         Self::PermissionDelegate,
     ];
 
@@ -252,14 +220,7 @@ impl ManagementScope {
     /// actions additionally require a recent-AAL2 human owner actor.
     #[must_use]
     pub const fn is_owner_target_sensitive(self) -> bool {
-        matches!(
-            self,
-            Self::UsersUpdate
-                | Self::UsersState
-                | Self::UsersRevokeAccess
-                | Self::CredentialsRevoke
-                | Self::CredentialsReset
-        )
+        matches!(self, Self::UsersWrite)
     }
 
     /// Scopes that first-party machine clients must never receive.
@@ -325,35 +286,11 @@ pub const MANAGEMENT_SCOPES: [ManagementScopeDefinition; MANAGEMENT_SCOPE_COUNT]
         ManagementFlowAllowance::USER_AND_CLIENT_CREDENTIALS,
     ),
     entry(
-        ManagementScope::UsersCreate,
-        "management.user.create",
-        "user.create",
-        "Create users",
+        ManagementScope::UsersWrite,
+        "management.user.write",
+        "user.write",
+        "Create, update, enable, disable, or unlock users",
         HumanAuthenticationRequirement::Aal2,
-        ManagementFlowAllowance::USER_AND_CLIENT_CREDENTIALS,
-    ),
-    entry(
-        ManagementScope::UsersUpdate,
-        "management.user.update",
-        "user.update",
-        "Update user profiles and identifiers",
-        HumanAuthenticationRequirement::Aal2,
-        ManagementFlowAllowance::USER_AND_CLIENT_CREDENTIALS,
-    ),
-    entry(
-        ManagementScope::UsersState,
-        "management.user.state",
-        "user.state",
-        "Enable, disable, or unlock users",
-        HumanAuthenticationRequirement::Aal2,
-        ManagementFlowAllowance::USER_AND_CLIENT_CREDENTIALS,
-    ),
-    entry(
-        ManagementScope::UsersRevokeAccess,
-        "management.user.revoke_access",
-        "user.revoke_access",
-        "Revoke a user's sessions and other access",
-        HumanAuthenticationRequirement::RecentAal2,
         ManagementFlowAllowance::USER_AND_CLIENT_CREDENTIALS,
     ),
     entry(
@@ -365,38 +302,6 @@ pub const MANAGEMENT_SCOPES: [ManagementScopeDefinition; MANAGEMENT_SCOPE_COUNT]
         ManagementFlowAllowance::USER_AND_CLIENT_CREDENTIALS,
     ),
     entry(
-        ManagementScope::SessionsRevoke,
-        "management.session.revoke",
-        "session.revoke",
-        "Revoke sessions across users",
-        HumanAuthenticationRequirement::Aal2,
-        ManagementFlowAllowance::USER_AND_CLIENT_CREDENTIALS,
-    ),
-    entry(
-        ManagementScope::CredentialsRead,
-        "management.credential.read",
-        "credential.read",
-        "Read credential and passkey metadata",
-        HumanAuthenticationRequirement::Aal2,
-        ManagementFlowAllowance::USER_AND_CLIENT_CREDENTIALS,
-    ),
-    entry(
-        ManagementScope::CredentialsRevoke,
-        "management.credential.revoke",
-        "credential.revoke",
-        "Revoke another user's credential",
-        HumanAuthenticationRequirement::RecentAal2,
-        ManagementFlowAllowance::USER_ONLY,
-    ),
-    entry(
-        ManagementScope::CredentialsReset,
-        "management.credential.reset",
-        "credential.reset",
-        "Reset another user's MFA",
-        HumanAuthenticationRequirement::RecentAal2,
-        ManagementFlowAllowance::USER_ONLY,
-    ),
-    entry(
         ManagementScope::ClientsRead,
         "management.client.read",
         "client.read",
@@ -405,26 +310,10 @@ pub const MANAGEMENT_SCOPES: [ManagementScopeDefinition; MANAGEMENT_SCOPE_COUNT]
         ManagementFlowAllowance::USER_AND_CLIENT_CREDENTIALS,
     ),
     entry(
-        ManagementScope::ClientsCreate,
-        "management.client.create",
-        "client.create",
-        "Create OAuth clients",
-        HumanAuthenticationRequirement::Aal2,
-        ManagementFlowAllowance::USER_AND_CLIENT_CREDENTIALS,
-    ),
-    entry(
-        ManagementScope::ClientsUpdate,
-        "management.client.update",
-        "client.update",
-        "Update OAuth client configuration",
-        HumanAuthenticationRequirement::Aal2,
-        ManagementFlowAllowance::USER_AND_CLIENT_CREDENTIALS,
-    ),
-    entry(
-        ManagementScope::ClientsState,
-        "management.client.state",
-        "client.state",
-        "Enable or disable OAuth clients",
+        ManagementScope::ClientsWrite,
+        "management.client.write",
+        "client.write",
+        "Create, update, enable, disable, or assign scopes to OAuth clients",
         HumanAuthenticationRequirement::Aal2,
         ManagementFlowAllowance::USER_AND_CLIENT_CREDENTIALS,
     ),
@@ -437,14 +326,6 @@ pub const MANAGEMENT_SCOPES: [ManagementScopeDefinition; MANAGEMENT_SCOPE_COUNT]
         ManagementFlowAllowance::USER_ONLY,
     ),
     entry(
-        ManagementScope::ClientsScopes,
-        "management.client.scope",
-        "client.scope",
-        "Assign non-reserved scopes to OAuth clients",
-        HumanAuthenticationRequirement::Aal2,
-        ManagementFlowAllowance::USER_AND_CLIENT_CREDENTIALS,
-    ),
-    entry(
         ManagementScope::ClientCredentialsRead,
         "management.client_credential.read",
         "client_credential.read",
@@ -453,18 +334,10 @@ pub const MANAGEMENT_SCOPES: [ManagementScopeDefinition; MANAGEMENT_SCOPE_COUNT]
         ManagementFlowAllowance::USER_AND_CLIENT_CREDENTIALS,
     ),
     entry(
-        ManagementScope::ClientCredentialsCreate,
-        "management.client_credential.create",
-        "client_credential.create",
-        "Create client credentials",
-        HumanAuthenticationRequirement::RecentAal2,
-        ManagementFlowAllowance::USER_ONLY,
-    ),
-    entry(
-        ManagementScope::ClientCredentialsRotate,
-        "management.client_credential.rotate",
-        "client_credential.rotate",
-        "Rotate client credentials",
+        ManagementScope::ClientCredentialsWrite,
+        "management.client_credential.write",
+        "client_credential.write",
+        "Create or rotate client credentials",
         HumanAuthenticationRequirement::RecentAal2,
         ManagementFlowAllowance::USER_ONLY,
     ),
@@ -533,18 +406,10 @@ pub const MANAGEMENT_SCOPES: [ManagementScopeDefinition; MANAGEMENT_SCOPE_COUNT]
         ManagementFlowAllowance::USER_AND_CLIENT_CREDENTIALS,
     ),
     entry(
-        ManagementScope::KeysCreate,
-        "management.key.create",
-        "key.create",
-        "Add signing keys for further algorithms",
-        HumanAuthenticationRequirement::RecentAal2,
-        ManagementFlowAllowance::USER_ONLY,
-    ),
-    entry(
-        ManagementScope::KeysRotate,
-        "management.key.rotate",
-        "key.rotate",
-        "Rotate signing and data encryption keys",
+        ManagementScope::KeysWrite,
+        "management.key.write",
+        "key.write",
+        "Add or rotate signing and data encryption keys",
         HumanAuthenticationRequirement::RecentAal2,
         ManagementFlowAllowance::USER_ONLY,
     ),
@@ -553,30 +418,6 @@ pub const MANAGEMENT_SCOPES: [ManagementScopeDefinition; MANAGEMENT_SCOPE_COUNT]
         "management.key.revoke",
         "key.revoke",
         "Revoke signing and data encryption keys",
-        HumanAuthenticationRequirement::RecentAal2,
-        ManagementFlowAllowance::USER_ONLY,
-    ),
-    entry(
-        ManagementScope::AuditRead,
-        "management.audit.read",
-        "audit.read",
-        "Read security audit events",
-        HumanAuthenticationRequirement::Aal2,
-        ManagementFlowAllowance::USER_AND_CLIENT_CREDENTIALS,
-    ),
-    entry(
-        ManagementScope::PermissionRead,
-        "management.permission.read",
-        "permission.read",
-        "Read permission catalog",
-        HumanAuthenticationRequirement::Aal2,
-        ManagementFlowAllowance::USER_AND_CLIENT_CREDENTIALS,
-    ),
-    entry(
-        ManagementScope::PermissionWrite,
-        "management.permission.write",
-        "permission.write",
-        "Create or update custom permission definitions",
         HumanAuthenticationRequirement::RecentAal2,
         ManagementFlowAllowance::USER_ONLY,
     ),
@@ -600,7 +441,7 @@ pub const MANAGEMENT_SCOPES: [ManagementScopeDefinition; MANAGEMENT_SCOPE_COUNT]
         ManagementScope::RoleAssignmentsRead,
         "management.role_assignment.read",
         "role_assignment.read",
-        "Read user business role assignments",
+        "Read user and group role assignments",
         HumanAuthenticationRequirement::Aal2,
         ManagementFlowAllowance::USER_AND_CLIENT_CREDENTIALS,
     ),
@@ -608,7 +449,7 @@ pub const MANAGEMENT_SCOPES: [ManagementScopeDefinition; MANAGEMENT_SCOPE_COUNT]
         ManagementScope::RoleAssignmentsWrite,
         "management.role_assignment.write",
         "role_assignment.write",
-        "Assign or revoke user business roles",
+        "Assign or revoke user and group roles",
         HumanAuthenticationRequirement::RecentAal2,
         ManagementFlowAllowance::USER_ONLY,
     ),
@@ -629,34 +470,26 @@ pub const MANAGEMENT_SCOPES: [ManagementScopeDefinition; MANAGEMENT_SCOPE_COUNT]
         ManagementFlowAllowance::USER_ONLY,
     ),
     entry(
-        ManagementScope::GroupMembershipsRead,
-        "management.group_membership.read",
-        "group_membership.read",
-        "Read user group memberships",
-        HumanAuthenticationRequirement::Aal2,
-        ManagementFlowAllowance::USER_AND_CLIENT_CREDENTIALS,
-    ),
-    entry(
-        ManagementScope::GroupMembershipsWrite,
-        "management.group_membership.write",
-        "group_membership.write",
-        "Add or remove user group members",
+        ManagementScope::GroupsDelete,
+        "management.group.delete",
+        "group.delete",
+        "Delete user groups",
         HumanAuthenticationRequirement::RecentAal2,
         ManagementFlowAllowance::USER_ONLY,
     ),
     entry(
-        ManagementScope::GroupRolesRead,
-        "management.group_role.read",
-        "group_role.read",
-        "Read group role bindings",
+        ManagementScope::GroupMembersRead,
+        "management.group_member.read",
+        "group_member.read",
+        "Read user group members",
         HumanAuthenticationRequirement::Aal2,
         ManagementFlowAllowance::USER_AND_CLIENT_CREDENTIALS,
     ),
     entry(
-        ManagementScope::GroupRolesWrite,
-        "management.group_role.write",
-        "group_role.write",
-        "Set or revoke group role bindings",
+        ManagementScope::GroupMembersWrite,
+        "management.group_member.write",
+        "group_member.write",
+        "Add or remove user group members",
         HumanAuthenticationRequirement::RecentAal2,
         ManagementFlowAllowance::USER_ONLY,
     ),
@@ -673,31 +506,64 @@ pub const MANAGEMENT_SCOPES: [ManagementScopeDefinition; MANAGEMENT_SCOPE_COUNT]
 /// Former built-in management scopes that no longer guard any operation. The
 /// seed removes their definitions and relations from existing databases; a
 /// historical grant that still names one simply authorizes nothing.
-pub const RETIRED_MANAGEMENT_SCOPE_NAMES: [&str; 4] = [
+pub const RETIRED_MANAGEMENT_SCOPE_NAMES: [&str; 27] = [
     "management.administrator.read",
     "management.administrator.write",
     "management.client_grant.read",
     "management.client_grant.write",
+    "management.user.create",
+    "management.user.update",
+    "management.user.state",
+    "management.user.revoke_access",
+    "management.session.revoke",
+    "management.credential.read",
+    "management.credential.revoke",
+    "management.credential.reset",
+    "management.client.create",
+    "management.client.update",
+    "management.client.state",
+    "management.client.scope",
+    "management.client_credential.create",
+    "management.client_credential.rotate",
+    "management.key.create",
+    "management.key.rotate",
+    "management.audit.read",
+    "management.permission.read",
+    "management.permission.write",
+    "management.group_membership.read",
+    "management.group_membership.write",
+    "management.group_role.read",
+    "management.group_role.write",
+];
+
+/// Exact 1-to-1 built-in management scope renames that keep identical semantics
+/// and can be migrated on custom role/client/consent assignments before the old
+/// built-in scope rows are retired. Narrower retired scopes are never widened
+/// automatically onto consolidated `.write` scopes.
+pub const RENAMED_MANAGEMENT_SCOPES: [(&str, ManagementScope); 2] = [
+    (
+        "management.group_membership.read",
+        ManagementScope::GroupMembersRead,
+    ),
+    (
+        "management.group_membership.write",
+        ManagementScope::GroupMembersWrite,
+    ),
 ];
 
 /// Scopes that must never be issued to machine clients in the first release.
-pub const HUMAN_ONLY_SCOPES: [ManagementScope; 17] = [
-    ManagementScope::CredentialsRevoke,
-    ManagementScope::CredentialsReset,
+pub const HUMAN_ONLY_SCOPES: [ManagementScope; 12] = [
     ManagementScope::ClientsDelete,
-    ManagementScope::ClientCredentialsCreate,
-    ManagementScope::ClientCredentialsRotate,
+    ManagementScope::ClientCredentialsWrite,
     ManagementScope::ClientCredentialsRevoke,
     ManagementScope::SettingsWrite,
-    ManagementScope::KeysCreate,
-    ManagementScope::KeysRotate,
+    ManagementScope::KeysWrite,
     ManagementScope::KeysRevoke,
-    ManagementScope::PermissionWrite,
     ManagementScope::RolesWrite,
     ManagementScope::RoleAssignmentsWrite,
     ManagementScope::GroupsWrite,
-    ManagementScope::GroupMembershipsWrite,
-    ManagementScope::GroupRolesWrite,
+    ManagementScope::GroupsDelete,
+    ManagementScope::GroupMembersWrite,
     ManagementScope::PermissionDelegate,
 ];
 
@@ -828,7 +694,8 @@ mod tests {
 
     use super::{
         HUMAN_ONLY_SCOPES, HumanAuthenticationRequirement, ManagementScope, ManagementScopeError,
-        is_reserved_management_name, m2m_allowed_scopes, policy_fingerprint, validate_catalog,
+        RENAMED_MANAGEMENT_SCOPES, RETIRED_MANAGEMENT_SCOPE_NAMES, is_reserved_management_name,
+        m2m_allowed_scopes, policy_fingerprint, validate_catalog,
     };
 
     #[test]
@@ -838,8 +705,8 @@ mod tests {
             "management.sessions.read",
             "management.roles.write",
             "management.groups.write",
-            "management.group_memberships.write",
-            "management.client_credentials.rotate",
+            "management.group_members.write",
+            "management.client_credentials.write",
             "management.client.scopes",
         ] {
             assert!(
@@ -881,8 +748,8 @@ mod tests {
     fn group_scopes_have_exact_authentication_and_machine_boundaries() {
         for scope in [
             ManagementScope::GroupsRead,
-            ManagementScope::GroupMembershipsRead,
-            ManagementScope::GroupRolesRead,
+            ManagementScope::GroupMembersRead,
+            ManagementScope::RoleAssignmentsRead,
         ] {
             assert_eq!(
                 scope.human_authentication(),
@@ -894,8 +761,9 @@ mod tests {
         }
         for scope in [
             ManagementScope::GroupsWrite,
-            ManagementScope::GroupMembershipsWrite,
-            ManagementScope::GroupRolesWrite,
+            ManagementScope::GroupsDelete,
+            ManagementScope::GroupMembersWrite,
+            ManagementScope::RoleAssignmentsWrite,
         ] {
             assert_eq!(
                 scope.human_authentication(),
@@ -940,24 +808,32 @@ mod tests {
         assert!(is_reserved_management_name("management.unknown"));
         assert!(!is_reserved_management_name("management"));
         assert!(!is_reserved_management_name("managementx.users.read"));
-        assert!(!is_reserved_management_name("account.read"));
+        assert!(!is_reserved_management_name("user.read"));
     }
 
     #[test]
     fn owner_target_sensitive_scopes_are_explicit() {
-        let expected = [
-            ManagementScope::UsersUpdate,
-            ManagementScope::UsersState,
-            ManagementScope::UsersRevokeAccess,
-            ManagementScope::CredentialsRevoke,
-            ManagementScope::CredentialsReset,
-        ];
+        let expected = [ManagementScope::UsersWrite];
         for scope in ManagementScope::ALL {
             assert_eq!(
                 scope.is_owner_target_sensitive(),
                 expected.contains(&scope),
                 "{scope}"
             );
+        }
+    }
+
+    #[test]
+    fn retired_and_renamed_catalogs_are_disjoint_from_active_names() {
+        let active: BTreeSet<&str> = ManagementScope::ALL
+            .into_iter()
+            .map(|scope| scope.name())
+            .collect();
+        let retired: BTreeSet<&str> = RETIRED_MANAGEMENT_SCOPE_NAMES.into_iter().collect();
+        assert!(active.is_disjoint(&retired));
+        for (old_name, new_scope) in RENAMED_MANAGEMENT_SCOPES {
+            assert!(retired.contains(old_name), "{old_name}");
+            assert!(active.contains(new_scope.name()), "{}", new_scope.name());
         }
     }
 }

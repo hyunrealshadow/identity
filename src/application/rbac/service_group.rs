@@ -13,6 +13,7 @@ use identity_domain::{
         GroupOid, GroupValidationError, LocalizedMetadata, LocalizedTextError, RoleOid, group,
         group::MAX_GROUP_REASON_LENGTH, validate_group_descriptions, validate_group_names,
     },
+    user::UserOid,
 };
 
 use super::group::GroupFilter as GroupGroupFilter;
@@ -24,22 +25,27 @@ use crate::{
     },
     observability::{BusinessEvent, EventSink, EventValue, NoopEventSink, error_outcome},
     rbac::{
-        cursor::{PageArguments, encode_cursor, prepare_page},
+        cursor::{CURSOR_KIND_ACCOUNT_GROUP, PageArguments, encode_cursor, prepare_page},
         group::{
-            AddGroupMemberCommand, CreateGroupCommand, DeleteGroupCommand, DeleteGroupResult,
-            GroupFilter, GroupMembershipMutationResult, GroupMembershipPage,
-            GroupMembershipPageItem, GroupMembershipPageRequest, GroupPage, GroupPageItem,
-            GroupPageRequest, GroupRecord, GroupRoleMutationResult, GroupRolePage,
-            GroupRolePageItem, GroupRolePageRequest, GroupStateCommand, MAX_GROUP_ROLES,
-            RemoveGroupMemberCommand, SetGroupRolesCommand, UpdateGroupCommand,
+            AccountGroupPage, AccountGroupPageItem, AccountGroupPageRequest, AddGroupMemberCommand,
+            CreateGroupCommand, DeleteGroupCommand, DeleteGroupResult, GroupFilter,
+            GroupMembershipMutationResult, GroupMembershipPage, GroupMembershipPageItem,
+            GroupMembershipPageRequest, GroupPage, GroupPageItem, GroupPageRequest, GroupRecord,
+            GroupRoleMutationResult, GroupRolePage, GroupRolePageItem, GroupRolePageRequest,
+            GroupStateCommand, MAX_GROUP_ROLES, RemoveGroupMemberCommand, SetGroupRolesCommand,
+            UpdateGroupCommand,
         },
         group_repository::{
-            AddGroupMemberTransaction, CreateGroupTransaction, DeleteGroupTransaction,
-            GroupEntityKind, GroupManagementRepository, GroupManagementRepositoryError,
-            GroupMembershipQuery, GroupQuery, GroupRoleQuery, GroupStateTransaction,
-            RemoveGroupMemberTransaction, SetGroupRolesTransaction, UpdateGroupTransaction,
+            AccountGroupQuery, AddGroupMemberTransaction, CreateGroupTransaction,
+            DeleteGroupTransaction, GroupEntityKind, GroupManagementRepository,
+            GroupManagementRepositoryError, GroupMembershipQuery, GroupQuery, GroupRoleQuery,
+            GroupStateTransaction, RemoveGroupMemberTransaction, SetGroupRolesTransaction,
+            UpdateGroupTransaction,
         },
-        model::{MAX_CLIENT_MUTATION_ID_LENGTH, MAX_QUERY_FILTER_LENGTH, RbacManagementAuthority},
+        model::{
+            MAX_CLIENT_MUTATION_ID_LENGTH, MAX_QUERY_FILTER_LENGTH, RbacManagementAuthority,
+            dedupe_batch_lookups,
+        },
     },
 };
 
@@ -82,6 +88,76 @@ impl GroupManagementService {
             .find_group(oid)
             .await
             .map_err(map_repository_error)
+    }
+
+    #[tracing::instrument(skip_all, name = "rbac.group.find_many")]
+    pub async fn find_groups(&self, oids: Vec<GroupOid>) -> Result<Vec<GroupRecord>, AppError> {
+        let oids = dedupe_batch_lookups(oids, GroupErrorCode::InvalidCollectionSize)?;
+        self.repository
+            .find_groups(oids)
+            .await
+            .map_err(map_repository_error)
+    }
+
+    #[tracing::instrument(skip_all, name = "rbac.account_groups.count")]
+    pub async fn count_account_groups(&self, user_oid: UserOid) -> Result<u64, AppError> {
+        self.repository
+            .count_account_groups(user_oid)
+            .await
+            .map_err(map_repository_error)
+    }
+
+    #[tracing::instrument(skip_all, name = "rbac.account_groups.list")]
+    pub async fn list_account_groups(
+        &self,
+        request: AccountGroupPageRequest,
+    ) -> Result<AccountGroupPage, AppError> {
+        let order = request.order;
+        let prepared = prepare_page(
+            self.data_protector.as_ref(),
+            CURSOR_KIND_ACCOUNT_GROUP,
+            order.as_u8(),
+            &request.user_oid,
+            PageArguments {
+                first: request.first,
+                after: request.after,
+                last: request.last,
+                before: request.before,
+            },
+        )
+        .await?;
+        let data = self
+            .repository
+            .list_account_groups(AccountGroupQuery {
+                user_oid: request.user_oid,
+                order,
+                direction: prepared.direction,
+                after: prepared.after,
+                before: prepared.before,
+                limit: prepared.limit,
+            })
+            .await
+            .map_err(map_repository_error)?;
+        let mut items = Vec::with_capacity(data.items.len());
+        for entry in data.items {
+            let cursor = encode_cursor(
+                self.data_protector.as_ref(),
+                CURSOR_KIND_ACCOUNT_GROUP,
+                order.as_u8(),
+                &prepared.filter_fingerprint,
+                &entry.sort_key,
+            )
+            .await?;
+            items.push(AccountGroupPageItem {
+                record: entry.record,
+                cursor,
+            });
+        }
+        Ok(AccountGroupPage {
+            items,
+            has_previous_page: data.has_previous_page,
+            has_next_page: data.has_next_page,
+        })
     }
 
     #[tracing::instrument(skip_all, name = "rbac.group.count")]

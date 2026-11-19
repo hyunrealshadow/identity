@@ -30,8 +30,8 @@ pub(crate) struct ClientMutation;
 impl ClientMutation {
     /// Create a client. Issue a secret separately with `createClientSecret`.
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::ClientsCreate, ManagementTarget::instance())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::ClientsCreate))
+        guard = "ManagementGuard::new(ManagementScope::ClientsWrite, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::ClientsWrite))
     )]
     async fn create_client(
         &self,
@@ -59,8 +59,8 @@ impl ClientMutation {
     /// Update display text and/or protocol settings. Changing what the client
     /// may obtain permanently withdraws what it was already issued.
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::ClientsUpdate, ManagementTarget::instance())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::ClientsUpdate))
+        guard = "ManagementGuard::new(ManagementScope::ClientsWrite, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::ClientsWrite))
     )]
     async fn update_client(
         &self,
@@ -94,8 +94,8 @@ impl ClientMutation {
     }
 
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::ClientsState, ManagementTarget::instance())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::ClientsState))
+        guard = "ManagementGuard::new(ManagementScope::ClientsWrite, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::ClientsWrite))
     )]
     async fn enable_client(
         &self,
@@ -108,8 +108,8 @@ impl ClientMutation {
     /// Disabling rejects the client at every protocol endpoint and permanently
     /// withdraws what it was issued; enabling again does not restore them.
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::ClientsState, ManagementTarget::instance())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::ClientsState))
+        guard = "ManagementGuard::new(ManagementScope::ClientsWrite, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::ClientsWrite))
     )]
     async fn disable_client(
         &self,
@@ -141,8 +141,8 @@ impl ClientMutation {
 
     /// Issue an additional secret; existing secrets stay valid.
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::ClientCredentialsCreate, ManagementTarget::instance())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::ClientCredentialsCreate))
+        guard = "ManagementGuard::new(ManagementScope::ClientCredentialsWrite, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::ClientCredentialsWrite))
     )]
     async fn create_client_secret(
         &self,
@@ -167,8 +167,8 @@ impl ClientMutation {
     /// Issue a new secret and revoke the given one, which permanently withdraws
     /// what the client was already issued.
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::ClientCredentialsRotate, ManagementTarget::instance())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::ClientCredentialsRotate))
+        guard = "ManagementGuard::new(ManagementScope::ClientCredentialsWrite, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::ClientCredentialsWrite))
     )]
     async fn rotate_client_secret(
         &self,
@@ -194,8 +194,8 @@ impl ClientMutation {
     /// Register a public key the client signs `private_key_jwt` assertions
     /// with. Existing credentials stay valid.
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::ClientCredentialsCreate, ManagementTarget::instance())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::ClientCredentialsCreate))
+        guard = "ManagementGuard::new(ManagementScope::ClientCredentialsWrite, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::ClientCredentialsWrite))
     )]
     async fn add_client_public_key(
         &self,
@@ -228,8 +228,8 @@ impl ClientMutation {
     /// Register a JWKS URI the client publishes its signing keys at. The key
     /// set is fetched once to validate it and refreshed from the URI later.
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::ClientCredentialsCreate, ManagementTarget::instance())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::ClientCredentialsCreate))
+        guard = "ManagementGuard::new(ManagementScope::ClientCredentialsWrite, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::ClientCredentialsWrite))
     )]
     async fn add_client_jwks_uri(
         &self,

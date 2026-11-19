@@ -599,7 +599,7 @@ mod tests {
     fn machine_tokens_never_select_a_fake_user_subject() {
         let subject = Uuid::new_v4();
         let machine = ClientAuthorizationData::AccessToken(AccessTokenData {
-            scope: "management.audit.read".to_owned(),
+            scope: "management.session.read".to_owned(),
             resources: Vec::new(),
             user_oid: Some(subject.to_string()),
             principal: AccessTokenPrincipal::Client,

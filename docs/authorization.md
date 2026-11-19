@@ -69,7 +69,7 @@ so there is no second permission catalog to drift.
 - `openid`, `profile`, `email`, `address`, `phone`, and `offline_access` are
   global protocol scopes. They have no resource owner, cannot be added to a role
   as business permissions, and confer no instance authority.
-- Request selectors such as `account.*`, `session.*`, or `management.*` expand
+- Request selectors such as `user.*`, `session.*`, or `management.*` expand
   only against registered scopes at the requested resource. A selector may be
   used at any hierarchy level, selects descendants rather than the prefix
   itself, and never creates a permission. Persistent assignments store concrete
@@ -259,9 +259,9 @@ protected group carrying explicit permissions:
 
 | Preset | Permissions | Notes |
 | --- | --- | --- |
-| Owner | all 44 management scopes | installation adds the first user to this group |
-| Admin | 39 | day-to-day administration; no settings write, no key create/rotate/revoke, no permission delegation |
-| Viewer | 16 | read-only management views |
+| Owner | all 28 management scopes | installation adds the first user to this group |
+| Admin | 24 | day-to-day administration; no settings write, no key write/revoke, no permission delegation |
+| Viewer | 12 | read-only management views |
 
 Protection is decided by the persisted `built_in` flag, never by a fixed
 identifier or a name, so a user-created object that happens to share a display
@@ -273,8 +273,11 @@ Seed identities are deterministic: UUIDv8 values derived from SHA-256 over
 `identity/rbac/role/{owner|admin|viewer}`, `identity/rbac/group/...`, and
 `identity/rbac/permission/<scope name>`. The seed uses those identities only to
 stay idempotent; runtime authorization reads effective permissions and the
-`built_in` flag. Re-running the seed maintains definitions without restoring
-revoked grants.
+`built_in` flag. Startup seed execution automatically reconciles built-in
+scopes, roles, groups, and built-in client scope ceilings: exact 1-to-1
+renames migrate existing relations cleanly, obsolete built-in scopes are retired
+without widening narrowed custom roles, and built-in group memberships or
+revoked custom grants are never restored.
 
 Custom roles may reference built-in permissions, and an instance administrator
 is simply a user holding the relevant permissions — losing them removes the

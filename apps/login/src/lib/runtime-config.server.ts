@@ -101,6 +101,15 @@ export async function loadOAuthClient() {
   }
 }
 
+export async function loadConsoleUrl(): Promise<string | undefined> {
+  try {
+    await loadRuntimeConfiguration()
+  } catch {
+    // Fall back to any cached origin; Console link is optional UI affordance.
+  }
+  return configuredApplicationUrl('console_domain')
+}
+
 export function loadSessionSecret() {
   const secret = process.env.IDENTITY_LOGIN_SESSION_SECRET
   if (!secret) {

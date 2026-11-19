@@ -345,7 +345,7 @@ impl KeyManagementRepository for KeyManagementRepositoryImpl {
             now,
         } = transaction;
         let txn = self.db.begin().await.map_err(storage)?;
-        recheck_authority(&txn, &authority, ManagementScope::KeysRotate, None)
+        recheck_authority(&txn, &authority, ManagementScope::KeysWrite, None)
             .await
             .map_err(from_management)?;
         if revoke_previous {
@@ -407,7 +407,7 @@ impl KeyManagementRepository for KeyManagementRepositoryImpl {
             now,
         } = transaction;
         let txn = self.db.begin().await.map_err(storage)?;
-        recheck_authority(&txn, &authority, ManagementScope::KeysCreate, None)
+        recheck_authority(&txn, &authority, ManagementScope::KeysWrite, None)
             .await
             .map_err(from_management)?;
         txn.execute(&advisory_transaction_lock(KEY_ROTATION_LOCK))

@@ -7,6 +7,353 @@ export const schemaMetadata: SchemaMetadata = {
   "queryTypeName": "QueryRoot",
   "mutationTypeName": "MutationRoot",
   "types": {
+    "AccountGroup": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "builtIn": {
+          "name": "builtIn",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "description": {
+          "name": "description",
+          "returnType": "String",
+          "policies": []
+        },
+        "descriptions": {
+          "name": "descriptions",
+          "returnType": "LocalizedText",
+          "policies": []
+        },
+        "id": {
+          "name": "id",
+          "returnType": "ID",
+          "policies": []
+        },
+        "name": {
+          "name": "name",
+          "returnType": "String",
+          "policies": []
+        },
+        "names": {
+          "name": "names",
+          "returnType": "LocalizedText",
+          "policies": []
+        }
+      }
+    },
+    "AccountGroupConnection": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "edges": {
+          "name": "edges",
+          "returnType": "AccountGroupEdge",
+          "policies": []
+        },
+        "nodes": {
+          "name": "nodes",
+          "returnType": "AccountGroup",
+          "policies": []
+        },
+        "pageInfo": {
+          "name": "pageInfo",
+          "returnType": "PageInfo",
+          "policies": []
+        },
+        "totalCount": {
+          "name": "totalCount",
+          "returnType": "Int",
+          "policies": []
+        }
+      }
+    },
+    "AccountGroupEdge": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "cursor": {
+          "name": "cursor",
+          "returnType": "String",
+          "policies": []
+        },
+        "joinedAt": {
+          "name": "joinedAt",
+          "returnType": "DateTime",
+          "policies": []
+        },
+        "node": {
+          "name": "node",
+          "returnType": "AccountGroup",
+          "policies": []
+        }
+      }
+    },
+    "AccountPermission": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "builtIn": {
+          "name": "builtIn",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "code": {
+          "name": "code",
+          "returnType": "String",
+          "policies": []
+        },
+        "description": {
+          "name": "description",
+          "returnType": "String",
+          "policies": []
+        },
+        "descriptions": {
+          "name": "descriptions",
+          "returnType": "LocalizedText",
+          "policies": []
+        },
+        "groupSources": {
+          "name": "groupSources",
+          "returnType": "AccountPermissionGroupSource",
+          "policies": []
+        },
+        "name": {
+          "name": "name",
+          "returnType": "String",
+          "policies": []
+        },
+        "names": {
+          "name": "names",
+          "returnType": "LocalizedText",
+          "policies": []
+        },
+        "permissionId": {
+          "name": "permissionId",
+          "returnType": "ID",
+          "policies": []
+        },
+        "resourceId": {
+          "name": "resourceId",
+          "returnType": "ID",
+          "policies": []
+        },
+        "resourceName": {
+          "name": "resourceName",
+          "returnType": "String",
+          "policies": []
+        },
+        "resourceUri": {
+          "name": "resourceUri",
+          "returnType": "String",
+          "policies": []
+        },
+        "scope": {
+          "name": "scope",
+          "returnType": "String",
+          "policies": []
+        },
+        "sources": {
+          "name": "sources",
+          "returnType": "AccountPermissionRoleSource",
+          "policies": []
+        }
+      }
+    },
+    "AccountPermissionConnection": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "edges": {
+          "name": "edges",
+          "returnType": "AccountPermissionEdge",
+          "policies": []
+        },
+        "nodes": {
+          "name": "nodes",
+          "returnType": "AccountPermission",
+          "policies": []
+        },
+        "pageInfo": {
+          "name": "pageInfo",
+          "returnType": "PageInfo",
+          "policies": []
+        },
+        "totalCount": {
+          "name": "totalCount",
+          "returnType": "Int",
+          "policies": []
+        }
+      }
+    },
+    "AccountPermissionEdge": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "cursor": {
+          "name": "cursor",
+          "returnType": "String",
+          "policies": []
+        },
+        "node": {
+          "name": "node",
+          "returnType": "AccountPermission",
+          "policies": []
+        }
+      }
+    },
+    "AccountPermissionGroupSource": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "group": {
+          "name": "group",
+          "returnType": "AccountGroup",
+          "policies": []
+        },
+        "groupId": {
+          "name": "groupId",
+          "returnType": "ID",
+          "policies": []
+        },
+        "role": {
+          "name": "role",
+          "returnType": "AccountRole",
+          "policies": []
+        },
+        "roleId": {
+          "name": "roleId",
+          "returnType": "ID",
+          "policies": []
+        }
+      }
+    },
+    "AccountPermissionRoleSource": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "role": {
+          "name": "role",
+          "returnType": "AccountRole",
+          "policies": []
+        },
+        "roleId": {
+          "name": "roleId",
+          "returnType": "ID",
+          "policies": []
+        }
+      }
+    },
+    "AccountRole": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "builtIn": {
+          "name": "builtIn",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "description": {
+          "name": "description",
+          "returnType": "String",
+          "policies": []
+        },
+        "descriptions": {
+          "name": "descriptions",
+          "returnType": "LocalizedText",
+          "policies": []
+        },
+        "id": {
+          "name": "id",
+          "returnType": "ID",
+          "policies": []
+        },
+        "name": {
+          "name": "name",
+          "returnType": "String",
+          "policies": []
+        },
+        "names": {
+          "name": "names",
+          "returnType": "LocalizedText",
+          "policies": []
+        }
+      }
+    },
+    "AccountRoleConnection": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "edges": {
+          "name": "edges",
+          "returnType": "AccountRoleEdge",
+          "policies": []
+        },
+        "nodes": {
+          "name": "nodes",
+          "returnType": "AccountRole",
+          "policies": []
+        },
+        "pageInfo": {
+          "name": "pageInfo",
+          "returnType": "PageInfo",
+          "policies": []
+        },
+        "totalCount": {
+          "name": "totalCount",
+          "returnType": "Int",
+          "policies": []
+        }
+      }
+    },
+    "AccountRoleEdge": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "cursor": {
+          "name": "cursor",
+          "returnType": "String",
+          "policies": []
+        },
+        "grantedAt": {
+          "name": "grantedAt",
+          "returnType": "DateTime",
+          "policies": []
+        },
+        "group": {
+          "name": "group",
+          "returnType": "AccountGroup",
+          "policies": []
+        },
+        "groupId": {
+          "name": "groupId",
+          "returnType": "ID",
+          "policies": []
+        },
+        "node": {
+          "name": "node",
+          "returnType": "AccountRole",
+          "policies": []
+        },
+        "source": {
+          "name": "source",
+          "returnType": "AuthorizationSource",
+          "policies": []
+        }
+      }
+    },
     "AccountSecurity": {
       "kind": "OBJECT",
       "interfaces": [],
@@ -965,7 +1312,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "management.group_membership.read"
+                "management.group_member.read"
               ],
               "authentication": "AAL2",
               "userOnly": false,
@@ -973,7 +1320,7 @@ export const schemaMetadata: SchemaMetadata = {
             },
             {
               "scopes": [
-                "management.group_role.read"
+                "management.role_assignment.read"
               ],
               "authentication": "AAL2",
               "userOnly": false,
@@ -1189,7 +1536,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "management.group_membership.read"
+                "management.group_member.read"
               ],
               "authentication": "AAL2",
               "userOnly": false,
@@ -1221,7 +1568,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "management.group_role.read"
+                "management.role_assignment.read"
               ],
               "authentication": "AAL2",
               "userOnly": false,
@@ -2057,7 +2404,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "management.client_credential.create"
+                "management.client_credential.write"
               ],
               "authentication": "RECENT_AAL2",
               "userOnly": true,
@@ -2072,7 +2419,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "management.client_credential.create"
+                "management.client_credential.write"
               ],
               "authentication": "RECENT_AAL2",
               "userOnly": true,
@@ -2087,7 +2434,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "management.group_membership.write"
+                "management.group_member.write"
               ],
               "authentication": "RECENT_AAL2",
               "userOnly": true,
@@ -2124,7 +2471,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "account.update"
+                "user.write"
               ],
               "authentication": "SESSION",
               "userOnly": true,
@@ -2146,7 +2493,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "account.update"
+                "user.write"
               ],
               "authentication": "SESSION",
               "userOnly": true,
@@ -2190,7 +2537,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "account.update"
+                "user.write"
               ],
               "authentication": "SESSION",
               "userOnly": true,
@@ -2212,7 +2559,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "account.update"
+                "user.write"
               ],
               "authentication": "SESSION",
               "userOnly": true,
@@ -2234,7 +2581,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "management.client.create"
+                "management.client.write"
               ],
               "authentication": "AAL2",
               "userOnly": false,
@@ -2248,7 +2595,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "management.client_credential.create"
+                "management.client_credential.write"
               ],
               "authentication": "RECENT_AAL2",
               "userOnly": true,
@@ -2328,7 +2675,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "management.key.create"
+                "management.key.write"
               ],
               "authentication": "RECENT_AAL2",
               "userOnly": true,
@@ -2343,7 +2690,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "management.user.create"
+                "management.user.write"
               ],
               "authentication": "AAL2",
               "userOnly": false,
@@ -2372,7 +2719,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "management.group.write"
+                "management.group.delete"
               ],
               "authentication": "RECENT_AAL2",
               "userOnly": true,
@@ -2394,7 +2741,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "account.update"
+                "user.write"
               ],
               "authentication": "SESSION",
               "userOnly": true,
@@ -2416,7 +2763,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "management.client.state"
+                "management.client.write"
               ],
               "authentication": "AAL2",
               "userOnly": false,
@@ -2473,7 +2820,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "account.update"
+                "user.write"
               ],
               "authentication": "SESSION",
               "userOnly": true,
@@ -2494,7 +2841,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "management.user.state"
+                "management.user.write"
               ],
               "authentication": "AAL2",
               "userOnly": false,
@@ -2508,7 +2855,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "management.client.state"
+                "management.client.write"
               ],
               "authentication": "AAL2",
               "userOnly": false,
@@ -2565,7 +2912,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "management.user.state"
+                "management.user.write"
               ],
               "authentication": "AAL2",
               "userOnly": false,
@@ -2579,7 +2926,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "account.update"
+                "user.write"
               ],
               "authentication": "SESSION",
               "userOnly": true,
@@ -2601,7 +2948,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "account.update"
+                "user.write"
               ],
               "authentication": "SESSION",
               "userOnly": true,
@@ -2623,7 +2970,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "account.update"
+                "user.write"
               ],
               "authentication": "SESSION",
               "userOnly": true,
@@ -2645,7 +2992,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "account.update"
+                "user.write"
               ],
               "authentication": "SESSION",
               "userOnly": true,
@@ -2666,7 +3013,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "management.group_membership.write"
+                "management.group_member.write"
               ],
               "authentication": "RECENT_AAL2",
               "userOnly": true,
@@ -2761,7 +3108,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "management.key.rotate",
+                "management.key.write",
                 "management.key.revoke"
               ],
               "authentication": "RECENT_AAL2",
@@ -2777,7 +3124,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "management.client_credential.rotate"
+                "management.client_credential.write"
               ],
               "authentication": "RECENT_AAL2",
               "userOnly": true,
@@ -2792,7 +3139,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "management.key.rotate"
+                "management.key.write"
               ],
               "authentication": "RECENT_AAL2",
               "userOnly": true,
@@ -2807,7 +3154,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "management.client.scope"
+                "management.client.write"
               ],
               "authentication": "AAL2",
               "userOnly": false,
@@ -2843,7 +3190,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "management.group_role.write"
+                "management.role_assignment.write"
               ],
               "authentication": "RECENT_AAL2",
               "userOnly": true,
@@ -2880,7 +3227,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "management.user.state"
+                "management.user.write"
               ],
               "authentication": "AAL2",
               "userOnly": false,
@@ -2909,7 +3256,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "management.client.update"
+                "management.client.write"
               ],
               "authentication": "AAL2",
               "userOnly": false,
@@ -2923,7 +3270,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "account.update"
+                "user.write"
               ],
               "authentication": "SESSION",
               "userOnly": true,
@@ -2966,7 +3313,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "account.update"
+                "user.write"
               ],
               "authentication": "SESSION",
               "userOnly": true,
@@ -2980,7 +3327,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "account.update"
+                "user.write"
               ],
               "authentication": "SESSION",
               "userOnly": true,
@@ -3052,7 +3399,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "management.user.update"
+                "management.user.write"
               ],
               "authentication": "AAL2",
               "userOnly": false,
@@ -3066,7 +3413,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "account.update"
+                "user.write"
               ],
               "authentication": "SESSION",
               "userOnly": true,
@@ -3255,7 +3602,21 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "account.read"
+                "user.read"
+              ],
+              "authentication": "SESSION",
+              "userOnly": true,
+              "runtime": false
+            }
+          ]
+        },
+        "accountGroups": {
+          "name": "accountGroups",
+          "returnType": "AccountGroupConnection",
+          "policies": [
+            {
+              "scopes": [
+                "user.read"
               ],
               "authentication": "SESSION",
               "userOnly": true,
@@ -3265,11 +3626,25 @@ export const schemaMetadata: SchemaMetadata = {
         },
         "accountPermissions": {
           "name": "accountPermissions",
-          "returnType": "EffectivePermissionConnection",
+          "returnType": "AccountPermissionConnection",
           "policies": [
             {
               "scopes": [
-                "account.read"
+                "user.read"
+              ],
+              "authentication": "SESSION",
+              "userOnly": true,
+              "runtime": false
+            }
+          ]
+        },
+        "accountRoles": {
+          "name": "accountRoles",
+          "returnType": "AccountRoleConnection",
+          "policies": [
+            {
+              "scopes": [
+                "user.read"
               ],
               "authentication": "SESSION",
               "userOnly": true,
@@ -3453,7 +3828,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "account.read"
+                "user.read"
               ],
               "authentication": "SESSION",
               "userOnly": true,
@@ -3551,7 +3926,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "account.read"
+                "user.read"
               ],
               "authentication": "SESSION",
               "userOnly": true,
@@ -3869,7 +4244,7 @@ export const schemaMetadata: SchemaMetadata = {
             },
             {
               "scopes": [
-                "management.group_role.read"
+                "management.role_assignment.read"
               ],
               "authentication": "AAL2",
               "userOnly": false,
@@ -4535,6 +4910,36 @@ export const schemaMetadata: SchemaMetadata = {
       ],
       "possibleTypes": [],
       "fields": {
+        "addressCountry": {
+          "name": "addressCountry",
+          "returnType": "String",
+          "policies": []
+        },
+        "addressFormatted": {
+          "name": "addressFormatted",
+          "returnType": "String",
+          "policies": []
+        },
+        "addressLocality": {
+          "name": "addressLocality",
+          "returnType": "String",
+          "policies": []
+        },
+        "addressPostalCode": {
+          "name": "addressPostalCode",
+          "returnType": "String",
+          "policies": []
+        },
+        "addressRegion": {
+          "name": "addressRegion",
+          "returnType": "String",
+          "policies": []
+        },
+        "addressStreetAddress": {
+          "name": "addressStreetAddress",
+          "returnType": "String",
+          "policies": []
+        },
         "birthdate": {
           "name": "birthdate",
           "returnType": "String",
@@ -4602,6 +5007,11 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "String",
           "policies": []
         },
+        "gender": {
+          "name": "gender",
+          "returnType": "String",
+          "policies": []
+        },
         "givenName": {
           "name": "givenName",
           "returnType": "String",
@@ -4621,7 +5031,7 @@ export const schemaMetadata: SchemaMetadata = {
             },
             {
               "scopes": [
-                "management.group_membership.read"
+                "management.group_member.read"
               ],
               "authentication": "AAL2",
               "userOnly": false,
@@ -4675,6 +5085,16 @@ export const schemaMetadata: SchemaMetadata = {
         "nickname": {
           "name": "nickname",
           "returnType": "String",
+          "policies": []
+        },
+        "phoneNumber": {
+          "name": "phoneNumber",
+          "returnType": "String",
+          "policies": []
+        },
+        "phoneNumberVerified": {
+          "name": "phoneNumberVerified",
+          "returnType": "Boolean",
           "policies": []
         },
         "picture": {

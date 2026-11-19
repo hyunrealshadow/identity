@@ -147,7 +147,7 @@ impl RbacManagementRepositoryImpl {
         recheck_authority(
             &txn,
             &command.authority,
-            ManagementScope::ClientsScopes,
+            ManagementScope::ClientsWrite,
             None,
         )
         .await?;

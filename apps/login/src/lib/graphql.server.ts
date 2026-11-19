@@ -69,7 +69,7 @@ export async function preflightIdentityGraphql(
 
   let result = await evaluatePreflight(query, variables, elevated ?? standard ?? '')
   // An elevation token is minted for a single purpose. After an MFA change it
-  // can carry `account.*` only, so an unrelated operation's scope looks
+  // can carry `user.*` only, so an unrelated operation's scope looks
   // forbidden even though reauthenticating for that purpose would grant it.
   // The ordinary token still answers whether the operation is reachable that
   // way, so let it run the same check instead of reporting a dead end.
@@ -167,7 +167,7 @@ async function evaluatePreflight(
   const context = tokenPreflightContext(token)
   if (!context) return
   let result = preflightOperation(query, variables, context)
-  if (result.status === 'unknown' && context.scopes.includes('account.read')) {
+  if (result.status === 'unknown' && context.scopes.includes('user.read')) {
     const withoutMfa = preflightOperation(query, variables, { ...context, mfaEnabled: false })
     const withMfa = preflightOperation(query, variables, { ...context, mfaEnabled: true })
     if (JSON.stringify(withoutMfa) !== JSON.stringify(withMfa)) {

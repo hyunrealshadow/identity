@@ -91,7 +91,7 @@ describe('account theme', () => {
   it('keeps the current theme when the account read fails', async () => {
     stubSystemTheme(true)
     applyTheme('light')
-    mocks.failure.current = new Error('account.read is missing from the session')
+    mocks.failure.current = new Error('user.read is missing from the session')
 
     renderWithLocale(<AccountThemeSync />)
 

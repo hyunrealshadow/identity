@@ -275,8 +275,8 @@ impl GroupNode {
 
     /// Users in the group, with the membership facts on each edge.
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::GroupMembershipsRead, ManagementTarget::instance()).and(ManagementGuard::new(ManagementScope::UsersRead, ManagementTarget::instance()))",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::GroupMembershipsRead)),
+        guard = "ManagementGuard::new(ManagementScope::GroupMembersRead, ManagementTarget::instance()).and(ManagementGuard::new(ManagementScope::UsersRead, ManagementTarget::instance()))",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::GroupMembersRead)),
         directive = access::apply(ManagementGuard::policy(ManagementScope::UsersRead)),
         complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
     )]
@@ -306,8 +306,8 @@ impl GroupNode {
 
     /// Roles granted to the group, with the group-role facts on each edge.
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::GroupRolesRead, ManagementTarget::instance()).and(ManagementGuard::new(ManagementScope::RolesRead, ManagementTarget::instance()))",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::GroupRolesRead)),
+        guard = "ManagementGuard::new(ManagementScope::RoleAssignmentsRead, ManagementTarget::instance()).and(ManagementGuard::new(ManagementScope::RolesRead, ManagementTarget::instance()))",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::RoleAssignmentsRead)),
         directive = access::apply(ManagementGuard::policy(ManagementScope::RolesRead)),
         complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
     )]

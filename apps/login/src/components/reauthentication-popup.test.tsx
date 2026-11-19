@@ -88,7 +88,7 @@ it('shows a blocked notice and opens a retry window only after the server confir
   await waitFor(() => expect(mocks.navigate).toHaveBeenCalledOnce())
 })
 
-function access(age = 0, scopes = ['account.read', 'account.update', 'password.change']) {
+function access(age = 0, scopes = ['user.read', 'user.write', 'password.change']) {
   const context = { scopes, user: true, acr: 'aal2', authTime: Math.floor(Date.now() / 1000) - age, mfaEnabled: true }
   return { default: context, elevated: context }
 }

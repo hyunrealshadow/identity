@@ -27,8 +27,9 @@ use super::{
     role::{RoleFilter, RoleOrder, RoleRecord},
     scope::{ScopeFilter, ScopeOrder, ScopeRecord},
     user_role::{
-        AuthorizationSource, EffectivePermissionOrder, EffectivePermissionRecord, UserRoleGrant,
-        UserRoleMutationResult, UserRoleOrder, UserRoleRecord,
+        AccountPermissionRecord, AccountRoleGrant, AuthorizationSource, EffectivePermissionOrder,
+        EffectivePermissionRecord, UserRoleGrant, UserRoleMutationResult, UserRoleOrder,
+        UserRoleRecord,
     },
 };
 
@@ -124,6 +125,41 @@ pub struct EffectivePermissionPageData {
     pub has_previous_page: bool,
     pub has_next_page: bool,
     pub user_version: Uuid,
+}
+
+#[derive(Debug, Clone)]
+pub struct AccountRolePageEntry {
+    pub sort_key: RbacSortKey,
+    pub grant: AccountRoleGrant,
+}
+
+#[derive(Debug, Clone)]
+pub struct AccountRoleQuery {
+    pub user_oid: UserOid,
+    pub source: Option<AuthorizationSource>,
+    pub order: UserRoleOrder,
+    pub direction: RbacPageDirection,
+    pub after: Option<RbacSortKey>,
+    pub before: Option<RbacSortKey>,
+    pub limit: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct AccountPermissionPageEntry {
+    pub sort_key: RbacSortKey,
+    pub record: AccountPermissionRecord,
+}
+
+#[derive(Debug, Clone)]
+pub struct AccountPermissionQuery {
+    pub user_oid: UserOid,
+    pub resource_oid: Option<ResourceOid>,
+    pub source: Option<AuthorizationSource>,
+    pub order: EffectivePermissionOrder,
+    pub direction: RbacPageDirection,
+    pub after: Option<RbacSortKey>,
+    pub before: Option<RbacSortKey>,
+    pub limit: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -528,6 +564,29 @@ pub trait RbacManagementRepository: Send + Sync {
         &self,
         query: EffectivePermissionQuery,
     ) -> Result<EffectivePermissionPageData, RbacManagementRepositoryError>;
+
+    async fn count_account_roles(
+        &self,
+        user_oid: UserOid,
+        source: Option<AuthorizationSource>,
+    ) -> Result<u64, RbacManagementRepositoryError>;
+
+    async fn list_account_roles(
+        &self,
+        query: AccountRoleQuery,
+    ) -> Result<RbacPageData<AccountRolePageEntry>, RbacManagementRepositoryError>;
+
+    async fn count_account_permissions(
+        &self,
+        user_oid: UserOid,
+        resource_oid: Option<ResourceOid>,
+        source: Option<AuthorizationSource>,
+    ) -> Result<u64, RbacManagementRepositoryError>;
+
+    async fn list_account_permissions(
+        &self,
+        query: AccountPermissionQuery,
+    ) -> Result<RbacPageData<AccountPermissionPageEntry>, RbacManagementRepositoryError>;
 
     async fn assign_user_roles(
         &self,

@@ -317,3 +317,32 @@ pub struct DeleteGroupResult {
     pub group_oid: GroupOid,
     pub deleted: bool,
 }
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AccountGroupRecord {
+    pub group: GroupRecord,
+    pub joined_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AccountGroupPageRequest {
+    pub user_oid: UserOid,
+    pub order: GroupOrder,
+    pub first: Option<u32>,
+    pub after: Option<String>,
+    pub last: Option<u32>,
+    pub before: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct AccountGroupPageItem {
+    pub record: AccountGroupRecord,
+    pub cursor: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct AccountGroupPage {
+    pub items: Vec<AccountGroupPageItem>,
+    pub has_previous_page: bool,
+    pub has_next_page: bool,
+}

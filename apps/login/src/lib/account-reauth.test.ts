@@ -8,7 +8,7 @@ import {
 
 describe('account reauthentication', () => {
   it('does not turn a permission denial into an authentication challenge', () => {
-    for (const requiredScope of ['account.update', 'password.change']) {
+    for (const requiredScope of ['user.write', 'password.change']) {
       expect(requiresAccountReauthentication(new GraphqlRequestError([{
         message: 'insufficient scope', extensions: { code: 'insufficient_scope', requiredScope },
       }]))).toBe(false)

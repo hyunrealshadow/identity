@@ -52,6 +52,7 @@ const zhCN = {
   signedOutDescription: '你已在此设备上退出登录。你可以安全地关闭此页面，或重新登录',
   signInAgain: '重新登录',
   accountConsole: 'Identity 账号',
+  consoleLabel: '控制台',
   accountSettings: '账号设置',
   accountSecurity: '安全',
   accountProfileDescription: '个人资料与显示偏好',

@@ -109,7 +109,7 @@ describe('user detail action authority', () => {
   it('offers requestable actions without starting authentication before an operation', () => {
     mocks.permissions = permissions(
       ['management.user.read'],
-      ['management.user.state'],
+      ['management.user.write'],
       false,
     )
     renderWithLocale(
@@ -123,7 +123,7 @@ describe('user detail action authority', () => {
   it('offers the state menu only after the state permission is effective', () => {
     mocks.permissions = permissions([
       'management.user.read',
-      'management.user.state',
+      'management.user.write',
     ])
     renderWithLocale(
       <UserDetailLayout userId="User:target" current="/users/$userId">

@@ -51,6 +51,30 @@ it('keeps sign out and adds switch account to the same menu', async () => {
   ])
 })
 
+it('shows the Console link above switch account when authorized', async () => {
+  render(
+    <UserMenu
+      user={user}
+      menuLabel="Account menu"
+      consoleUrl="https://identity.example/console"
+      consoleLabel="Console"
+      signOutLabel="Sign out"
+      switchAccountLabel="Switch account"
+      requestFailedLabel="Unable to save changes"
+    />,
+  )
+
+  fireEvent.click(screen.getByRole('button', { name: 'Account menu' }))
+  const items = await screen.findAllByRole('menuitem')
+  expect(items.map((item) => item.textContent)).toEqual([
+    'Console',
+    'Switch account',
+    'Sign out',
+  ])
+  const consoleLink = screen.getByRole('menuitem', { name: 'Console' })
+  expect(consoleLink.getAttribute('href')).toBe('https://identity.example/console')
+})
+
 it('starts a normal switch-account sign-in action', async () => {
   render(
     <UserMenu

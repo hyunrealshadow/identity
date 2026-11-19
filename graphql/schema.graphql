@@ -21,6 +21,93 @@ input AccessPolicy {
 	runtime: Boolean!
 }
 
+type AccountGroup {
+	id: ID!
+	name: String!
+	description: String!
+	names: [LocalizedText!]!
+	descriptions: [LocalizedText!]!
+	builtIn: Boolean!
+}
+
+type AccountGroupConnection {
+	pageInfo: PageInfo!
+	edges: [AccountGroupEdge!]!
+	nodes: [AccountGroup!]!
+	totalCount: Int!
+}
+
+type AccountGroupEdge {
+	cursor: String!
+	joinedAt: DateTime!
+	node: AccountGroup!
+}
+
+type AccountPermission {
+	permissionId: ID!
+	resourceId: ID!
+	resourceUri: String!
+	resourceName: String!
+	code: String!
+	scope: String!
+	name: String!
+	names: [LocalizedText!]!
+	description: String!
+	descriptions: [LocalizedText!]!
+	builtIn: Boolean!
+	sources: [AccountPermissionRoleSource!]!
+	groupSources: [AccountPermissionGroupSource!]!
+}
+
+type AccountPermissionConnection {
+	pageInfo: PageInfo!
+	edges: [AccountPermissionEdge!]!
+	nodes: [AccountPermission!]!
+	totalCount: Int!
+}
+
+type AccountPermissionEdge {
+	cursor: String!
+	node: AccountPermission!
+}
+
+type AccountPermissionGroupSource {
+	groupId: ID!
+	roleId: ID!
+	group: AccountGroup!
+	role: AccountRole!
+}
+
+type AccountPermissionRoleSource {
+	roleId: ID!
+	role: AccountRole!
+}
+
+type AccountRole {
+	id: ID!
+	name: String!
+	description: String!
+	names: [LocalizedText!]!
+	descriptions: [LocalizedText!]!
+	builtIn: Boolean!
+}
+
+type AccountRoleConnection {
+	pageInfo: PageInfo!
+	edges: [AccountRoleEdge!]!
+	nodes: [AccountRole!]!
+	totalCount: Int!
+}
+
+type AccountRoleEdge {
+	cursor: String!
+	source: AuthorizationSource!
+	grantedAt: DateTime!
+	groupId: ID
+	group: AccountGroup
+	node: AccountRole!
+}
+
 type AccountSecurity {
 	mfaEnabled: Boolean!
 	preferredMfaMethod: String!
@@ -722,7 +809,7 @@ type EffectivePermission {
 	code: String!
 	scope: String!
 	sources: [EffectivePermissionSource!]!
-	groupSources: [EffectiveGroupPermissionSource!]! @access(policy: {scopes: ["management.group_membership.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true}) @access(policy: {scopes: ["management.group_role.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	groupSources: [EffectiveGroupPermissionSource!]! @access(policy: {scopes: ["management.group_member.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true}) @access(policy: {scopes: ["management.role_assignment.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 }
 
 type EffectivePermissionConnection {
@@ -779,11 +866,11 @@ type Group implements Node {
 	"""
 	Users in the group, with the membership facts on each edge.
 	"""
-	members(filter: GroupMembershipFilter, orderBy: GroupMembershipOrder, first: Int, after: String, last: Int, before: String): GroupMemberConnection! @access(policy: {scopes: ["management.group_membership.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true}) @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	members(filter: GroupMembershipFilter, orderBy: GroupMembershipOrder, first: Int, after: String, last: Int, before: String): GroupMemberConnection! @access(policy: {scopes: ["management.group_member.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true}) @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	"""
 	Roles granted to the group, with the group-role facts on each edge.
 	"""
-	roles(filter: GroupRoleFilter, orderBy: GroupRoleOrder, first: Int, after: String, last: Int, before: String): GroupRoleConnection! @access(policy: {scopes: ["management.group_role.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true}) @access(policy: {scopes: ["management.role.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	roles(filter: GroupRoleFilter, orderBy: GroupRoleOrder, first: Int, after: String, last: Int, before: String): GroupRoleConnection! @access(policy: {scopes: ["management.role_assignment.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true}) @access(policy: {scopes: ["management.role.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 }
 
 type GroupConnection {
@@ -1193,35 +1280,35 @@ input LocalizedTextInput {
 }
 
 type MutationRoot {
-	updateUsername(input: UpdateUsernameInput!): UpdateProfilePayload! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: RECENT, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: false})
-	updateEmail(input: UpdateEmailInput!): UpdateProfilePayload! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: RECENT, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: false})
-	updateProfile(input: UpdateProfileInput!): UpdateProfilePayload! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
-	prepareMfaManagement: Boolean! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
-	prepareMfaRecoveryCodes: RecoveryCodeEnrollmentPayload! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
-	updatePreferredMfaMethod(method: PreferredMfaMethod!): Boolean! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
-	beginPasskeyRegistration(recoveryEnrollmentToken: String): JSON! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
-	finishPasskeyRegistration(challengeId: ID!, name: String!, credential: JSON!): Boolean! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
-	deletePasskey(id: ID!): Boolean! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
+	updateUsername(input: UpdateUsernameInput!): UpdateProfilePayload! @access(policy: {scopes: ["user.write"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: RECENT, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: false})
+	updateEmail(input: UpdateEmailInput!): UpdateProfilePayload! @access(policy: {scopes: ["user.write"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: RECENT, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: false})
+	updateProfile(input: UpdateProfileInput!): UpdateProfilePayload! @access(policy: {scopes: ["user.write"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
+	prepareMfaManagement: Boolean! @access(policy: {scopes: ["user.write"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
+	prepareMfaRecoveryCodes: RecoveryCodeEnrollmentPayload! @access(policy: {scopes: ["user.write"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
+	updatePreferredMfaMethod(method: PreferredMfaMethod!): Boolean! @access(policy: {scopes: ["user.write"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
+	beginPasskeyRegistration(recoveryEnrollmentToken: String): JSON! @access(policy: {scopes: ["user.write"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
+	finishPasskeyRegistration(challengeId: ID!, name: String!, credential: JSON!): Boolean! @access(policy: {scopes: ["user.write"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
+	deletePasskey(id: ID!): Boolean! @access(policy: {scopes: ["user.write"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
 	changePassword(input: ChangePasswordInput!): ChangePasswordPayload! @access(policy: {scopes: ["password.change"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
-	beginTotpEnrollment(clientMutationId: String): BeginTotpEnrollmentPayload! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
-	confirmTotpEnrollment(input: ConfirmTotpEnrollmentInput!): RecoveryCodesPayload! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
-	changeTotpEnrollmentAlgorithm(input: ChangeTotpEnrollmentAlgorithmInput!): BeginTotpEnrollmentPayload! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
-	disableTotp(clientMutationId: String): TotpChangedPayload! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: RECENT_AAL2, maxAge: 3600, elevatedMaxAge: null, userOnly: true, runtime: false})
-	regenerateRecoveryCodes(clientMutationId: String): RecoveryCodesPayload! @access(policy: {scopes: ["account.update"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: RECENT_AAL2, maxAge: 3600, elevatedMaxAge: null, userOnly: true, runtime: false})
+	beginTotpEnrollment(clientMutationId: String): BeginTotpEnrollmentPayload! @access(policy: {scopes: ["user.write"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
+	confirmTotpEnrollment(input: ConfirmTotpEnrollmentInput!): RecoveryCodesPayload! @access(policy: {scopes: ["user.write"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
+	changeTotpEnrollmentAlgorithm(input: ChangeTotpEnrollmentAlgorithmInput!): BeginTotpEnrollmentPayload! @access(policy: {scopes: ["user.write"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
+	disableTotp(clientMutationId: String): TotpChangedPayload! @access(policy: {scopes: ["user.write"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: RECENT_AAL2, maxAge: 3600, elevatedMaxAge: null, userOnly: true, runtime: false})
+	regenerateRecoveryCodes(clientMutationId: String): RecoveryCodesPayload! @access(policy: {scopes: ["user.write"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: RECENT_AAL2, maxAge: 3600, elevatedMaxAge: null, userOnly: true, runtime: false})
 	revokeSession(id: ID!, clientMutationId: String): RevokeSessionPayload! @access(policy: {scopes: ["session.revoke"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
 	revokeOtherSessions(clientMutationId: String): RevokeOtherSessionsPayload! @access(policy: {scopes: ["session.revoke"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
-	createUser(input: CreateUserInput!): CreateUserPayload! @access(policy: {scopes: ["management.user.create"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
-	updateUser(input: UpdateUserInput!): UpdateUserPayload! @access(policy: {scopes: ["management.user.update"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
-	enableUser(input: UserStateInput!): UserStatePayload! @access(policy: {scopes: ["management.user.state"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
-	disableUser(input: UserStateInput!): UserStatePayload! @access(policy: {scopes: ["management.user.state"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
-	unlockUser(input: UnlockUserInput!): UserStatePayload! @access(policy: {scopes: ["management.user.state"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	createUser(input: CreateUserInput!): CreateUserPayload! @access(policy: {scopes: ["management.user.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	updateUser(input: UpdateUserInput!): UpdateUserPayload! @access(policy: {scopes: ["management.user.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	enableUser(input: UserStateInput!): UserStatePayload! @access(policy: {scopes: ["management.user.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	disableUser(input: UserStateInput!): UserStatePayload! @access(policy: {scopes: ["management.user.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	unlockUser(input: UnlockUserInput!): UserStatePayload! @access(policy: {scopes: ["management.user.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	createGroup(input: CreateGroupInput!): GroupPayload! @access(policy: {scopes: ["management.group.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true}) @access(policy: {scopes: [], authentication: RECENT_AAL2, maxAge: 3600, elevatedMaxAge: null, userOnly: true, runtime: false})
 	updateGroup(input: UpdateGroupInput!): GroupPayload! @access(policy: {scopes: ["management.group.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true}) @access(policy: {scopes: [], authentication: RECENT_AAL2, maxAge: 3600, elevatedMaxAge: null, userOnly: true, runtime: false})
 	setGroupEnabled(input: SetGroupEnabledInput!): GroupPayload! @access(policy: {scopes: ["management.group.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true}) @access(policy: {scopes: [], authentication: RECENT_AAL2, maxAge: 3600, elevatedMaxAge: null, userOnly: true, runtime: false})
-	deleteGroup(input: GroupStateInput!): DeleteGroupPayload! @access(policy: {scopes: ["management.group.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true}) @access(policy: {scopes: [], authentication: RECENT_AAL2, maxAge: 3600, elevatedMaxAge: null, userOnly: true, runtime: false})
-	addGroupMember(input: AddGroupMemberInput!): GroupMemberPayload! @access(policy: {scopes: ["management.group_membership.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true}) @access(policy: {scopes: [], authentication: RECENT_AAL2, maxAge: 3600, elevatedMaxAge: null, userOnly: true, runtime: false})
-	removeGroupMember(input: RemoveGroupMemberInput!): GroupMemberPayload! @access(policy: {scopes: ["management.group_membership.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true}) @access(policy: {scopes: [], authentication: RECENT_AAL2, maxAge: 3600, elevatedMaxAge: null, userOnly: true, runtime: false})
-	setGroupRoles(input: SetGroupRolesInput!): GroupRolesPayload! @access(policy: {scopes: ["management.group_role.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true}) @access(policy: {scopes: [], authentication: RECENT_AAL2, maxAge: 3600, elevatedMaxAge: null, userOnly: true, runtime: false})
+	deleteGroup(input: GroupStateInput!): DeleteGroupPayload! @access(policy: {scopes: ["management.group.delete"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true}) @access(policy: {scopes: [], authentication: RECENT_AAL2, maxAge: 3600, elevatedMaxAge: null, userOnly: true, runtime: false})
+	addGroupMember(input: AddGroupMemberInput!): GroupMemberPayload! @access(policy: {scopes: ["management.group_member.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true}) @access(policy: {scopes: [], authentication: RECENT_AAL2, maxAge: 3600, elevatedMaxAge: null, userOnly: true, runtime: false})
+	removeGroupMember(input: RemoveGroupMemberInput!): GroupMemberPayload! @access(policy: {scopes: ["management.group_member.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true}) @access(policy: {scopes: [], authentication: RECENT_AAL2, maxAge: 3600, elevatedMaxAge: null, userOnly: true, runtime: false})
+	setGroupRoles(input: SetGroupRolesInput!): GroupRolesPayload! @access(policy: {scopes: ["management.role_assignment.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true}) @access(policy: {scopes: [], authentication: RECENT_AAL2, maxAge: 3600, elevatedMaxAge: null, userOnly: true, runtime: false})
 	createResource(input: CreateResourceInput!): ResourcePayload! @access(policy: {scopes: ["management.resource.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	updateResource(input: UpdateResourceInput!): ResourcePayload! @access(policy: {scopes: ["management.resource.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	enableResource(input: ResourceStateInput!): ResourcePayload! @access(policy: {scopes: ["management.resource.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
@@ -1240,38 +1327,38 @@ type MutationRoot {
 	"""
 	Create a client. Issue a secret separately with `createClientSecret`.
 	"""
-	createClient(input: CreateClientInput!): ClientPayload! @access(policy: {scopes: ["management.client.create"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	createClient(input: CreateClientInput!): ClientPayload! @access(policy: {scopes: ["management.client.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	"""
 	Update display text and/or protocol settings. Changing what the client
 	may obtain permanently withdraws what it was already issued.
 	"""
-	updateClient(input: UpdateClientInput!): ClientPayload! @access(policy: {scopes: ["management.client.update"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
-	enableClient(input: ClientStateInput!): ClientPayload! @access(policy: {scopes: ["management.client.state"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	updateClient(input: UpdateClientInput!): ClientPayload! @access(policy: {scopes: ["management.client.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	enableClient(input: ClientStateInput!): ClientPayload! @access(policy: {scopes: ["management.client.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	"""
 	Disabling rejects the client at every protocol endpoint and permanently
 	withdraws what it was issued; enabling again does not restore them.
 	"""
-	disableClient(input: ClientStateInput!): ClientPayload! @access(policy: {scopes: ["management.client.state"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	disableClient(input: ClientStateInput!): ClientPayload! @access(policy: {scopes: ["management.client.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	deleteClient(input: ClientStateInput!): DeleteClientPayload! @access(policy: {scopes: ["management.client.delete"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
 	"""
 	Issue an additional secret; existing secrets stay valid.
 	"""
-	createClientSecret(input: CreateClientSecretInput!): ClientSecretPayload! @access(policy: {scopes: ["management.client_credential.create"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	createClientSecret(input: CreateClientSecretInput!): ClientSecretPayload! @access(policy: {scopes: ["management.client_credential.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
 	"""
 	Issue a new secret and revoke the given one, which permanently withdraws
 	what the client was already issued.
 	"""
-	rotateClientSecret(input: RotateClientSecretInput!): ClientSecretPayload! @access(policy: {scopes: ["management.client_credential.rotate"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	rotateClientSecret(input: RotateClientSecretInput!): ClientSecretPayload! @access(policy: {scopes: ["management.client_credential.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
 	"""
 	Register a public key the client signs `private_key_jwt` assertions
 	with. Existing credentials stay valid.
 	"""
-	addClientPublicKey(input: AddClientPublicKeyInput!): ClientCredentialPayload! @access(policy: {scopes: ["management.client_credential.create"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	addClientPublicKey(input: AddClientPublicKeyInput!): ClientCredentialPayload! @access(policy: {scopes: ["management.client_credential.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
 	"""
 	Register a JWKS URI the client publishes its signing keys at. The key
 	set is fetched once to validate it and refreshed from the URI later.
 	"""
-	addClientJwksUri(input: AddClientJwksUriInput!): ClientCredentialPayload! @access(policy: {scopes: ["management.client_credential.create"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	addClientJwksUri(input: AddClientJwksUriInput!): ClientCredentialPayload! @access(policy: {scopes: ["management.client_credential.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
 	"""
 	Revoke a credential, permanently withdrawing what the client was issued.
 	"""
@@ -1281,7 +1368,7 @@ type MutationRoot {
 	scopes such as `openid`. Protocol scopes cannot be granted to the
 	client itself.
 	"""
-	setClientScopes(input: SetClientScopesInput!): ClientScopeSetPayload! @access(policy: {scopes: ["management.client.scope"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	setClientScopes(input: SetClientScopesInput!): ClientScopeSetPayload! @access(policy: {scopes: ["management.client.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	"""
 	Replace the instance-wide OAuth and OpenID Connect protocol defaults.
 	"""
@@ -1296,19 +1383,19 @@ type MutationRoot {
 	signing key; existing keys keep serving clients that ask for their
 	algorithm.
 	"""
-	createSigningKey(input: CreateSigningKeyInput!): KeyPayload! @access(policy: {scopes: ["management.key.create"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	createSigningKey(input: CreateSigningKeyInput!): KeyPayload! @access(policy: {scopes: ["management.key.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
 	"""
 	Replace a key in use with a new key of the same algorithm. The old key
 	retires: it keeps verifying signatures or decrypting existing data
 	until it expires.
 	"""
-	rotateKey(input: KeyLifecycleInput!): RotateKeyPayload! @access(policy: {scopes: ["management.key.rotate"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	rotateKey(input: KeyLifecycleInput!): RotateKeyPayload! @access(policy: {scopes: ["management.key.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
 	"""
 	Rotate a key in use and revoke it at once. Tokens it signed stop
 	validating and data it protected can no longer be read, so sessions and
-	tokens it protected end. Requires both rotate and revoke permissions.
+	tokens it protected end. Requires both key write and revoke permissions.
 	"""
-	rotateAndRevokeKey(input: KeyLifecycleInput!): RotateKeyPayload! @access(policy: {scopes: ["management.key.rotate", "management.key.revoke"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	rotateAndRevokeKey(input: KeyLifecycleInput!): RotateKeyPayload! @access(policy: {scopes: ["management.key.write", "management.key.revoke"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
 	"""
 	Revoke a retired or expired key. A signing key leaves the published key
 	set; data protected by an encryption key can no longer be read, which
@@ -1411,9 +1498,23 @@ contributes its own business field; there is no `viewer` wrapper and no
 `management` namespace.
 """
 type QueryRoot {
-	account: User @access(policy: {scopes: ["account.read"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
-	passkeys: [Passkey!]! @access(policy: {scopes: ["account.read"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
-	security: AccountSecurity! @access(policy: {scopes: ["account.read"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
+	account: User @access(policy: {scopes: ["user.read"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
+	"""
+	Active groups the current user belongs to (`user.read` only).
+	"""
+	accountGroups(orderBy: GroupOrder, first: Int, after: String, last: Int, before: String): AccountGroupConnection! @access(policy: {scopes: ["user.read"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
+	"""
+	Active roles currently held by the authenticated user, directly or
+	inherited through active groups (`user.read` only).
+	"""
+	accountRoles(source: AuthorizationSource, orderBy: UserRoleOrder, first: Int, after: String, last: Int, before: String): AccountRoleConnection! @access(policy: {scopes: ["user.read"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
+	"""
+	Self-only effective permissions across enabled API resources or filtered
+	to one `resourceId` (`user.read` only).
+	"""
+	accountPermissions(resourceId: ID, source: AuthorizationSource, orderBy: EffectivePermissionOrder, first: Int, after: String, last: Int, before: String): AccountPermissionConnection! @access(policy: {scopes: ["user.read"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
+	passkeys: [Passkey!]! @access(policy: {scopes: ["user.read"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
+	security: AccountSecurity! @access(policy: {scopes: ["user.read"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
 	sessions(after: String, before: String, first: Int, last: Int): SessionConnection! @access(policy: {scopes: ["session.read"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
 	node(id: ID!): Node @access(policy: {scopes: [], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	nodes(ids: [ID!]!): [Node!]! @access(policy: {scopes: [], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
@@ -1450,12 +1551,6 @@ type QueryRoot {
 	scopes(filter: ScopeFilter, orderBy: ScopeOrder, first: Int, after: String, last: Int, before: String): ScopeConnection! @access(policy: {scopes: ["management.scope.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	role(id: ID!): Role @access(policy: {scopes: ["management.role.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	roles(filter: RoleFilter, orderBy: RoleOrder, first: Int, after: String, last: Int, before: String): RoleConnection! @access(policy: {scopes: ["management.role.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
-	"""
-	Self-only account summary. This field deliberately carries only the
-	existing `account.read` self-service scope and accepts no caller-supplied
-	user identity.
-	"""
-	accountPermissions(resourceId: ID!, orderBy: EffectivePermissionOrder, first: Int, after: String, last: Int, before: String): EffectivePermissionConnection! @access(policy: {scopes: ["account.read"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
 	client(id: ID!): Client @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	clients(filter: ClientFilter, orderBy: ClientOrder, first: Int, after: String, last: Int, before: String): ClientConnection! @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	"""
@@ -1619,7 +1714,7 @@ type Role implements Node {
 	version: UUID!
 	createdAt: DateTime!
 	updatedAt: DateTime
-	groups(filter: GroupFilter, orderBy: GroupOrder, first: Int, after: String, last: Int, before: String): GroupConnection! @access(policy: {scopes: ["management.group.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true}) @access(policy: {scopes: ["management.group_role.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	groups(filter: GroupFilter, orderBy: GroupOrder, first: Int, after: String, last: Int, before: String): GroupConnection! @access(policy: {scopes: ["management.group.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true}) @access(policy: {scopes: ["management.role_assignment.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	"""
 	Scopes explicitly contained by this role. The field name is retained for
 	authorization meaning; nodes are canonical `Scope` identities.
@@ -2125,11 +2220,11 @@ input UpdateUsernameInput {
 
 type User implements Node {
 	id: ID!
-	groups(filter: GroupFilter, orderBy: GroupOrder, first: Int, after: String, last: Int, before: String): GroupConnection! @access(policy: {scopes: ["management.group.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true}) @access(policy: {scopes: ["management.group_membership.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	groups(filter: GroupFilter, orderBy: GroupOrder, first: Int, after: String, last: Int, before: String): GroupConnection! @access(policy: {scopes: ["management.group.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true}) @access(policy: {scopes: ["management.group_member.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	"""
 	The user's roles, assigned directly or inherited through groups, with
 	the source on each edge. `source` narrows the list; leaving it unset or
-	choosing `GROUP` also needs the group membership and group role read
+	choosing `GROUP` also needs the group member and role assignment read
 	scopes. Inherited roles are live grants and never appear as revoked.
 	`userVersion` is the expected version for assigning or revoking.
 	"""
@@ -2137,7 +2232,7 @@ type User implements Node {
 	"""
 	Permissions the user holds on one API resource. `source` keeps only
 	permissions reachable through that source and needs the group
-	membership and group role read scopes.
+	member and role assignment read scopes.
 	"""
 	effectivePermissions(resourceId: ID!, source: AuthorizationSource, orderBy: EffectivePermissionOrder, first: Int, after: String, last: Int, before: String): EffectivePermissionConnection! @access(policy: {scopes: ["management.role_assignment.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	username: String!
@@ -2150,10 +2245,19 @@ type User implements Node {
 	profile: String
 	picture: String
 	website: String
+	gender: String
 	birthdate: String
 	zoneInfo: String
 	locale: String
 	theme: String
+	phoneNumber: String
+	phoneNumberVerified: Boolean
+	addressFormatted: String
+	addressStreetAddress: String
+	addressLocality: String
+	addressRegion: String
+	addressPostalCode: String
+	addressCountry: String
 	createdAt: DateTime!
 	updatedAt: DateTime
 	version: UUID! @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})

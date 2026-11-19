@@ -18,9 +18,9 @@ pub const STANDARD_OIDC_SCOPES: &[&str] = &[
 ];
 
 pub const ACCOUNT_SELF_SERVICE_SCOPES: &[&str] = &[
-    "account.*",
-    "account.read",
-    "account.update",
+    "user.*",
+    "user.read",
+    "user.write",
     "session.*",
     "session.read",
     "session.revoke",
@@ -106,9 +106,9 @@ mod tests {
             ));
         }
         for scope in [
-            "account.*",
-            "account.read",
-            "account.update",
+            "user.*",
+            "user.read",
+            "user.write",
             "session.*",
             "session.read",
             "session.revoke",

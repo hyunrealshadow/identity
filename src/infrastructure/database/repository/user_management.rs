@@ -632,7 +632,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         command: CreateUserTransaction,
     ) -> Result<UserManagementMutationOutcome, UserManagementRepositoryError> {
         let txn = self.db.begin().await.map_err(storage)?;
-        recheck_authority(&txn, &command.authority, ManagementScope::UsersCreate, None).await?;
+        recheck_authority(&txn, &command.authority, ManagementScope::UsersWrite, None).await?;
         if identifier_exists(
             &txn,
             UserColumn::NameNormalized,
@@ -787,7 +787,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         recheck_authority(
             &txn,
             &command.authority,
-            ManagementScope::UsersUpdate,
+            ManagementScope::UsersWrite,
             Some(command.user_oid),
         )
         .await?;
@@ -946,7 +946,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         recheck_authority(
             &txn,
             &command.authority,
-            ManagementScope::UsersState,
+            ManagementScope::UsersWrite,
             Some(command.user_oid),
         )
         .await?;
@@ -1042,7 +1042,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         recheck_authority(
             &txn,
             &command.authority,
-            ManagementScope::UsersState,
+            ManagementScope::UsersWrite,
             Some(command.user_oid),
         )
         .await?;

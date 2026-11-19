@@ -153,7 +153,7 @@ impl OpenIdConnectClientRepository for MachineClientRepository {
                 metadata,
                 test_platforms(),
                 vec![
-                    "account.read".to_owned(),
+                    "user.read".to_owned(),
                     "session.read".to_owned(),
                     "orders.read".to_owned(),
                 ],
@@ -179,7 +179,7 @@ impl OpenIdConnectClientRepository for MachineAlgorithmClientRepository {
                 test_client(oid),
                 metadata,
                 test_platforms(),
-                vec!["account.read".to_owned(), "orders.read".to_owned()],
+                vec!["user.read".to_owned(), "orders.read".to_owned()],
             )
             .unwrap(),
         ))

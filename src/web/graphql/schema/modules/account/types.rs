@@ -91,9 +91,9 @@ impl UserNode {
     }
 
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::GroupsRead, ManagementTarget::instance()).and(ManagementGuard::new(ManagementScope::GroupMembershipsRead, ManagementTarget::instance()))",
+        guard = "ManagementGuard::new(ManagementScope::GroupsRead, ManagementTarget::instance()).and(ManagementGuard::new(ManagementScope::GroupMembersRead, ManagementTarget::instance()))",
         directive = access::apply(ManagementGuard::policy(ManagementScope::GroupsRead)),
-        directive = access::apply(ManagementGuard::policy(ManagementScope::GroupMembershipsRead)),
+        directive = access::apply(ManagementGuard::policy(ManagementScope::GroupMembersRead)),
         complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
     )]
     #[allow(clippy::too_many_arguments)]
@@ -122,7 +122,7 @@ impl UserNode {
 
     /// The user's roles, assigned directly or inherited through groups, with
     /// the source on each edge. `source` narrows the list; leaving it unset or
-    /// choosing `GROUP` also needs the group membership and group role read
+    /// choosing `GROUP` also needs the group member and role assignment read
     /// scopes. Inherited roles are live grants and never appear as revoked.
     /// `userVersion` is the expected version for assigning or revoking.
     #[graphql(
@@ -164,7 +164,7 @@ impl UserNode {
     #[allow(clippy::too_many_arguments)]
     /// Permissions the user holds on one API resource. `source` keeps only
     /// permissions reachable through that source and needs the group
-    /// membership and group role read scopes.
+    /// member and role assignment read scopes.
     async fn effective_permissions(
         &self,
         ctx: &Context<'_>,
@@ -230,6 +230,10 @@ impl UserNode {
         self.user.website.as_deref()
     }
 
+    async fn gender(&self) -> Option<&str> {
+        self.user.gender.as_deref()
+    }
+
     async fn birthdate(&self) -> Option<&str> {
         self.user.birthdate.as_deref()
     }
@@ -245,6 +249,38 @@ impl UserNode {
 
     async fn theme(&self) -> Option<&str> {
         self.user.theme.map(UserTheme::as_str)
+    }
+
+    async fn phone_number(&self) -> Option<&str> {
+        self.user.phone_number.as_deref()
+    }
+
+    async fn phone_number_verified(&self) -> Option<bool> {
+        self.user.phone_number_verified
+    }
+
+    async fn address_formatted(&self) -> Option<&str> {
+        self.user.address_formatted.as_deref()
+    }
+
+    async fn address_street_address(&self) -> Option<&str> {
+        self.user.address_street_address.as_deref()
+    }
+
+    async fn address_locality(&self) -> Option<&str> {
+        self.user.address_locality.as_deref()
+    }
+
+    async fn address_region(&self) -> Option<&str> {
+        self.user.address_region.as_deref()
+    }
+
+    async fn address_postal_code(&self) -> Option<&str> {
+        self.user.address_postal_code.as_deref()
+    }
+
+    async fn address_country(&self) -> Option<&str> {
+        self.user.address_country.as_deref()
     }
 
     async fn created_at(&self) -> DateTime<Utc> {

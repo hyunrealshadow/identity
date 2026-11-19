@@ -20,7 +20,7 @@ export function themeFromAccount(value: string | null | undefined): ThemePrefere
 /**
  * Applies the signed-in operator's account theme preference, like the locale
  * and time zone that arrive with the ID token. A failed read (for example a
- * session issued before the Console requested `account.read`) keeps the local
+ * session issued before the Console requested `user.read`) keeps the local
  * theme and never starts reauthentication.
  */
 export function AccountThemeSync() {
@@ -45,7 +45,7 @@ export function AccountThemeSync() {
   const theme = account ? themeFromAccount(account.theme) : null
 
   useEffect(() => {
-    // A runtime configuration older than the `account.read` request is rejected
+    // A runtime configuration older than the `user.read` request is rejected
     // during preflight. Say so in development instead of silently keeping the
     // system palette.
     if (query.error && import.meta.env.DEV && import.meta.env.MODE !== 'test') {

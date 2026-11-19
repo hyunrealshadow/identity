@@ -193,7 +193,7 @@ mod tests {
     #[test]
     fn clipping_uses_exact_effective_permissions_and_never_role_names() {
         let requested = ScopeSet::parse(
-            "openid management.user.read management.user.create management.credential.reset",
+            "openid management.user.read management.user.write management.setting.write",
         )
         .unwrap();
         assert_eq!(
@@ -209,11 +209,11 @@ mod tests {
                 &requested,
                 Some(&authority([
                     ManagementScope::UsersRead,
-                    ManagementScope::UsersCreate
+                    ManagementScope::UsersWrite
                 ])),
                 true
             ),
-            vec![ManagementScope::UsersRead, ManagementScope::UsersCreate]
+            vec![ManagementScope::UsersRead, ManagementScope::UsersWrite]
         );
     }
 
@@ -244,7 +244,7 @@ mod tests {
     #[test]
     fn clipping_keeps_base_scopes_and_removes_unapproved_management() {
         let requested =
-            ScopeSet::parse("openid profile management.user.read management.user.create").unwrap();
+            ScopeSet::parse("openid profile management.user.read management.user.write").unwrap();
         let clipped = clipped_scope(&requested, [ManagementScope::UsersRead]);
         assert_eq!(
             clipped.to_scope_string(),

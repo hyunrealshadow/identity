@@ -586,7 +586,7 @@ async fn scope_must_be_assigned_to_the_client() {
     );
 
     let error = service
-        .authorize(params(Some("secret-123"), Some("openid account.update")))
+        .authorize(params(Some("secret-123"), Some("openid user.write")))
         .await
         .unwrap_err();
 

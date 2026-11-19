@@ -4,11 +4,12 @@ import {
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@identity/ui/components/dropdown-menu'
 import { useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
-import { ArrowLeftRight, ChevronDown, LogOut } from 'lucide-react'
+import { ArrowLeftRight, ChevronDown, ExternalLink, LogOut } from 'lucide-react'
 import { useState } from 'react'
 
 import { AccountAvatar } from '#/components/account-avatar'
@@ -23,6 +24,8 @@ export interface AccountMenuUser {
 interface UserMenuProps {
   user: AccountMenuUser
   menuLabel: string
+  consoleUrl?: string
+  consoleLabel?: string
   signOutLabel: string
   switchAccountLabel: string
   requestFailedLabel: string
@@ -36,6 +39,8 @@ interface UserMenuProps {
 export function UserMenu({
   user,
   menuLabel,
+  consoleUrl,
+  consoleLabel,
   signOutLabel,
   switchAccountLabel,
   requestFailedLabel,
@@ -86,6 +91,17 @@ export function UserMenu({
         <ChevronDown className="hidden size-3.5 text-muted-foreground sm:block" aria-hidden="true" />
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="min-w-56">
+        {consoleUrl && consoleLabel ? (
+          <>
+            <DropdownMenuGroup>
+              <DropdownMenuItem render={<a href={consoleUrl} />}>
+                <ExternalLink className="text-muted-foreground" aria-hidden="true" />
+                {consoleLabel}
+              </DropdownMenuItem>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+          </>
+        ) : null}
         <DropdownMenuGroup>
           <DropdownMenuItem onClick={() => void onAction('switch-account')}>
             <ArrowLeftRight className="text-muted-foreground" aria-hidden="true" />

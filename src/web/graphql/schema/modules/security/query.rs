@@ -13,8 +13,8 @@ pub(crate) struct SecurityQuery;
 
 #[Object]
 impl SecurityQuery {
-    #[graphql(guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::AccountRead))",
-        directive = access::apply(ScopeGuard::policy(ApiScope::AccountRead)))]
+    #[graphql(guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::UserRead))",
+        directive = access::apply(ScopeGuard::policy(ApiScope::UserRead)))]
     async fn passkeys(&self, ctx: &Context<'_>) -> Result<Vec<PasskeyNode>> {
         let request = request_context(ctx)?;
         let keys = request
@@ -27,8 +27,8 @@ impl SecurityQuery {
         Ok(keys.into_iter().map(PasskeyNode::from).collect())
     }
 
-    #[graphql(guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::AccountRead))",
-        directive = access::apply(ScopeGuard::policy(ApiScope::AccountRead)))]
+    #[graphql(guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::UserRead))",
+        directive = access::apply(ScopeGuard::policy(ApiScope::UserRead)))]
     async fn security(&self, ctx: &Context<'_>) -> Result<AccountSecurity> {
         let request = request_context(ctx)?;
         let status = request

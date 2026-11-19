@@ -30,8 +30,8 @@ function bootstrap(recent: boolean) {
   return {
     data: {
       effectivePermissions: {
-        requestableScopes: ['management.user.update'],
-        effectiveScopes: recent ? ['management.user.update'] : [],
+        requestableScopes: ['management.user.write'],
+        effectiveScopes: recent ? ['management.user.write'] : [],
         authentication: { aal2: true, recent },
       },
       instanceInfo: { name: 'Identity' },

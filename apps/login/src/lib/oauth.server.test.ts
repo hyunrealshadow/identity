@@ -28,8 +28,8 @@ afterEach(() => {
 
 describe('OAuth reauthentication scopes', () => {
   it('uses the broad account scope assigned to the built-in client', () => {
-    expect(reauthenticationScope('account')).toBe('openid account.*')
-    expect(reauthenticationScope('mfa')).toBe('openid account.*')
+    expect(reauthenticationScope('account')).toBe('openid user.*')
+    expect(reauthenticationScope('mfa')).toBe('openid user.*')
   })
 
   it('keeps password reauthentication scoped to password changes', () => {

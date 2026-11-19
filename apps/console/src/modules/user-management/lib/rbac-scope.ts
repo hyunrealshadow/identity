@@ -22,6 +22,7 @@ export function rbacScope(
     usersRead: query('users'),
     groupsRead: query('groups'),
     groupsWrite: mutation('createGroup'),
+    groupsDelete: mutation('deleteGroup'),
     groupMembershipsRead: fieldAffordance(permissions, 'Group', 'members'),
     groupMembershipsWrite: mutation('addGroupMember'),
     groupRolesRead: fieldAffordance(permissions, 'Group', 'roles'),

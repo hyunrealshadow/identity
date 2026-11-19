@@ -186,8 +186,8 @@ pub(crate) struct ClientScopeMutation;
 #[Object]
 impl ClientScopeMutation {
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::ClientsScopes, ManagementTarget::instance())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::ClientsScopes))
+        guard = "ManagementGuard::new(ManagementScope::ClientsWrite, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::ClientsWrite))
     )]
     /// Replace every scope assignment of a client: API scopes and protocol
     /// scopes such as `openid`. Protocol scopes cannot be granted to the

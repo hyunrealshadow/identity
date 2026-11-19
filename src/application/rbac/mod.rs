@@ -24,6 +24,7 @@ pub use client::{
     ClientScopeSetResult, SetClientScopesCommand,
 };
 pub use group::{
+    AccountGroupPage, AccountGroupPageItem, AccountGroupPageRequest, AccountGroupRecord,
     AddGroupMemberCommand, CreateGroupCommand, DeleteGroupCommand, DeleteGroupResult, GroupFilter,
     GroupMembershipFilter, GroupMembershipMutationResult, GroupMembershipOrder,
     GroupMembershipPage, GroupMembershipPageItem, GroupMembershipPageRequest,
@@ -33,14 +34,16 @@ pub use group::{
     MAX_GROUP_ROLES, RemoveGroupMemberCommand, SetGroupRolesCommand, UpdateGroupCommand,
 };
 pub use group_repository::{
-    AddGroupMemberTransaction, CreateGroupTransaction, DeleteGroupTransaction, GroupEntityKind,
-    GroupManagementRepository, GroupManagementRepositoryError, GroupMembershipPageEntry,
-    GroupMembershipQuery, GroupPageData, GroupPageEntry, GroupQuery, GroupRolePageEntry,
-    GroupRoleQuery, GroupStateTransaction, RemoveGroupMemberTransaction, SetGroupRolesTransaction,
-    SharedGroupManagementRepository, UpdateGroupTransaction,
+    AccountGroupPageEntry, AccountGroupQuery, AddGroupMemberTransaction, CreateGroupTransaction,
+    DeleteGroupTransaction, GroupEntityKind, GroupManagementRepository,
+    GroupManagementRepositoryError, GroupMembershipPageEntry, GroupMembershipQuery, GroupPageData,
+    GroupPageEntry, GroupQuery, GroupRolePageEntry, GroupRoleQuery, GroupStateTransaction,
+    RemoveGroupMemberTransaction, SetGroupRolesTransaction, SharedGroupManagementRepository,
+    UpdateGroupTransaction,
 };
 pub use model::{RbacManagementAuthority, ScopeDescription, ScopeOid};
 pub use repository::{
+    AccountPermissionPageEntry, AccountPermissionQuery, AccountRolePageEntry, AccountRoleQuery,
     AssignUserRolesTransaction, ClientScopePageEntry, ClientScopeQuery, CreateResourceTransaction,
     CreateRoleTransaction, CreateScopeTransaction, EffectivePermissionPageData,
     EffectivePermissionPageEntry, EffectivePermissionQuery, RbacDuplicateKind, RbacEntityKind,
@@ -67,10 +70,13 @@ pub use scope::{
 pub use service::RbacManagementService;
 pub use service_group::GroupManagementService;
 pub use user_role::{
-    AssignUserRolesCommand, AuthorizationSource, EffectiveGroupPermissionSourceRecord,
-    EffectivePermissionOrder, EffectivePermissionPage, EffectivePermissionPageItem,
-    EffectivePermissionPageRequest, EffectivePermissionRecord, EffectivePermissionSourceRecord,
-    InheritedUserRoleRecord, RevokeUserRolesCommand, RoleUserPageRequest, UserRoleGrant,
-    UserRoleGrantPage, UserRoleGrantPageItem, UserRoleMutationResult, UserRoleOrder, UserRolePage,
-    UserRolePageItem, UserRolePageRequest, UserRoleRecord,
+    AccountPermissionPage, AccountPermissionPageItem, AccountPermissionPageRequest,
+    AccountPermissionRecord, AccountRoleGrant, AccountRolePage, AccountRolePageItem,
+    AccountRolePageRequest, AssignUserRolesCommand, AuthorizationSource,
+    EffectiveGroupPermissionSourceRecord, EffectivePermissionOrder, EffectivePermissionPage,
+    EffectivePermissionPageItem, EffectivePermissionPageRequest, EffectivePermissionRecord,
+    EffectivePermissionSourceRecord, InheritedUserRoleRecord, RevokeUserRolesCommand,
+    RoleUserPageRequest, UserRoleGrant, UserRoleGrantPage, UserRoleGrantPageItem,
+    UserRoleMutationResult, UserRoleOrder, UserRolePage, UserRolePageItem, UserRolePageRequest,
+    UserRoleRecord,
 };

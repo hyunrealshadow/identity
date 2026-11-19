@@ -17,8 +17,8 @@ pub(crate) struct AccountMutation;
 #[Object]
 impl AccountMutation {
     #[graphql(
-        guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::AccountUpdate)).and(RecentAuthenticationGuard::new())",
-        directive = access::apply(ScopeGuard::policy(ApiScope::AccountUpdate)),
+        guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::UserWrite)).and(RecentAuthenticationGuard::new())",
+        directive = access::apply(ScopeGuard::policy(ApiScope::UserWrite)),
         directive = access::apply(RecentAuthenticationGuard::new().policy())
     )]
     async fn update_username(
@@ -41,8 +41,8 @@ impl AccountMutation {
     }
 
     #[graphql(
-        guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::AccountUpdate)).and(RecentAuthenticationGuard::new())",
-        directive = access::apply(ScopeGuard::policy(ApiScope::AccountUpdate)),
+        guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::UserWrite)).and(RecentAuthenticationGuard::new())",
+        directive = access::apply(ScopeGuard::policy(ApiScope::UserWrite)),
         directive = access::apply(RecentAuthenticationGuard::new().policy())
     )]
     async fn update_email(
@@ -64,8 +64,8 @@ impl AccountMutation {
         ))
     }
 
-    #[graphql(guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::AccountUpdate))",
-        directive = access::apply(ScopeGuard::policy(ApiScope::AccountUpdate)))]
+    #[graphql(guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::UserWrite))",
+        directive = access::apply(ScopeGuard::policy(ApiScope::UserWrite)))]
     async fn update_profile(
         &self,
         ctx: &Context<'_>,

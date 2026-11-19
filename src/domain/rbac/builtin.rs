@@ -54,26 +54,15 @@ pub const VIEWER_PRESET: BuiltInPreset = BuiltInPreset {
 
 pub const BUILT_IN_PRESETS: [BuiltInPreset; 3] = [OWNER_PRESET, ADMIN_PRESET, VIEWER_PRESET];
 
-const ADMIN_PERMISSIONS: [ManagementScope; 39] = [
+const ADMIN_PERMISSIONS: [ManagementScope; 24] = [
     ManagementScope::UsersRead,
-    ManagementScope::UsersCreate,
-    ManagementScope::UsersUpdate,
-    ManagementScope::UsersState,
-    ManagementScope::UsersRevokeAccess,
+    ManagementScope::UsersWrite,
     ManagementScope::SessionsRead,
-    ManagementScope::SessionsRevoke,
-    ManagementScope::CredentialsRead,
-    ManagementScope::CredentialsRevoke,
-    ManagementScope::CredentialsReset,
     ManagementScope::ClientsRead,
-    ManagementScope::ClientsCreate,
-    ManagementScope::ClientsUpdate,
-    ManagementScope::ClientsState,
+    ManagementScope::ClientsWrite,
     ManagementScope::ClientsDelete,
-    ManagementScope::ClientsScopes,
     ManagementScope::ClientCredentialsRead,
-    ManagementScope::ClientCredentialsCreate,
-    ManagementScope::ClientCredentialsRotate,
+    ManagementScope::ClientCredentialsWrite,
     ManagementScope::ClientCredentialsRevoke,
     ManagementScope::ResourcesRead,
     ManagementScope::ResourcesWrite,
@@ -81,38 +70,30 @@ const ADMIN_PERMISSIONS: [ManagementScope; 39] = [
     ManagementScope::ScopesWrite,
     ManagementScope::SettingsRead,
     ManagementScope::KeysRead,
-    ManagementScope::AuditRead,
-    ManagementScope::PermissionRead,
-    ManagementScope::PermissionWrite,
     ManagementScope::RolesRead,
     ManagementScope::RolesWrite,
     ManagementScope::RoleAssignmentsRead,
     ManagementScope::RoleAssignmentsWrite,
     ManagementScope::GroupsRead,
     ManagementScope::GroupsWrite,
-    ManagementScope::GroupMembershipsRead,
-    ManagementScope::GroupMembershipsWrite,
-    ManagementScope::GroupRolesRead,
-    ManagementScope::GroupRolesWrite,
+    ManagementScope::GroupsDelete,
+    ManagementScope::GroupMembersRead,
+    ManagementScope::GroupMembersWrite,
 ];
 
-const VIEWER_PERMISSIONS: [ManagementScope; 16] = [
+const VIEWER_PERMISSIONS: [ManagementScope; 12] = [
     ManagementScope::UsersRead,
     ManagementScope::SessionsRead,
-    ManagementScope::CredentialsRead,
     ManagementScope::ClientsRead,
     ManagementScope::ClientCredentialsRead,
     ManagementScope::ResourcesRead,
     ManagementScope::ScopesRead,
     ManagementScope::SettingsRead,
     ManagementScope::KeysRead,
-    ManagementScope::AuditRead,
-    ManagementScope::PermissionRead,
     ManagementScope::RolesRead,
     ManagementScope::RoleAssignmentsRead,
     ManagementScope::GroupsRead,
-    ManagementScope::GroupMembershipsRead,
-    ManagementScope::GroupRolesRead,
+    ManagementScope::GroupMembersRead,
 ];
 
 /// Deterministic UUIDv8 from an exact seed. First 16 SHA-256 bytes, UUID
@@ -173,7 +154,7 @@ mod tests {
         }
         assert_ne!(
             built_in_permission_oid(ManagementScope::UsersRead),
-            built_in_permission_oid(ManagementScope::UsersCreate)
+            built_in_permission_oid(ManagementScope::UsersWrite)
         );
     }
 

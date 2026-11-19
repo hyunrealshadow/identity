@@ -187,7 +187,7 @@ mod tests {
         assert_eq!(bytes[8] & 0xc0, 0x80);
         assert_ne!(
             first,
-            trusted_built_in_permission_oid(ManagementScope::AuditRead)
+            trusted_built_in_permission_oid(ManagementScope::SessionsRead)
         );
     }
 

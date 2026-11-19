@@ -144,8 +144,8 @@ impl GroupMutation {
     }
 
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::GroupsWrite, ManagementTarget::instance()).and(RecentAuthenticationGuard::aal2())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::GroupsWrite)),
+        guard = "ManagementGuard::new(ManagementScope::GroupsDelete, ManagementTarget::instance()).and(RecentAuthenticationGuard::aal2())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::GroupsDelete)),
         directive = access::apply(RecentAuthenticationGuard::aal2().policy())
     )]
     async fn delete_group(
@@ -181,8 +181,8 @@ impl GroupMutation {
     }
 
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::GroupMembershipsWrite, ManagementTarget::instance()).and(RecentAuthenticationGuard::aal2())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::GroupMembershipsWrite)),
+        guard = "ManagementGuard::new(ManagementScope::GroupMembersWrite, ManagementTarget::instance()).and(RecentAuthenticationGuard::aal2())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::GroupMembersWrite)),
         directive = access::apply(RecentAuthenticationGuard::aal2().policy())
     )]
     async fn add_group_member(
@@ -217,8 +217,8 @@ impl GroupMutation {
     }
 
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::GroupMembershipsWrite, ManagementTarget::instance()).and(RecentAuthenticationGuard::aal2())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::GroupMembershipsWrite)),
+        guard = "ManagementGuard::new(ManagementScope::GroupMembersWrite, ManagementTarget::instance()).and(RecentAuthenticationGuard::aal2())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::GroupMembersWrite)),
         directive = access::apply(RecentAuthenticationGuard::aal2().policy())
     )]
     async fn remove_group_member(
@@ -253,8 +253,8 @@ impl GroupMutation {
     }
 
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::GroupRolesWrite, ManagementTarget::instance()).and(RecentAuthenticationGuard::aal2())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::GroupRolesWrite)),
+        guard = "ManagementGuard::new(ManagementScope::RoleAssignmentsWrite, ManagementTarget::instance()).and(RecentAuthenticationGuard::aal2())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::RoleAssignmentsWrite)),
         directive = access::apply(RecentAuthenticationGuard::aal2().policy())
     )]
     async fn set_group_roles(

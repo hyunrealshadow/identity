@@ -38,7 +38,7 @@ const config: RuntimeConfig = {
   postLogoutRedirectUri: `${window.location.origin}/logout`,
   accountUrl: 'https://account.example.test',
   scope:
-    'openid management.user.read management.user.update management.group.read',
+    'openid management.user.read management.user.write management.group.read',
   displayName: 'Identity Console',
   environment: 'test',
 }
@@ -155,7 +155,7 @@ describe('workspace operation-based reauthentication', () => {
       bootstrap({
         requestableScopes: [
           'management.user.read',
-          'management.user.update',
+          'management.user.write',
           'management.group.read',
         ],
         effectiveScopes: ['management.user.read', 'management.group.read'],

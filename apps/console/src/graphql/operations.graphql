@@ -18,7 +18,7 @@ query ConsoleBootstrap {
   }
 }
 
-# The operator's theme preference from the account center. Needs `account.read`;
+# The operator's theme preference from the account center. Needs `user.read`;
 # without it the Console keeps the local theme.
 query ConsoleAccountTheme {
   account {

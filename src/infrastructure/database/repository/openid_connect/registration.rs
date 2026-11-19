@@ -405,8 +405,8 @@ impl OpenIdConnectClientRepositoryImpl {
                                 Condition::any().add(ScopeColumn::ResourceId.is_null()).add(
                                     Condition::all()
                                         .add(ScopeColumn::Code.is_in([
-                                            "account.read",
-                                            "account.update",
+                                            "user.read",
+                                            "user.write",
                                             "session.read",
                                             "session.revoke",
                                             "password.change",

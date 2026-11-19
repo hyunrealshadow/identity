@@ -122,14 +122,14 @@ pub(crate) async fn load_group_connection(
     Ok(connection)
 }
 
-/// A group list filter that reveals membership or group-role relations needs
-/// the corresponding relationship-read authority in addition to `groups.read`.
+/// A group list filter that reveals membership or role-assignment relations needs
+/// the corresponding relationship-read authority in addition to `management.group.read`.
 /// This also covers root compositions such as `User.groups(filter: {roleId})`
 /// and `Role.groups(filter: {userId})`.
 async fn ensure_relationship_read_guards(ctx: &Context<'_>, filter: &GroupFilter) -> Result<()> {
     if filter.user_id.is_some() {
         ManagementGuard::new(
-            ManagementScope::GroupMembershipsRead,
+            ManagementScope::GroupMembersRead,
             ManagementTarget::instance(),
         )
         .check(ctx)
@@ -137,7 +137,7 @@ async fn ensure_relationship_read_guards(ctx: &Context<'_>, filter: &GroupFilter
     }
     if filter.role_id.is_some() {
         ManagementGuard::new(
-            ManagementScope::GroupRolesRead,
+            ManagementScope::RoleAssignmentsRead,
             ManagementTarget::instance(),
         )
         .check(ctx)

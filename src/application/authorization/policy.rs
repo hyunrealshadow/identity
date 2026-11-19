@@ -425,7 +425,7 @@ mod tests {
             ManagementAuthorizationSnapshot::for_user_permissions(&authority, PolicyVersion::new());
         let current = CurrentManagementAuthority::UserPermissions(authority);
         let actor = actor(user, HumanAuthenticationContext::aal2(Some(at(990))));
-        let token = scopes(&[ManagementScope::UsersRead, ManagementScope::UsersCreate]);
+        let token = scopes(&[ManagementScope::UsersRead, ManagementScope::UsersWrite]);
         let decision = evaluate_management_authority(&request(
             &actor,
             &token,
@@ -441,14 +441,14 @@ mod tests {
             evaluate_management_authority(&request(
                 &actor,
                 &token,
-                ManagementScope::UsersCreate,
+                ManagementScope::UsersWrite,
                 ManagementTarget::instance(),
                 &current,
                 &snapshot,
                 at(1_000),
             )),
             Err(ManagementAuthorizationError::PermissionNotAuthorized {
-                permission: ManagementScope::UsersCreate
+                permission: ManagementScope::UsersWrite
             })
         );
     }
@@ -456,17 +456,17 @@ mod tests {
     #[test]
     fn recent_aal2_is_strict_for_sensitive_scope() {
         let user = UserOid(Uuid::new_v4());
-        let authority = authority(user, [ManagementScope::CredentialsReset]);
+        let authority = authority(user, [ManagementScope::SettingsWrite]);
         let snapshot =
             ManagementAuthorizationSnapshot::for_user_permissions(&authority, PolicyVersion::new());
         let current = CurrentManagementAuthority::UserPermissions(authority);
-        let token = scopes(&[ManagementScope::CredentialsReset]);
+        let token = scopes(&[ManagementScope::SettingsWrite]);
         let old_aal2 = actor(user, HumanAuthenticationContext::aal2(Some(at(100))));
         assert_eq!(
             evaluate_management_authority(&request(
                 &old_aal2,
                 &token,
-                ManagementScope::CredentialsReset,
+                ManagementScope::SettingsWrite,
                 ManagementTarget::instance(),
                 &current,
                 &snapshot,
@@ -479,7 +479,7 @@ mod tests {
             evaluate_management_authority(&request(
                 &aal1,
                 &token,
-                ManagementScope::CredentialsReset,
+                ManagementScope::SettingsWrite,
                 ManagementTarget::instance(),
                 &current,
                 &snapshot,
@@ -497,10 +497,7 @@ mod tests {
         let boundary = PolicyVersion::new();
         let authority = CurrentManagementAuthority::ClientScopes(ClientScopeAuthority::new(
             client_oid,
-            [
-                ManagementScope::UsersRead,
-                ManagementScope::CredentialsReset,
-            ],
+            [ManagementScope::UsersRead, ManagementScope::SettingsWrite],
             boundary,
         ));
         let actor =
@@ -532,16 +529,16 @@ mod tests {
             Err(ManagementAuthorizationError::ClientScopeBoundaryMismatch)
         );
 
-        let human_only = scopes(&[ManagementScope::CredentialsReset]);
+        let human_only = scopes(&[ManagementScope::SettingsWrite]);
         let denied = ManagementAuthorizationRequest {
             token_scopes: &human_only,
-            required: ManagementScope::CredentialsReset,
+            required: ManagementScope::SettingsWrite,
             ..stale
         };
         assert_eq!(
             evaluate_management_authority(&denied),
             Err(ManagementAuthorizationError::HumanOnlyCapability {
-                scope: ManagementScope::CredentialsReset
+                scope: ManagementScope::SettingsWrite
             })
         );
     }
@@ -577,17 +574,17 @@ mod tests {
         // no Owner/Admin role gate and no built-in group membership check.
         let actor_user = UserOid(Uuid::new_v4());
         let target = UserOid(Uuid::new_v4());
-        let authority = authority(actor_user, [ManagementScope::UsersState]);
+        let authority = authority(actor_user, [ManagementScope::UsersWrite]);
         let snapshot =
             ManagementAuthorizationSnapshot::for_user_permissions(&authority, PolicyVersion::new());
         let current = CurrentManagementAuthority::UserPermissions(authority);
         let actor = actor(actor_user, HumanAuthenticationContext::aal2(Some(at(999))));
-        let token = scopes(&[ManagementScope::UsersState]);
+        let token = scopes(&[ManagementScope::UsersWrite]);
         assert!(
             evaluate_management_authority(&request(
                 &actor,
                 &token,
-                ManagementScope::UsersState,
+                ManagementScope::UsersWrite,
                 ManagementTarget::user(target, true),
                 &current,
                 &snapshot,

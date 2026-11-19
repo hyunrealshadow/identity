@@ -113,13 +113,13 @@ impl From<AuthorizationSource> for RbacAuthorizationSource {
 /// declaration.
 pub(crate) async fn ensure_group_source_read(ctx: &Context<'_>) -> GraphqlResult<()> {
     ManagementGuard::new(
-        ManagementScope::GroupMembershipsRead,
+        ManagementScope::GroupMembersRead,
         ManagementTarget::instance(),
     )
     .check(ctx)
     .await?;
     ManagementGuard::new(
-        ManagementScope::GroupRolesRead,
+        ManagementScope::RoleAssignmentsRead,
         ManagementTarget::instance(),
     )
     .check(ctx)
@@ -246,7 +246,7 @@ impl Guard for EffectivePermissionVersionGuard {
             return Ok(());
         }
         UserPrincipalGuard
-            .and(ScopeGuard::new(ApiScope::AccountRead))
+            .and(ScopeGuard::new(ApiScope::UserRead))
             .check(ctx)
             .await
     }
@@ -506,9 +506,9 @@ impl EffectivePermissionNode {
 
     #[graphql(
         complexity = "child_complexity",
-        guard = "ManagementGuard::new(ManagementScope::GroupMembershipsRead, ManagementTarget::instance()).and(ManagementGuard::new(ManagementScope::GroupRolesRead, ManagementTarget::instance()))",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::GroupMembershipsRead)),
-        directive = access::apply(ManagementGuard::policy(ManagementScope::GroupRolesRead))
+        guard = "ManagementGuard::new(ManagementScope::GroupMembersRead, ManagementTarget::instance()).and(ManagementGuard::new(ManagementScope::RoleAssignmentsRead, ManagementTarget::instance()))",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::GroupMembersRead)),
+        directive = access::apply(ManagementGuard::policy(ManagementScope::RoleAssignmentsRead))
     )]
     async fn group_sources(&self) -> Vec<EffectiveGroupPermissionSourceNode> {
         self.record

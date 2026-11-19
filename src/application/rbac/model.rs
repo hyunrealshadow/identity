@@ -113,3 +113,16 @@ pub(crate) const MAX_USER_ROLES: usize = 100;
 pub(crate) const MAX_BATCH_LOOKUPS: usize = 100;
 pub(crate) const MAX_SCOPE_ASSIGNMENTS: usize = 1_000;
 pub(crate) const MAX_DESCRIPTION_LOCALES: usize = 20;
+
+/// Deduplicate a page-bounded batch lookup and reject oversized input.
+pub(crate) fn dedupe_batch_lookups<T: Ord, C: crate::error::code::AppErrorCode>(
+    oids: Vec<T>,
+    code: C,
+) -> Result<Vec<T>, crate::error::AppError> {
+    let oids = oids.into_iter().collect::<BTreeSet<_>>();
+    if oids.len() > MAX_BATCH_LOOKUPS {
+        return Err(crate::error::AppError::from_code(code)
+            .with_param("max", MAX_BATCH_LOOKUPS.to_string()));
+    }
+    Ok(oids.into_iter().collect())
+}

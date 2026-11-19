@@ -627,14 +627,14 @@ mod tests {
 
     #[test]
     fn refresh_scope_allows_hierarchical_narrowing_but_rejects_expansion() {
-        let granted = ScopeSet::parse("account.* offline_access").unwrap();
+        let granted = ScopeSet::parse("user.* offline_access").unwrap();
         assert_eq!(
-            refresh_scope(&granted, Some("account.read"))
+            refresh_scope(&granted, Some("user.read"))
                 .unwrap()
                 .to_scope_string(),
-            "account.read"
+            "user.read"
         );
-        assert!(refresh_scope(&granted, Some("openid account.read")).is_err());
+        assert!(refresh_scope(&granted, Some("openid user.read")).is_err());
         assert!(refresh_scope(&granted, Some("session.read")).is_err());
     }
 }

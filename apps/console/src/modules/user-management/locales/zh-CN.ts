@@ -48,13 +48,13 @@ const zhCN = {
   usersClearFilters: '清除筛选',
   usersNoReadTitle: '无法读取用户记录',
   usersNoReadWriteOnlyDescription:
-    '此账户可写入用户，但没有 users.read，无法读取用户记录，如已授予 users.create，仍可创建用户',
+    '此账户可写入用户，但没有 management.user.read，无法读取用户记录，如已授予 management.user.write，仍可创建用户',
   usersNoManagementTitle: '你无权访问用户管理',
   usersNoManagementDescription: '当前账户可登录，但没有有效的用户管理权限',
   usersStepUpDescription: '完成两步验证后即可使用用户管理',
   usersStepUpNote: '验证后请返回此页继续',
   usersCreateNoPermissionTitle: '你无法创建用户',
-  usersCreateNoPermissionDescription: '此账户没有 users.create 权限',
+  usersCreateNoPermissionDescription: '此账户没有 management.user.write 权限',
   usersCreateOnlyAccessTitle: '仅写入的用户权限',
   usersCreateReadWarning:
     '此账户可创建用户，但无法读取用户记录，创建后仅显示新用户 ID 和版本',
@@ -208,7 +208,7 @@ const zhCN = {
   usersEditSuccessToast: '用户已更新',
   usersEditCommitted: '更改已保存',
   usersEditNoPermissionTitle: '你无法编辑此用户',
-  usersEditNoPermissionDescription: '此账户没有 users.update 权限',
+  usersEditNoPermissionDescription: '此账户没有 management.user.write 权限',
   usersBackToDetail: '返回用户详情',
 
   rbacStepUpTitle: '需要两步验证',

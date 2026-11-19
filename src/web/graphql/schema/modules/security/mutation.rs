@@ -26,8 +26,8 @@ pub(crate) struct SecurityMutation;
 #[Object]
 impl SecurityMutation {
     #[graphql(
-        guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::AccountUpdate)).and(MfaRecentAuthenticationGuard)",
-        directive = access::apply(ScopeGuard::policy(ApiScope::AccountUpdate)),
+        guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::UserWrite)).and(MfaRecentAuthenticationGuard)",
+        directive = access::apply(ScopeGuard::policy(ApiScope::UserWrite)),
         directive = access::apply(AccessPolicy::account_security())
     )]
     async fn prepare_mfa_management(&self, ctx: &Context<'_>) -> Result<bool> {
@@ -36,8 +36,8 @@ impl SecurityMutation {
     }
 
     #[graphql(
-        guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::AccountUpdate)).and(MfaRecentAuthenticationGuard)",
-        directive = access::apply(ScopeGuard::policy(ApiScope::AccountUpdate)),
+        guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::UserWrite)).and(MfaRecentAuthenticationGuard)",
+        directive = access::apply(ScopeGuard::policy(ApiScope::UserWrite)),
         directive = access::apply(AccessPolicy::account_security())
     )]
     async fn prepare_mfa_recovery_codes(
@@ -58,8 +58,8 @@ impl SecurityMutation {
         })
     }
 
-    #[graphql(guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::AccountUpdate))",
-        directive = access::apply(ScopeGuard::policy(ApiScope::AccountUpdate)))]
+    #[graphql(guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::UserWrite))",
+        directive = access::apply(ScopeGuard::policy(ApiScope::UserWrite)))]
     async fn update_preferred_mfa_method(
         &self,
         ctx: &Context<'_>,
@@ -86,8 +86,8 @@ impl SecurityMutation {
     }
 
     #[graphql(
-        guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::AccountUpdate)).and(MfaRecentAuthenticationGuard)",
-        directive = access::apply(ScopeGuard::policy(ApiScope::AccountUpdate)),
+        guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::UserWrite)).and(MfaRecentAuthenticationGuard)",
+        directive = access::apply(ScopeGuard::policy(ApiScope::UserWrite)),
         directive = access::apply(AccessPolicy::account_security())
     )]
     async fn begin_passkey_registration(
@@ -134,8 +134,8 @@ impl SecurityMutation {
     }
 
     #[graphql(
-        guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::AccountUpdate)).and(MfaRecentAuthenticationGuard)",
-        directive = access::apply(ScopeGuard::policy(ApiScope::AccountUpdate)),
+        guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::UserWrite)).and(MfaRecentAuthenticationGuard)",
+        directive = access::apply(ScopeGuard::policy(ApiScope::UserWrite)),
         directive = access::apply(AccessPolicy::account_security())
     )]
     async fn finish_passkey_registration(
@@ -179,8 +179,8 @@ impl SecurityMutation {
     }
 
     #[graphql(
-        guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::AccountUpdate)).and(MfaRecentAuthenticationGuard)",
-        directive = access::apply(ScopeGuard::policy(ApiScope::AccountUpdate)),
+        guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::UserWrite)).and(MfaRecentAuthenticationGuard)",
+        directive = access::apply(ScopeGuard::policy(ApiScope::UserWrite)),
         directive = access::apply(AccessPolicy::account_security())
     )]
     async fn delete_passkey(&self, ctx: &Context<'_>, id: ID) -> Result<bool> {
@@ -234,8 +234,8 @@ impl SecurityMutation {
     }
 
     #[graphql(
-        guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::AccountUpdate)).and(MfaRecentAuthenticationGuard)",
-        directive = access::apply(ScopeGuard::policy(ApiScope::AccountUpdate)),
+        guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::UserWrite)).and(MfaRecentAuthenticationGuard)",
+        directive = access::apply(ScopeGuard::policy(ApiScope::UserWrite)),
         directive = access::apply(AccessPolicy::account_security())
     )]
     async fn begin_totp_enrollment(
@@ -271,8 +271,8 @@ impl SecurityMutation {
     }
 
     #[graphql(
-        guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::AccountUpdate)).and(MfaRecentAuthenticationGuard)",
-        directive = access::apply(ScopeGuard::policy(ApiScope::AccountUpdate)),
+        guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::UserWrite)).and(MfaRecentAuthenticationGuard)",
+        directive = access::apply(ScopeGuard::policy(ApiScope::UserWrite)),
         directive = access::apply(AccessPolicy::account_security())
     )]
     async fn confirm_totp_enrollment(
@@ -295,8 +295,8 @@ impl SecurityMutation {
     }
 
     #[graphql(
-        guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::AccountUpdate)).and(MfaRecentAuthenticationGuard)",
-        directive = access::apply(ScopeGuard::policy(ApiScope::AccountUpdate)),
+        guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::UserWrite)).and(MfaRecentAuthenticationGuard)",
+        directive = access::apply(ScopeGuard::policy(ApiScope::UserWrite)),
         directive = access::apply(AccessPolicy::account_security())
     )]
     async fn change_totp_enrollment_algorithm(
@@ -334,8 +334,8 @@ impl SecurityMutation {
     }
 
     #[graphql(
-        guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::AccountUpdate)).and(RecentAuthenticationGuard::aal2())",
-        directive = access::apply(ScopeGuard::policy(ApiScope::AccountUpdate)),
+        guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::UserWrite)).and(RecentAuthenticationGuard::aal2())",
+        directive = access::apply(ScopeGuard::policy(ApiScope::UserWrite)),
         directive = access::apply(RecentAuthenticationGuard::aal2().policy())
     )]
     async fn disable_totp(
@@ -355,8 +355,8 @@ impl SecurityMutation {
     }
 
     #[graphql(
-        guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::AccountUpdate)).and(RecentAuthenticationGuard::aal2())",
-        directive = access::apply(ScopeGuard::policy(ApiScope::AccountUpdate)),
+        guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::UserWrite)).and(RecentAuthenticationGuard::aal2())",
+        directive = access::apply(ScopeGuard::policy(ApiScope::UserWrite)),
         directive = access::apply(RecentAuthenticationGuard::aal2().policy())
     )]
     async fn regenerate_recovery_codes(

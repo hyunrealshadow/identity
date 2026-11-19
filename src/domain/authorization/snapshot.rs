@@ -152,11 +152,11 @@ mod tests {
         let authority = UserPermissionAuthority::new(
             user,
             AuthorizationVersion::new(),
-            [ManagementScope::UsersRead, ManagementScope::AuditRead],
+            [ManagementScope::UsersRead, ManagementScope::SessionsRead],
         );
         let snapshot = ManagementAuthorizationSnapshot::for_user_permissions(&authority, policy);
         let mut changed = authority.clone();
-        changed.permissions.remove(&ManagementScope::AuditRead);
+        changed.permissions.remove(&ManagementScope::SessionsRead);
         assert_eq!(
             validate_user_permission_snapshot(&snapshot, Some(&changed), policy),
             Err(SnapshotValidationError::PermissionsMismatch)

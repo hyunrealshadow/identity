@@ -66,24 +66,24 @@ describe('identityGraphql', () => {
   }
 
   it('exports only safe claims for the browser using the same token selection', async () => {
-    const standard = token('account.read account.update', 'aal1', 400)
-    const elevated = token('account.read account.update password.change', 'aal2', 20)
+    const standard = token('user.read user.write', 'aal1', 400)
+    const elevated = token('user.read user.write password.change', 'aal2', 20)
     mocks.accessToken.mockResolvedValue(standard)
     mocks.elevatedAccessToken.mockResolvedValue(elevated)
     const context = await accountAccessContext(true)
-    expect(context.default).toMatchObject({ scopes: ['account.read', 'account.update'], acr: 'aal1', user: true, mfaEnabled: true })
-    expect(context.elevated).toMatchObject({ scopes: ['account.read', 'account.update', 'password.change'], acr: 'aal2' })
+    expect(context.default).toMatchObject({ scopes: ['user.read', 'user.write'], acr: 'aal1', user: true, mfaEnabled: true })
+    expect(context.elevated).toMatchObject({ scopes: ['user.read', 'user.write', 'password.change'], acr: 'aal2' })
     expect(JSON.stringify(context)).not.toContain(standard)
     expect(JSON.stringify(context)).not.toContain(elevated)
     expect(Object.keys(context.default!)).toEqual(['scopes', 'acr', 'authTime', 'user', 'mfaEnabled'])
   })
 
   it('blocks a missing directive scope locally with a translated denial', async () => {
-    mocks.accessToken.mockResolvedValue(token('account.read'))
+    mocks.accessToken.mockResolvedValue(token('user.read'))
     const fetch = vi.fn()
     vi.stubGlobal('fetch', fetch)
     await expect(identityGraphql('mutation { updateProfile(input: {}) { user { id } } }')).rejects.toMatchObject({
-      errors: [{ message: '没有执行此操作的权限', extensions: { code: 'insufficient_scope', requiredScopes: ['account.update'] } }],
+      errors: [{ message: '没有执行此操作的权限', extensions: { code: 'insufficient_scope', requiredScopes: ['user.write'] } }],
     })
     expect(fetch).not.toHaveBeenCalled()
     expect(mocks.clearAuthorizationCookie).not.toHaveBeenCalled()
@@ -98,10 +98,10 @@ describe('identityGraphql', () => {
   })
 
   it('falls back to the account token when the step-up token was minted for another purpose', async () => {
-    // An MFA step-up stores an aal2 token scoped for account.* only; the
+    // An MFA step-up stores an aal2 token scoped for user.* only; the
     // password operation needs its own scope and a fresh aal2 step-up.
-    mocks.accessToken.mockResolvedValue(token('account.read password.change', 'aal1', 10))
-    mocks.elevatedAccessToken.mockResolvedValue(token('account.read account.*', 'aal2', 10))
+    mocks.accessToken.mockResolvedValue(token('user.read password.change', 'aal1', 10))
+    mocks.elevatedAccessToken.mockResolvedValue(token('user.read user.*', 'aal2', 10))
     const fetch = vi.fn().mockResolvedValue(jsonResponse({ data: { security: { mfaEnabled: true } } }))
     vi.stubGlobal('fetch', fetch)
     await expect(preflightIdentityGraphql(
@@ -116,8 +116,8 @@ describe('identityGraphql', () => {
   })
 
   it('still denies an operation neither token can reach', async () => {
-    mocks.accessToken.mockResolvedValue(token('account.read', 'aal2', 10))
-    mocks.elevatedAccessToken.mockResolvedValue(token('account.read account.*', 'aal2', 10))
+    mocks.accessToken.mockResolvedValue(token('user.read', 'aal2', 10))
+    mocks.elevatedAccessToken.mockResolvedValue(token('user.read user.*', 'aal2', 10))
     const fetch = vi.fn()
     vi.stubGlobal('fetch', fetch)
     await expect(preflightIdentityGraphql(
@@ -131,7 +131,7 @@ describe('identityGraphql', () => {
   })
 
   it('prechecks schema freshness before submitting an account write', async () => {
-    mocks.accessToken.mockResolvedValue(token('account.update', 'aal1', 301))
+    mocks.accessToken.mockResolvedValue(token('user.write', 'aal1', 301))
     const fetch = vi.fn()
     vi.stubGlobal('fetch', fetch)
     await expect(identityGraphql('mutation { updateUsername(input: {username: "new-name"}) { user { id } } }')).rejects.toMatchObject({
@@ -142,7 +142,7 @@ describe('identityGraphql', () => {
   })
 
   it('resolves the schema account-factor condition without submitting the write', async () => {
-    mocks.accessToken.mockResolvedValue(token('account.read account.update', 'aal1', 0))
+    mocks.accessToken.mockResolvedValue(token('user.read user.write', 'aal1', 0))
     const fetch = vi.fn().mockResolvedValue(jsonResponse({ data: { security: { mfaEnabled: true } } }))
     vi.stubGlobal('fetch', fetch)
     await expect(identityGraphql('mutation { beginTotpEnrollment { clientMutationId } }')).rejects.toMatchObject({
@@ -153,7 +153,7 @@ describe('identityGraphql', () => {
   })
 
   it('permits a fresh AAL2 security write without another factors query', async () => {
-    mocks.accessToken.mockResolvedValue(token('account.read account.update', 'aal2', 100))
+    mocks.accessToken.mockResolvedValue(token('user.read user.write', 'aal2', 100))
     const fetch = vi.fn().mockResolvedValue(jsonResponse({ data: { prepareMfaManagement: true } }))
     vi.stubGlobal('fetch', fetch)
     await expect(identityGraphql('mutation { prepareMfaManagement }')).resolves.toEqual({ prepareMfaManagement: true })
@@ -161,7 +161,7 @@ describe('identityGraphql', () => {
   })
 
   it('prioritizes a missing permission over stale authentication', async () => {
-    mocks.accessToken.mockResolvedValue(token('account.read', 'aal1', 1000))
+    mocks.accessToken.mockResolvedValue(token('user.read', 'aal1', 1000))
     vi.stubGlobal('fetch', vi.fn())
     try {
       await identityGraphql('mutation { updateUsername(input: {username: "new-name"}) { user { id } } }')

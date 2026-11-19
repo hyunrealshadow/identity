@@ -1,3 +1,4 @@
+mod access;
 mod mutation;
 mod query;
 mod types;

@@ -123,7 +123,7 @@ total count is not a cursor: it cannot address an unvisited page.
 
 ## Account and dashboard fields
 
-Two field families carry behaviour that is easy to get wrong.
+Three field families carry behaviour that is worth noting explicitly.
 
 **Account preferences.** `updateProfile(input: { zoneInfo })` stores the preferred
 IANA time zone and `account.zoneInfo` reads it back. Omitting the field preserves
@@ -133,6 +133,24 @@ error. The value is exported as the standard `profile` claim `zoneinfo`, so a
 client that requests `profile` receives it without an extra UserInfo call. Time
 zone changes affect presentation and calendar boundaries, not elapsed durations
 or date-only values such as birthdays.
+
+**Account self-service reads.** `account`, `accountGroups`, `accountRoles`, and
+`accountPermissions` require a user principal and only `user.read` (no
+management scopes or management-guarded admin fields such as `User.version`,
+audit metadata, or revoked grant history). `account` returns the authenticated
+user's own `User` fields, including standard profile, phone, and postal address
+fields. `accountGroups` lists the user's active memberships in enabled,
+non-deleted groups ordered by join time. `accountRoles` lists active enabled
+roles held directly or inherited through active groups, with optional `source`
+(`DIRECT` / `GROUP`) filtering. `accountPermissions` lists active effective
+permissions across enabled API resources or filtered to an optional `resourceId`
+and optional `source`, preserving direct and group-derived provenance without
+duplicating permission rows. All three collections use bidirectional Relay
+pagination with lazy `totalCount`. The Account Center queries
+`effectivePermissions { requestableScopes effectiveScopes }` (requiring only an
+authenticated session) and evaluates `hasManagementAccess` in
+`@identity/graphql-access` against executable schema metadata together with the
+configured Console URL to decide whether to show the Console menu entry.
 
 **Dashboard aggregates.** `instanceOverview` returns real instance aggregates,
 each loaded only after its own authorization check, so a missing permission or a
@@ -192,7 +210,7 @@ Responses use a single envelope:
 
 ## Management scope catalog
 
-These 44 scopes are reserved, defined by the server, and regenerated into
+These 28 scopes are reserved, defined by the server, and regenerated into
 `graphql/management-scopes.json`. `authentication` is the human requirement;
 `machine` indicates whether client-credentials tokens may use the scope, always
 subject to the client's live granted-scope ceiling.
@@ -200,24 +218,13 @@ subject to the client's live granted-scope ceiling.
 | Scope | Authentication | Machine |
 | --- | --- | --- |
 | `management.user.read` | AAL2 | yes |
-| `management.user.create` | AAL2 | yes |
-| `management.user.update` | AAL2 | yes |
-| `management.user.state` | AAL2 | yes |
-| `management.user.revoke_access` | RECENT_AAL2 | yes |
+| `management.user.write` | AAL2 | yes |
 | `management.session.read` | AAL2 | yes |
-| `management.session.revoke` | AAL2 | yes |
-| `management.credential.read` | AAL2 | yes |
-| `management.credential.revoke` | RECENT_AAL2 | no |
-| `management.credential.reset` | RECENT_AAL2 | no |
 | `management.client.read` | AAL2 | yes |
-| `management.client.create` | AAL2 | yes |
-| `management.client.update` | AAL2 | yes |
-| `management.client.state` | AAL2 | yes |
+| `management.client.write` | AAL2 | yes |
 | `management.client.delete` | RECENT_AAL2 | no |
-| `management.client.scope` | AAL2 | yes |
 | `management.client_credential.read` | AAL2 | yes |
-| `management.client_credential.create` | RECENT_AAL2 | no |
-| `management.client_credential.rotate` | RECENT_AAL2 | no |
+| `management.client_credential.write` | RECENT_AAL2 | no |
 | `management.client_credential.revoke` | RECENT_AAL2 | no |
 | `management.resource.read` | AAL2 | yes |
 | `management.resource.write` | AAL2 | yes |
@@ -226,22 +233,17 @@ subject to the client's live granted-scope ceiling.
 | `management.setting.read` | AAL2 | yes |
 | `management.setting.write` | RECENT_AAL2 | no |
 | `management.key.read` | AAL2 | yes |
-| `management.key.create` | RECENT_AAL2 | no |
-| `management.key.rotate` | RECENT_AAL2 | no |
+| `management.key.write` | RECENT_AAL2 | no |
 | `management.key.revoke` | RECENT_AAL2 | no |
-| `management.audit.read` | AAL2 | yes |
-| `management.permission.read` | AAL2 | yes |
-| `management.permission.write` | RECENT_AAL2 | no |
 | `management.role.read` | AAL2 | yes |
 | `management.role.write` | RECENT_AAL2 | no |
 | `management.role_assignment.read` | AAL2 | yes |
 | `management.role_assignment.write` | RECENT_AAL2 | no |
 | `management.group.read` | AAL2 | yes |
 | `management.group.write` | RECENT_AAL2 | no |
-| `management.group_membership.read` | AAL2 | yes |
-| `management.group_membership.write` | RECENT_AAL2 | no |
-| `management.group_role.read` | AAL2 | yes |
-| `management.group_role.write` | RECENT_AAL2 | no |
+| `management.group.delete` | RECENT_AAL2 | no |
+| `management.group_member.read` | AAL2 | yes |
+| `management.group_member.write` | RECENT_AAL2 | no |
 | `management.permission.delegate` | RECENT_AAL2 | no |
 
 Read scopes read; write scopes change the definition or relationship. There is

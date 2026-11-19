@@ -636,7 +636,7 @@ mod tests {
     #[test]
     fn legacy_access_tokens_default_to_a_human_principal_and_no_management() {
         let legacy = serde_json::json!({
-            "scope": "openid account.read",
+            "scope": "openid user.read",
             "user_oid": "11111111-1111-1111-1111-111111111111",
             "authorization_code_oid": null
         });
@@ -652,7 +652,7 @@ mod tests {
     #[test]
     fn machine_access_tokens_carry_no_user_or_session() {
         let data = super::AccessTokenData {
-            scope: "management.audit.read".to_owned(),
+            scope: "management.session.read".to_owned(),
             resources: Vec::new(),
             user_oid: None,
             principal: AccessTokenPrincipal::Client,
@@ -750,7 +750,7 @@ mod tests {
         let authority = UserPermissionAuthority::new(
             UserOid(Uuid::new_v4()),
             AuthorizationVersion::fresh(),
-            [ManagementScope::UsersRead, ManagementScope::AuditRead],
+            [ManagementScope::UsersRead, ManagementScope::SessionsRead],
         );
         let policy = PolicyVersion::new();
         let client_policy = PolicyVersion::new();

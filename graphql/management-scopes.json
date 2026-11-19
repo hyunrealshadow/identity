@@ -7,30 +7,9 @@
     "reserved": true
   },
   {
-    "scope": "management.user.create",
-    "action": "user.create",
+    "scope": "management.user.write",
+    "action": "user.write",
     "authentication": "aal2",
-    "machineAllowed": true,
-    "reserved": true
-  },
-  {
-    "scope": "management.user.update",
-    "action": "user.update",
-    "authentication": "aal2",
-    "machineAllowed": true,
-    "reserved": true
-  },
-  {
-    "scope": "management.user.state",
-    "action": "user.state",
-    "authentication": "aal2",
-    "machineAllowed": true,
-    "reserved": true
-  },
-  {
-    "scope": "management.user.revoke_access",
-    "action": "user.revoke_access",
-    "authentication": "recent_aal2",
     "machineAllowed": true,
     "reserved": true
   },
@@ -42,34 +21,6 @@
     "reserved": true
   },
   {
-    "scope": "management.session.revoke",
-    "action": "session.revoke",
-    "authentication": "aal2",
-    "machineAllowed": true,
-    "reserved": true
-  },
-  {
-    "scope": "management.credential.read",
-    "action": "credential.read",
-    "authentication": "aal2",
-    "machineAllowed": true,
-    "reserved": true
-  },
-  {
-    "scope": "management.credential.revoke",
-    "action": "credential.revoke",
-    "authentication": "recent_aal2",
-    "machineAllowed": false,
-    "reserved": true
-  },
-  {
-    "scope": "management.credential.reset",
-    "action": "credential.reset",
-    "authentication": "recent_aal2",
-    "machineAllowed": false,
-    "reserved": true
-  },
-  {
     "scope": "management.client.read",
     "action": "client.read",
     "authentication": "aal2",
@@ -77,22 +28,8 @@
     "reserved": true
   },
   {
-    "scope": "management.client.create",
-    "action": "client.create",
-    "authentication": "aal2",
-    "machineAllowed": true,
-    "reserved": true
-  },
-  {
-    "scope": "management.client.update",
-    "action": "client.update",
-    "authentication": "aal2",
-    "machineAllowed": true,
-    "reserved": true
-  },
-  {
-    "scope": "management.client.state",
-    "action": "client.state",
+    "scope": "management.client.write",
+    "action": "client.write",
     "authentication": "aal2",
     "machineAllowed": true,
     "reserved": true
@@ -105,13 +42,6 @@
     "reserved": true
   },
   {
-    "scope": "management.client.scope",
-    "action": "client.scope",
-    "authentication": "aal2",
-    "machineAllowed": true,
-    "reserved": true
-  },
-  {
     "scope": "management.client_credential.read",
     "action": "client_credential.read",
     "authentication": "aal2",
@@ -119,15 +49,8 @@
     "reserved": true
   },
   {
-    "scope": "management.client_credential.create",
-    "action": "client_credential.create",
-    "authentication": "recent_aal2",
-    "machineAllowed": false,
-    "reserved": true
-  },
-  {
-    "scope": "management.client_credential.rotate",
-    "action": "client_credential.rotate",
+    "scope": "management.client_credential.write",
+    "action": "client_credential.write",
     "authentication": "recent_aal2",
     "machineAllowed": false,
     "reserved": true
@@ -189,15 +112,8 @@
     "reserved": true
   },
   {
-    "scope": "management.key.create",
-    "action": "key.create",
-    "authentication": "recent_aal2",
-    "machineAllowed": false,
-    "reserved": true
-  },
-  {
-    "scope": "management.key.rotate",
-    "action": "key.rotate",
+    "scope": "management.key.write",
+    "action": "key.write",
     "authentication": "recent_aal2",
     "machineAllowed": false,
     "reserved": true
@@ -205,27 +121,6 @@
   {
     "scope": "management.key.revoke",
     "action": "key.revoke",
-    "authentication": "recent_aal2",
-    "machineAllowed": false,
-    "reserved": true
-  },
-  {
-    "scope": "management.audit.read",
-    "action": "audit.read",
-    "authentication": "aal2",
-    "machineAllowed": true,
-    "reserved": true
-  },
-  {
-    "scope": "management.permission.read",
-    "action": "permission.read",
-    "authentication": "aal2",
-    "machineAllowed": true,
-    "reserved": true
-  },
-  {
-    "scope": "management.permission.write",
-    "action": "permission.write",
     "authentication": "recent_aal2",
     "machineAllowed": false,
     "reserved": true
@@ -273,29 +168,22 @@
     "reserved": true
   },
   {
-    "scope": "management.group_membership.read",
-    "action": "group_membership.read",
-    "authentication": "aal2",
-    "machineAllowed": true,
-    "reserved": true
-  },
-  {
-    "scope": "management.group_membership.write",
-    "action": "group_membership.write",
+    "scope": "management.group.delete",
+    "action": "group.delete",
     "authentication": "recent_aal2",
     "machineAllowed": false,
     "reserved": true
   },
   {
-    "scope": "management.group_role.read",
-    "action": "group_role.read",
+    "scope": "management.group_member.read",
+    "action": "group_member.read",
     "authentication": "aal2",
     "machineAllowed": true,
     "reserved": true
   },
   {
-    "scope": "management.group_role.write",
-    "action": "group_role.write",
+    "scope": "management.group_member.write",
+    "action": "group_member.write",
     "authentication": "recent_aal2",
     "machineAllowed": false,
     "reserved": true

@@ -94,7 +94,7 @@ impl Default for FixtureOptions {
     fn default() -> Self {
         Self {
             audience: RESOURCE_AUDIENCE,
-            scope: "openid account.read",
+            scope: "openid user.read",
             revoked: false,
             tail: FixtureTail::SelfService,
             config: GraphqlConfig::default(),
@@ -107,14 +107,27 @@ async fn graphql_http_accepts_a_valid_resource_access_token() {
     let fixture = fixture(FixtureOptions::default()).await;
     let mut response = graphql_post(
         &fixture,
-        "query { account { id username email birthdate } }",
+        "query { account { id username email birthdate gender phoneNumber phoneNumberVerified addressFormatted addressStreetAddress addressLocality addressRegion addressPostalCode addressCountry } }",
     )
     .await;
 
     assert_eq!(response.status_code, Some(StatusCode::OK));
     let body: Value = response.take_json().await.unwrap();
-    assert_eq!(body["data"]["account"]["username"], "ada");
-    assert!(body["data"]["account"]["birthdate"].is_null());
+    let account = &body["data"]["account"];
+    assert_eq!(account["username"], "ada");
+    assert!(account["birthdate"].is_null());
+    assert_eq!(account["gender"], "female");
+    assert_eq!(account["phoneNumber"], "+1-555-0100");
+    assert_eq!(account["phoneNumberVerified"], true);
+    assert_eq!(
+        account["addressFormatted"],
+        "10 Downing St\nLondon SW1A 2AA\nGB"
+    );
+    assert_eq!(account["addressStreetAddress"], "10 Downing St");
+    assert_eq!(account["addressLocality"], "London");
+    assert_eq!(account["addressRegion"], "Greater London");
+    assert_eq!(account["addressPostalCode"], "SW1A 2AA");
+    assert_eq!(account["addressCountry"], "GB");
     assert!(body.get("errors").is_none());
 }
 
@@ -310,7 +323,7 @@ async fn graphql_http_reports_the_required_scope() {
     let body: Value = response.take_json().await.unwrap();
     assert_eq!(
         body["errors"][0]["extensions"]["requiredScope"],
-        "account.read"
+        "user.read"
     );
     assert_eq!(
         body["errors"][0]["extensions"]["code"],
@@ -372,6 +385,33 @@ async fn graphql_http_returns_empty_management_permissions_for_an_ordinary_user(
     assert_eq!(permissions["authentication"]["recent"], false);
     assert!(permissions["authentication"]["acr"].is_null());
     assert!(permissions["authentication"]["authTime"].is_null());
+}
+
+#[tokio::test]
+async fn graphql_http_effective_permissions_allows_user_read_selection_only() {
+    let fixture = fixture(FixtureOptions {
+        scope: "openid user.read",
+        tail: FixtureTail::EffectivePermissions,
+        ..FixtureOptions::default()
+    })
+    .await;
+    let mut response = graphql_post(
+        &fixture,
+        "query { effectivePermissions { requestableScopes effectiveScopes } }",
+    )
+    .await;
+
+    assert_eq!(response.status_code, Some(StatusCode::OK));
+    let body: Value = response.take_json().await.unwrap();
+    assert!(body.get("errors").is_none());
+    assert_eq!(
+        body["data"]["effectivePermissions"]["requestableScopes"],
+        json!([])
+    );
+    assert_eq!(
+        body["data"]["effectivePermissions"]["effectiveScopes"],
+        json!([])
+    );
 }
 
 #[tokio::test]
@@ -517,24 +557,31 @@ async fn graphql_http_denies_client_management_without_management_authority() {
 }
 
 #[tokio::test]
-async fn graphql_http_account_permissions_requires_only_account_read() {
-    let fixture = fixture(FixtureOptions {
-        scope: "openid",
-        ..FixtureOptions::default()
-    })
-    .await;
+async fn graphql_http_account_access_queries_require_only_user_read() {
     let resource_id = GlobalId::<ResourceGlobalId>::new(Uuid::new_v4()).encode();
-    let query = format!(
-        "query {{ accountPermissions(resourceId: \"{resource_id}\") {{ edges {{ node {{ code }} }} }} }}"
-    );
-    let mut response = graphql_post(&fixture, &query).await;
+    for query in [
+        "query { accountGroups { edges { joinedAt node { id name } } totalCount } }".to_owned(),
+        "query { accountRoles { edges { source grantedAt groupId node { id name } } totalCount } }"
+            .to_owned(),
+        "query { accountPermissions { edges { node { code scope } } totalCount } }".to_owned(),
+        format!(
+            "query {{ accountPermissions(resourceId: \"{resource_id}\") {{ edges {{ node {{ code }} }} }} }}"
+        ),
+    ] {
+        let fixture = fixture(FixtureOptions {
+            scope: "openid",
+            ..FixtureOptions::default()
+        })
+        .await;
+        let mut response = graphql_post(&fixture, &query).await;
 
-    assert_eq!(response.status_code, Some(StatusCode::OK));
-    let body: Value = response.take_json().await.unwrap();
-    let error = &body["errors"][0];
-    assert_eq!(error["extensions"]["code"], "insufficient_scope");
-    assert_eq!(error["extensions"]["requiredScope"], "account.read");
-    assert!(body["data"].is_null());
+        assert_eq!(response.status_code, Some(StatusCode::OK));
+        let body: Value = response.take_json().await.unwrap();
+        let error = &body["errors"][0];
+        assert_eq!(error["extensions"]["code"], "insufficient_scope");
+        assert_eq!(error["extensions"]["requiredScope"], "user.read");
+        assert!(body["data"].is_null());
+    }
 }
 
 #[tokio::test]
@@ -684,9 +731,9 @@ async fn fixture(options: FixtureOptions) -> GraphqlFixture {
     let scope_rows = || {
         [
             "openid",
-            "account.*",
-            "account.read",
-            "account.update",
+            "user.*",
+            "user.read",
+            "user.write",
             "session.*",
             "session.read",
             "session.revoke",
@@ -945,8 +992,8 @@ fn test_user(oid: Uuid, version: Uuid, now: DateTime<Utc>) -> user::Model {
         email: "ada@example.com".to_owned(),
         email_normalized: "ada@example.com".to_owned(),
         email_verified: true,
-        phone_number: None,
-        phone_number_verified: None,
+        phone_number: Some("+1-555-0100".to_owned()),
+        phone_number_verified: Some(true),
         nickname: None,
         given_name: Some("Ada".to_owned()),
         family_name: Some("Lovelace".to_owned()),
@@ -954,17 +1001,17 @@ fn test_user(oid: Uuid, version: Uuid, now: DateTime<Utc>) -> user::Model {
         profile: None,
         picture: None,
         website: None,
-        gender: None,
+        gender: Some("female".to_owned()),
         birthdate: None,
         zone_info: None,
         locale: None,
         preferences: json!({}),
-        address_formatted: None,
-        address_street_address: None,
-        address_locality: None,
-        address_region: None,
-        address_postal_code: None,
-        address_country: None,
+        address_formatted: Some("10 Downing St\nLondon SW1A 2AA\nGB".to_owned()),
+        address_street_address: Some("10 Downing St".to_owned()),
+        address_locality: Some("London".to_owned()),
+        address_region: Some("Greater London".to_owned()),
+        address_postal_code: Some("SW1A 2AA".to_owned()),
+        address_country: Some("GB".to_owned()),
         failed_attempts: 0,
         enabled: true,
         locked: false,

@@ -16,7 +16,10 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use async_trait::async_trait;
 use identity_domain::{
-    authorization::catalog::{ManagementScope, RETIRED_MANAGEMENT_SCOPE_NAMES, validate_catalog},
+    authorization::catalog::{
+        ManagementScope, RENAMED_MANAGEMENT_SCOPES, RETIRED_MANAGEMENT_SCOPE_NAMES,
+        validate_catalog,
+    },
     rbac::{
         ADMIN_PRESET, BUILT_IN_PRESETS, BuiltInPreset, LocalizedMetadata, LocalizedText,
         OWNER_PRESET, RolePermissionOid, VIEWER_PRESET, built_in_permission_oid,
@@ -24,11 +27,14 @@ use identity_domain::{
 };
 use sea_orm::{
     ConnectionTrait, DatabaseConnection, DatabaseTransaction, DbBackend, DbErr, Statement,
-    TransactionTrait,
+    TransactionTrait, Value,
 };
 use uuid::Uuid;
 
-use super::{Seed, oauth_resource};
+use super::{
+    Seed, oauth_resource,
+    scope::{advance_users_affected_by_role, copy_scope_relations, retire_built_in_scopes},
+};
 use crate::{
     application::error::{AppError, codes::rbac::RbacErrorCode},
     database::{
@@ -85,13 +91,15 @@ pub async fn ensure_built_in_rbac(transaction: &DatabaseTransaction) -> Result<(
     validate_catalog().map_err(AppError::internal)?;
 
     let resource_oid = oauth_resource::graphql_resource_oid(transaction).await?;
-    retire_management_scopes(transaction).await?;
 
     let mut scope_ids: BTreeMap<ManagementScope, i64> = BTreeMap::new();
     for scope in ManagementScope::ALL {
         let id = ensure_scope_id(transaction, resource_oid, scope).await?;
         scope_ids.insert(scope, id);
     }
+
+    migrate_renamed_management_scopes(transaction, resource_oid, &scope_ids).await?;
+    retire_management_scopes(transaction, resource_oid).await?;
 
     for preset in &BUILT_IN_PRESETS {
         let text = preset_text(preset)?;
@@ -104,87 +112,93 @@ pub async fn ensure_built_in_rbac(transaction: &DatabaseTransaction) -> Result<(
     Ok(())
 }
 
-/// Remove retired built-in scope definitions from an existing database. Every
-/// role that still references one loses that permission with the same version,
-/// withdrawal and audit effects as any other built-in reconciliation; client
-/// assignments and consents follow through their cascading foreign keys.
-async fn retire_management_scopes(transaction: &DatabaseTransaction) -> Result<(), AppError> {
-    let retired: Vec<sea_orm::Value> = RETIRED_MANAGEMENT_SCOPE_NAMES
-        .iter()
-        .map(|name| (*name).into())
-        .collect();
-    let placeholders = (1..=retired.len())
+/// Migrate exact 1-to-1 built-in management renames onto the new scope rows
+/// before [`retire_management_scopes`] deletes the old definitions.
+async fn migrate_renamed_management_scopes(
+    transaction: &DatabaseTransaction,
+    resource_oid: Uuid,
+    scope_ids: &BTreeMap<ManagementScope, i64>,
+) -> Result<(), AppError> {
+    for (old_code, new_scope) in RENAMED_MANAGEMENT_SCOPES {
+        let old_row = transaction
+            .query_one_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                "SELECT id FROM \"scope\" WHERE built_in = true AND resource_id = $1 AND code = $2",
+                [resource_oid.into(), old_code.into()],
+            ))
+            .await
+            .map_err(AppError::internal)?;
+        let Some(old_row) = old_row else {
+            continue;
+        };
+        let old_id = old_row
+            .try_get::<i64>("", "id")
+            .map_err(AppError::internal)?;
+        let new_id = *scope_ids
+            .get(&new_scope)
+            .ok_or_else(|| internal("a built-in scope id is missing"))?;
+        copy_scope_relations(transaction, old_id, new_id, new_scope.m2m_allowed()).await?;
+    }
+    Ok(())
+}
+
+/// Remove retired and obsolete built-in management scope definitions from an
+/// existing database. Every role that still references one loses that
+/// permission with version rotation, authority withdrawal and audit; client
+/// assignments and consents follow through their cascading foreign keys and
+/// trigger client authorization withdrawal.
+async fn retire_management_scopes(
+    transaction: &DatabaseTransaction,
+    resource_oid: Uuid,
+) -> Result<(), AppError> {
+    let mut binds: Vec<Value> = vec![resource_oid.into()];
+    let retired_placeholders = (2..=RETIRED_MANAGEMENT_SCOPE_NAMES.len() + 1)
         .map(|index| format!("${index}"))
         .collect::<Vec<_>>()
         .join(", ");
-    let roles = transaction
+    binds.extend(
+        RETIRED_MANAGEMENT_SCOPE_NAMES
+            .iter()
+            .map(|name| (*name).into()),
+    );
+
+    let active_start = binds.len() + 1;
+    let active_placeholders = (active_start..active_start + ManagementScope::ALL.len())
+        .map(|index| format!("${index}"))
+        .collect::<Vec<_>>()
+        .join(", ");
+    binds.extend(
+        ManagementScope::ALL
+            .into_iter()
+            .map(|scope| scope.name().into()),
+    );
+
+    let rows = transaction
         .query_all_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,
             format!(
-                "SELECT DISTINCT r.id AS role_id, r.oid AS role_oid \
-                 FROM role_permission rp \
-                 JOIN scope s ON s.id = rp.scope_id \
-                 JOIN \"role\" r ON r.id = rp.role_id \
-                 WHERE s.built_in = true AND s.code IN ({placeholders}) \
-                 ORDER BY r.id"
+                "SELECT id FROM \"scope\" \
+                 WHERE built_in = true \
+                   AND ( \
+                     code IN ({retired_placeholders}) \
+                     OR ( \
+                       resource_id = $1 \
+                       AND code LIKE 'management.%' \
+                       AND code NOT IN ({active_placeholders}) \
+                     ) \
+                   ) \
+                 ORDER BY id"
             ),
-            retired.clone(),
+            binds,
         ))
         .await
         .map_err(AppError::internal)?;
-    for row in roles {
-        let role_id = row
-            .try_get::<i64>("", "role_id")
-            .map_err(AppError::internal)?;
-        let role_oid = row
-            .try_get::<Uuid>("", "role_oid")
-            .map_err(AppError::internal)?;
-        let mut values = vec![role_id.into()];
-        values.extend(retired.iter().cloned());
-        let shifted = (2..=retired.len() + 1)
-            .map(|index| format!("${index}"))
-            .collect::<Vec<_>>()
-            .join(", ");
-        transaction
-            .execute_raw(Statement::from_sql_and_values(
-                DbBackend::Postgres,
-                format!(
-                    "DELETE FROM role_permission rp USING scope s \
-                     WHERE rp.scope_id = s.id AND rp.role_id = $1 \
-                       AND s.built_in = true AND s.code IN ({shifted})"
-                ),
-                values,
-            ))
-            .await
-            .map_err(AppError::internal)?;
-        transaction
-            .execute_raw(Statement::from_sql_and_values(
-                DbBackend::Postgres,
-                "UPDATE \"role\" SET version = gen_random_uuid(), \
-                    updated_at = now() WHERE id = $1",
-                [role_id.into()],
-            ))
-            .await
-            .map_err(AppError::internal)?;
-        advance_users_affected_by_role(transaction, role_id).await?;
-        audit::record(
-            transaction,
-            "rbac.role.permissions.reconcile",
-            "role",
-            role_oid,
-        )
-        .await
+    let obsolete_ids: Vec<i64> = rows
+        .into_iter()
+        .map(|row| row.try_get::<i64>("", "id"))
+        .collect::<Result<_, _>>()
         .map_err(AppError::internal)?;
-    }
-    transaction
-        .execute_raw(Statement::from_sql_and_values(
-            DbBackend::Postgres,
-            format!("DELETE FROM scope WHERE built_in = true AND code IN ({placeholders})"),
-            retired,
-        ))
-        .await
-        .map_err(AppError::internal)?;
-    Ok(())
+    retire_built_in_scopes(transaction, &obsolete_ids).await
 }
 
 fn internal(message: &'static str) -> AppError {
@@ -322,7 +336,7 @@ async fn ensure_role(
     let (names, descriptions, name, description) = metadata_values(&metadata)?;
     let description = description.unwrap_or_default();
     let row = transaction.query_one_raw(Statement::from_sql_and_values(DbBackend::Postgres,
-        "SELECT id,oid,built_in,name,description,names,descriptions FROM role WHERE oid=$1 FOR UPDATE",
+        "SELECT id,oid,built_in,enabled,name,description,names,descriptions FROM role WHERE oid=$1 FOR UPDATE",
         [oid.into()])).await.map_err(AppError::internal)?;
     if let Some(row) = row {
         if row.try_get::<Uuid>("", "oid").map_err(AppError::internal)? != oid
@@ -332,10 +346,13 @@ async fn ensure_role(
         {
             return Err(identity_conflict());
         }
-        let changed = row
-            .try_get::<String>("", "name")
+        let changed = !row
+            .try_get::<bool>("", "enabled")
             .map_err(AppError::internal)?
-            != name
+            || row
+                .try_get::<String>("", "name")
+                .map_err(AppError::internal)?
+                != name
             || row
                 .try_get::<String>("", "description")
                 .map_err(AppError::internal)?
@@ -350,7 +367,7 @@ async fn ensure_role(
                 != text_map(&metadata.descriptions);
         if changed {
             transaction.execute_raw(Statement::from_sql_and_values(DbBackend::Postgres,
-                "UPDATE role SET name=$2,description=$3,names=$4::jsonb,descriptions=$5::jsonb,version=gen_random_uuid(),updated_at=now() WHERE oid=$1",
+                "UPDATE role SET enabled=true,name=$2,description=$3,names=$4::jsonb,descriptions=$5::jsonb,version=gen_random_uuid(),updated_at=now() WHERE oid=$1",
                 [oid.into(),name.into(),description.into(),names.into(),descriptions.into()])).await.map_err(AppError::internal)?;
         }
         return row.try_get::<i64>("", "id").map_err(AppError::internal);
@@ -451,47 +468,6 @@ async fn ensure_role_permissions(
     Ok(())
 }
 
-async fn advance_users_affected_by_role(
-    transaction: &DatabaseTransaction,
-    role_id: i64,
-) -> Result<(), AppError> {
-    let rows = transaction
-        .query_all_raw(Statement::from_sql_and_values(
-            DbBackend::Postgres,
-            r#"
-SELECT user_id FROM (
-    SELECT binding.user_id
-    FROM user_role binding
-    WHERE binding.role_id = $1
-      AND binding.enabled = true
-      AND binding.revoked_at IS NULL
-    UNION
-    SELECT membership.user_id
-    FROM group_role relation
-    JOIN group_membership membership ON membership.group_id = relation.group_id
-    WHERE relation.role_id = $1
-      AND relation.enabled = true
-      AND relation.revoked_at IS NULL
-      AND membership.enabled = true
-      AND membership.revoked_at IS NULL
-) affected
-ORDER BY user_id
-"#,
-            [role_id.into()],
-        ))
-        .await
-        .map_err(AppError::internal)?;
-    for row in rows {
-        let user_id = row
-            .try_get::<i64>("", "user_id")
-            .map_err(AppError::internal)?;
-        authorization_lifecycle::withdraw_user_authority_in_txn(transaction, user_id)
-            .await
-            .map_err(AppError::internal)?;
-    }
-    Ok(())
-}
-
 async fn ensure_group(
     transaction: &DatabaseTransaction,
     preset: &BuiltInPreset,
@@ -503,7 +479,7 @@ async fn ensure_group(
     let row = transaction
         .query_one_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,
-            "SELECT id,oid,built_in,name,description,names,descriptions FROM user_group WHERE oid=$1 FOR UPDATE",
+            "SELECT id,oid,built_in,enabled,name,description,names,descriptions FROM user_group WHERE oid=$1 FOR UPDATE",
             [oid.into()],
         ))
         .await
@@ -516,10 +492,13 @@ async fn ensure_group(
         {
             return Err(identity_conflict());
         }
-        if row
-            .try_get::<String>("", "name")
+        if !row
+            .try_get::<bool>("", "enabled")
             .map_err(AppError::internal)?
-            != name
+            || row
+                .try_get::<String>("", "name")
+                .map_err(AppError::internal)?
+                != name
             || row
                 .try_get::<String>("", "description")
                 .map_err(AppError::internal)?
@@ -534,7 +513,7 @@ async fn ensure_group(
                 != text_map(&metadata.descriptions)
         {
             transaction.execute_raw(Statement::from_sql_and_values(DbBackend::Postgres,
-                "UPDATE user_group SET names=$2::jsonb,descriptions=$3::jsonb,name=$4,description=$5,version=gen_random_uuid(),updated_at=now() WHERE oid=$1",
+                "UPDATE user_group SET enabled=true,names=$2::jsonb,descriptions=$3::jsonb,name=$4,description=$5,version=gen_random_uuid(),updated_at=now() WHERE oid=$1",
                 [oid.into(),names.into(),descriptions.into(),name.into(),description.unwrap_or_default().into()])).await.map_err(AppError::internal)?;
         }
         return row.try_get::<i64>("", "id").map_err(AppError::internal);

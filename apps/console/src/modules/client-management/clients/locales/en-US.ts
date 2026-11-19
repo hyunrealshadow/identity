@@ -27,7 +27,7 @@ const messages = {
   clientsNoReadDescription:
     'This account does not have management.client.read, so no clients were requested.',
   clientsCreateNoPermissionTitle: 'You cannot create clients',
-  clientsCreateNoPermissionDescription: 'This account does not have management.client.create.',
+  clientsCreateNoPermissionDescription: 'This account does not have management.client.write.',
   clientsTabs: 'Client sections',
   clientsTabCredentials: 'Credentials',
   clientsTabScopes: 'Scopes',

@@ -16,7 +16,7 @@ it('does not offer capabilities from withdrawn historical grants', () => {
     ...snapshot,
     grantedScopes: [
       'management.role.write',
-      'management.group_membership.write',
+      'management.group_member.write',
     ],
   })
   expect(scope.rolesWrite).toBe(false)
@@ -28,7 +28,7 @@ it('offers requestable actions without imposing a second authentication policy',
     ...snapshot,
     requestableScopes: [
       'management.role.write',
-      'management.group_membership.write',
+      'management.group_member.write',
     ],
   })
   expect(scope.rolesWrite).toBe(true)
@@ -47,4 +47,20 @@ it('derives every affordance from a field that the schema still declares', () =>
   for (const [name, allowed] of Object.entries(scope)) {
     expect(allowed, name).toBe(true)
   }
+})
+
+it('separates group write affordances from group deletion', () => {
+  const writeOnly = rbacScope({
+    ...snapshot,
+    requestableScopes: ['management.group.write'],
+  })
+  expect(writeOnly.groupsWrite).toBe(true)
+  expect(writeOnly.groupsDelete).toBe(false)
+
+  const deleteOnly = rbacScope({
+    ...snapshot,
+    requestableScopes: ['management.group.delete'],
+  })
+  expect(deleteOnly.groupsWrite).toBe(false)
+  expect(deleteOnly.groupsDelete).toBe(true)
 })

@@ -329,7 +329,7 @@ pub(super) async fn create(
     db: &DatabaseConnection,
     command: CreateClientTransaction,
 ) -> Result<ClientRecord, ClientManagementRepositoryError> {
-    let txn = begin(db, &command.authority, ManagementScope::ClientsCreate).await?;
+    let txn = begin(db, &command.authority, ManagementScope::ClientsWrite).await?;
     let model = client::ActiveModel {
         oid: Set(command.client_oid),
         protocol: Set(PROTOCOL.to_owned()),
@@ -416,7 +416,7 @@ pub(super) async fn update(
     db: &DatabaseConnection,
     command: UpdateClientTransaction,
 ) -> Result<ClientRecord, ClientManagementRepositoryError> {
-    let txn = begin(db, &command.authority, ManagementScope::ClientsUpdate).await?;
+    let txn = begin(db, &command.authority, ManagementScope::ClientsWrite).await?;
     let model = lock_client(&txn, command.client_oid, command.expected_version).await?;
     let before = boundary(&txn, model.id).await?;
     let mut active: client::ActiveModel = model.clone().into();
@@ -466,7 +466,7 @@ pub(super) async fn set_enabled(
     command: ClientStateTransaction,
     enabled: bool,
 ) -> Result<ClientRecord, ClientManagementRepositoryError> {
-    let txn = begin(db, &command.authority, ManagementScope::ClientsState).await?;
+    let txn = begin(db, &command.authority, ManagementScope::ClientsWrite).await?;
     let model = lock_client(&txn, command.client_oid, command.expected_version).await?;
     if model.enabled == enabled {
         txn.commit().await.map_err(storage)?;
@@ -553,12 +553,12 @@ pub(super) async fn create_secret(
     db: &DatabaseConnection,
     command: CreateClientSecretTransaction,
 ) -> Result<ClientSecretResult, ClientManagementRepositoryError> {
-    let required = if command.replaces.is_some() {
-        ManagementScope::ClientCredentialsRotate
-    } else {
-        ManagementScope::ClientCredentialsCreate
-    };
-    let txn = begin(db, &command.authority, required).await?;
+    let txn = begin(
+        db,
+        &command.authority,
+        ManagementScope::ClientCredentialsWrite,
+    )
+    .await?;
     let model = lock_client(&txn, command.client_oid, command.expected_version).await?;
     let revoked = match command.replaces {
         Some(oid) => {
@@ -651,7 +651,7 @@ pub(super) async fn add_credential(
     let txn = begin(
         db,
         &command.authority,
-        ManagementScope::ClientCredentialsCreate,
+        ManagementScope::ClientCredentialsWrite,
     )
     .await?;
     let model = lock_client(&txn, command.client_oid, command.expected_version).await?;

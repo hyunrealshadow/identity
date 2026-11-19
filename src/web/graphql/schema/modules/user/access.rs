@@ -3,7 +3,7 @@
 //! Management metadata on the `User` type is never implied by constructing a
 //! user from a write result or from the self-service account service. It always
 //! requires `management.user.read`; the Node lookup additionally preserves the
-//! existing `account.read` self-only fallback.
+//! existing `user.read` self-only fallback.
 
 use async_graphql::{Context, Error, Guard, Result, Value};
 use identity_application::authorization::ManagementTarget;
@@ -17,7 +17,7 @@ use crate::graphql::schema::{
 pub(crate) enum UserReadAccess {
     /// The caller proved a live `management.user.read` authority for the target.
     Management,
-    /// The caller may read only its own account through `account.read`.
+    /// The caller may read only its own account through `user.read`.
     SelfOnly,
 }
 
@@ -41,7 +41,7 @@ fn has_management_users_read(request: &RequestContext) -> bool {
 /// Decide how a Node/nodes User lookup may read the target.
 ///
 /// Explicit management read wins when it is valid. For one's own ID, the
-/// pre-existing `account.read` self-only path remains available. A genuine
+/// pre-existing `user.read` self-only path remains available. A genuine
 /// policy denial on the management path is allowed to fall back to that
 /// self-only path; infrastructure/internal failures are propagated instead of
 /// being misreported as a self-service read.
@@ -51,7 +51,7 @@ pub(crate) async fn node_user_read_access(
 ) -> Result<UserReadAccess> {
     let request = request_context(ctx)?;
     let is_self = request.claims.user_oid == Some(target);
-    let self_read = is_self && request.claims.scope.allows(ApiScope::AccountRead);
+    let self_read = is_self && request.claims.scope.allows(ApiScope::UserRead);
 
     if !self_read {
         ensure_user_management_read(ctx, target).await?;

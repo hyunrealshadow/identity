@@ -6,8 +6,8 @@
 //! leaves sign-in broken. Redirect URIs and credentials stay as installed.
 
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, DatabaseTransaction, EntityTrait,
-    QueryFilter, Set, TransactionTrait,
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DatabaseTransaction,
+    DbBackend, EntityTrait, QueryFilter, Set, Statement, TransactionTrait,
 };
 use serde_json::json;
 
@@ -21,7 +21,7 @@ use crate::{
         setting::LoginClientIdSetting,
     },
     database::{
-        audit,
+        audit, client_authorization_boundary,
         entity::{
             client::{Column as ClientColumn, Entity as ClientEntity},
             client_openid_connect,
@@ -31,20 +31,20 @@ use crate::{
         },
         repository::setting::read_setting,
     },
-    domain::openid_connect::{GrantType, ResponseType},
+    domain::openid_connect::{ApiScope, GrantType, ResponseType, model::claim::StandardScopes},
 };
 
 /// Scopes the Login application requests for sign-in and the account center.
 pub const LOGIN_SCOPE_NAMES: [&str; 9] = [
-    "openid",
-    "profile",
-    "email",
-    "offline_access",
-    "account.read",
-    "account.update",
-    "session.read",
-    "session.revoke",
-    "password.change",
+    StandardScopes::OPENID,
+    StandardScopes::PROFILE,
+    StandardScopes::EMAIL,
+    StandardScopes::OFFLINE_ACCESS,
+    ApiScope::USER_READ,
+    ApiScope::USER_WRITE,
+    ApiScope::SESSION_READ,
+    ApiScope::SESSION_REVOKE,
+    ApiScope::PASSWORD_CHANGE,
 ];
 
 /// Reconcile the installed Login client. Does nothing before installation.
@@ -93,6 +93,16 @@ async fn ensure_login_client_in_transaction(db: &DatabaseTransaction) -> Result<
     }
 
     if changed {
+        db.execute_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            "UPDATE client SET version = gen_random_uuid(), updated_at = now() WHERE id = $1",
+            [client.id.into()],
+        ))
+        .await
+        .map_err(AppError::internal)?;
+        client_authorization_boundary::withdraw_client_authorizations(db, client.id)
+            .await
+            .map_err(AppError::internal)?;
         audit::record(db, "client.update", "client", oid)
             .await
             .map_err(AppError::internal)?;

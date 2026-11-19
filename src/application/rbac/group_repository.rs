@@ -20,9 +20,9 @@ use crate::authorization::ManagementAuthorizationError;
 use super::{
     cursor::{RbacPageDirection, RbacSortKey},
     group::{
-        DeleteGroupResult, GroupFilter, GroupMembershipFilter, GroupMembershipMutationResult,
-        GroupMembershipOrder, GroupMembershipRecord, GroupOrder, GroupRecord, GroupRoleFilter,
-        GroupRoleMutationResult, GroupRoleOrder, GroupRoleRecord,
+        AccountGroupRecord, DeleteGroupResult, GroupFilter, GroupMembershipFilter,
+        GroupMembershipMutationResult, GroupMembershipOrder, GroupMembershipRecord, GroupOrder,
+        GroupRecord, GroupRoleFilter, GroupRoleMutationResult, GroupRoleOrder, GroupRoleRecord,
     },
     model::RbacManagementAuthority,
 };
@@ -91,10 +91,26 @@ pub struct GroupRolePageEntry {
 }
 
 #[derive(Debug, Clone)]
+pub struct AccountGroupPageEntry {
+    pub sort_key: RbacSortKey,
+    pub record: AccountGroupRecord,
+}
+
+#[derive(Debug, Clone)]
 pub struct GroupPageData<T> {
     pub items: Vec<T>,
     pub has_previous_page: bool,
     pub has_next_page: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct AccountGroupQuery {
+    pub user_oid: UserOid,
+    pub order: GroupOrder,
+    pub direction: RbacPageDirection,
+    pub after: Option<RbacSortKey>,
+    pub before: Option<RbacSortKey>,
+    pub limit: usize,
 }
 
 #[derive(Debug, Clone)]
@@ -211,6 +227,21 @@ pub trait GroupManagementRepository: Send + Sync {
         &self,
         oid: GroupOid,
     ) -> Result<Option<GroupRecord>, GroupManagementRepositoryError>;
+
+    async fn find_groups(
+        &self,
+        oids: Vec<GroupOid>,
+    ) -> Result<Vec<GroupRecord>, GroupManagementRepositoryError>;
+
+    async fn count_account_groups(
+        &self,
+        user_oid: UserOid,
+    ) -> Result<u64, GroupManagementRepositoryError>;
+
+    async fn list_account_groups(
+        &self,
+        query: AccountGroupQuery,
+    ) -> Result<GroupPageData<AccountGroupPageEntry>, GroupManagementRepositoryError>;
 
     async fn list_group_memberships(
         &self,

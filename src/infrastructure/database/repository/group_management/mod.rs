@@ -12,14 +12,14 @@ mod support;
 
 use async_trait::async_trait;
 use identity_application::rbac::{
-    AddGroupMemberTransaction, CreateGroupTransaction, DeleteGroupResult, DeleteGroupTransaction,
-    GroupFilter, GroupManagementRepository, GroupManagementRepositoryError,
-    GroupMembershipMutationResult, GroupMembershipPageEntry, GroupMembershipQuery, GroupPageData,
-    GroupPageEntry, GroupQuery, GroupRecord, GroupRoleMutationResult, GroupRolePageEntry,
-    GroupRoleQuery, GroupStateTransaction, RemoveGroupMemberTransaction, SetGroupRolesTransaction,
-    UpdateGroupTransaction,
+    AccountGroupPageEntry, AccountGroupQuery, AddGroupMemberTransaction, CreateGroupTransaction,
+    DeleteGroupResult, DeleteGroupTransaction, GroupFilter, GroupManagementRepository,
+    GroupManagementRepositoryError, GroupMembershipMutationResult, GroupMembershipPageEntry,
+    GroupMembershipQuery, GroupPageData, GroupPageEntry, GroupQuery, GroupRecord,
+    GroupRoleMutationResult, GroupRolePageEntry, GroupRoleQuery, GroupStateTransaction,
+    RemoveGroupMemberTransaction, SetGroupRolesTransaction, UpdateGroupTransaction,
 };
-use identity_domain::rbac::GroupOid;
+use identity_domain::{rbac::GroupOid, user::UserOid};
 use sea_orm::DatabaseConnection;
 
 pub struct GroupManagementRepositoryImpl {
@@ -54,6 +54,27 @@ impl GroupManagementRepository for GroupManagementRepositoryImpl {
         oid: GroupOid,
     ) -> Result<Option<GroupRecord>, GroupManagementRepositoryError> {
         self.group_find(oid).await
+    }
+
+    async fn find_groups(
+        &self,
+        oids: Vec<GroupOid>,
+    ) -> Result<Vec<GroupRecord>, GroupManagementRepositoryError> {
+        self.groups_find(oids).await
+    }
+
+    async fn count_account_groups(
+        &self,
+        user_oid: UserOid,
+    ) -> Result<u64, GroupManagementRepositoryError> {
+        self.account_group_count(user_oid).await
+    }
+
+    async fn list_account_groups(
+        &self,
+        query: AccountGroupQuery,
+    ) -> Result<GroupPageData<AccountGroupPageEntry>, GroupManagementRepositoryError> {
+        self.account_group_list(query).await
     }
 
     async fn list_group_memberships(

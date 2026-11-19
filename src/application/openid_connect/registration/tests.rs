@@ -57,7 +57,7 @@ async fn public_registration_never_self_declares_api_scopes() {
             .with_scope_catalog(Arc::new(TestScopeCatalog(vec![
                 "openid".into(),
                 "profile".into(),
-                "account.read".into(),
+                "user.read".into(),
                 "orders.read".into(),
             ])));
     for scope in [
@@ -76,11 +76,11 @@ async fn public_registration_never_self_declares_api_scopes() {
     }
     let request = from_value(json!({
         "redirect_uris": ["https://rp.example.com/callback"],
-        "scope": "openid profile account.read account.read"
+        "scope": "openid profile user.read user.read"
     }))
     .unwrap();
     let response = service.register(request, &issuer()).await.unwrap();
-    let expected = ["account.read", "openid", "profile"]
+    let expected = ["user.read", "openid", "profile"]
         .into_iter()
         .collect::<BTreeSet<_>>();
     assert_eq!(

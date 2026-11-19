@@ -212,8 +212,8 @@ mod tests {
 
     #[test]
     fn business_scope_and_protocol_controls_are_separated() {
-        let scope = ScopeSet::parse("openid profile orders.read account.read management.user.read")
-            .unwrap();
+        let scope =
+            ScopeSet::parse("openid profile orders.read user.read management.user.read").unwrap();
         assert_eq!(
             business_scope_names(&scope),
             ["orders.read".to_owned()].into_iter().collect()

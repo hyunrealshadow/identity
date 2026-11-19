@@ -28,6 +28,18 @@ pub(crate) async fn find_group(
         .await
 }
 
+pub(crate) async fn find_groups(
+    request: &RequestContext,
+    oids: Vec<GroupOid>,
+) -> Result<Vec<GroupRecord>, AppError> {
+    request
+        .state
+        .services()
+        .group_management()
+        .find_groups(oids)
+        .await
+}
+
 pub(crate) async fn list_groups(
     request: &RequestContext,
     filter: GroupFilter,

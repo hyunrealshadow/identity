@@ -1,9 +1,10 @@
 //! Read and page queries for groups, memberships and group roles.
 
 use identity_application::rbac::{
-    GroupEntityKind, GroupFilter, GroupManagementRepositoryError, GroupMembershipPageEntry,
-    GroupMembershipQuery, GroupMembershipRecord, GroupOrder, GroupPageData, GroupPageEntry,
-    GroupQuery, GroupRecord, GroupRoleOrder, GroupRolePageEntry, GroupRoleQuery, GroupRoleRecord,
+    AccountGroupPageEntry, AccountGroupQuery, AccountGroupRecord, GroupEntityKind, GroupFilter,
+    GroupManagementRepositoryError, GroupMembershipPageEntry, GroupMembershipQuery,
+    GroupMembershipRecord, GroupOrder, GroupPageData, GroupPageEntry, GroupQuery, GroupRecord,
+    GroupRoleOrder, GroupRolePageEntry, GroupRoleQuery, GroupRoleRecord,
     cursor::{RbacPageDirection, RbacSortKey, RbacTie},
 };
 use identity_domain::{
@@ -227,6 +228,18 @@ fn group_filter_conditions(filter: &GroupFilter, binds: &mut Binds) -> Vec<Strin
     conditions
 }
 
+fn account_group_conditions(user_oid: UserOid, binds: &mut Binds) -> Vec<String> {
+    let user_placeholder = binds.push(Uuid::from(user_oid));
+    vec![
+        format!("u.oid = {user_placeholder}"),
+        "u.enabled = true".to_owned(),
+        "gm.enabled = true".to_owned(),
+        "gm.revoked_at IS NULL".to_owned(),
+        "ug.enabled = true".to_owned(),
+        "ug.deleted_at IS NULL".to_owned(),
+    ]
+}
+
 impl GroupManagementRepositoryImpl {
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "group.count"))]
     pub(crate) async fn group_count(
@@ -258,6 +271,151 @@ impl GroupManagementRepositoryImpl {
         oid: GroupOid,
     ) -> Result<Option<GroupRecord>, GroupManagementRepositoryError> {
         load_group_by_oid(&self.db, oid).await
+    }
+
+    pub(crate) async fn groups_find(
+        &self,
+        oids: Vec<GroupOid>,
+    ) -> Result<Vec<GroupRecord>, GroupManagementRepositoryError> {
+        if oids.is_empty() {
+            return Ok(Vec::new());
+        }
+        let mut binds = Binds::new();
+        let placeholders = oids
+            .into_iter()
+            .map(|oid| binds.push(Uuid::from(oid)))
+            .collect::<Vec<_>>()
+            .join(", ");
+        let rows = self
+            .db
+            .query_all_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                format!(
+                    "{GROUP_SELECT} WHERE ug.oid IN ({placeholders}) AND ug.deleted_at IS NULL"
+                ),
+                binds.into_values(),
+            ))
+            .await
+            .map_err(storage)?;
+        rows.iter().map(group_from_row).collect()
+    }
+
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "account_groups.count"))]
+    pub(crate) async fn account_group_count(
+        &self,
+        user_oid: UserOid,
+    ) -> Result<u64, GroupManagementRepositoryError> {
+        let mut binds = Binds::new();
+        let conditions = account_group_conditions(user_oid, &mut binds);
+        let sql = format!(
+            "SELECT count(*)::bigint AS total_count \
+             FROM group_membership gm \
+             JOIN user_group ug ON ug.id = gm.group_id \
+             JOIN \"user\" u ON u.id = gm.user_id \
+             WHERE {}",
+            conditions.join(" AND ")
+        );
+        let row = self
+            .db
+            .query_one_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                sql,
+                binds.into_values(),
+            ))
+            .await
+            .map_err(storage)?
+            .ok_or_else(corrupt)?;
+        let value = row.try_get::<i64>("", "total_count").map_err(storage)?;
+        u64::try_from(value).map_err(|_| corrupt())
+    }
+
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "account_groups.list"))]
+    pub(crate) async fn account_group_list(
+        &self,
+        query: AccountGroupQuery,
+    ) -> Result<GroupPageData<AccountGroupPageEntry>, GroupManagementRepositoryError> {
+        let descending = order_is_descending(query.order.is_descending(), query.direction);
+        let ascending = !query.order.is_descending();
+        let column = match query.order {
+            GroupOrder::CreatedAtAsc | GroupOrder::CreatedAtDesc => "gm.created_at",
+        };
+        let mut binds = Binds::new();
+        let mut conditions = account_group_conditions(query.user_oid, &mut binds);
+        if let Some(after) = &query.after {
+            conditions.push(keyset_condition(
+                column,
+                "gm.id",
+                after,
+                CursorComparison::After,
+                ascending,
+                &mut binds,
+            ));
+        }
+        if let Some(before) = &query.before {
+            conditions.push(keyset_condition(
+                column,
+                "gm.id",
+                before,
+                CursorComparison::Before,
+                ascending,
+                &mut binds,
+            ));
+        }
+        let direction_sql = if descending { "DESC" } else { "ASC" };
+        let limit_placeholder = binds.push((query.limit + 1) as i64);
+        let where_sql = conditions.join(" AND ");
+        let sql = format!(
+            "SELECT gm.id AS membership_id, gm.created_at AS joined_at, \
+                    ug.id, ug.oid, ug.built_in, ug.name, ug.description, ug.names, ug.descriptions, \
+                    ug.enabled, ug.version, ug.created_at, ug.updated_at \
+             FROM group_membership gm \
+             JOIN user_group ug ON ug.id = gm.group_id \
+             JOIN \"user\" u ON u.id = gm.user_id \
+             WHERE {where_sql} \
+             ORDER BY {column} {direction_sql}, gm.id {direction_sql} LIMIT {limit_placeholder}"
+        );
+        let rows = self
+            .db
+            .query_all_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                sql,
+                binds.into_values(),
+            ))
+            .await
+            .map_err(storage)?;
+        let has_more = rows.len() > query.limit;
+        let mut rows = rows;
+        rows.truncate(query.limit);
+        if query.direction == RbacPageDirection::Backward {
+            rows.reverse();
+        }
+        let mut items = Vec::with_capacity(rows.len());
+        for row in rows {
+            let membership_id = row.try_get::<i64>("", "membership_id").map_err(storage)?;
+            let joined_at = utc(row
+                .try_get::<chrono::DateTime<chrono::FixedOffset>>("", "joined_at")
+                .map_err(storage)?);
+            let group = group_from_row(&row)?;
+            let sort_key = RbacSortKey::CreatedAt {
+                created_at: joined_at,
+                tie: RbacTie::Id(membership_id),
+            };
+            items.push(AccountGroupPageEntry {
+                sort_key,
+                record: AccountGroupRecord { group, joined_at },
+            });
+        }
+        let (has_previous_page, has_next_page) = page_flags(
+            query.direction,
+            has_more,
+            query.after.is_some(),
+            query.before.is_some(),
+        );
+        Ok(GroupPageData {
+            items,
+            has_previous_page,
+            has_next_page,
+        })
     }
 
     pub(crate) async fn group_list(

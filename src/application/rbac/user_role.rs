@@ -3,8 +3,8 @@
 use chrono::{DateTime, Utc};
 use identity_domain::{
     rbac::{
-        GroupMembershipOid, GroupOid, GroupRoleOid, ResourceOid, ResourcePermissionOid, RoleOid,
-        UserRoleOid,
+        GroupMembershipOid, GroupOid, GroupRoleOid, LocalizedText, ResourceOid,
+        ResourcePermissionOid, RoleOid, UserRoleOid,
     },
     user::UserOid,
 };
@@ -260,6 +260,109 @@ pub struct UserRoleMutationResult {
     pub user_role_oids: Vec<UserRoleOid>,
     pub created_count: u32,
     pub revoked_count: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AccountRoleGrant {
+    Direct {
+        role_oid: RoleOid,
+        granted_at: DateTime<Utc>,
+    },
+    Group {
+        role_oid: RoleOid,
+        group_oid: GroupOid,
+        granted_at: DateTime<Utc>,
+    },
+}
+
+impl AccountRoleGrant {
+    #[must_use]
+    pub const fn role_oid(&self) -> RoleOid {
+        match self {
+            Self::Direct { role_oid, .. } | Self::Group { role_oid, .. } => *role_oid,
+        }
+    }
+
+    #[must_use]
+    pub const fn group_oid(&self) -> Option<GroupOid> {
+        match self {
+            Self::Direct { .. } => None,
+            Self::Group { group_oid, .. } => Some(*group_oid),
+        }
+    }
+
+    #[must_use]
+    pub const fn granted_at(&self) -> DateTime<Utc> {
+        match self {
+            Self::Direct { granted_at, .. } | Self::Group { granted_at, .. } => *granted_at,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AccountRolePageRequest {
+    pub user_oid: UserOid,
+    pub source: Option<AuthorizationSource>,
+    pub order: UserRoleOrder,
+    pub first: Option<u32>,
+    pub after: Option<String>,
+    pub last: Option<u32>,
+    pub before: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct AccountRolePageItem {
+    pub grant: AccountRoleGrant,
+    pub cursor: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct AccountRolePage {
+    pub items: Vec<AccountRolePageItem>,
+    pub has_previous_page: bool,
+    pub has_next_page: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AccountPermissionRecord {
+    pub permission_oid: ResourcePermissionOid,
+    pub resource_oid: ResourceOid,
+    pub resource_uri: String,
+    pub resource_name: String,
+    pub code: String,
+    pub scope: String,
+    pub name: String,
+    pub names: Vec<LocalizedText>,
+    pub description: String,
+    pub descriptions: Vec<LocalizedText>,
+    pub built_in: bool,
+    pub sources: Vec<EffectivePermissionSourceRecord>,
+    pub group_sources: Vec<EffectiveGroupPermissionSourceRecord>,
+}
+
+#[derive(Debug, Clone)]
+pub struct AccountPermissionPageRequest {
+    pub user_oid: UserOid,
+    pub resource_oid: Option<ResourceOid>,
+    pub source: Option<AuthorizationSource>,
+    pub order: EffectivePermissionOrder,
+    pub first: Option<u32>,
+    pub after: Option<String>,
+    pub last: Option<u32>,
+    pub before: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct AccountPermissionPageItem {
+    pub record: AccountPermissionRecord,
+    pub cursor: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct AccountPermissionPage {
+    pub items: Vec<AccountPermissionPageItem>,
+    pub has_previous_page: bool,
+    pub has_next_page: bool,
 }
 
 #[cfg(test)]

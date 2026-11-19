@@ -199,7 +199,7 @@ async fn load_node(ctx: &Context<'_>, id: &ID) -> Result<Option<Node>> {
             .map_err(|_| coded_error(ctx, GraphqlErrorCode::InvalidGlobalId, ErrorParams::new()))?
             .oid();
         UserPrincipalGuard.check(ctx).await?;
-        ScopeGuard::new(ApiScope::AccountRead).check(ctx).await?;
+        ScopeGuard::new(ApiScope::UserRead).check(ctx).await?;
         let passkey = request
             .state
             .services()
