@@ -71,11 +71,11 @@ function Calendar({
           defaultClassNames.dropdowns
         ),
         dropdown_root: cn(
-          "relative rounded-(--cell-radius)",
+          "relative rounded-(--cell-radius) has-disabled:cursor-not-allowed has-disabled:opacity-50",
           defaultClassNames.dropdown_root
         ),
         dropdown: cn(
-          "absolute inset-0 bg-popover opacity-0",
+          "absolute inset-0 cursor-pointer bg-popover opacity-0 disabled:cursor-not-allowed",
           defaultClassNames.dropdown
         ),
         caption_label: cn(
