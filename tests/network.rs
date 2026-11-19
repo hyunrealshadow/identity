@@ -5,8 +5,8 @@ use identity_application::openid_connect::remote::{
 use reqwest::{Client, redirect::Policy};
 use std::time::Duration;
 use tokio::{
-    io::AsyncWriteExt,
-    net::TcpListener,
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::{TcpListener, TcpStream},
     spawn,
     time::{sleep, timeout},
 };
@@ -37,7 +37,10 @@ async fn fetch_request_object_rejects_oversized_chunked_response_before_completi
     let error = result
         .expect("oversized response should be rejected before server finishes")
         .unwrap_err();
-    assert!(matches!(error, RemoteFetchError::TooLarge));
+    assert!(
+        matches!(error, RemoteFetchError::TooLarge),
+        "unexpected error: {error:?}"
+    );
 }
 #[tokio::test]
 async fn fetch_request_object_rejects_redirect_response() {
@@ -56,7 +59,22 @@ async fn fetch_request_object_rejects_redirect_response() {
     .await
     .unwrap_err();
 
-    assert!(matches!(error, RemoteFetchError::NotOk));
+    assert!(
+        matches!(error, RemoteFetchError::NotOk),
+        "unexpected error: {error:?}"
+    );
+}
+async fn read_http_request_head(stream: &mut TcpStream) {
+    let mut request = Vec::new();
+    while !request.windows(4).any(|bytes| bytes == b"\r\n\r\n") {
+        let mut chunk = [0_u8; 1024];
+        let read = stream.read(&mut chunk).await.unwrap();
+        assert!(
+            read > 0,
+            "client closed before sending HTTP request headers"
+        );
+        request.extend_from_slice(&chunk[..read]);
+    }
 }
 async fn spawn_chunked_response_server(chunks: Vec<Vec<u8>>, keep_open_for: Duration) -> Url {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -64,20 +82,27 @@ async fn spawn_chunked_response_server(chunks: Vec<Vec<u8>>, keep_open_for: Dura
 
     spawn(async move {
         let (mut stream, _) = listener.accept().await.unwrap();
-        stream
-                .write_all(
-                    b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nContent-Type: text/plain\r\n\r\n",
-                )
-                .await
-                .unwrap();
+        read_http_request_head(&mut stream).await;
+        if stream
+            .write_all(
+                b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nContent-Type: text/plain\r\n\r\n",
+            )
+            .await
+            .is_err()
+        {
+            return;
+        }
 
         for chunk in chunks {
-            stream
+            if stream
                 .write_all(format!("{:X}\r\n", chunk.len()).as_bytes())
                 .await
-                .unwrap();
-            stream.write_all(&chunk).await.unwrap();
-            stream.write_all(b"\r\n").await.unwrap();
+                .is_err()
+                || stream.write_all(&chunk).await.is_err()
+                || stream.write_all(b"\r\n").await.is_err()
+            {
+                return;
+            }
         }
 
         sleep(keep_open_for).await;
@@ -93,16 +118,19 @@ async fn spawn_redirect_response_server(_location: &str) -> Url {
 
     spawn(async move {
         let (mut stream, _) = listener.accept().await.unwrap();
+        read_http_request_head(&mut stream).await;
         let response = format!(
-            "HTTP/1.1 307 Temporary Redirect\r\nLocation: {location}\r\nContent-Length: 0\r\n\r\n"
+            "HTTP/1.1 307 Temporary Redirect\r\nLocation: {location}\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
         );
-        stream.write_all(response.as_bytes()).await.unwrap();
+        let _ = stream.write_all(response.as_bytes()).await;
+        let _ = stream.shutdown().await;
 
         let (mut stream, _) = listener.accept().await.unwrap();
-        stream
-            .write_all(b"HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\n\r\n")
-            .await
-            .unwrap();
+        read_http_request_head(&mut stream).await;
+        let _ = stream
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\nok")
+            .await;
+        let _ = stream.shutdown().await;
     });
 
     Url::parse(&format!("http://{address}/request.jwt")).unwrap()
