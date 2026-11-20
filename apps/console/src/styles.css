@@ -1,4 +1,5 @@
 @import "@identity/ui/globals.css";
+@import "@identity/lucene-input/styles.css";
 
 :root {
   --sidebar-width: 240px;

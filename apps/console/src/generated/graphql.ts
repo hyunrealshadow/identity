@@ -41,6 +41,10 @@ export type AssignUserRolesInput = {
   userId: string | number;
 };
 
+export type AuditEventOrder =
+  | 'OCCURRED_AT_ASC'
+  | 'OCCURRED_AT_DESC';
+
 /** Where a user's role or permission comes from. */
 export type AuthorizationSource =
   /** Assigned to the user directly. */
@@ -882,6 +886,37 @@ export type InstanceDashboardQueryVariables = Exact<{
 
 export type InstanceDashboardQuery = { instanceOverview: { generatedAt: string, users?: { total: number, enabled: number, createdLast7Days: number, registrations: Array<{ date: string, count: number }> } | null, clients?: { total: number, enabled: number, builtIn: number } | null, sessions?: { active: number, createdLast24Hours: number } | null, resources?: { total: number, enabled: number } | null } };
 
+export type AuditEventFieldsFragment = { id: string, occurredAt: string, transactionId: string, action: string | null, operation: string, eventKind: string | null, actorType: string | null, actorOid: string | null, actorGlobalId: string | null, targetType: string | null, targetOid: string | null, targetGlobalId: string | null, resourceType: string, resourceOid: string, resourceGlobalId: string | null, subjectOid: string | null, subjectGlobalId: string | null, status: string | null, previousStatus: string | null, credentialType: string | null, reason: string | null, requestId: string | null, traceId: string | null, actorUser?: { id: string, username: string, email: string, nickname: string | null } | null, actorClient?: { id: string, name: string, names: Array<{ locale: string, value: string }> } | null };
+
+export type AuditEventsQueryQueryVariables = Exact<{
+  query?: string | null | undefined;
+  timeZone?: string | null | undefined;
+  orderBy?: AuditEventOrder | null | undefined;
+  first?: number | null | undefined;
+  after?: string | null | undefined;
+  last?: number | null | undefined;
+  before?: string | null | undefined;
+  includeActorUser: boolean;
+  includeActorClient: boolean;
+}>;
+
+
+export type AuditEventsQueryQuery = { auditEvents: { totalCount: number, pageInfo: { hasPreviousPage: boolean, hasNextPage: boolean, startCursor: string | null, endCursor: string | null }, edges: Array<{ cursor: string, node: { id: string, occurredAt: string, transactionId: string, action: string | null, operation: string, eventKind: string | null, actorType: string | null, actorOid: string | null, actorGlobalId: string | null, targetType: string | null, targetOid: string | null, targetGlobalId: string | null, resourceType: string, resourceOid: string, resourceGlobalId: string | null, subjectOid: string | null, subjectGlobalId: string | null, status: string | null, previousStatus: string | null, credentialType: string | null, reason: string | null, requestId: string | null, traceId: string | null, actorUser?: { id: string, username: string, email: string, nickname: string | null } | null, actorClient?: { id: string, name: string, names: Array<{ locale: string, value: string }> } | null } }> } };
+
+export type AuditEventDetailQueryQueryVariables = Exact<{
+  id: string | number;
+  includeActorUser: boolean;
+  includeActorClient: boolean;
+}>;
+
+
+export type AuditEventDetailQueryQuery = { auditEvent: { id: string, occurredAt: string, transactionId: string, action: string | null, operation: string, eventKind: string | null, actorType: string | null, actorOid: string | null, actorGlobalId: string | null, targetType: string | null, targetOid: string | null, targetGlobalId: string | null, resourceType: string, resourceOid: string, resourceGlobalId: string | null, subjectOid: string | null, subjectGlobalId: string | null, status: string | null, previousStatus: string | null, credentialType: string | null, reason: string | null, requestId: string | null, traceId: string | null, actorUser?: { id: string, username: string, email: string, nickname: string | null } | null, actorClient?: { id: string, name: string, names: Array<{ locale: string, value: string }> } | null } | null };
+
+export type AuditEventActionsQueryQueryVariables = Exact<{ [key: string]: never; }>;
+
+
+export type AuditEventActionsQueryQuery = { auditEventActions: Array<string> };
+
 export type ConsoleKeyFieldsFragment = { id: string, keyId: string, use: KeyUse, status: KeyStatus, inUse: boolean, algorithms: Array<string>, keyIds: Array<string>, hasCertificate: boolean, rotatedFromId: string | null, createdAt: string, expiresAt: string | null, rotatedAt: string | null, revokedAt: string | null };
 
 export type ConsoleKeysQueryVariables = Exact<{
@@ -1009,6 +1044,7 @@ export type ConsoleAuthorizationLabelsQueryVariables = Exact<{
 
 
 export type ConsoleAuthorizationLabelsQuery = { nodes: Array<
+    | { __typename: 'AuditEvent', id: string }
     | { __typename: 'Client', id: string }
     | { __typename: 'Group', name: string, id: string, names: Array<{ locale: string, value: string }> }
     | { __typename: 'Passkey', id: string }
@@ -1402,6 +1438,47 @@ export const ConsoleClientFieldsFragmentDoc = new TypedDocumentString(`
   tokenEndpointAuthSigningAlgs
   initiateLoginUri
 }`, {"fragmentName":"ConsoleClientFields"}) as unknown as TypedDocumentString<ConsoleClientFieldsFragment, unknown>;
+export const AuditEventFieldsFragmentDoc = new TypedDocumentString(`
+    fragment AuditEventFields on AuditEvent {
+  id
+  occurredAt
+  transactionId
+  action
+  operation
+  eventKind
+  actorType
+  actorOid
+  actorGlobalId
+  targetType
+  targetOid
+  targetGlobalId
+  resourceType
+  resourceOid
+  resourceGlobalId
+  subjectOid
+  subjectGlobalId
+  status
+  previousStatus
+  credentialType
+  reason
+  requestId
+  traceId
+  actorUser @include(if: $includeActorUser) {
+    id
+    username
+    email
+    nickname
+  }
+  actorClient @include(if: $includeActorClient) {
+    id
+    name
+    names {
+      locale
+      value
+    }
+  }
+}
+    `, {"fragmentName":"AuditEventFields"}) as unknown as TypedDocumentString<AuditEventFieldsFragment, unknown>;
 export const ConsoleKeyFieldsFragmentDoc = new TypedDocumentString(`
     fragment ConsoleKeyFields on Key {
   id
@@ -2127,6 +2204,121 @@ export const InstanceDashboardDocument = new TypedDocumentString(`
   }
 }
     `) as unknown as TypedDocumentString<InstanceDashboardQuery, InstanceDashboardQueryVariables>;
+export const AuditEventsQueryDocument = new TypedDocumentString(`
+    query AuditEventsQuery($query: String, $timeZone: String, $orderBy: AuditEventOrder, $first: Int, $after: String, $last: Int, $before: String, $includeActorUser: Boolean!, $includeActorClient: Boolean!) {
+  auditEvents(
+    query: $query
+    timeZone: $timeZone
+    orderBy: $orderBy
+    first: $first
+    after: $after
+    last: $last
+    before: $before
+  ) {
+    totalCount
+    pageInfo {
+      hasPreviousPage
+      hasNextPage
+      startCursor
+      endCursor
+    }
+    edges {
+      cursor
+      node {
+        ...AuditEventFields
+      }
+    }
+  }
+}
+    fragment AuditEventFields on AuditEvent {
+  id
+  occurredAt
+  transactionId
+  action
+  operation
+  eventKind
+  actorType
+  actorOid
+  actorGlobalId
+  targetType
+  targetOid
+  targetGlobalId
+  resourceType
+  resourceOid
+  resourceGlobalId
+  subjectOid
+  subjectGlobalId
+  status
+  previousStatus
+  credentialType
+  reason
+  requestId
+  traceId
+  actorUser @include(if: $includeActorUser) {
+    id
+    username
+    email
+    nickname
+  }
+  actorClient @include(if: $includeActorClient) {
+    id
+    name
+    names {
+      locale
+      value
+    }
+  }
+}`) as unknown as TypedDocumentString<AuditEventsQueryQuery, AuditEventsQueryQueryVariables>;
+export const AuditEventDetailQueryDocument = new TypedDocumentString(`
+    query AuditEventDetailQuery($id: ID!, $includeActorUser: Boolean!, $includeActorClient: Boolean!) {
+  auditEvent(id: $id) {
+    ...AuditEventFields
+  }
+}
+    fragment AuditEventFields on AuditEvent {
+  id
+  occurredAt
+  transactionId
+  action
+  operation
+  eventKind
+  actorType
+  actorOid
+  actorGlobalId
+  targetType
+  targetOid
+  targetGlobalId
+  resourceType
+  resourceOid
+  resourceGlobalId
+  subjectOid
+  subjectGlobalId
+  status
+  previousStatus
+  credentialType
+  reason
+  requestId
+  traceId
+  actorUser @include(if: $includeActorUser) {
+    id
+    username
+    email
+    nickname
+  }
+  actorClient @include(if: $includeActorClient) {
+    id
+    name
+    names {
+      locale
+      value
+    }
+  }
+}`) as unknown as TypedDocumentString<AuditEventDetailQueryQuery, AuditEventDetailQueryQueryVariables>;
+export const AuditEventActionsQueryDocument = new TypedDocumentString(`
+    query AuditEventActionsQuery {
+  auditEventActions
+}
+    `) as unknown as TypedDocumentString<AuditEventActionsQueryQuery, AuditEventActionsQueryQueryVariables>;
 export const ConsoleKeysDocument = new TypedDocumentString(`
     query ConsoleKeys($filter: KeyFilter, $first: Int, $after: String, $last: Int, $before: String) {
   keys(

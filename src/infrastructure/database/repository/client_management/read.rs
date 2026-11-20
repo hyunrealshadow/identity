@@ -162,6 +162,22 @@ pub(super) async fn find_record<C: ConnectionTrait>(
     Ok(load_records(db, vec![model]).await?.pop())
 }
 
+pub(super) async fn find_records<C: ConnectionTrait>(
+    db: &C,
+    oids: Vec<ClientOid>,
+) -> Result<Vec<ClientRecord>, ClientManagementRepositoryError> {
+    if oids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let models = ClientEntity::find()
+        .filter(ClientColumn::Oid.is_in(oids))
+        .filter(ClientColumn::Protocol.eq(PROTOCOL))
+        .all(db)
+        .await
+        .map_err(storage)?;
+    load_records(db, models).await
+}
+
 pub(super) fn credential_record(
     model: CredentialModel,
 ) -> Result<ClientCredentialRecord, ClientManagementRepositoryError> {

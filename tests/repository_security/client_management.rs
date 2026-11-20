@@ -641,7 +641,7 @@ async fn postgres_seed_reconciles_renamed_scopes_presets_and_built_in_clients() 
                 ('management.group_membership.read'),
                 ('management.group_membership.write'),
                 ('management.group_role.read'),
-                ('management.audit.read')
+                ('management.permission.read')
             ) AS legacy(code);
 
             INSERT INTO "role"(oid,name,names,description,descriptions,built_in,enabled,version)
@@ -654,7 +654,7 @@ async fn postgres_seed_reconciles_renamed_scopes_presets_and_built_in_clients() 
                       'management.group_membership.read',
                       'management.group_membership.write',
                       'management.group_role.read',
-                      'management.audit.read'
+                      'management.permission.read'
                   );
 
             INSERT INTO client(oid,name,protocol,built_in)
@@ -707,7 +707,7 @@ async fn postgres_seed_reconciles_renamed_scopes_presets_and_built_in_clients() 
         seed::run_all(&db).await.unwrap();
 
         assert_eq!(
-            scalar::<i64>(&db, "SELECT count(*)::bigint AS value FROM scope WHERE code IN ('account.read','account.update','management.user.create','management.group_membership.read','management.group_membership.write','management.group_role.read','management.audit.read')").await,
+            scalar::<i64>(&db, "SELECT count(*)::bigint AS value FROM scope WHERE code IN ('account.read','account.update','management.user.create','management.group_membership.read','management.group_membership.write','management.group_role.read','management.permission.read')").await,
             0
         );
         assert!(scalar::<bool>(&db, "SELECT enabled AS value FROM scope WHERE built_in=true AND code='management.user.read'").await);
@@ -760,9 +760,9 @@ async fn postgres_seed_reconciles_renamed_scopes_presets_and_built_in_clients() 
         assert!(audit_count(&db, "client.update", login_oid).await >= 1);
         assert!(audit_count(&db, "client.update", console_oid).await >= 1);
 
-        assert_eq!(scalar::<i64>(&db, &format!("SELECT count(*)::bigint AS value FROM role_permission rp JOIN \"role\" r ON r.id=rp.role_id WHERE r.oid='{owner_role_oid}'")).await, 28);
-        assert_eq!(scalar::<i64>(&db, &format!("SELECT count(*)::bigint AS value FROM role_permission rp JOIN \"role\" r ON r.id=rp.role_id WHERE r.oid='{admin_role_oid}'")).await, 24);
-        assert_eq!(scalar::<i64>(&db, &format!("SELECT count(*)::bigint AS value FROM role_permission rp JOIN \"role\" r ON r.id=rp.role_id WHERE r.oid='{viewer_role_oid}'")).await, 12);
+        assert_eq!(scalar::<i64>(&db, &format!("SELECT count(*)::bigint AS value FROM role_permission rp JOIN \"role\" r ON r.id=rp.role_id WHERE r.oid='{owner_role_oid}'")).await, 29);
+        assert_eq!(scalar::<i64>(&db, &format!("SELECT count(*)::bigint AS value FROM role_permission rp JOIN \"role\" r ON r.id=rp.role_id WHERE r.oid='{admin_role_oid}'")).await, 25);
+        assert_eq!(scalar::<i64>(&db, &format!("SELECT count(*)::bigint AS value FROM role_permission rp JOIN \"role\" r ON r.id=rp.role_id WHERE r.oid='{viewer_role_oid}'")).await, 13);
 
         assert_eq!(scalar::<i64>(&db, &format!("SELECT count(*)::bigint AS value FROM group_membership gm JOIN user_group g ON g.id=gm.group_id JOIN \"user\" u ON u.id=gm.user_id WHERE g.oid='{owner_group_oid}' AND u.name='owner' AND gm.enabled=true AND gm.revoked_at IS NULL")).await, 1);
         assert_eq!(scalar::<i64>(&db, &format!("SELECT count(*)::bigint AS value FROM group_membership gm JOIN user_group g ON g.id=gm.group_id JOIN \"user\" u ON u.id=gm.user_id WHERE g.oid='{admin_group_oid}' AND u.name='bob' AND gm.enabled=true AND gm.revoked_at IS NULL")).await, 0);
@@ -770,8 +770,8 @@ async fn postgres_seed_reconciles_renamed_scopes_presets_and_built_in_clients() 
 
         assert_eq!(scalar::<i64>(&db, &format!("SELECT count(*)::bigint AS value FROM client_scope cs JOIN client c ON c.id=cs.client_id WHERE c.oid='{login_oid}'")).await, 9);
         assert_eq!(scalar::<i64>(&db, &format!("SELECT count(*)::bigint AS value FROM client_scope cs JOIN client c ON c.id=cs.client_id JOIN scope s ON s.id=cs.scope_id WHERE c.oid='{login_oid}' AND s.code IN ('user.read','user.write')")).await, 2);
-        assert_eq!(scalar::<i64>(&db, &format!("SELECT count(*)::bigint AS value FROM client_scope cs JOIN client c ON c.id=cs.client_id WHERE c.oid='{console_oid}'")).await, 32);
-        assert_eq!(scalar::<i64>(&db, &format!("SELECT count(*)::bigint AS value FROM client_scope cs JOIN client c ON c.id=cs.client_id JOIN scope s ON s.id=cs.scope_id WHERE c.oid='{console_oid}' AND (s.code='user.read' OR s.code LIKE 'management.%')")).await, 29);
+        assert_eq!(scalar::<i64>(&db, &format!("SELECT count(*)::bigint AS value FROM client_scope cs JOIN client c ON c.id=cs.client_id WHERE c.oid='{console_oid}'")).await, 33);
+        assert_eq!(scalar::<i64>(&db, &format!("SELECT count(*)::bigint AS value FROM client_scope cs JOIN client c ON c.id=cs.client_id JOIN scope s ON s.id=cs.scope_id WHERE c.oid='{console_oid}' AND (s.code='user.read' OR s.code LIKE 'management.%')")).await, 30);
 
         let role_ver = scalar::<Uuid>(&db, "SELECT version AS value FROM \"role\" WHERE name='LegacyEditors'").await;
         let app_ver = scalar::<Uuid>(&db, &format!("SELECT version AS value FROM client WHERE oid='{legacy_app_oid}'")).await;

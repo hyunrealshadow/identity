@@ -126,6 +126,13 @@
     "reserved": true
   },
   {
+    "scope": "management.audit.read",
+    "action": "audit.read",
+    "authentication": "aal2",
+    "machineAllowed": true,
+    "reserved": true
+  },
+  {
     "scope": "management.role.read",
     "action": "role.read",
     "authentication": "aal2",

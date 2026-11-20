@@ -52,6 +52,7 @@ pub mod kind {
         PasskeyChallenge,
         AccessToken,
         LogoutToken,
+        AuditEvent,
     );
 }
 
@@ -133,6 +134,15 @@ impl DecodedGlobalId {
             type_name: type_name.into(),
             oid: Uuid::from_slice(encoded_oid).map_err(|_| InvalidGlobalId)?,
         })
+    }
+
+    pub fn type_name(&self) -> &str {
+        &self.type_name
+    }
+
+    #[must_use]
+    pub fn oid(&self) -> Uuid {
+        self.oid
     }
 
     pub fn is<T: GlobalIdType>(&self) -> bool {

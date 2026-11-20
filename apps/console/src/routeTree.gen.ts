@@ -19,6 +19,7 @@ import { Route as AppclientManagementClientsClientIdRouteRouteImport } from './r
 import { Route as AppclientManagementClientsNewRouteImport } from './routes/_app/(client-management)/clients/new'
 import { Route as AppclientManagementResourcesIndexRouteImport } from './routes/_app/(client-management)/resources/index'
 import { Route as AppclientManagementResourcesResourceIdRouteRouteImport } from './routes/_app/(client-management)/resources/$resourceId/route'
+import { Route as AppinstanceAuditEventsIndexRouteImport } from './routes/_app/(instance)/audit-events/index'
 import { Route as AppinstanceSettingsIndexRouteImport } from './routes/_app/(instance)/settings/index'
 import { Route as AppinstanceSettingsAuthenticationRouteImport } from './routes/_app/(instance)/settings/authentication'
 import { Route as AppinstanceSettingsEncryptionKeysRouteImport } from './routes/_app/(instance)/settings/encryption-keys'
@@ -109,6 +110,12 @@ const AppclientManagementResourcesResourceIdRouteRoute =
   AppclientManagementResourcesResourceIdRouteRouteImport.update({
     id: '/(client-management)/resources/$resourceId',
     path: '/resources/$resourceId',
+    getParentRoute: () => AppRouteRoute,
+  } as any)
+const AppinstanceAuditEventsIndexRoute =
+  AppinstanceAuditEventsIndexRouteImport.update({
+    id: '/(instance)/audit-events/',
+    path: '/audit-events/',
     getParentRoute: () => AppRouteRoute,
   } as any)
 const AppinstanceSettingsIndexRoute =
@@ -350,6 +357,7 @@ export interface FileRoutesByFullPath {
   '/users/new': typeof AppuserManagementUsersNewRoute
   '/clients/': typeof AppclientManagementClientsIndexRoute
   '/resources/': typeof AppclientManagementResourcesIndexRoute
+  '/audit-events/': typeof AppinstanceAuditEventsIndexRoute
   '/settings/': typeof AppinstanceSettingsIndexRoute
   '/groups/': typeof AppuserManagementGroupsIndexRoute
   '/roles/': typeof AppuserManagementRolesIndexRoute
@@ -391,6 +399,7 @@ export interface FileRoutesByTo {
   '/users/new': typeof AppuserManagementUsersNewRoute
   '/clients': typeof AppclientManagementClientsIndexRoute
   '/resources': typeof AppclientManagementResourcesIndexRoute
+  '/audit-events': typeof AppinstanceAuditEventsIndexRoute
   '/settings': typeof AppinstanceSettingsIndexRoute
   '/groups': typeof AppuserManagementGroupsIndexRoute
   '/roles': typeof AppuserManagementRolesIndexRoute
@@ -440,6 +449,7 @@ export interface FileRoutesById {
   '/_app/(user-management)/users/new': typeof AppuserManagementUsersNewRoute
   '/_app/(client-management)/clients/': typeof AppclientManagementClientsIndexRoute
   '/_app/(client-management)/resources/': typeof AppclientManagementResourcesIndexRoute
+  '/_app/(instance)/audit-events/': typeof AppinstanceAuditEventsIndexRoute
   '/_app/(instance)/settings/': typeof AppinstanceSettingsIndexRoute
   '/_app/(user-management)/groups/': typeof AppuserManagementGroupsIndexRoute
   '/_app/(user-management)/roles/': typeof AppuserManagementRolesIndexRoute
@@ -489,6 +499,7 @@ export interface FileRouteTypes {
     | '/users/new'
     | '/clients/'
     | '/resources/'
+    | '/audit-events/'
     | '/settings/'
     | '/groups/'
     | '/roles/'
@@ -530,6 +541,7 @@ export interface FileRouteTypes {
     | '/users/new'
     | '/clients'
     | '/resources'
+    | '/audit-events'
     | '/settings'
     | '/groups'
     | '/roles'
@@ -578,6 +590,7 @@ export interface FileRouteTypes {
     | '/_app/(user-management)/users/new'
     | '/_app/(client-management)/clients/'
     | '/_app/(client-management)/resources/'
+    | '/_app/(instance)/audit-events/'
     | '/_app/(instance)/settings/'
     | '/_app/(user-management)/groups/'
     | '/_app/(user-management)/roles/'
@@ -682,6 +695,13 @@ declare module '@tanstack/react-router' {
       path: '/resources/$resourceId'
       fullPath: '/resources/$resourceId'
       preLoaderRoute: typeof AppclientManagementResourcesResourceIdRouteRouteImport
+      parentRoute: typeof AppRouteRoute
+    }
+    '/_app/(instance)/audit-events/': {
+      id: '/_app/(instance)/audit-events/'
+      path: '/audit-events'
+      fullPath: '/audit-events/'
+      preLoaderRoute: typeof AppinstanceAuditEventsIndexRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/_app/(instance)/settings/': {
@@ -1103,6 +1123,7 @@ interface AppRouteRouteChildren {
   AppuserManagementUsersNewRoute: typeof AppuserManagementUsersNewRoute
   AppclientManagementClientsIndexRoute: typeof AppclientManagementClientsIndexRoute
   AppclientManagementResourcesIndexRoute: typeof AppclientManagementResourcesIndexRoute
+  AppinstanceAuditEventsIndexRoute: typeof AppinstanceAuditEventsIndexRoute
   AppuserManagementGroupsIndexRoute: typeof AppuserManagementGroupsIndexRoute
   AppuserManagementRolesIndexRoute: typeof AppuserManagementRolesIndexRoute
   AppuserManagementUsersIndexRoute: typeof AppuserManagementUsersIndexRoute
@@ -1128,6 +1149,7 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
   AppclientManagementClientsIndexRoute: AppclientManagementClientsIndexRoute,
   AppclientManagementResourcesIndexRoute:
     AppclientManagementResourcesIndexRoute,
+  AppinstanceAuditEventsIndexRoute: AppinstanceAuditEventsIndexRoute,
   AppuserManagementGroupsIndexRoute: AppuserManagementGroupsIndexRoute,
   AppuserManagementRolesIndexRoute: AppuserManagementRolesIndexRoute,
   AppuserManagementUsersIndexRoute: AppuserManagementUsersIndexRoute,

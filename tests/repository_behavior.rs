@@ -1,4 +1,6 @@
 //! PostgreSQL repository behavior checks through public persistence ports.
+#[path = "repository_behavior/audit_query.rs"]
+mod audit_query;
 mod common;
 #[path = "repository_behavior/effective_permission_totals.rs"]
 mod effective_permission_totals;

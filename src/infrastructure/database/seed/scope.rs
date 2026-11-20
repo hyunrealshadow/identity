@@ -216,7 +216,7 @@ pub(crate) async fn resolve_builtin_scope_ids<S: AsRef<str>>(
 }
 
 /// Presentation metadata is deliberately local to the seed and keyed by the
-/// trusted enum. The 28 names themselves come only from `ManagementScope`.
+/// trusted enum. The 29 names themselves come only from `ManagementScope`.
 pub(crate) fn management_name(scope: ManagementScope) -> &'static str {
     match scope {
         ManagementScope::UsersRead => "Read users",
@@ -237,6 +237,7 @@ pub(crate) fn management_name(scope: ManagementScope) -> &'static str {
         ManagementScope::KeysRead => "Read keys",
         ManagementScope::KeysWrite => "Manage keys",
         ManagementScope::KeysRevoke => "Revoke keys",
+        ManagementScope::AuditRead => "Read audit events",
         ManagementScope::RolesRead => "Read roles",
         ManagementScope::RolesWrite => "Write roles",
         ManagementScope::RoleAssignmentsRead => "Read role assignments",
@@ -270,6 +271,7 @@ pub(crate) fn management_name_zh_cn(scope: ManagementScope) -> &'static str {
         ManagementScope::KeysRead => "读取密钥",
         ManagementScope::KeysWrite => "管理密钥",
         ManagementScope::KeysRevoke => "撤销密钥",
+        ManagementScope::AuditRead => "读取安全审计",
         ManagementScope::RolesRead => "读取角色",
         ManagementScope::RolesWrite => "维护角色",
         ManagementScope::RoleAssignmentsRead => "读取角色分配",
@@ -303,6 +305,7 @@ pub(crate) fn management_description_zh_cn(scope: ManagementScope) -> &'static s
         ManagementScope::KeysRead => "读取签名密钥和数据加密密钥的元数据",
         ManagementScope::KeysWrite => "添加或轮换签名密钥与数据加密密钥",
         ManagementScope::KeysRevoke => "撤销签名密钥和数据加密密钥",
+        ManagementScope::AuditRead => "读取安全审计事件",
         ManagementScope::RolesRead => "读取业务角色",
         ManagementScope::RolesWrite => "创建或更新业务角色及其权限",
         ManagementScope::RoleAssignmentsRead => "读取用户及用户组角色分配",

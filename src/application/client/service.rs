@@ -123,6 +123,17 @@ impl ClientManagementService {
             .map_err(map_repository_error)
     }
 
+    #[tracing::instrument(skip_all, name = "client.find_many")]
+    pub async fn find_clients(&self, oids: Vec<ClientOid>) -> Result<Vec<ClientRecord>, AppError> {
+        if oids.is_empty() {
+            return Ok(Vec::new());
+        }
+        self.repository
+            .find_clients(oids)
+            .await
+            .map_err(map_repository_error)
+    }
+
     #[tracing::instrument(skip_all, name = "client.count")]
     pub async fn count_clients(&self, filter: ClientFilter) -> Result<u64, AppError> {
         let filter = normalize_filter(filter)?;

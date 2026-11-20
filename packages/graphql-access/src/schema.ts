@@ -381,6 +381,202 @@ export const schemaMetadata: SchemaMetadata = {
         }
       }
     },
+    "AuditEvent": {
+      "kind": "OBJECT",
+      "interfaces": [
+        "Node"
+      ],
+      "possibleTypes": [],
+      "fields": {
+        "action": {
+          "name": "action",
+          "returnType": "String",
+          "policies": []
+        },
+        "actorClient": {
+          "name": "actorClient",
+          "returnType": "Client",
+          "policies": [
+            {
+              "scopes": [
+                "management.client.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
+        },
+        "actorGlobalId": {
+          "name": "actorGlobalId",
+          "returnType": "ID",
+          "policies": []
+        },
+        "actorOid": {
+          "name": "actorOid",
+          "returnType": "String",
+          "policies": []
+        },
+        "actorType": {
+          "name": "actorType",
+          "returnType": "String",
+          "policies": []
+        },
+        "actorUser": {
+          "name": "actorUser",
+          "returnType": "User",
+          "policies": [
+            {
+              "scopes": [
+                "management.user.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
+        },
+        "credentialType": {
+          "name": "credentialType",
+          "returnType": "String",
+          "policies": []
+        },
+        "eventKind": {
+          "name": "eventKind",
+          "returnType": "String",
+          "policies": []
+        },
+        "id": {
+          "name": "id",
+          "returnType": "ID",
+          "policies": []
+        },
+        "occurredAt": {
+          "name": "occurredAt",
+          "returnType": "DateTime",
+          "policies": []
+        },
+        "operation": {
+          "name": "operation",
+          "returnType": "String",
+          "policies": []
+        },
+        "previousStatus": {
+          "name": "previousStatus",
+          "returnType": "String",
+          "policies": []
+        },
+        "reason": {
+          "name": "reason",
+          "returnType": "String",
+          "policies": []
+        },
+        "requestId": {
+          "name": "requestId",
+          "returnType": "String",
+          "policies": []
+        },
+        "resourceGlobalId": {
+          "name": "resourceGlobalId",
+          "returnType": "ID",
+          "policies": []
+        },
+        "resourceOid": {
+          "name": "resourceOid",
+          "returnType": "String",
+          "policies": []
+        },
+        "resourceType": {
+          "name": "resourceType",
+          "returnType": "String",
+          "policies": []
+        },
+        "status": {
+          "name": "status",
+          "returnType": "String",
+          "policies": []
+        },
+        "subjectGlobalId": {
+          "name": "subjectGlobalId",
+          "returnType": "ID",
+          "policies": []
+        },
+        "subjectOid": {
+          "name": "subjectOid",
+          "returnType": "String",
+          "policies": []
+        },
+        "targetGlobalId": {
+          "name": "targetGlobalId",
+          "returnType": "ID",
+          "policies": []
+        },
+        "targetOid": {
+          "name": "targetOid",
+          "returnType": "String",
+          "policies": []
+        },
+        "targetType": {
+          "name": "targetType",
+          "returnType": "String",
+          "policies": []
+        },
+        "traceId": {
+          "name": "traceId",
+          "returnType": "String",
+          "policies": []
+        },
+        "transactionId": {
+          "name": "transactionId",
+          "returnType": "String",
+          "policies": []
+        }
+      }
+    },
+    "AuditEventConnection": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "edges": {
+          "name": "edges",
+          "returnType": "AuditEventEdge",
+          "policies": []
+        },
+        "nodes": {
+          "name": "nodes",
+          "returnType": "AuditEvent",
+          "policies": []
+        },
+        "pageInfo": {
+          "name": "pageInfo",
+          "returnType": "PageInfo",
+          "policies": []
+        },
+        "totalCount": {
+          "name": "totalCount",
+          "returnType": "Int",
+          "policies": []
+        }
+      }
+    },
+    "AuditEventEdge": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "cursor": {
+          "name": "cursor",
+          "returnType": "String",
+          "policies": []
+        },
+        "node": {
+          "name": "node",
+          "returnType": "AuditEvent",
+          "policies": []
+        }
+      }
+    },
     "AuthenticationContext": {
       "kind": "OBJECT",
       "interfaces": [],
@@ -3434,6 +3630,7 @@ export const schemaMetadata: SchemaMetadata = {
       "kind": "INTERFACE",
       "interfaces": [],
       "possibleTypes": [
+        "AuditEvent",
         "Client",
         "Group",
         "Passkey",
@@ -3649,6 +3846,48 @@ export const schemaMetadata: SchemaMetadata = {
               "authentication": "SESSION",
               "userOnly": true,
               "runtime": false
+            }
+          ]
+        },
+        "auditEvent": {
+          "name": "auditEvent",
+          "returnType": "AuditEvent",
+          "policies": [
+            {
+              "scopes": [
+                "management.audit.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
+        },
+        "auditEventActions": {
+          "name": "auditEventActions",
+          "returnType": "String",
+          "policies": [
+            {
+              "scopes": [
+                "management.audit.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
+        },
+        "auditEvents": {
+          "name": "auditEvents",
+          "returnType": "AuditEventConnection",
+          "policies": [
+            {
+              "scopes": [
+                "management.audit.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
             }
           ]
         },

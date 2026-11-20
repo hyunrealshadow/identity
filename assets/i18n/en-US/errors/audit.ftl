@@ -1,0 +1,14 @@
+E30000 = The audit event page cursor is invalid or no longer matches the current query.
+E30001 = The requested audit event page size must be between 1 and { $max }.
+E30002 = Invalid time zone identifier: { $value }.
+E30003 = The audit search query exceeds the maximum length of { $max } characters.
+E30004 = The audit search query exceeds the maximum of { $max } filter clauses.
+E30005 = The audit search query exceeds the maximum nesting depth of { $max }.
+E30006 = The audit search query syntax is invalid.
+E30007 = Unknown audit query field: { $field }.
+E30008 = Invalid date or date math expression in audit query: { $value }.
+E30009 = Invalid identifier for audit field { $field }: { $value }.
+E30010 = Comparison operators are not supported for audit field { $field }.
+E30011 = Range queries are not supported for audit field { $field }.
+E30012 = Regular expression filters are not supported in audit queries.
+E30013 = Fuzzy or term boost modifiers are not supported in audit queries.

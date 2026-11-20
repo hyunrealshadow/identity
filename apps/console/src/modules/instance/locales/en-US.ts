@@ -1,4 +1,7 @@
+import auditMessages from '../audit/locales/en-US'
+
 const messages = {
+  ...auditMessages,
   navInstance: 'Instance',
   navSettings: 'Settings',
 

@@ -224,6 +224,11 @@ mod tests {
             include_str!("../../../assets/i18n/zh-CN/errors/account.ftl"),
         ),
         (
+            "audit",
+            include_str!("../../../assets/i18n/en-US/errors/audit.ftl"),
+            include_str!("../../../assets/i18n/zh-CN/errors/audit.ftl"),
+        ),
+        (
             "auth",
             include_str!("../../../assets/i18n/en-US/errors/auth.ftl"),
             include_str!("../../../assets/i18n/zh-CN/errors/auth.ftl"),

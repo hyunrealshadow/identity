@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@identity/graphql-access": "workspace:*",
+    "@identity/lucene-input": "workspace:*",
     "@identity/ui": "workspace:*",
     "@internationalized/date": "3.12.4",
     "@tanstack/react-query": "5.102.8",

@@ -14,6 +14,7 @@ import {
   ChevronsRight,
   LayoutDashboard,
   Menu,
+  ScrollText,
   Settings,
   Shield,
   UserRound,
@@ -32,6 +33,7 @@ interface NavEntry {
     | '/roles'
     | '/clients'
     | '/resources'
+    | '/audit-events'
     | '/settings'
   icon: LucideIcon
 }
@@ -66,6 +68,7 @@ const groups: NavGroup[] = [
   {
     label: 'navInstance',
     entries: [
+      { label: 'navAuditEvents', to: '/audit-events', icon: ScrollText },
       { label: 'navSettings', to: '/settings', icon: Settings },
     ],
   },

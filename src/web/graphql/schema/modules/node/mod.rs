@@ -7,6 +7,7 @@ use identity_application::{
 };
 use identity_domain::global_id::DecodedGlobalId;
 use identity_domain::{
+    audit::AuditEventOid,
     auth::SessionOid,
     authorization::ManagementScope,
     openid_connect::ApiScope,
@@ -17,6 +18,7 @@ use uuid::Uuid;
 
 use super::{
     account::{UserGlobalId, UserNode},
+    audit::{AuditEventGlobalId, AuditEventNode, integration as audit_integration},
     client::{
         integration as client_integration,
         types::{ClientGlobalId, ClientNode},
@@ -85,6 +87,7 @@ enum Node {
     Group(Box<GroupNode>),
     Client(Box<ClientNode>),
     Passkey(Box<PasskeyNode>),
+    AuditEvent(Box<AuditEventNode>),
 }
 
 async fn load_node(ctx: &Context<'_>, id: &ID) -> Result<Option<Node>> {
@@ -210,6 +213,18 @@ async fn load_node(ctx: &Context<'_>, id: &ID) -> Result<Option<Node>> {
             .into_iter()
             .find(|passkey| passkey.id == oid);
         Ok(passkey.map(PasskeyNode::from).map(Box::new).map(Node::from))
+    } else if decoded.is::<AuditEventGlobalId>() {
+        let oid = decoded
+            .into_typed::<AuditEventGlobalId>()
+            .map_err(|_| coded_error(ctx, GraphqlErrorCode::InvalidGlobalId, ErrorParams::new()))?
+            .oid();
+        ManagementGuard::new(ManagementScope::AuditRead, ManagementTarget::instance())
+            .check(ctx)
+            .await?;
+        let event = audit_integration::find_event(request, AuditEventOid::from_uuid(oid))
+            .await
+            .map_err(|error| app_error(ctx, error))?;
+        Ok(event.map(AuditEventNode::new).map(Box::new).map(Node::from))
     } else {
         Err(coded_error(
             ctx,

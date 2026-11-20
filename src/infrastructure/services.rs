@@ -1,6 +1,7 @@
 use std::{error::Error as StdError, sync::Arc};
 
 use identity_application::{
+    audit::AuditQueryService,
     authentication::{
         account::AccountService,
         login::{LoginMfaEnrollmentDependencies, LoginService},
@@ -63,7 +64,8 @@ use crate::{
     },
     database::{
         repository::{
-            authorization::AuthorizationRepositoryImpl, challenge::ChallengeRepositoryImpl,
+            audit_query::AuditQueryRepositoryImpl, authorization::AuthorizationRepositoryImpl,
+            challenge::ChallengeRepositoryImpl,
             client_authorization::ClientAuthorizationRepositoryImpl,
             client_management::ClientManagementRepositoryImpl,
             device_authorization::DeviceAuthorizationRepositoryImpl,
@@ -124,6 +126,7 @@ pub struct AppServices {
     key_management: KeyManagementService,
     instance_setting: InstanceSettingService,
     install: AppInstallService,
+    audit_query: AuditQueryService,
     instance_overview: InstanceOverviewService,
     user_management: UserManagementService,
     rbac_management: RbacManagementService,
@@ -299,6 +302,10 @@ impl AppServices {
                 runtime_key_ring: settings.key_ring(),
                 client_secret_lifetime: BUILTIN_CLIENT_SECRET_LIFETIME,
             },
+            audit_query: AuditQueryService::new(
+                Arc::new(AuditQueryRepositoryImpl::new(db.clone())),
+                data_protector.clone(),
+            ),
             instance_overview: InstanceOverviewService::new(Arc::new(
                 InstanceOverviewRepositoryImpl::new(db.clone()),
             )),
@@ -518,6 +525,11 @@ impl AppServices {
     #[must_use]
     pub fn install(&self) -> &AppInstallService {
         &self.install
+    }
+
+    #[must_use]
+    pub fn audit_query(&self) -> &AuditQueryService {
+        &self.audit_query
     }
 
     #[must_use]

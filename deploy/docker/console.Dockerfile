@@ -4,10 +4,12 @@ RUN corepack enable && corepack prepare pnpm@12.9.1 --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/console/package.json apps/console/package.json
 COPY packages/graphql-access/package.json packages/graphql-access/package.json
+COPY packages/lucene-input/package.json packages/lucene-input/package.json
 COPY packages/ui/package.json packages/ui/package.json
 RUN pnpm install --frozen-lockfile --filter console...
 COPY apps/console apps/console
 COPY packages/graphql-access packages/graphql-access
+COPY packages/lucene-input packages/lucene-input
 COPY packages/ui packages/ui
 RUN pnpm --filter console build && rm -f apps/console/dist/config.json
 

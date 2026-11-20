@@ -53,6 +53,14 @@ impl ClientManagementRepository for ClientManagementRepositoryImpl {
         read::find_record(&self.db, oid).await
     }
 
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "client.find_many"))]
+    async fn find_clients(
+        &self,
+        oids: Vec<ClientOid>,
+    ) -> Result<Vec<ClientRecord>, ClientManagementRepositoryError> {
+        read::find_records(&self.db, oids).await
+    }
+
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "client.credentials"))]
     async fn list_client_credentials(
         &self,

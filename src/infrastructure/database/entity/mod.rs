@@ -23,6 +23,7 @@ pub mod login;
 pub mod role;
 pub mod role_permission;
 pub mod scope;
+pub mod security_audit;
 pub mod session;
 pub mod setting;
 pub mod user;

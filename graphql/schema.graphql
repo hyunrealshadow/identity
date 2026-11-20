@@ -160,6 +160,69 @@ input AssignUserRolesInput {
 	clientMutationId: String
 }
 
+type AuditEvent implements Node {
+	id: ID!
+	occurredAt: DateTime!
+	transactionId: String!
+	action: String
+	operation: String!
+	eventKind: String
+	actorType: String
+	actorOid: String
+	actorGlobalId: ID
+	targetType: String
+	targetOid: String
+	targetGlobalId: ID
+	resourceType: String!
+	resourceOid: String!
+	resourceGlobalId: ID
+	subjectOid: String
+	subjectGlobalId: ID
+	status: String
+	previousStatus: String
+	credentialType: String
+	reason: String
+	requestId: String
+	traceId: String
+	actorUser: User @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	actorClient: Client @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+}
+
+type AuditEventConnection {
+	"""
+	Information to aid in pagination.
+	"""
+	pageInfo: PageInfo!
+	"""
+	A list of edges.
+	"""
+	edges: [AuditEventEdge!]!
+	"""
+	A list of nodes.
+	"""
+	nodes: [AuditEvent!]!
+	totalCount: Int!
+}
+
+"""
+An edge in a connection.
+"""
+type AuditEventEdge {
+	"""
+	The item at the end of the edge
+	"""
+	node: AuditEvent!
+	"""
+	A cursor for use in pagination
+	"""
+	cursor: String!
+}
+
+enum AuditEventOrder {
+	OCCURRED_AT_ASC
+	OCCURRED_AT_DESC
+}
+
 type AuthenticationContext {
 	acr: String
 	authTime: DateTime
@@ -1572,6 +1635,9 @@ type QueryRoot {
 	Signing and data encryption keys, newest first.
 	"""
 	keys(filter: KeyFilter, first: Int, after: String, last: Int, before: String): KeyConnection! @access(policy: {scopes: ["management.key.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	auditEvent(id: ID!): AuditEvent @access(policy: {scopes: ["management.audit.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	auditEvents(query: String, timeZone: String, orderBy: AuditEventOrder, first: Int, after: String, last: Int, before: String): AuditEventConnection! @access(policy: {scopes: ["management.audit.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	auditEventActions: [String!]! @access(policy: {scopes: ["management.audit.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 }
 
 type RecoveryCodeEnrollmentPayload {

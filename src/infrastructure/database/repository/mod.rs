@@ -1,3 +1,4 @@
+pub mod audit_query;
 pub mod authorization;
 pub(crate) mod authorization_lifecycle;
 pub mod challenge;

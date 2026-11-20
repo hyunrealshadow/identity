@@ -259,9 +259,9 @@ protected group carrying explicit permissions:
 
 | Preset | Permissions | Notes |
 | --- | --- | --- |
-| Owner | all 28 management scopes | installation adds the first user to this group |
-| Admin | 24 | day-to-day administration; no settings write, no key write/revoke, no permission delegation |
-| Viewer | 12 | read-only management views |
+| Owner | all 29 management scopes | installation adds the first user to this group |
+| Admin | 25 | day-to-day administration; no settings write, no key write/revoke, no permission delegation |
+| Viewer | 13 | read-only management views |
 
 Protection is decided by the persisted `built_in` flag, never by a fixed
 identifier or a name, so a user-created object that happens to share a display

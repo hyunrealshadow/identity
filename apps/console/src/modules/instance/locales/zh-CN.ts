@@ -1,4 +1,7 @@
+import auditMessages from '../audit/locales/zh-CN'
+
 const messages = {
+  ...auditMessages,
   navInstance: '实例',
   navSettings: '设置',
 

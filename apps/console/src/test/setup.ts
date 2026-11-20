@@ -44,3 +44,22 @@ if (typeof Element !== 'undefined' && !Element.prototype.scrollIntoView) {
 if (typeof window !== 'undefined' && !window.scrollTo) {
   window.scrollTo = vi.fn() as typeof window.scrollTo
 }
+
+if (typeof Range !== 'undefined') {
+  if (!Range.prototype.getClientRects) {
+    Range.prototype.getClientRects = () =>
+      ({
+        length: 0,
+        item: () => null,
+        [Symbol.iterator]: function* () {},
+      }) as unknown as DOMRectList
+  }
+
+  if (!Range.prototype.getBoundingClientRect) {
+    Range.prototype.getBoundingClientRect = () => new DOMRect(0, 0, 0, 0)
+  }
+}
+
+if (typeof document !== 'undefined' && typeof document.execCommand !== 'function') {
+  document.execCommand = () => false
+}

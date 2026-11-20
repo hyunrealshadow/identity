@@ -1,4 +1,5 @@
 pub mod account;
+pub mod audit;
 pub mod auth;
 pub mod authorization;
 pub mod authorize;
@@ -23,14 +24,14 @@ pub mod user_management;
 #[cfg(test)]
 mod tests {
     use super::{
-        account::AccountErrorCode, auth::AuthErrorCode, authorization::AuthorizationErrorCode,
-        authorize::AuthorizeErrorCode, authorize_http::AuthorizeHttpErrorCode,
-        client::ClientErrorCode, common::CommonErrorCode, data_protection::DataProtectionErrorCode,
-        device::DeviceAuthorizationErrorCode, graphql::GraphqlErrorCode,
-        graphql_transport::GraphqlTransportErrorCode, group::GroupErrorCode,
-        install::InstallErrorCode, instance::InstanceErrorCode, key::KeyErrorCode,
-        openid_connect::OpenIdConnectErrorCode, provider::ProviderErrorCode, rbac::RbacErrorCode,
-        registration::RegistrationErrorCode, token::TokenErrorCode,
+        account::AccountErrorCode, audit::AuditErrorCode, auth::AuthErrorCode,
+        authorization::AuthorizationErrorCode, authorize::AuthorizeErrorCode,
+        authorize_http::AuthorizeHttpErrorCode, client::ClientErrorCode, common::CommonErrorCode,
+        data_protection::DataProtectionErrorCode, device::DeviceAuthorizationErrorCode,
+        graphql::GraphqlErrorCode, graphql_transport::GraphqlTransportErrorCode,
+        group::GroupErrorCode, install::InstallErrorCode, instance::InstanceErrorCode,
+        key::KeyErrorCode, openid_connect::OpenIdConnectErrorCode, provider::ProviderErrorCode,
+        rbac::RbacErrorCode, registration::RegistrationErrorCode, token::TokenErrorCode,
         user_management::UserManagementErrorCode,
     };
     use crate::error::code::AppErrorCode;
@@ -74,5 +75,6 @@ mod tests {
         check::<GraphqlTransportErrorCode>(&mut seen, 28100..=28199);
         check::<GraphqlErrorCode>(&mut seen, 28000..=28099);
         check::<InstanceErrorCode>(&mut seen, 29000..=29099);
+        check::<AuditErrorCode>(&mut seen, 30000..=30099);
     }
 }

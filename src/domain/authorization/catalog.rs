@@ -116,6 +116,7 @@ pub enum ManagementScope {
     KeysRead,
     KeysWrite,
     KeysRevoke,
+    AuditRead,
     RolesRead,
     RolesWrite,
     RoleAssignmentsRead,
@@ -148,6 +149,7 @@ impl ManagementScope {
         Self::KeysRead,
         Self::KeysWrite,
         Self::KeysRevoke,
+        Self::AuditRead,
         Self::RolesRead,
         Self::RolesWrite,
         Self::RoleAssignmentsRead,
@@ -422,6 +424,14 @@ pub const MANAGEMENT_SCOPES: [ManagementScopeDefinition; MANAGEMENT_SCOPE_COUNT]
         ManagementFlowAllowance::USER_ONLY,
     ),
     entry(
+        ManagementScope::AuditRead,
+        "management.audit.read",
+        "audit.read",
+        "Read security audit events",
+        HumanAuthenticationRequirement::Aal2,
+        ManagementFlowAllowance::USER_AND_CLIENT_CREDENTIALS,
+    ),
+    entry(
         ManagementScope::RolesRead,
         "management.role.read",
         "role.read",
@@ -506,7 +516,7 @@ pub const MANAGEMENT_SCOPES: [ManagementScopeDefinition; MANAGEMENT_SCOPE_COUNT]
 /// Former built-in management scopes that no longer guard any operation. The
 /// seed removes their definitions and relations from existing databases; a
 /// historical grant that still names one simply authorizes nothing.
-pub const RETIRED_MANAGEMENT_SCOPE_NAMES: [&str; 27] = [
+pub const RETIRED_MANAGEMENT_SCOPE_NAMES: [&str; 26] = [
     "management.administrator.read",
     "management.administrator.write",
     "management.client_grant.read",
@@ -527,7 +537,6 @@ pub const RETIRED_MANAGEMENT_SCOPE_NAMES: [&str; 27] = [
     "management.client_credential.rotate",
     "management.key.create",
     "management.key.rotate",
-    "management.audit.read",
     "management.permission.read",
     "management.permission.write",
     "management.group_membership.read",

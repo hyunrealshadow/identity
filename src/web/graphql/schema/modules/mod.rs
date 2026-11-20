@@ -2,6 +2,7 @@ use async_graphql::MergedObject;
 
 use self::{
     account::{AccountMutation, AccountQuery},
+    audit::AuditQuery,
     authorization::AuthorizationQuery,
     client::{ClientMutation, ClientQuery},
     group::{GroupMutation, GroupQuery},
@@ -18,6 +19,7 @@ use self::{
 };
 
 pub(super) mod account;
+mod audit;
 mod authorization;
 mod client;
 mod group;
@@ -53,6 +55,7 @@ pub(crate) struct QueryRoot(
     ClientQuery,
     SettingQuery,
     KeyQuery,
+    AuditQuery,
 );
 
 #[derive(MergedObject, Default)]

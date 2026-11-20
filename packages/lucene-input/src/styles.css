@@ -1,0 +1,98 @@
+.lucene-input-root {
+  position: relative;
+  width: 100%;
+  --lucene-token-field: #0b70db;
+  --lucene-token-operator: #7c3aed;
+  --lucene-token-string: #b45309;
+  --lucene-token-wildcard: #2563eb;
+}
+
+.dark .lucene-input-root {
+  --lucene-token-field: #60a5fa;
+  --lucene-token-operator: #c084fc;
+  --lucene-token-string: #fbbf24;
+  --lucene-token-wildcard: #93c5fd;
+}
+
+.lucene-input-editor {
+  width: 100%;
+}
+
+.lucene-completion-panel {
+  position: absolute;
+  z-index: 50;
+  min-width: 240px;
+  max-width: min(440px, 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius, 0.5rem);
+  background-color: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.14), 0 4px 10px -4px rgba(0, 0, 0, 0.08);
+  overflow: hidden;
+}
+
+.lucene-completion-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.lucene-completion-section {
+  padding: 6px 8px 3px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted-foreground);
+}
+
+.lucene-completion-option {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 0;
+  border-radius: calc(var(--radius, 0.5rem) - 2px);
+  background: transparent;
+  padding: 6px 8px;
+  text-align: left;
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  color: var(--popover-foreground);
+  cursor: pointer;
+}
+
+.lucene-completion-option:hover,
+.lucene-completion-option[data-selected='true'] {
+  background-color: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.lucene-completion-label {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lucene-completion-detail {
+  flex-shrink: 0;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}
+
+.lucene-completion-option[data-selected='true'] .lucene-completion-detail {
+  color: var(--accent-foreground);
+  opacity: 0.8;
+}
+
+.lucene-completion-info {
+  border-top: 1px solid var(--border);
+  background-color: var(--muted);
+  padding: 6px 10px;
+  font-size: 0.75rem;
+  color: var(--muted-foreground);
+}

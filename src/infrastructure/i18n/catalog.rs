@@ -6,7 +6,7 @@ use fluent_templates::{
 use identity_application::error::{
     code::AppErrorCode,
     codes::{
-        account::AccountErrorCode, auth::AuthErrorCode,
+        account::AccountErrorCode, audit::AUDIT_ERROR_INVENTORY, auth::AuthErrorCode,
         authorization::AUTHORIZATION_ERROR_INVENTORY, authorize::AuthorizeErrorCode,
         client::CLIENT_ERROR_INVENTORY, common::CommonErrorCode,
         device::DeviceAuthorizationErrorCode, graphql::GraphqlErrorCode,
@@ -145,6 +145,18 @@ pub fn public_error_inventory() -> Vec<PublicErrorDefinition> {
     );
     inventory.extend(
         GROUP_ERROR_INVENTORY
+            .iter()
+            .map(|definition| PublicErrorDefinition {
+                code: definition.numeric_code,
+                kind: definition.kind,
+                fluent_key: definition.fluent_key.to_owned(),
+                usage_module: definition.usage_module,
+                required: definition.required_params,
+                optional: definition.optional_params,
+            }),
+    );
+    inventory.extend(
+        AUDIT_ERROR_INVENTORY
             .iter()
             .map(|definition| PublicErrorDefinition {
                 code: definition.numeric_code,

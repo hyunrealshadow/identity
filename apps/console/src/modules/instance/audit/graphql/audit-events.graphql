@@ -1,0 +1,89 @@
+fragment AuditEventFields on AuditEvent {
+  id
+  occurredAt
+  transactionId
+  action
+  operation
+  eventKind
+  actorType
+  actorOid
+  actorGlobalId
+  targetType
+  targetOid
+  targetGlobalId
+  resourceType
+  resourceOid
+  resourceGlobalId
+  subjectOid
+  subjectGlobalId
+  status
+  previousStatus
+  credentialType
+  reason
+  requestId
+  traceId
+  actorUser @include(if: $includeActorUser) {
+    id
+    username
+    email
+    nickname
+  }
+  actorClient @include(if: $includeActorClient) {
+    id
+    name
+    names {
+      locale
+      value
+    }
+  }
+}
+
+query AuditEventsQuery(
+  $query: String
+  $timeZone: String
+  $orderBy: AuditEventOrder
+  $first: Int
+  $after: String
+  $last: Int
+  $before: String
+  $includeActorUser: Boolean!
+  $includeActorClient: Boolean!
+) {
+  auditEvents(
+    query: $query
+    timeZone: $timeZone
+    orderBy: $orderBy
+    first: $first
+    after: $after
+    last: $last
+    before: $before
+  ) {
+    totalCount
+    pageInfo {
+      hasPreviousPage
+      hasNextPage
+      startCursor
+      endCursor
+    }
+    edges {
+      cursor
+      node {
+        ...AuditEventFields
+      }
+    }
+  }
+}
+
+query AuditEventDetailQuery(
+  $id: ID!
+  $includeActorUser: Boolean!
+  $includeActorClient: Boolean!
+) {
+  auditEvent(id: $id) {
+    ...AuditEventFields
+  }
+}
+
+query AuditEventActionsQuery {
+  auditEventActions
+}

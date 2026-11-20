@@ -3643,5 +3643,140 @@
     "requiredParams": [],
     "optionalParams": [],
     "module": "rbac.group"
+  },
+  {
+    "code": 30000,
+    "kind": "validation",
+    "fluentKey": "E30000",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "audit"
+  },
+  {
+    "code": 30001,
+    "kind": "validation",
+    "fluentKey": "E30001",
+    "requiredParams": [
+      "max"
+    ],
+    "optionalParams": [],
+    "module": "audit"
+  },
+  {
+    "code": 30002,
+    "kind": "validation",
+    "fluentKey": "E30002",
+    "requiredParams": [
+      "value"
+    ],
+    "optionalParams": [],
+    "module": "audit"
+  },
+  {
+    "code": 30003,
+    "kind": "validation",
+    "fluentKey": "E30003",
+    "requiredParams": [
+      "max"
+    ],
+    "optionalParams": [
+      "actual"
+    ],
+    "module": "audit"
+  },
+  {
+    "code": 30004,
+    "kind": "validation",
+    "fluentKey": "E30004",
+    "requiredParams": [
+      "max"
+    ],
+    "optionalParams": [],
+    "module": "audit"
+  },
+  {
+    "code": 30005,
+    "kind": "validation",
+    "fluentKey": "E30005",
+    "requiredParams": [
+      "max"
+    ],
+    "optionalParams": [],
+    "module": "audit"
+  },
+  {
+    "code": 30006,
+    "kind": "validation",
+    "fluentKey": "E30006",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "audit"
+  },
+  {
+    "code": 30007,
+    "kind": "validation",
+    "fluentKey": "E30007",
+    "requiredParams": [
+      "field"
+    ],
+    "optionalParams": [],
+    "module": "audit"
+  },
+  {
+    "code": 30008,
+    "kind": "validation",
+    "fluentKey": "E30008",
+    "requiredParams": [
+      "value"
+    ],
+    "optionalParams": [],
+    "module": "audit"
+  },
+  {
+    "code": 30009,
+    "kind": "validation",
+    "fluentKey": "E30009",
+    "requiredParams": [
+      "field",
+      "value"
+    ],
+    "optionalParams": [],
+    "module": "audit"
+  },
+  {
+    "code": 30010,
+    "kind": "validation",
+    "fluentKey": "E30010",
+    "requiredParams": [
+      "field"
+    ],
+    "optionalParams": [],
+    "module": "audit"
+  },
+  {
+    "code": 30011,
+    "kind": "validation",
+    "fluentKey": "E30011",
+    "requiredParams": [
+      "field"
+    ],
+    "optionalParams": [],
+    "module": "audit"
+  },
+  {
+    "code": 30012,
+    "kind": "validation",
+    "fluentKey": "E30012",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "audit"
+  },
+  {
+    "code": 30013,
+    "kind": "validation",
+    "fluentKey": "E30013",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "audit"
   }
 ]

@@ -54,7 +54,7 @@ pub const VIEWER_PRESET: BuiltInPreset = BuiltInPreset {
 
 pub const BUILT_IN_PRESETS: [BuiltInPreset; 3] = [OWNER_PRESET, ADMIN_PRESET, VIEWER_PRESET];
 
-const ADMIN_PERMISSIONS: [ManagementScope; 24] = [
+const ADMIN_PERMISSIONS: [ManagementScope; 25] = [
     ManagementScope::UsersRead,
     ManagementScope::UsersWrite,
     ManagementScope::SessionsRead,
@@ -70,6 +70,7 @@ const ADMIN_PERMISSIONS: [ManagementScope; 24] = [
     ManagementScope::ScopesWrite,
     ManagementScope::SettingsRead,
     ManagementScope::KeysRead,
+    ManagementScope::AuditRead,
     ManagementScope::RolesRead,
     ManagementScope::RolesWrite,
     ManagementScope::RoleAssignmentsRead,
@@ -81,7 +82,7 @@ const ADMIN_PERMISSIONS: [ManagementScope; 24] = [
     ManagementScope::GroupMembersWrite,
 ];
 
-const VIEWER_PERMISSIONS: [ManagementScope; 12] = [
+const VIEWER_PERMISSIONS: [ManagementScope; 13] = [
     ManagementScope::UsersRead,
     ManagementScope::SessionsRead,
     ManagementScope::ClientsRead,
@@ -90,6 +91,7 @@ const VIEWER_PERMISSIONS: [ManagementScope; 12] = [
     ManagementScope::ScopesRead,
     ManagementScope::SettingsRead,
     ManagementScope::KeysRead,
+    ManagementScope::AuditRead,
     ManagementScope::RolesRead,
     ManagementScope::RoleAssignmentsRead,
     ManagementScope::GroupsRead,

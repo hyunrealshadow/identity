@@ -190,6 +190,11 @@ pub trait ClientManagementRepository: Send + Sync {
         oid: ClientOid,
     ) -> Result<Option<ClientRecord>, ClientManagementRepositoryError>;
 
+    async fn find_clients(
+        &self,
+        oids: Vec<ClientOid>,
+    ) -> Result<Vec<ClientRecord>, ClientManagementRepositoryError>;
+
     /// Metadata of the credentials not revoked, expired ones included, newest
     /// first. Revocation is permanent and recorded in the audit log, so revoked
     /// credentials are not listed. Secret values are never read.

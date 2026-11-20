@@ -652,6 +652,69 @@ async fn graphql_http_rejects_a_raw_uuid_session_id() {
     assert!(body["data"]["revokeSession"].is_null());
 }
 
+#[tokio::test]
+async fn graphql_http_denies_audit_reads_without_management_authority() {
+    let audit_id =
+        GlobalId::<identity_domain::global_id::kind::AuditEvent>::new(Uuid::new_v4()).encode();
+    for (field, query) in [
+        (
+            "auditEvents",
+            "query { auditEvents(first: 10) { totalCount edges { node { id occurredAt action } } } }"
+                .to_owned(),
+        ),
+        (
+            "auditEvent",
+            format!("query {{ auditEvent(id: \"{audit_id}\") {{ id action occurredAt }} }}"),
+        ),
+        (
+            "auditEventActions",
+            "query { auditEventActions }".to_owned(),
+        ),
+    ] {
+        let fixture = fixture(FixtureOptions {
+            tail: FixtureTail::ManagementDenial,
+            ..FixtureOptions::default()
+        })
+        .await;
+        let mut response = graphql_post(&fixture, &query).await;
+
+        assert_eq!(response.status_code, Some(StatusCode::OK), "{field}");
+        let body: Value = response.take_json().await.unwrap();
+        let errors = body["errors"].as_array().unwrap();
+        assert!(!errors.is_empty(), "{field} must fail without management.audit.read");
+        assert!(
+            !errors.iter().any(|error| error["message"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("Unknown")),
+            "{field} is missing from schema: {errors:?}"
+        );
+        assert!(body["data"][field].is_null(), "{field} returned data unexpectedly");
+    }
+}
+
+#[tokio::test]
+async fn graphql_http_audit_events_validate_transport_bounds_before_resolver() {
+    let fixture = fixture(FixtureOptions::default()).await;
+    let mut over_limit = graphql_post(
+        &fixture,
+        "query { auditEvents(first: 101) { edges { node { id } } } }",
+    )
+    .await;
+    assert_eq!(over_limit.status_code, Some(StatusCode::OK));
+    let over_body: Value = over_limit.take_json().await.unwrap();
+    assert!(!over_body["errors"].as_array().unwrap().is_empty());
+
+    let mut invalid_raw_id = graphql_post(
+        &fixture,
+        "query { auditEvent(id: \"not-a-global-id\") { id } }",
+    )
+    .await;
+    assert_eq!(invalid_raw_id.status_code, Some(StatusCode::OK));
+    let id_body: Value = invalid_raw_id.take_json().await.unwrap();
+    assert!(!id_body["errors"].as_array().unwrap().is_empty());
+}
+
 async fn graphql_post(fixture: &GraphqlFixture, query: &str) -> Response {
     TestClient::post("http://identity.test/graphql")
         .bearer_auth(&fixture.token)

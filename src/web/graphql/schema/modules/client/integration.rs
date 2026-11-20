@@ -31,6 +31,18 @@ pub(crate) async fn find_client(
         .await
 }
 
+pub(crate) async fn find_clients(
+    request: &RequestContext,
+    oids: Vec<ClientOid>,
+) -> Result<Vec<ClientRecord>, AppError> {
+    request
+        .state
+        .services()
+        .client_management()
+        .find_clients(oids)
+        .await
+}
+
 pub(crate) async fn count_clients(
     request: &RequestContext,
     filter: ClientFilter,

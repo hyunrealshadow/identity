@@ -38,7 +38,8 @@ missing or invalid token yields `401` with
 ## Schema conventions
 
 - Queries are **flat functional fields** (`user`, `users`, `role`, `client`,
-  `instanceOverview`, `effectivePermissions`, …). There are no `viewer` or
+  `auditEvents`, `auditEvent`, `auditEventActions`, `instanceOverview`,
+  `effectivePermissions`, …). There are no `viewer` or
   `management` wrapper namespaces.
 - Mutations are **explicitly named verbs** (`createUser`, `setRolePermissions`,
   `rotateAndRevokeKey`, …). A mutation that modifies an existing managed object
@@ -164,6 +165,19 @@ sessions exclude revoked, expired, and unavailable-account sessions, and do not
 mean that a device is online. Aggregate reads produce query spans, not
 security-change audit facts.
 
+**Audit log queries.** `auditEvents(query:timeZone:orderBy:first:after:last:before:)`,
+`auditEvent(id:)`, and `auditEventActions` require `management.audit.read`
+(`AAL2`). `query` accepts the server-parsed Lucene filter DSL (up to 2048
+characters, nesting depth 16, and 64 leaf clauses), resolving `occurredAt` bare
+dates and calendar math against `timeZone` (default `UTC`). Encrypted cursors
+bind the normalized query, time zone, sort order, and initial `snapshot_at`
+timestamp so relative ranges such as `now-24h` stay consistent across pages.
+`AuditEvent.actorUser` and `AuditEvent.actorClient` carry separate `@access`
+guards (`management.user.read` and `management.client.read`) and are batch
+preloaded only when selected and permitted. Validation failures return typed
+localized codes `30000`–`30013` attached to `query` / `timeZone` / pagination
+fields.
+
 ## Limits
 
 | Setting | Default | Enforced by |
@@ -210,13 +224,14 @@ Responses use a single envelope:
 
 ## Management scope catalog
 
-These 28 scopes are reserved, defined by the server, and regenerated into
+These 29 scopes are reserved, defined by the server, and regenerated into
 `graphql/management-scopes.json`. `authentication` is the human requirement;
 `machine` indicates whether client-credentials tokens may use the scope, always
 subject to the client's live granted-scope ceiling.
 
 | Scope | Authentication | Machine |
 | --- | --- | --- |
+| `management.audit.read` | AAL2 | yes |
 | `management.user.read` | AAL2 | yes |
 | `management.user.write` | AAL2 | yes |
 | `management.session.read` | AAL2 | yes |
