@@ -17,7 +17,40 @@ const fields: LuceneField[] = [
     name: 'occurredAt',
     type: 'datetime',
   },
+  {
+    name: 'targetType',
+    type: 'keyword',
+    search: async (query) =>
+      ['user_group', 'user', 'user_role']
+        .filter((value) => value.startsWith(query))
+        .map((value) => ({ label: value, value })),
+  },
 ]
+
+async function openCompletions(value: string) {
+  const onChange = vi.fn()
+  const onSubmit = vi.fn()
+  const props = { onChange, onSubmit, fields, locale: 'en', ariaLabel: 'Query' }
+  const view = render(<LuceneInput value="" {...props} />)
+  const editor = screen.getByRole('combobox', { name: 'Query' })
+  await act(async () => {
+    editor.focus()
+    fireEvent.focus(editor)
+  })
+  view.rerender(<LuceneInput value={value} {...props} />)
+  await act(async () => {
+    editor.focus()
+    fireEvent.focus(editor)
+  })
+  await waitFor(() => {
+    expect(screen.getByRole('listbox')).toBeTruthy()
+  })
+  onChange.mockClear()
+  return { editor, onChange, onSubmit }
+}
+
+const optionLabels = () =>
+  screen.getAllByRole('option').map((option) => option.textContent?.trim().split(/\s/)[0])
 
 describe('LuceneInput (React)', () => {
   it('renders controlled value and emits diagnostics', async () => {
@@ -131,5 +164,53 @@ describe('LuceneInput (React)', () => {
       />,
     )
     expect(editor.getAttribute('aria-disabled')).toBe('true')
+  })
+
+  it('submits on Enter while suggestions are open but none was chosen', async () => {
+    const { editor, onChange, onSubmit } = await openCompletions('targetType:user')
+
+    expect(screen.getAllByRole('option').every((o) => o.getAttribute('aria-selected') === 'false')).toBe(true)
+    fireEvent.keyDown(editor, { key: 'Enter', code: 'Enter' })
+
+    expect(onSubmit).toHaveBeenCalledWith('targetType:user')
+    expect(onChange).not.toHaveBeenCalled()
+    await waitFor(() => {
+      expect(screen.queryByRole('listbox')).toBeNull()
+    })
+  })
+
+  it('accepts an option chosen with the arrow keys on Enter', async () => {
+    const { editor, onChange, onSubmit } = await openCompletions('targetType:user')
+
+    fireEvent.keyDown(editor, { key: 'ArrowDown', code: 'ArrowDown' })
+    fireEvent.keyDown(editor, { key: 'ArrowDown', code: 'ArrowDown' })
+    fireEvent.keyDown(editor, { key: 'Enter', code: 'Enter' })
+
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(onChange).toHaveBeenCalledWith('targetType:user_group')
+  })
+
+  it('ranks an exact match first and accepts the first option on Tab', async () => {
+    const { editor, onChange } = await openCompletions('targetType:us')
+    expect(optionLabels()).toEqual(['user_group', 'user', 'user_role'])
+
+    fireEvent.keyDown(editor, { key: 'Tab', code: 'Tab' })
+    expect(onChange).toHaveBeenCalledWith('targetType:user_group')
+  })
+
+  it('keeps a complete value listed first instead of replacing it', async () => {
+    await openCompletions('targetType:user')
+
+    expect(optionLabels()).toEqual(['user', 'user_group', 'user_role'])
+  })
+
+  it('shows value suggestions right after accepting a field name', async () => {
+    const { editor } = await openCompletions('targetT')
+
+    fireEvent.keyDown(editor, { key: 'Tab', code: 'Tab' })
+
+    await waitFor(() => {
+      expect(optionLabels()).toContain('user_group')
+    })
   })
 })

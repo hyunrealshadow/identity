@@ -95,7 +95,10 @@ vi.mock('#/lib/workspace', () => ({
 vi.mock('#/modules/instance/audit/hooks/use-audit-events', () => ({
   useAuditEvents: (variables: unknown, enabled: boolean) => {
     mocks.eventsCalls.push({ variables, enabled })
-    return mocks.eventsResult
+    // Like useConsoleQuery: no variables means no request and no data.
+    return variables
+      ? mocks.eventsResult
+      : { ...mocks.eventsResult, status: 'idle', data: null }
   },
   useAuditEventDetail: () => ({
     status: 'idle',
@@ -196,6 +199,19 @@ describe('AuditEventsPage', () => {
     })
     const navArg = mocks.navigate.mock.calls.at(-1)?.[0]
     expect(navArg.search.q).toBe('occurredAt:[now-24h TO now]')
+  })
+
+  it('does not send an invalid query opened from a link and explains it at the query bar', () => {
+    mocks.permissions = permissions(['management.audit.read'])
+
+    renderWithLocale(<AuditEventsPage search={{ q: 'targetType:' }} />)
+
+    expect(mocks.eventsCalls.length).toBeGreaterThan(0)
+    expect(mocks.eventsCalls.every((call) => call.variables === null)).toBe(true)
+    const alert = screen.getByRole('alert')
+    expect(alert.textContent).toContain('targetType:')
+    expect(screen.getByText('The query has errors')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
   })
 
   it('navigates with event parameter when clicking a row action title button', async () => {

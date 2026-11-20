@@ -19,6 +19,7 @@ import { formatDateTime } from '#/lib/format'
 import type { GraphQLIssue } from '#/lib/graphql/transport'
 import { useLocale, useTranslator } from '#/lib/i18n'
 import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
+import { auditValueLabel } from '../lib/audit-labels'
 
 export interface AuditEventDetailSheetProps {
   open: boolean
@@ -179,18 +180,26 @@ export function AuditEventDetailSheet({
                         : undefined
                     }
                   />
-                  <DetailRow label={t('auditDetailOperation')} value={event.operation} />
+                  <DetailRow
+                    label={t('auditDetailOperation')}
+                    value={auditValueLabel(t, 'operation', event.operation)}
+                  />
                   <DetailRow
                     label={t('auditDetailStatus')}
                     value={
-                      event.status ? <Badge variant="outline">{event.status}</Badge> : null
+                      event.status ? (
+                        <Badge variant="outline">{auditValueLabel(t, 'status', event.status)}</Badge>
+                      ) : null
                     }
                   />
                   <DetailRow
                     label={t('auditDetailPreviousStatus')}
-                    value={event.previousStatus}
+                    value={auditValueLabel(t, 'status', event.previousStatus)}
                   />
-                  <DetailRow label={t('auditDetailEventKind')} value={event.eventKind} />
+                  <DetailRow
+                    label={t('auditDetailEventKind')}
+                    value={auditValueLabel(t, 'eventKind', event.eventKind)}
+                  />
                   <DetailRow label={t('auditDetailCredentialType')} value={event.credentialType} />
                   <DetailRow label={t('auditDetailReason')} value={event.reason} />
                   <DetailRow
@@ -209,7 +218,10 @@ export function AuditEventDetailSheet({
                   {t('auditDetailSectionActorTarget')}
                 </h3>
                 <dl className="divide-y divide-border/60 rounded-lg border border-border px-3.5">
-                  <DetailRow label={t('auditDetailActorType')} value={event.actorType} />
+                  <DetailRow
+                    label={t('auditDetailActorType')}
+                    value={auditValueLabel(t, 'actorType', event.actorType)}
+                  />
                   <DetailRow label={t('auditDetailActorIdentity')} value={actorDisplay} />
                   <DetailRow
                     label={t('auditDetailActorOid')}
@@ -238,7 +250,10 @@ export function AuditEventDetailSheet({
                       ) : null
                     }
                   />
-                  <DetailRow label={t('auditDetailTargetType')} value={event.targetType} />
+                  <DetailRow
+                    label={t('auditDetailTargetType')}
+                    value={auditValueLabel(t, 'entityType', event.targetType)}
+                  />
                   <DetailRow
                     label={t('auditDetailTargetOid')}
                     value={
@@ -266,7 +281,10 @@ export function AuditEventDetailSheet({
                       ) : null
                     }
                   />
-                  <DetailRow label={t('auditDetailResourceType')} value={event.resourceType} />
+                  <DetailRow
+                    label={t('auditDetailResourceType')}
+                    value={auditValueLabel(t, 'entityType', event.resourceType)}
+                  />
                   <DetailRow
                     label={t('auditDetailResourceOid')}
                     value={

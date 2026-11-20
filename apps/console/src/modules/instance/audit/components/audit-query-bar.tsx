@@ -4,8 +4,9 @@ import {
   type ComponentDiagnostic,
   type LuceneField,
 } from '@identity/lucene-input'
+import { Alert, AlertDescription, AlertTitle } from '@identity/ui/components/alert'
 import { Button } from '@identity/ui/components/button'
-import { Search, X } from 'lucide-react'
+import { CircleAlert, Search, X } from 'lucide-react'
 import { useState } from 'react'
 
 import { ErrorDetails } from '#/components/error-details'
@@ -30,6 +31,8 @@ export interface AuditQueryBarProps {
   locale: string
   timeZone: string
   disabled?: boolean
+  /** Syntax error of the applied query (e.g. opened from a link); not sent to the server. */
+  appliedQueryError?: string
   serverIssues?: ReadonlyArray<GraphQLIssue>
   requestId?: string
   traceId?: string
@@ -44,6 +47,7 @@ export function AuditQueryBar({
   locale,
   timeZone,
   disabled = false,
+  appliedQueryError,
   serverIssues,
   requestId,
   traceId,
@@ -53,6 +57,8 @@ export function AuditQueryBar({
   const [submitRejected, setSubmitRejected] = useState(false)
 
   const blockingDiagnostic = diagnostics.find((item) => item.severity === 'error')
+  const syntaxError =
+    submitRejected && blockingDiagnostic ? blockingDiagnostic.message : appliedQueryError
 
   function submitValue(value: string) {
     const currentDiagnostics = getLuceneDiagnostics(value, fields, locale, undefined, {
@@ -86,6 +92,8 @@ export function AuditQueryBar({
             }}
             onSubmit={(currentValue) => submitValue(currentValue)}
             onDiagnostics={setDiagnostics}
+            // The rejection alert below already explains the error.
+            diagnosticTooltip={!syntaxError}
             fields={fields}
             disallowUnknownFields
             locale={locale}
@@ -123,7 +131,7 @@ export function AuditQueryBar({
             <Button
               key={preset.range}
               type="button"
-              size="xs"
+              size="sm"
               variant="outline"
               disabled={disabled}
               onClick={() => {
@@ -140,24 +148,22 @@ export function AuditQueryBar({
         <p className="text-xs text-muted-foreground">{t('auditSyntaxHelp')}</p>
       </div>
 
-      {submitRejected && blockingDiagnostic ? (
-        <div
-          role="alert"
-          className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-xs text-destructive"
-        >
-          <p className="font-medium">{t('auditInvalidQueryFeedback')}</p>
-          <p className="mt-0.5">{blockingDiagnostic.message}</p>
-        </div>
+      {syntaxError ? (
+        <Alert variant="destructive">
+          <CircleAlert aria-hidden="true" />
+          <AlertTitle>{t('auditInvalidQueryFeedback')}</AlertTitle>
+          <AlertDescription>{syntaxError}</AlertDescription>
+        </Alert>
       ) : null}
 
       {serverIssues && serverIssues.length > 0 ? (
-        <div
-          role="alert"
-          className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-2 text-sm"
-        >
-          <ErrorDetails issues={serverIssues} />
-          <RequestCorrelation requestId={requestId} traceId={traceId} />
-        </div>
+        <Alert variant="destructive">
+          <CircleAlert aria-hidden="true" />
+          <AlertDescription className="space-y-2">
+            <ErrorDetails issues={serverIssues} />
+            <RequestCorrelation requestId={requestId} traceId={traceId} />
+          </AlertDescription>
+        </Alert>
       ) : null}
     </div>
   )

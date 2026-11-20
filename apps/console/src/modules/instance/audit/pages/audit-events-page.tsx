@@ -1,3 +1,4 @@
+import { getLuceneDiagnostics } from '@identity/lucene-input'
 import { Badge } from '@identity/ui/components/badge'
 import { Skeleton } from '@identity/ui/components/skeleton'
 import { useNavigate } from '@tanstack/react-router'
@@ -13,7 +14,7 @@ import { TableRowActions } from '#/components/table-row-actions'
 import type { AuditEventFieldsFragment } from '#/generated/graphql'
 import { formatDateTime } from '#/lib/format'
 import { failureDescriptionKey, failureTitleKey } from '#/lib/graphql/presentation'
-import { useLocale, useTranslator } from '#/lib/i18n'
+import { type MessageKey, useLocale, useTranslator } from '#/lib/i18n'
 import { resolveTimeZone } from '#/lib/time-zone'
 import { useCursorPagination } from '#/lib/use-cursor-pagination'
 import { useUrlFilters } from '#/lib/use-url-filters'
@@ -24,7 +25,9 @@ import { RbacAccessRestricted } from '#/modules/user-management/roles/components
 import { AuditEventDetailSheet } from '../components/audit-event-detail-sheet'
 import { AuditQueryBar } from '../components/audit-query-bar'
 import { useAuditEventActions, useAuditEventDetail, useAuditEvents } from '../hooks/use-audit-events'
+import { AUDIT_QUERY_ERROR_CODES } from '../lib/audit-catalog'
 import { appendLuceneClause, buildAuditLuceneFields } from '../lib/audit-fields'
+import { auditValueLabel } from '../lib/audit-labels'
 import { auditScope } from '../lib/audit-scope'
 import {
   AUDIT_EVENTS_PAGE_SIZE,
@@ -53,6 +56,7 @@ function AuditEventsLoadingSkeleton() {
 function summarizeActor(
   event: AuditEventFieldsFragment,
   locale: 'en-US' | 'zh-CN',
+  t: (key: MessageKey) => string,
 ): string | null {
   if (event.actorUser) {
     return event.actorUser.nickname?.trim() || event.actorUser.username
@@ -60,17 +64,22 @@ function summarizeActor(
   if (event.actorClient) {
     return resolveLocalizedText(event.actorClient.names, locale) ?? event.actorClient.name
   }
-  if (event.actorType && event.actorOid) {
-    return `${event.actorType} (${event.actorOid.slice(0, 8)})`
+  const actorType = auditValueLabel(t, 'actorType', event.actorType)
+  if (actorType && event.actorOid) {
+    return `${actorType} (${event.actorOid.slice(0, 8)})`
   }
-  return event.actorType ?? null
+  return actorType
 }
 
-function summarizeTarget(event: AuditEventFieldsFragment): string | null {
-  if (event.targetType && event.targetOid) {
-    return `${event.targetType} (${event.targetOid.slice(0, 8)})`
+function summarizeTarget(
+  event: AuditEventFieldsFragment,
+  t: (key: MessageKey) => string,
+): string | null {
+  const targetType = auditValueLabel(t, 'entityType', event.targetType)
+  if (targetType && event.targetOid) {
+    return `${targetType} (${event.targetOid.slice(0, 8)})`
   }
-  return event.targetType ?? null
+  return targetType
 }
 
 export function AuditEventsPage({ search }: { search: AuditEventsSearch }) {
@@ -102,18 +111,6 @@ export function AuditEventsPage({ search }: { search: AuditEventsSearch }) {
   }
   const appliedKey = auditEventsQueryKey(appliedSearch)
 
-  const variables = useMemo(
-    () =>
-      scope.read
-        ? auditEventsQueryVariables(appliedSearch, resolvedTimeZone, {
-            includeActorUser: scope.readActorUser,
-            includeActorClient: scope.readActorClient,
-          })
-        : null,
-    [scope.read, scope.readActorUser, scope.readActorClient, appliedKey, resolvedTimeZone],
-  )
-
-  const eventsQuery = useAuditEvents(variables, scope.read)
   const actionsQuery = useAuditEventActions(scope.read && scope.readActions)
 
   const fields = useMemo(
@@ -139,9 +136,48 @@ export function AuditEventsPage({ search }: { search: AuditEventsSearch }) {
           occurredAt: t('auditFieldOccurredAtDesc'),
         },
         actionsQuery.data?.auditEventActions,
+        (kind, value) => auditValueLabel(t, kind, value),
       ),
     [actionsQuery.data?.auditEventActions, t],
   )
+
+  // A query that fails the shared syntax check is never sent; the query bar
+  // explains it instead of the table showing a request failure.
+  const appliedSyntaxError = useMemo(
+    () =>
+      applied.q
+        ? getLuceneDiagnostics(applied.q, fields, locale, undefined, {
+            disallowUnknownFields: true,
+          }).find((item) => item.severity === 'error')?.message
+        : undefined,
+    [applied.q, fields, locale],
+  )
+
+  const variables = useMemo(
+    () =>
+      scope.read && !appliedSyntaxError
+        ? auditEventsQueryVariables(appliedSearch, resolvedTimeZone, {
+            includeActorUser: scope.readActorUser,
+            includeActorClient: scope.readActorClient,
+          })
+        : null,
+    [
+      scope.read,
+      scope.readActorUser,
+      scope.readActorClient,
+      appliedKey,
+      resolvedTimeZone,
+      appliedSyntaxError,
+    ],
+  )
+
+  const eventsQuery = useAuditEvents(variables, scope.read)
+  // Statement errors the server still rejects belong to the query bar too.
+  const queryIssues = eventsQuery.errors.filter((issue) =>
+    AUDIT_QUERY_ERROR_CODES.has(Number(issue.code)),
+  )
+  const queryRejected =
+    Boolean(appliedSyntaxError) || (eventsQuery.status === 'error' && queryIssues.length > 0)
 
   const connection = eventsQuery.data?.auditEvents
   const items = useMemo(
@@ -234,9 +270,23 @@ export function AuditEventsPage({ search }: { search: AuditEventsSearch }) {
               fields={fields}
               locale={locale}
               timeZone={resolvedTimeZone}
-              serverIssues={eventsQuery.partial ? eventsQuery.errors : undefined}
-              requestId={eventsQuery.partial ? eventsQuery.requestId : undefined}
-              traceId={eventsQuery.partial ? eventsQuery.traceId : undefined}
+              appliedQueryError={
+                // Only while the input still shows the applied query.
+                (search.q?.trim() || undefined) === applied.q ? appliedSyntaxError : undefined
+              }
+              serverIssues={
+                eventsQuery.partial
+                  ? eventsQuery.errors
+                  : queryRejected && queryIssues.length > 0
+                    ? queryIssues
+                    : undefined
+              }
+              requestId={
+                eventsQuery.partial || queryIssues.length > 0 ? eventsQuery.requestId : undefined
+              }
+              traceId={
+                eventsQuery.partial || queryIssues.length > 0 ? eventsQuery.traceId : undefined
+              }
             />
 
             <ResourceTable
@@ -256,7 +306,14 @@ export function AuditEventsPage({ search }: { search: AuditEventsSearch }) {
               onRefresh={() => void eventsQuery.refresh()}
               refreshing={eventsQuery.refreshing || eventsQuery.status === 'loading'}
               emptyState={
-                eventsQuery.status === 'error' ? (
+                queryRejected ? (
+                  <AsyncState
+                    kind="empty"
+                    compact
+                    title={t('auditInvalidQueryTitle')}
+                    description={t('auditInvalidQueryDescription')}
+                  />
+                ) : eventsQuery.status === 'error' ? (
                   <AsyncState
                     kind={eventsQuery.forbidden ? 'forbidden' : 'error'}
                     title={t(failureTitleKey(eventsQuery.failure, eventsQuery.forbidden))}
@@ -324,7 +381,7 @@ export function AuditEventsPage({ search }: { search: AuditEventsSearch }) {
                   id: 'actor',
                   label: t('auditColumnActor'),
                   render: (event) => {
-                    const summary = summarizeActor(event, locale)
+                    const summary = summarizeActor(event, locale, t)
                     return summary ? (
                       <span className="text-sm">{summary}</span>
                     ) : null
@@ -334,7 +391,7 @@ export function AuditEventsPage({ search }: { search: AuditEventsSearch }) {
                   id: 'target',
                   label: t('auditColumnTarget'),
                   render: (event) => {
-                    const summary = summarizeTarget(event)
+                    const summary = summarizeTarget(event, t)
                     return summary ? (
                       <span className="text-sm">{summary}</span>
                     ) : null
@@ -343,13 +400,17 @@ export function AuditEventsPage({ search }: { search: AuditEventsSearch }) {
                 {
                   id: 'operation',
                   label: t('auditColumnOperation'),
-                  render: (event) => <span className="text-sm">{event.operation}</span>,
+                  render: (event) => (
+                    <span className="text-sm">{auditValueLabel(t, 'operation', event.operation)}</span>
+                  ),
                 },
                 {
                   id: 'status',
                   label: t('auditColumnStatus'),
                   render: (event) =>
-                    event.status ? <Badge variant="outline">{event.status}</Badge> : null,
+                    event.status ? (
+                      <Badge variant="outline">{auditValueLabel(t, 'status', event.status)}</Badge>
+                    ) : null,
                 },
                 {
                   id: 'requestId',

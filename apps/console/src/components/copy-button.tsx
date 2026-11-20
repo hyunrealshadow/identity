@@ -107,7 +107,10 @@ export function CopyableValue({
     >
       <code
         className={cn(
-          'min-w-0 flex-1 font-mono',
+          // IDs and hashes have no descenders; trimming the text box to cap
+          // height and baseline centres the glyphs rather than the line box;
+          // the padding restores breathing room when the value wraps.
+          'min-w-0 flex-1 py-1 font-mono [text-box:trim-both_cap_alphabetic]',
           size === 'sm' ? 'text-sm' : 'text-xs',
           wrap === 'truncate' ? 'truncate' : 'break-all',
           valueClassName,

@@ -1,4 +1,4 @@
-import type { LuceneField } from '@identity/lucene-input'
+import type { LuceneField, LuceneFieldValueOption } from '@identity/lucene-input'
 
 import {
   AUDIT_ACTOR_TYPE_OPTIONS,
@@ -9,6 +9,7 @@ import {
   filterCatalogOptions,
   mergeActionOptions,
 } from './audit-catalog'
+import type { AuditValueKind } from './audit-labels'
 
 export interface AuditFieldDescriptions {
   action: string
@@ -30,11 +31,30 @@ export interface AuditFieldDescriptions {
   occurredAt: string
 }
 
+/** Localized display name for a stored enum value, shown beside completions. */
+export type AuditValueLabeler = (kind: AuditValueKind, value: string) => string
+
 export function buildAuditLuceneFields(
   descriptions: AuditFieldDescriptions,
   liveActions?: readonly string[],
+  valueLabel?: AuditValueLabeler,
 ): LuceneField[] {
   const actionOptions = mergeActionOptions(liveActions)
+  const labeled = (
+    options: readonly LuceneFieldValueOption[],
+    kind: AuditValueKind,
+  ): readonly LuceneFieldValueOption[] => {
+    if (!valueLabel) return options
+    return options.map((option) => {
+      const detail = valueLabel(kind, option.value)
+      return detail === option.value ? option : { ...option, detail }
+    })
+  }
+  const actorTypeOptions = labeled(AUDIT_ACTOR_TYPE_OPTIONS, 'actorType')
+  const entityTypeOptions = labeled(AUDIT_ENTITY_TYPE_OPTIONS, 'entityType')
+  const operationOptions = labeled(AUDIT_OPERATION_OPTIONS, 'operation')
+  const statusOptions = labeled(AUDIT_STATUS_OPTIONS, 'status')
+  const eventKindOptions = labeled(AUDIT_EVENT_KIND_OPTIONS, 'eventKind')
 
   return [
     {
@@ -47,7 +67,7 @@ export function buildAuditLuceneFields(
       name: 'actorType',
       type: 'keyword',
       description: descriptions.actorType,
-      search: async (query) => filterCatalogOptions(AUDIT_ACTOR_TYPE_OPTIONS, query),
+      search: async (query) => filterCatalogOptions(actorTypeOptions, query),
     },
     {
       name: 'actor',
@@ -58,7 +78,7 @@ export function buildAuditLuceneFields(
       name: 'targetType',
       type: 'keyword',
       description: descriptions.targetType,
-      search: async (query) => filterCatalogOptions(AUDIT_ENTITY_TYPE_OPTIONS, query),
+      search: async (query) => filterCatalogOptions(entityTypeOptions, query),
     },
     {
       name: 'target',
@@ -69,7 +89,7 @@ export function buildAuditLuceneFields(
       name: 'resourceType',
       type: 'keyword',
       description: descriptions.resourceType,
-      search: async (query) => filterCatalogOptions(AUDIT_ENTITY_TYPE_OPTIONS, query),
+      search: async (query) => filterCatalogOptions(entityTypeOptions, query),
     },
     {
       name: 'resource',
@@ -85,13 +105,13 @@ export function buildAuditLuceneFields(
       name: 'operation',
       type: 'keyword',
       description: descriptions.operation,
-      search: async (query) => filterCatalogOptions(AUDIT_OPERATION_OPTIONS, query),
+      search: async (query) => filterCatalogOptions(operationOptions, query),
     },
     {
       name: 'status',
       type: 'keyword',
       description: descriptions.status,
-      search: async (query) => filterCatalogOptions(AUDIT_STATUS_OPTIONS, query),
+      search: async (query) => filterCatalogOptions(statusOptions, query),
     },
     {
       name: 'previousStatus',
@@ -107,7 +127,7 @@ export function buildAuditLuceneFields(
       name: 'eventKind',
       type: 'keyword',
       description: descriptions.eventKind,
-      search: async (query) => filterCatalogOptions(AUDIT_EVENT_KIND_OPTIONS, query),
+      search: async (query) => filterCatalogOptions(eventKindOptions, query),
     },
     {
       name: 'requestId',

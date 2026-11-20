@@ -18,6 +18,8 @@ export type LuceneInputProps = {
   disabled?: boolean
   readOnly?: boolean
   ariaLabel?: string
+  /** Explain diagnostics in a hover tooltip; turn off while the host already shows them. */
+  diagnosticTooltip?: boolean
   id?: string
   className?: string
 }
@@ -36,6 +38,7 @@ export function LuceneInput({
   disabled = false,
   readOnly = false,
   ariaLabel,
+  diagnosticTooltip = true,
   id,
   className,
 }: LuceneInputProps) {
@@ -71,6 +74,7 @@ export function LuceneInput({
       locale,
       timeZone,
       messages,
+      diagnosticTooltip,
       onChange: (nextValue) => onChangeRef.current(nextValue),
       onSubmit: (currentValue) => onSubmitRef.current?.(currentValue),
       onDiagnostics: (nextDiagnostics) => onDiagnosticsRef.current?.(nextDiagnostics),
@@ -126,6 +130,10 @@ export function LuceneInput({
   useEffect(() => {
     handleRef.current?.setAriaLabel(ariaLabel)
   }, [ariaLabel])
+
+  useEffect(() => {
+    handleRef.current?.setDiagnosticTooltip(diagnosticTooltip)
+  }, [diagnosticTooltip])
 
   return (
     <div id={id} className={className ? `lucene-input-root ${className}` : 'lucene-input-root'}>

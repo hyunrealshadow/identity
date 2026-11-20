@@ -1,5 +1,10 @@
 import type { LuceneFieldValueOption } from '@identity/lucene-input'
 
+/** Server error codes (E30003–E30013) that reject the query statement itself. */
+export const AUDIT_QUERY_ERROR_CODES: ReadonlySet<number> = new Set([
+  30003, 30004, 30005, 30006, 30007, 30008, 30009, 30010, 30011, 30012, 30013,
+])
+
 export const AUDIT_ACTOR_TYPE_OPTIONS: readonly LuceneFieldValueOption[] = [
   { label: 'user', value: 'user' },
   { label: 'client', value: 'client' },
@@ -108,5 +113,9 @@ export function filterCatalogOptions(
 ): LuceneFieldValueOption[] {
   const needle = query.trim().toLowerCase()
   if (!needle) return [...options]
-  return options.filter((option) => option.label.toLowerCase().includes(needle))
+  return options.filter(
+    (option) =>
+      option.label.toLowerCase().includes(needle) ||
+      Boolean(option.detail?.toLowerCase().includes(needle)),
+  )
 }

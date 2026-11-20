@@ -37,7 +37,7 @@
       [role="checkbox"],
       [role="switch"],
       [role="tab"]
-    ):not(:disabled, [aria-disabled="true"], [data-disabled], [aria-busy="true"], [data-loading], [data-pending], input, textarea) {
+    ):not(:disabled, [aria-disabled="true"], [data-disabled], [aria-busy="true"], [data-loading], [data-pending], input, textarea, [contenteditable]:not([contenteditable="false"])) {
     cursor: pointer;
   }
 

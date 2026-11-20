@@ -26,7 +26,6 @@
   },
   "dependencies": {
     "@codemirror/autocomplete": "^6.20.2",
-    "@codemirror/lint": "^6.9.6",
     "@codemirror/state": "^6.6.0",
     "@codemirror/view": "^6.42.1"
   },

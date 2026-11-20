@@ -1,4 +1,3 @@
-import { linter, type Diagnostic as CodeMirrorDiagnostic } from '@codemirror/lint';
 import { Compartment, EditorState, Prec, type Extension } from '@codemirror/state';
 import { EditorView, keymap, placeholder } from '@codemirror/view';
 import { getLuceneCompletions } from './completion';
@@ -6,6 +5,7 @@ import {
   LuceneCompletionDropdown,
   type LuceneCompletionDropdownState
 } from './completion-dropdown';
+import { luceneDiagnostics, refreshDiagnostics, setDiagnosticTooltip } from './diagnostics';
 import { luceneEditorTheme } from './theme';
 import { getLuceneDiagnostics } from '../diagnostics';
 import { FieldCompletionController } from '../field-completion';
@@ -29,6 +29,8 @@ export type LuceneEditorConfig = {
   onSubmit?: (value: string) => void;
   onDiagnostics?: (diagnostics: ComponentDiagnostic[]) => void;
   onCompletionChange?: (state: LuceneCompletionDropdownState | null) => void;
+  /** Show diagnostics in a hover tooltip (default true). */
+  diagnosticTooltip?: boolean;
 };
 
 export type LuceneEditorHandle = {
@@ -43,6 +45,7 @@ export type LuceneEditorHandle = {
   setDisabled(disabled: boolean): void;
   setReadOnly(readOnly: boolean): void;
   setAriaLabel(ariaLabel: string | undefined): void;
+  setDiagnosticTooltip(enabled: boolean): void;
   hoverCompletion(index: number): void;
   selectCompletion(index: number): void;
   closeCompletion(): boolean;
@@ -60,7 +63,29 @@ export function createLuceneEditor(config: LuceneEditorConfig): LuceneEditorHand
 
   const initialValue = sanitizeSingleLineValue(config.value);
   const completionController = new FieldCompletionController(fields, locale, messages);
+  // The error tooltip and the completion menu both open below the text, so the
+  // tooltip only shows while the host allows it and no completion is open.
+  let hostTooltip = config.diagnosticTooltip ?? true;
+  let completionOpen = false;
+  let destroyed = false;
+  let editorView: EditorView | null = null;
+  const syncDiagnosticTooltip = () => {
+    // Completion changes arrive during an editor update; dispatch afterwards.
+    queueMicrotask(() => {
+      if (!destroyed && editorView) {
+        editorView.dispatch({
+          effects: setDiagnosticTooltip.of(hostTooltip && !completionOpen)
+        });
+      }
+    });
+  };
+
   const completionUi = new LuceneCompletionDropdown((state) => {
+    const nextOpen = state !== null;
+    if (nextOpen !== completionOpen) {
+      completionOpen = nextOpen;
+      syncDiagnosticTooltip();
+    }
     config.onCompletionChange?.(state);
   });
 
@@ -69,12 +94,17 @@ export function createLuceneEditor(config: LuceneEditorConfig): LuceneEditorHand
   const readOnlyCompartment = new Compartment();
   const ariaCompartment = new Compartment();
 
+  const computeDiagnostics = (text: string) =>
+    getLuceneDiagnostics(text, fields, locale, messages, { disallowUnknownFields });
+
   const notifyDiagnostics = (view: EditorView) => {
-    config.onDiagnostics?.(
-      getLuceneDiagnostics(view.state.doc.toString(), fields, locale, messages, {
-        disallowUnknownFields
-      })
-    );
+    config.onDiagnostics?.(computeDiagnostics(view.state.doc.toString()));
+  };
+
+  // Settings changes re-mark the text; document changes refresh on their own.
+  const refreshMarks = (view: EditorView) => {
+    view.dispatch({ effects: refreshDiagnostics.of(null) });
+    notifyDiagnostics(view);
   };
 
   const buildContentAttributes = (label: string | undefined, disabled: boolean) => {
@@ -101,9 +131,10 @@ export function createLuceneEditor(config: LuceneEditorConfig): LuceneEditorHand
         {
           key: 'Enter',
           run: (view) => {
-            if (completionUi.accept()) {
+            if (completionUi.acceptKeyboardSelection()) {
               return true;
             }
+            completionUi.close();
             config.onSubmit?.(sanitizeSingleLineValue(view.state.doc.toString()));
             return true;
           }
@@ -129,6 +160,13 @@ export function createLuceneEditor(config: LuceneEditorConfig): LuceneEditorHand
         return;
       }
 
+      // Only the user's editing, caret movement, or focus opens suggestions;
+      // host-driven refreshes (fields, locale, tooltip) must not reopen a list
+      // that was just closed by submitting.
+      if (!update.docChanged && !update.selectionSet && !update.focusChanged) {
+        return;
+      }
+
       completionUi.update(update.view, () =>
         getLuceneCompletions(
           update.view,
@@ -141,11 +179,7 @@ export function createLuceneEditor(config: LuceneEditorConfig): LuceneEditorHand
         )
       );
     }),
-    linter((view) =>
-      getLuceneDiagnostics(view.state.doc.toString(), fields, locale, messages, {
-        disallowUnknownFields
-      }).map(toCodeMirrorDiagnostic)
-    ),
+    luceneDiagnostics(computeDiagnostics, { tooltip: hostTooltip }),
     luceneEditorTheme()
   ];
 
@@ -156,6 +190,8 @@ export function createLuceneEditor(config: LuceneEditorConfig): LuceneEditorHand
       extensions
     })
   });
+
+  editorView = view;
 
   queueMicrotask(() => notifyDiagnostics(view));
 
@@ -183,16 +219,16 @@ export function createLuceneEditor(config: LuceneEditorConfig): LuceneEditorHand
     setFields(nextFields: LuceneField[]) {
       fields = nextFields;
       completionController.setFields(nextFields);
-      notifyDiagnostics(view);
+      refreshMarks(view);
     },
     setDisallowUnknownFields(nextDisallowUnknownFields: boolean) {
       disallowUnknownFields = nextDisallowUnknownFields;
-      notifyDiagnostics(view);
+      refreshMarks(view);
     },
     setLocale(nextLocale: string) {
       locale = nextLocale;
       completionController.setLocale(nextLocale);
-      notifyDiagnostics(view);
+      refreshMarks(view);
     },
     setTimeZone(nextTimeZone: string | undefined) {
       timeZone = nextTimeZone;
@@ -200,7 +236,7 @@ export function createLuceneEditor(config: LuceneEditorConfig): LuceneEditorHand
     setMessages(nextMessages: LuceneInputMessages | undefined) {
       messages = nextMessages;
       completionController.setMessages(nextMessages);
-      notifyDiagnostics(view);
+      refreshMarks(view);
     },
     setPlaceholder(nextPlaceholder: string) {
       view.dispatch({
@@ -235,6 +271,10 @@ export function createLuceneEditor(config: LuceneEditorConfig): LuceneEditorHand
         effects: ariaCompartment.reconfigure(buildContentAttributes(currentAriaLabel, isDisabled))
       });
     },
+    setDiagnosticTooltip(enabled: boolean) {
+      hostTooltip = enabled;
+      syncDiagnosticTooltip();
+    },
     hoverCompletion(index: number) {
       completionUi.hover(index);
     },
@@ -245,6 +285,7 @@ export function createLuceneEditor(config: LuceneEditorConfig): LuceneEditorHand
       return completionUi.close();
     },
     destroy() {
+      destroyed = true;
       completionUi.destroy();
       view.destroy();
     }
@@ -255,26 +296,4 @@ function getCompletionSectionLabels(locale: string): { fields: string; syntax: s
   return locale.startsWith('zh')
     ? { fields: '字段', syntax: '语法', values: '字段值' }
     : { fields: 'Fields', syntax: 'Syntax', values: 'Values' };
-}
-
-function toCodeMirrorDiagnostic(diagnostic: ComponentDiagnostic): CodeMirrorDiagnostic {
-  return {
-    from: diagnostic.from,
-    to: diagnostic.to,
-    severity: diagnostic.severity === 'error' ? 'error' : 'warning',
-    message: diagnostic.message,
-    markClass: getDiagnosticMarkClass(diagnostic)
-  };
-}
-
-function getDiagnosticMarkClass(diagnostic: ComponentDiagnostic): string | undefined {
-  if (diagnostic.code === 'unknownField') {
-    return 'lucene-diagnostic-unknown-field';
-  }
-
-  if (diagnostic.code === 'missingToken' && diagnostic.params?.expected === 'field value') {
-    return 'lucene-diagnostic-missing-value';
-  }
-
-  return undefined;
 }

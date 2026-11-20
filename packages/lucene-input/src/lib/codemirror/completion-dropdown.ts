@@ -17,7 +17,12 @@ export class LuceneCompletionDropdown {
   #onStateChange: (state: LuceneCompletionDropdownState | null) => void;
   #view: EditorView | undefined;
   #result: LuceneCompletionResult | undefined;
-  #selectedIndex = 0;
+  // -1: nothing highlighted. Enter submits the query unless an option was
+  // chosen with the arrow keys (`#keyboardSelected`); hover only highlights.
+  #selectedIndex = -1;
+  #keyboardSelected = false;
+  // The edit made by accepting a value must not reopen the list.
+  #skipNextUpdate = false;
   #requestId = 0;
 
   constructor(onStateChange: (state: LuceneCompletionDropdownState | null) => void) {
@@ -54,6 +59,7 @@ export class LuceneCompletionDropdown {
       return;
     }
     this.#selectedIndex = index;
+    this.#keyboardSelected = false;
     this.#sync();
   }
 
@@ -67,6 +73,12 @@ export class LuceneCompletionDropdown {
 
   update(view: EditorView, getCompletions: () => Promise<LuceneCompletionResult | null>) {
     this.#view = view;
+
+    if (this.#skipNextUpdate) {
+      this.#skipNextUpdate = false;
+      this.close();
+      return;
+    }
 
     if (!view.hasFocus || !view.state.selection.main.empty) {
       this.close();
@@ -88,43 +100,64 @@ export class LuceneCompletionDropdown {
         ...result,
         query: this.#view?.state.doc.sliceString(result.from, result.to) ?? ''
       };
+      // Keep an exact match, ranked first, so a complete value reads as valid;
+      // close when it is the only option, since there is nothing to add.
       const normalizedQuery = nextResult.query.trim().toLowerCase();
-      nextResult.options = nextResult.options.filter(
-        (option) => option.apply.toLowerCase() !== normalizedQuery
-      );
+      const isExact = (option: { apply: string }) =>
+        normalizedQuery !== '' && option.apply.toLowerCase() === normalizedQuery;
+      nextResult.options = [
+        ...nextResult.options.filter(isExact),
+        ...nextResult.options.filter((option) => !isExact(option))
+      ];
 
-      if (!nextResult.options.length) {
+      if (!nextResult.options.length || nextResult.options.every(isExact)) {
         this.close();
         return;
       }
 
+      const previous = this.#result;
+      const sameList =
+        previous !== undefined &&
+        previous.from === nextResult.from &&
+        previous.query === nextResult.query &&
+        previous.options.length === nextResult.options.length;
       this.#result = nextResult;
-      this.#selectedIndex = Math.min(this.#selectedIndex, nextResult.options.length - 1);
+      if (!sameList) {
+        this.#selectedIndex = -1;
+        this.#keyboardSelected = false;
+      }
       this.#sync();
     });
   }
 
+  /** Enter: accept only an option chosen with the arrow keys. */
+  acceptKeyboardSelection(): boolean {
+    return this.#keyboardSelected && this.#selectedIndex >= 0 ? this.accept() : false;
+  }
+
+  /** Tab and click: accept the highlighted option, or the first one. */
   accept(): boolean {
     if (!this.#view || !this.#result) {
       return false;
     }
 
-    const option = this.#result.options[this.#selectedIndex];
+    const option = this.#result.options[Math.max(this.#selectedIndex, 0)];
     if (!option) {
       return false;
     }
 
-    this.#view.dispatch({
-      changes: {
-        from: this.#result.from,
-        to: this.#result.to,
-        insert: option.apply
-      },
-      selection: {
-        anchor: this.#result.from + option.apply.length
-      }
-    });
+    const { from, to, query } = this.#result;
+    const view = this.#view;
+    // Close before inserting: the insertion requests the next suggestions
+    // (values after a field), which closing afterwards would discard.
     this.close();
+    // A value completes its clause; a field or operator leads to further suggestions.
+    this.#skipNextUpdate = option.kind === 'value' && option.apply !== query;
+
+    view.dispatch({
+      changes: { from, to, insert: option.apply },
+      selection: { anchor: from + option.apply.length }
+    });
     return true;
   }
 
@@ -135,6 +168,8 @@ export class LuceneCompletionDropdown {
 
     this.#requestId += 1;
     this.#result = undefined;
+    this.#selectedIndex = -1;
+    this.#keyboardSelected = false;
     this.#sync();
     return true;
   }
@@ -152,7 +187,13 @@ export class LuceneCompletionDropdown {
     }
 
     const count = this.#result.options.length;
-    this.#selectedIndex = (this.#selectedIndex + step + count) % count;
+    this.#selectedIndex =
+      this.#selectedIndex < 0
+        ? step > 0
+          ? 0
+          : count - 1
+        : (this.#selectedIndex + step + count) % count;
+    this.#keyboardSelected = true;
     this.#sync();
     return true;
   }
