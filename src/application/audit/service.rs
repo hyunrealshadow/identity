@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, SubsecRound, Utc};
 use identity_domain::{
     audit::{
         AuditEvent, AuditEventOid, AuditEventOrder, AuditEventPageDirection, AuditEventQuery,
@@ -89,7 +89,7 @@ impl AuditQueryService {
                 .await?;
                 (Some(decoded.sort_key), decoded.snapshot_at)
             }
-            None => (None, Utc::now()),
+            None => (None, snapshot_instant(None)),
         };
 
         let expr = parse_query(&normalized_query, snapshot_at, time_zone)?;
@@ -138,7 +138,7 @@ impl AuditQueryService {
     pub async fn count_events(&self, request: AuditEventCountRequest) -> Result<u64, AppError> {
         let normalized_query = normalize_query(request.query.as_deref());
         let time_zone = parse_time_zone(request.time_zone.as_deref())?;
-        let snapshot_at = request.snapshot_at.unwrap_or_else(Utc::now);
+        let snapshot_at = snapshot_instant(request.snapshot_at);
         let expr = parse_query(&normalized_query, snapshot_at, time_zone)?;
         self.repository
             .count_events(&expr)
@@ -228,6 +228,13 @@ fn parse_time_zone(raw: Option<&str>) -> Result<TimeZone, AppError> {
                 .with_field("timeZone")
         }),
     }
+}
+
+/// Snapshots are persisted in cursors with microsecond precision, matching the
+/// database timestamp resolution, so relative expressions resolve identically
+/// on every page.
+fn snapshot_instant(requested: Option<DateTime<Utc>>) -> DateTime<Utc> {
+    requested.unwrap_or_else(Utc::now).trunc_subsecs(6)
 }
 
 fn parse_query(

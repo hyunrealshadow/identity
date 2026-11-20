@@ -399,10 +399,7 @@ impl<'a> Parser<'a> {
         let unary = if self.starts_with_keyword("NOT") {
             self.pos += 3;
             Some(UnaryOp::Not)
-        } else if self.rest().starts_with('!') {
-            self.pos += 1;
-            Some(UnaryOp::Not)
-        } else if self.rest().starts_with('-') {
+        } else if self.rest().starts_with(['!', '-']) {
             self.pos += 1;
             Some(UnaryOp::Not)
         } else if self.rest().starts_with('+') {
@@ -779,9 +776,8 @@ impl<'a> Parser<'a> {
         if !rest.starts_with('/') {
             return false;
         }
-        let mut chars = rest[1..].chars();
         let mut escaped = false;
-        while let Some(ch) = chars.next() {
+        for ch in rest[1..].chars() {
             if escaped {
                 escaped = false;
                 continue;

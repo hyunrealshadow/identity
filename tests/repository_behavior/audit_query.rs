@@ -77,10 +77,12 @@ async fn postgres_audit_query_supports_lucene_time_zones_null_not_and_frozen_cur
         let e3_oid = Uuid::new_v4();
         let e4_oid = Uuid::new_v4();
 
-        // Time stamps intentionally straddle 2026-11-20 UTC vs Asia/Shanghai (+08:00):
-        // - e1: 2026-11-19T16:30:00Z = 2026-11-20 00:30:00+08:00 (Nov 20 in Shanghai, Nov 19 in UTC)
-        // - e2: 2026-11-20T15:30:00Z = 2026-11-20 23:30:00+08:00 (Nov 20 in both)
-        // - e3: 2026-11-20T16:30:00Z = 2026-11-21 00:30:00+08:00 (Nov 21 in Shanghai, Nov 20 in UTC)
+        // Fixed time stamps lie well before `now` so the recent e4 row never
+        // falls into their calendar days. They straddle 2025-03-10 UTC vs
+        // Asia/Shanghai (+08:00):
+        // - e1: 2025-03-09T16:30:00Z = 2025-03-10 00:30:00+08:00 (Mar 10 in Shanghai, Mar 9 in UTC)
+        // - e2: 2025-03-10T15:30:00Z = 2025-03-10 23:30:00+08:00 (Mar 10 in both)
+        // - e3: 2025-03-10T16:30:00Z = 2025-03-11 00:30:00+08:00 (Mar 11 in Shanghai, Mar 10 in UTC)
         // - e4: now - 10s (nullable action & reason left NULL)
         let recent = (Utc::now() - Duration::seconds(10)).to_rfc3339();
 
@@ -90,8 +92,8 @@ async fn postgres_audit_query_supports_lucene_time_zones_null_not_and_frozen_cur
                 r#"
                 INSERT INTO client (oid, protocol, name, built_in, enabled, version)
                 VALUES ('{actor_client_oid}', 'openid_connect', 'Batch Lookup App', false, true, gen_random_uuid());
-                INSERT INTO client_openid_connect (client_id, grant_types, token_endpoint_auth_methods, allow_public_client_flow, require_pushed_authorization_requests, skip_consent, cors_enabled)
-                SELECT id, '["client_credentials"]'::jsonb, '["client_secret_basic"]'::jsonb, false, false, false, false
+                INSERT INTO client_openid_connect (client_id, grant_types, token_endpoint_auth_methods)
+                SELECT id, '["client_credentials"]'::jsonb, '["client_secret_basic"]'::jsonb
                 FROM client WHERE oid = '{actor_client_oid}';
 
                 INSERT INTO security_audit (
@@ -100,17 +102,17 @@ async fn postgres_audit_query_supports_lucene_time_zones_null_not_and_frozen_cur
                     reason, request_id, trace_id, event_kind
                 ) VALUES
                 (
-                    '{e1_oid}', '2026-11-19T16:30:00Z', 101, 'user', '{resource_oid}', '{subject_oid}',
+                    '{e1_oid}', '2025-03-09T16:30:00Z', 101, 'user', '{resource_oid}', '{subject_oid}',
                     'mutation', 'success', 'user', '{actor_user_oid}', 'user.create', 'user', '{target_user_oid}',
                     'Provisioned Operator', 'req-alpha', 'trace-alpha', 'semantic'
                 ),
                 (
-                    '{e2_oid}', '2026-11-20T15:30:00Z', 102, 'user', '{resource_oid}', NULL,
+                    '{e2_oid}', '2025-03-10T15:30:00Z', 102, 'user', '{resource_oid}', NULL,
                     'mutation', 'success', 'client', '{actor_client_oid}', 'user.delete', 'user', '{target_user_oid}',
                     'Cleanup Inactive', 'req-beta', 'trace-beta', 'semantic'
                 ),
                 (
-                    '{e3_oid}', '2026-11-20T16:30:00Z', 103, 'client', '{actor_client_oid}', NULL,
+                    '{e3_oid}', '2025-03-10T16:30:00Z', 103, 'client', '{actor_client_oid}', NULL,
                     'mutation', 'success', 'system', '{nil}', 'client.update', 'client', '{actor_client_oid}',
                     'bootstrap reconciliation', 'req-gamma', NULL, 'semantic'
                 ),
@@ -131,7 +133,7 @@ async fn postgres_audit_query_supports_lucene_time_zones_null_not_and_frozen_cur
         // 1. Time-zone-aware calendar date filtering
         let shanghai_nov20 = service
             .list_events(AuditEventPageRequest {
-                query: Some("occurredAt:2026-11-20".to_owned()),
+                query: Some("occurredAt:2025-03-10".to_owned()),
                 time_zone: Some("Asia/Shanghai".to_owned()),
                 order: AuditEventOrder::default(),
                 first: Some(20),
@@ -146,7 +148,7 @@ async fn postgres_audit_query_supports_lucene_time_zones_null_not_and_frozen_cur
 
         let utc_nov20 = service
             .list_events(AuditEventPageRequest {
-                query: Some("occurredAt:2026-11-20".to_owned()),
+                query: Some("occurredAt:2025-03-10".to_owned()),
                 time_zone: Some("UTC".to_owned()),
                 order: AuditEventOrder::default(),
                 first: Some(20),
@@ -224,7 +226,7 @@ async fn postgres_audit_query_supports_lucene_time_zones_null_not_and_frozen_cur
         };
         let p1 = service
             .list_events(AuditEventPageRequest {
-                query: Some("occurredAt:[2026-11-19T00:00:00Z TO now]".to_owned()),
+                query: Some("occurredAt:[2025-03-09T00:00:00Z TO now]".to_owned()),
                 time_zone: Some("UTC".to_owned()),
                 order: asc,
                 first: Some(2),
@@ -240,7 +242,7 @@ async fn postgres_audit_query_supports_lucene_time_zones_null_not_and_frozen_cur
 
         let p2 = service
             .list_events(AuditEventPageRequest {
-                query: Some("occurredAt:[2026-11-19T00:00:00Z TO now]".to_owned()),
+                query: Some("occurredAt:[2025-03-09T00:00:00Z TO now]".to_owned()),
                 time_zone: Some("UTC".to_owned()),
                 order: asc,
                 first: Some(2),
@@ -257,7 +259,7 @@ async fn postgres_audit_query_supports_lucene_time_zones_null_not_and_frozen_cur
 
         let back_to_p1 = service
             .list_events(AuditEventPageRequest {
-                query: Some("occurredAt:[2026-11-19T00:00:00Z TO now]".to_owned()),
+                query: Some("occurredAt:[2025-03-09T00:00:00Z TO now]".to_owned()),
                 time_zone: Some("UTC".to_owned()),
                 order: asc,
                 first: None,

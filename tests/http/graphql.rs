@@ -695,24 +695,24 @@ async fn graphql_http_denies_audit_reads_without_management_authority() {
 
 #[tokio::test]
 async fn graphql_http_audit_events_validate_transport_bounds_before_resolver() {
-    let fixture = fixture(FixtureOptions::default()).await;
-    let mut over_limit = graphql_post(
-        &fixture,
-        "query { auditEvents(first: 101) { edges { node { id } } } }",
-    )
-    .await;
-    assert_eq!(over_limit.status_code, Some(StatusCode::OK));
-    let over_body: Value = over_limit.take_json().await.unwrap();
-    assert!(!over_body["errors"].as_array().unwrap().is_empty());
-
-    let mut invalid_raw_id = graphql_post(
-        &fixture,
-        "query { auditEvent(id: \"not-a-global-id\") { id } }",
-    )
-    .await;
-    assert_eq!(invalid_raw_id.status_code, Some(StatusCode::OK));
-    let id_body: Value = invalid_raw_id.take_json().await.unwrap();
-    assert!(!id_body["errors"].as_array().unwrap().is_empty());
+    let long_query = "a".repeat(2049);
+    for operation in [
+        "query { auditEvents(first: 101) { edges { node { id } } } }".to_owned(),
+        "query { auditEvents(last: 0) { edges { node { id } } } }".to_owned(),
+        format!("query {{ auditEvents(query: \"{long_query}\") {{ edges {{ node {{ id }} }} }} }}"),
+    ] {
+        // Each fixture's mock database serves exactly one authenticated
+        // request, and its default token lacks audit scope: a validation
+        // error proves the bound is checked before the guard and resolver.
+        let fixture = fixture(FixtureOptions::default()).await;
+        let mut response = graphql_post(&fixture, &operation).await;
+        assert_eq!(response.status_code, Some(StatusCode::OK));
+        let body: Value = response.take_json().await.unwrap();
+        assert!(body["data"].is_null());
+        let errors = body["errors"].as_array().unwrap();
+        assert_eq!(errors.len(), 1, "{body}");
+        assert_eq!(errors[0]["extensions"]["kind"], "validation", "{body}");
+    }
 }
 
 async fn graphql_post(fixture: &GraphqlFixture, query: &str) -> Response {
