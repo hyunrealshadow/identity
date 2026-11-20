@@ -77,7 +77,7 @@ fn generic_message(i18n: &I18n, locale: &LanguageIdentifier) -> String {
 
 fn static_generic_message(locale: &LanguageIdentifier) -> String {
     if locale.language.as_str() == "zh" {
-        "发生意外错误，请重试。".to_owned()
+        "发生意外错误，请重试".to_owned()
     } else {
         "An unexpected error occurred. Please try again.".to_owned()
     }
