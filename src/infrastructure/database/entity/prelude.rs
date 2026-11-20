@@ -1,5 +1,6 @@
 //! Entity aliases for the current persistence schema.
 
+pub use super::audit::Entity as Audit;
 pub use super::authentication_challenge::Entity as AuthenticationChallenge;
 pub use super::client::Entity as Client;
 pub use super::client_authorization::Entity as ClientAuthorization;
@@ -14,7 +15,6 @@ pub use super::key::Entity as Key;
 pub use super::key_jwk::Entity as KeyJwk;
 pub use super::login::Entity as Login;
 pub use super::scope::Entity as Scope;
-pub use super::security_audit::Entity as SecurityAudit;
 pub use super::session::Entity as Session;
 pub use super::setting::Entity as Setting;
 pub use super::user::Entity as User;

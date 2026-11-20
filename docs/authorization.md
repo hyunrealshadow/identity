@@ -312,8 +312,9 @@ server-side checks remain in place for deployment skew and state changes.
 Security-relevant changes write a semantic audit fact **in the same transaction**
 as the business change. A failed audit insert rolls back the change, so an
 accepted response implies a persisted fact. Facts carry their own stable `oid`,
-the actual actor (an anonymous login keeps its actor unknown rather than
-impersonating the target), the action, the target, and request/trace correlation.
+the actual actor (a failed sign-in is anonymous rather than impersonating the
+target account), the action, the target, the changed attributes, and request
+context. See [Security auditing](security.md#security-auditing).
 
 The repository exposes append and read operations only; restricting direct
 modification of history is a database-role responsibility. A reason is optional

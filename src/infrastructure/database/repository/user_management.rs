@@ -21,6 +21,7 @@ use identity_application::{
         UserOrder as ManagementUserOrder, UserPageDirection, UserSortKey, UserStateTransaction,
     },
 };
+use identity_domain::audit::{AuditAction, AuditRecord};
 use identity_domain::{
     authorization::{ActorPrincipal, ManagementScope, policy_fingerprint},
     user::{UserManagementRecord, UserOid, repository::UserRepositoryError},
@@ -28,7 +29,7 @@ use identity_domain::{
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection,
     DatabaseTransaction, DbBackend, DbErr, EntityTrait, Order, QueryFilter, QueryOrder,
-    QuerySelect, Set, Statement, TransactionTrait, Value as SeaValue,
+    QuerySelect, Set, Statement, TransactionTrait,
 };
 use serde_json::{json, to_value};
 use uuid::Uuid;
@@ -42,10 +43,10 @@ use super::{
     },
     session_security::lock_account_sessions,
     shared::lock_user_credentials,
-    user::{to_domain, update_theme_preference},
+    user::{to_domain, update_theme_preference, user_attribute_changes},
 };
 use crate::database::{
-    client_authorization_boundary,
+    audit, client_authorization_boundary,
     entity::{
         user,
         user::{Column as UserColumn, Entity as UserEntity},
@@ -255,45 +256,11 @@ async fn recheck_authority(
 async fn append_semantic_audit(
     txn: &DatabaseTransaction,
     authority: &UserManagementAuthority,
-    action: &'static str,
-    target_oid: Uuid,
-    reason: &str,
+    record: AuditRecord,
 ) -> Result<(), UserManagementRepositoryError> {
-    let (actor_type, actor_oid) = match &authority.actor.principal {
-        ActorPrincipal::User { user_oid, .. } => ("user", Uuid::from(*user_oid)),
-        ActorPrincipal::Client { client_oid } => ("client", (*client_oid)),
-    };
-    let trace_id = authority
-        .actor
-        .trace_id
-        .as_ref()
-        .map(|trace| trace.as_str().to_owned());
-    txn.execute_raw(Statement::from_sql_and_values(
-        DbBackend::Postgres,
-        r#"
-INSERT INTO security_audit (
-    resource_type, resource_oid, subject_oid, operation, status,
-    actor_type, actor_oid, action, target_type, target_oid,
-    reason, request_id, trace_id, event_kind
-) VALUES (
-    'user', $1, CASE WHEN $2 = 'user' THEN $3::uuid ELSE NULL END, 'mutation', 'success',
-    $2, $3, $4, 'user', $1,
-    $5, $6, $7, 'semantic'
-)
-"#,
-        [
-            target_oid.into(),
-            actor_type.to_owned().into(),
-            actor_oid.into(),
-            action.to_owned().into(),
-            reason.to_owned().into(),
-            authority.actor.request_id.as_str().to_owned().into(),
-            SeaValue::String(trace_id),
-        ],
-    ))
-    .await
-    .map_err(|error| UserManagementRepositoryError::AuditFailed(Box::new(error)))?;
-    Ok(())
+    audit::record(txn, record.by(&authority.actor))
+        .await
+        .map_err(|error| UserManagementRepositoryError::AuditFailed(Box::new(error)))
 }
 
 fn record_from_model(
@@ -749,9 +716,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         append_semantic_audit(
             &txn,
             &command.authority,
-            "user.create",
-            user_oid,
-            &command.reason,
+            AuditRecord::success(AuditAction::UserCreate, user_oid),
         )
         .await?;
         let user = to_domain(model).map_err(map_domain_user)?;
@@ -908,9 +873,8 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         append_semantic_audit(
             &txn,
             &command.authority,
-            "user.update",
-            Uuid::from(command.user_oid),
-            &command.reason,
+            AuditRecord::success(AuditAction::UserUpdate, Uuid::from(command.user_oid))
+                .with_changes(|changes| user_attribute_changes(changes, &model, &updated)),
         )
         .await?;
         let user = to_domain(updated).map_err(map_domain_user)?;
@@ -956,11 +920,8 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
             });
         }
 
-        let action = if enabled {
-            "user.enable"
-        } else {
-            "user.disable"
-        };
+        let action =
+            AuditAction::toggle(enabled, AuditAction::UserEnable, AuditAction::UserDisable);
         if model.enabled == enabled {
             // An explicit request that changes nothing still passed authority
             // re-verification and the expected-version CAS above. Preserve the
@@ -969,9 +930,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
             append_semantic_audit(
                 &txn,
                 &command.authority,
-                action,
-                Uuid::from(command.user_oid),
-                &command.reason,
+                AuditRecord::success(action, Uuid::from(command.user_oid)),
             )
             .await?;
             let user = to_domain(model).map_err(map_domain_user)?;
@@ -1005,9 +964,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         append_semantic_audit(
             &txn,
             &command.authority,
-            action,
-            Uuid::from(command.user_oid),
-            &command.reason,
+            AuditRecord::success(action, Uuid::from(command.user_oid)),
         )
         .await?;
         let user = to_domain(updated).map_err(map_domain_user)?;
@@ -1060,9 +1017,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
             append_semantic_audit(
                 &txn,
                 &command.authority,
-                "user.unlock",
-                Uuid::from(command.user_oid),
-                &command.reason,
+                AuditRecord::success(AuditAction::UserUnlock, Uuid::from(command.user_oid)),
             )
             .await?;
             let user = to_domain(model).map_err(map_domain_user)?;
@@ -1084,9 +1039,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         append_semantic_audit(
             &txn,
             &command.authority,
-            "user.unlock",
-            Uuid::from(command.user_oid),
-            &command.reason,
+            AuditRecord::success(AuditAction::UserUnlock, Uuid::from(command.user_oid)),
         )
         .await?;
         let user = to_domain(updated).map_err(map_domain_user)?;

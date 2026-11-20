@@ -5,6 +5,7 @@
 //! passes the immutable request authority to the repository, which re-checks
 //! live authority inside the mutation transaction.
 
+use identity_domain::audit::AuditAction;
 use std::{sync::Arc, time::Duration as TimeDuration};
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -448,7 +449,7 @@ impl ClientManagementService {
                     data: key_credential(parsed.material),
                     hint: Some(parsed.hint),
                     expires_at: Some(expires_at),
-                    action: "client.public_key.create",
+                    action: AuditAction::ClientPublicKeyAdd,
                     reason,
                     authority: authority.clone(),
                 })
@@ -491,7 +492,7 @@ impl ClientManagementService {
                     },
                     hint: None,
                     expires_at: None,
-                    action: "client.jwks_uri.create",
+                    action: AuditAction::ClientJwksUriSet,
                     reason,
                     authority: authority.clone(),
                 })

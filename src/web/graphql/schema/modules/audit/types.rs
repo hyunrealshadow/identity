@@ -1,22 +1,29 @@
-use async_graphql::{Context, Enum, ID, Object, Result as GraphqlResult};
+use async_graphql::{Context, Enum, ID, Json, Object, Result as GraphqlResult, SimpleObject};
 use chrono::{DateTime, Utc};
 use identity_application::{authorization::ManagementTarget, client::ClientRecord};
 use identity_domain::{
     audit::{
-        AuditEvent, AuditEventOid, AuditEventOrder as DomainAuditEventOrder,
-        AuditEventOrderDirection, AuditEventOrderField,
+        self as domain, AuditChangeValue, AuditEvent, AuditEventOid,
+        AuditEventOrder as DomainAuditEventOrder, AuditEventOrderDirection, AuditEventOrderField,
     },
     authorization::ManagementScope,
     global_id::{GlobalId, kind},
     user::{User, UserOid},
 };
+use serde_json::Value;
 use uuid::Uuid;
 
-use super::super::{
-    account::UserNode,
-    client::{self, types::ClientNode},
-    resource::support::decode_oid,
-    user,
+use super::{
+    super::{
+        account::UserNode,
+        client::{self, types::ClientNode},
+        resource::support::decode_oid,
+        user,
+    },
+    enums::{
+        AuditAction, AuditActorKind, AuditAuthMethod, AuditCategory, AuditFailureReason,
+        AuditField, AuditOutcome, AuditTargetKind,
+    },
 };
 use crate::graphql::schema::{
     access::access, authorization::request_context, error::app_error,
@@ -60,41 +67,49 @@ impl From<AuditEventOrder> for DomainAuditEventOrder {
     }
 }
 
+/// The Global ID of an audited object, when its kind has one.
+fn global_id(kind: domain::AuditTargetKind, oid: Uuid) -> Option<ID> {
+    use domain::AuditTargetKind as Kind;
+    let encoded = match kind {
+        Kind::User => GlobalId::<kind::User>::new(oid).encode(),
+        Kind::Client => GlobalId::<kind::Client>::new(oid).encode(),
+        Kind::Role => GlobalId::<kind::Role>::new(oid).encode(),
+        Kind::Group => GlobalId::<kind::Group>::new(oid).encode(),
+        Kind::Scope => GlobalId::<kind::Scope>::new(oid).encode(),
+        Kind::Resource => GlobalId::<kind::Resource>::new(oid).encode(),
+        Kind::Key => GlobalId::<kind::Key>::new(oid).encode(),
+        Kind::Session => GlobalId::<kind::Session>::new(oid).encode(),
+        Kind::Passkey => GlobalId::<kind::Passkey>::new(oid).encode(),
+        Kind::Setting | Kind::Authorization | Kind::DeviceAuthorization => return None,
+    };
+    Some(ID(encoded))
+}
+
+/// Users and clients already loaded for a page of events.
+#[derive(Default, Clone)]
+pub(crate) struct PreloadedActor {
+    pub(crate) user: Option<User>,
+    pub(crate) user_loaded: bool,
+    pub(crate) client: Option<ClientRecord>,
+    pub(crate) client_loaded: bool,
+}
+
 pub(crate) struct AuditEventNode {
     id: ID,
     event: AuditEvent,
-    preloaded_user: Option<User>,
-    preloaded_user_loaded: bool,
-    preloaded_client: Option<ClientRecord>,
-    preloaded_client_loaded: bool,
+    preloaded: PreloadedActor,
 }
 
 impl AuditEventNode {
     pub(crate) fn new(event: AuditEvent) -> Self {
-        Self {
-            id: audit_event_global_id(event.oid),
-            event,
-            preloaded_user: None,
-            preloaded_user_loaded: false,
-            preloaded_client: None,
-            preloaded_client_loaded: false,
-        }
+        Self::with_preloaded_actor(event, PreloadedActor::default())
     }
 
-    pub(crate) fn with_preloaded_actors(
-        event: AuditEvent,
-        preloaded_user: Option<User>,
-        preloaded_user_loaded: bool,
-        preloaded_client: Option<ClientRecord>,
-        preloaded_client_loaded: bool,
-    ) -> Self {
+    pub(crate) fn with_preloaded_actor(event: AuditEvent, preloaded: PreloadedActor) -> Self {
         Self {
             id: audit_event_global_id(event.oid),
             event,
-            preloaded_user,
-            preloaded_user_loaded,
-            preloaded_client,
-            preloaded_client_loaded,
+            preloaded,
         }
     }
 }
@@ -112,107 +127,69 @@ impl AuditEventNode {
     }
 
     #[graphql(complexity = 0)]
-    async fn transaction_id(&self) -> String {
-        self.event.transaction_id.to_string()
+    async fn category(&self) -> AuditCategory {
+        self.event.category.into()
     }
 
     #[graphql(complexity = 0)]
-    async fn action(&self) -> Option<&str> {
-        self.event.action.as_deref()
+    async fn action(&self) -> AuditAction {
+        self.event.action.into()
     }
 
     #[graphql(complexity = 0)]
-    async fn operation(&self) -> &str {
-        &self.event.operation
+    async fn outcome(&self) -> AuditOutcome {
+        self.event.outcome.into()
     }
 
     #[graphql(complexity = 0)]
-    async fn event_kind(&self) -> Option<&str> {
-        self.event.event_kind.as_deref()
+    async fn failure_reason(&self) -> Option<AuditFailureReason> {
+        self.event.failure_reason.map(Into::into)
     }
 
     #[graphql(complexity = 0)]
-    async fn actor_type(&self) -> Option<&str> {
-        self.event.actor_type.as_deref()
-    }
-
-    #[graphql(complexity = 0)]
-    async fn actor_oid(&self) -> Option<String> {
-        self.event.actor_oid.map(|oid| oid.to_string())
-    }
-
-    #[graphql(complexity = 0)]
-    async fn actor_global_id(&self) -> Option<ID> {
-        match (self.event.actor_type.as_deref(), self.event.actor_oid) {
-            (Some(entity_type), Some(oid)) => global_id_for_entity_type(entity_type, oid),
-            _ => None,
+    async fn actor(&self) -> AuditActorNode<'_> {
+        AuditActorNode {
+            actor: &self.event.actor,
+            preloaded: &self.preloaded,
         }
     }
 
     #[graphql(complexity = 0)]
-    async fn target_type(&self) -> Option<&str> {
-        self.event.target_type.as_deref()
+    async fn target(&self) -> Option<AuditTargetNode> {
+        self.event.target.as_ref().map(|target| AuditTargetNode {
+            kind: target.kind.into(),
+            id: global_id(target.kind, target.oid),
+            oid: target.oid.to_string(),
+            label: target.label.clone(),
+        })
     }
 
+    /// The OAuth client application through which the action happened.
     #[graphql(complexity = 0)]
-    async fn target_oid(&self) -> Option<String> {
-        self.event.target_oid.map(|oid| oid.to_string())
-    }
-
-    #[graphql(complexity = 0)]
-    async fn target_global_id(&self) -> Option<ID> {
-        match (self.event.target_type.as_deref(), self.event.target_oid) {
-            (Some(entity_type), Some(oid)) => global_id_for_entity_type(entity_type, oid),
-            _ => None,
-        }
-    }
-
-    #[graphql(complexity = 0)]
-    async fn resource_type(&self) -> &str {
-        &self.event.resource_type
-    }
-
-    #[graphql(complexity = 0)]
-    async fn resource_oid(&self) -> String {
-        self.event.resource_oid.to_string()
-    }
-
-    #[graphql(complexity = 0)]
-    async fn resource_global_id(&self) -> Option<ID> {
-        global_id_for_entity_type(&self.event.resource_type, self.event.resource_oid)
-    }
-
-    #[graphql(complexity = 0)]
-    async fn subject_oid(&self) -> Option<String> {
-        self.event.subject_oid.map(|oid| oid.to_string())
-    }
-
-    #[graphql(complexity = 0)]
-    async fn subject_global_id(&self) -> Option<ID> {
+    async fn client_id(&self) -> Option<ID> {
         self.event
-            .subject_oid
-            .filter(|oid| !oid.is_nil())
-            .map(|oid| ID(GlobalId::<kind::User>::new(oid).encode()))
+            .client_oid
+            .and_then(|oid| global_id(domain::AuditTargetKind::Client, oid))
     }
 
     #[graphql(complexity = 0)]
-    async fn status(&self) -> Option<&str> {
-        self.event.status.as_deref()
+    async fn auth_methods(&self) -> Vec<AuditAuthMethod> {
+        self.event
+            .auth_methods
+            .iter()
+            .copied()
+            .map(Into::into)
+            .collect()
     }
 
     #[graphql(complexity = 0)]
-    async fn previous_status(&self) -> Option<&str> {
-        self.event.previous_status.as_deref()
+    async fn ip_address(&self) -> Option<&str> {
+        self.event.ip_address.as_deref()
     }
 
     #[graphql(complexity = 0)]
-    async fn credential_type(&self) -> Option<&str> {
-        self.event.credential_type.as_deref()
-    }
-
-    #[graphql(complexity = 0)]
-    async fn reason(&self) -> Option<&str> {
-        self.event.reason.as_deref()
+    async fn user_agent(&self) -> Option<&str> {
+        self.event.user_agent.as_deref()
     }
 
     #[graphql(complexity = 0)]
@@ -225,22 +202,68 @@ impl AuditEventNode {
         self.event.trace_id.as_deref()
     }
 
+    #[graphql(complexity = 0)]
+    async fn changes(&self) -> Vec<AuditChangeNode> {
+        self.event
+            .changes
+            .iter()
+            .map(AuditChangeNode::from)
+            .collect()
+    }
+}
+
+/// Who performed an audited action.
+pub(crate) struct AuditActorNode<'a> {
+    actor: &'a domain::AuditActor,
+    preloaded: &'a PreloadedActor,
+}
+
+#[Object(name = "AuditActor")]
+impl AuditActorNode<'_> {
+    #[graphql(complexity = 0)]
+    async fn kind(&self) -> AuditActorKind {
+        self.actor.kind.into()
+    }
+
+    /// Global ID of the user or client actor.
+    #[graphql(complexity = 0)]
+    async fn id(&self) -> Option<ID> {
+        let oid = self.actor.oid?;
+        match self.actor.kind {
+            domain::AuditActorKind::User => global_id(domain::AuditTargetKind::User, oid),
+            domain::AuditActorKind::Client => global_id(domain::AuditTargetKind::Client, oid),
+            domain::AuditActorKind::System | domain::AuditActorKind::Anonymous => None,
+        }
+    }
+
+    #[graphql(complexity = 0)]
+    async fn oid(&self) -> Option<String> {
+        self.actor.oid.map(|oid| oid.to_string())
+    }
+
+    /// Display name when the action happened.
+    #[graphql(complexity = 0)]
+    async fn label(&self) -> Option<&str> {
+        self.actor.label.as_deref()
+    }
+
     #[graphql(
         guard = "ManagementGuard::new(ManagementScope::UsersRead, ManagementTarget::instance())",
         directive = access::apply(ManagementGuard::policy(ManagementScope::UsersRead))
     )]
-    async fn actor_user(&self, ctx: &Context<'_>) -> GraphqlResult<Option<UserNode>> {
-        if self.event.actor_type.as_deref() != Some("user") {
-            return Ok(None);
-        }
-        let Some(actor_oid) = self.event.actor_oid.filter(|oid| !oid.is_nil()) else {
+    async fn user(&self, ctx: &Context<'_>) -> GraphqlResult<Option<UserNode>> {
+        let Some(oid) = self
+            .actor
+            .oid
+            .filter(|_| self.actor.kind == domain::AuditActorKind::User)
+        else {
             return Ok(None);
         };
-        if self.preloaded_user_loaded {
-            return Ok(self.preloaded_user.clone().map(UserNode::managed));
+        if self.preloaded.user_loaded {
+            return Ok(self.preloaded.user.clone().map(UserNode::managed));
         }
         let request = request_context(ctx)?;
-        let user = user::integration::find_user(request, UserOid(actor_oid))
+        let user = user::integration::find_user(request, UserOid(oid))
             .await
             .map_err(|error| app_error(ctx, error))?;
         Ok(user.map(UserNode::managed))
@@ -250,41 +273,88 @@ impl AuditEventNode {
         guard = "ManagementGuard::new(ManagementScope::ClientsRead, ManagementTarget::instance())",
         directive = access::apply(ManagementGuard::policy(ManagementScope::ClientsRead))
     )]
-    async fn actor_client(&self, ctx: &Context<'_>) -> GraphqlResult<Option<ClientNode>> {
-        if self.event.actor_type.as_deref() != Some("client") {
-            return Ok(None);
-        }
-        let Some(actor_oid) = self.event.actor_oid.filter(|oid| !oid.is_nil()) else {
+    async fn client(&self, ctx: &Context<'_>) -> GraphqlResult<Option<ClientNode>> {
+        let Some(oid) = self
+            .actor
+            .oid
+            .filter(|_| self.actor.kind == domain::AuditActorKind::Client)
+        else {
             return Ok(None);
         };
-        if self.preloaded_client_loaded {
-            return Ok(self.preloaded_client.clone().map(ClientNode::new));
+        if self.preloaded.client_loaded {
+            return Ok(self.preloaded.client.clone().map(ClientNode::new));
         }
         let request = request_context(ctx)?;
-        let client = client::integration::find_client(request, actor_oid)
+        let client = client::integration::find_client(request, oid)
             .await
             .map_err(|error| app_error(ctx, error))?;
         Ok(client.map(ClientNode::new))
     }
 }
 
-fn global_id_for_entity_type(entity_type: &str, oid: Uuid) -> Option<ID> {
-    if oid.is_nil() {
-        return None;
+/// The object an audited action applied to.
+#[derive(SimpleObject)]
+#[graphql(name = "AuditTarget")]
+pub(crate) struct AuditTargetNode {
+    kind: AuditTargetKind,
+    /// Global ID, for kinds that have one.
+    id: Option<ID>,
+    oid: String,
+    /// Display name when the action happened.
+    label: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]
+#[graphql(name = "AuditChangeKind")]
+pub(crate) enum AuditChangeKind {
+    /// `oldValue` and `newValue` hold the values.
+    Value,
+    /// `added` and `removed` hold collection members.
+    Set,
+    /// A secret changed; its values are never recorded.
+    Redacted,
+}
+
+/// One changed attribute of an audited object.
+#[derive(SimpleObject)]
+#[graphql(name = "AuditChange")]
+pub(crate) struct AuditChangeNode {
+    field: AuditField,
+    kind: AuditChangeKind,
+    old_value: Option<Json<Value>>,
+    new_value: Option<Json<Value>>,
+    added: Vec<Json<Value>>,
+    removed: Vec<Json<Value>>,
+}
+
+impl From<&domain::AuditChange> for AuditChangeNode {
+    fn from(change: &domain::AuditChange) -> Self {
+        let field = change.field.into();
+        match &change.value {
+            AuditChangeValue::Value { old, new } => Self {
+                field,
+                kind: AuditChangeKind::Value,
+                old_value: old.clone().map(Json),
+                new_value: new.clone().map(Json),
+                added: Vec::new(),
+                removed: Vec::new(),
+            },
+            AuditChangeValue::Set { added, removed } => Self {
+                field,
+                kind: AuditChangeKind::Set,
+                old_value: None,
+                new_value: None,
+                added: added.iter().cloned().map(Json).collect(),
+                removed: removed.iter().cloned().map(Json).collect(),
+            },
+            AuditChangeValue::Redacted => Self {
+                field,
+                kind: AuditChangeKind::Redacted,
+                old_value: None,
+                new_value: None,
+                added: Vec::new(),
+                removed: Vec::new(),
+            },
+        }
     }
-    let encoded = match entity_type {
-        "user" => GlobalId::<kind::User>::new(oid).encode(),
-        "client" => GlobalId::<kind::Client>::new(oid).encode(),
-        "resource" => GlobalId::<kind::Resource>::new(oid).encode(),
-        "scope" => GlobalId::<kind::Scope>::new(oid).encode(),
-        "role" => GlobalId::<kind::Role>::new(oid).encode(),
-        "user_group" => GlobalId::<kind::Group>::new(oid).encode(),
-        "session" => GlobalId::<kind::Session>::new(oid).encode(),
-        "key" => GlobalId::<kind::Key>::new(oid).encode(),
-        "passkey" => GlobalId::<kind::Passkey>::new(oid).encode(),
-        "client_credential" => GlobalId::<kind::ClientCredential>::new(oid).encode(),
-        "audit_event" => GlobalId::<kind::AuditEvent>::new(oid).encode(),
-        _ => return None,
-    };
-    Some(ID(encoded))
 }

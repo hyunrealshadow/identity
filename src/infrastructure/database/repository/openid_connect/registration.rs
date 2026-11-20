@@ -39,6 +39,7 @@ use crate::database::{
 };
 use async_trait::async_trait;
 use chrono::{Duration, Utc};
+use identity_domain::audit::{AuditAction, AuditActor, AuditRecord};
 use identity_domain::{
     authorization::catalog,
     client::model::ClientOid,
@@ -536,17 +537,13 @@ impl OpenIdConnectClientRepositoryImpl {
                             .await?;
                         }
                     }
-                    audit::record(
-                        txn,
-                        if update_auth.is_some() {
-                            "client.registration.update"
-                        } else {
-                            "client.registration.create"
-                        },
-                        "client",
-                        client_oid,
-                    )
-                    .await?;
+                    let record = if update_auth.is_some() {
+                        AuditRecord::success(AuditAction::ClientRegistrationUpdate, client_oid)
+                            .default_actor(AuditActor::client(client_oid))
+                    } else {
+                        AuditRecord::success(AuditAction::ClientRegister, client_oid)
+                    };
+                    audit::record(txn, record.client(client_oid)).await?;
                     Ok(())
                 })
             })
@@ -675,9 +672,15 @@ impl OpenIdConnectClientRegistrationRepository for OpenIdConnectClientRepository
             return Err(OpenIdConnectClientRepositoryError::BuiltInClient);
         }
 
-        audit::record(&txn, "client.registration.delete", "client", client_oid)
-            .await
-            .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?;
+        audit::record(
+            &txn,
+            AuditRecord::success(AuditAction::ClientRegistrationDelete, client_oid)
+                .label(client_model.name.clone())
+                .client(client_oid)
+                .default_actor(AuditActor::client(client_oid)),
+        )
+        .await
+        .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?;
         txn.commit()
             .await
             .map_err(|e| OpenIdConnectClientRepositoryError::QueryFailed(Box::new(e)))?;

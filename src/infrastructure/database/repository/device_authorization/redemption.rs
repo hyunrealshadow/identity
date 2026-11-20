@@ -5,7 +5,7 @@ use super::{
     parse_device_request, query_failed, transition_failed,
 };
 use crate::database::{
-    audit, authority_snapshot,
+    authority_snapshot,
     entity::{
         client_authorization,
         client_authorization::{
@@ -225,14 +225,6 @@ pub(super) async fn consume_device_request_with_tokens(
         )
         .await?;
     }
-    audit::record(
-        &transaction,
-        "device_authorization.consumed",
-        "device_authorization",
-        relation_oid,
-    )
-    .await
-    .map_err(query_failed)?;
     transaction.commit().await.map_err(query_failed)?;
 
     Ok(DeviceConsumeOutcome::Consumed)

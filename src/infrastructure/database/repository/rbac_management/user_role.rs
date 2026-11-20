@@ -1,5 +1,7 @@
 //! User-role binding persistence and effective-permission projection.
 
+use identity_domain::audit::{AuditAction, AuditRecord};
+use identity_domain::audit::{AuditField, AuditRef, AuditTargetKind};
 use std::collections::{BTreeMap, BTreeSet};
 
 use identity_application::rbac::{
@@ -97,7 +99,18 @@ async fn current_user_version(
 struct LockedRole {
     id: i64,
     oid: RoleOid,
+    name: String,
     enabled: bool,
+}
+
+impl LockedRole {
+    fn audit_ref(&self) -> AuditRef {
+        AuditRef::new(
+            AuditTargetKind::Role,
+            Uuid::from(self.oid),
+            self.name.clone(),
+        )
+    }
 }
 
 async fn lock_roles(
@@ -117,7 +130,7 @@ async fn lock_roles(
         .query_all_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,
             format!(
-                "SELECT id, oid, enabled FROM \"role\" WHERE oid IN ({placeholders}) \
+                "SELECT id, oid, name, enabled FROM \"role\" WHERE oid IN ({placeholders}) \
                  ORDER BY id FOR UPDATE"
             ),
             binds.into_values(),
@@ -131,6 +144,7 @@ async fn lock_roles(
     for row in rows {
         roles.push(LockedRole {
             id: row.try_get::<i64>("", "id").map_err(storage)?,
+            name: row.try_get::<String>("", "name").map_err(storage)?,
             oid: RoleOid(row.try_get::<Uuid>("", "oid").map_err(storage)?),
             enabled: row.try_get::<bool>("", "enabled").map_err(storage)?,
         });
@@ -1291,7 +1305,7 @@ impl RbacManagementRepositoryImpl {
             ))
             .await
             .map_err(storage)?;
-            created.push((user_role_oid, role.oid));
+            created.push((user_role_oid, role.audit_ref()));
             user_role_oids.push(user_role_oid);
         }
         let version = if created.is_empty() {
@@ -1304,29 +1318,16 @@ impl RbacManagementRepositoryImpl {
                 .map_err(storage)?
                 .as_uuid()
         };
-        if created.is_empty() {
-            append_semantic_audit(
-                &txn,
-                &command.authority,
-                "rbac.user.roles.assign",
-                "user",
-                Uuid::from(command.user_oid),
-                &command.reason,
-            )
-            .await?;
-        } else {
-            for (user_role_oid, _role_oid) in &created {
-                append_semantic_audit(
-                    &txn,
-                    &command.authority,
-                    "rbac.user.roles.assign",
-                    "user_role",
-                    Uuid::from(*user_role_oid),
-                    &command.reason,
-                )
-                .await?;
-            }
-        }
+        let granted: Vec<AuditRef> = created.iter().map(|(_, role)| role.clone()).collect();
+        append_semantic_audit(
+            &txn,
+            &command.authority,
+            AuditRecord::success(AuditAction::UserRoleGrant, Uuid::from(command.user_oid))
+                .with_changes(|changes| {
+                    changes.delta(AuditField::Roles, &granted, &[]);
+                }),
+        )
+        .await?;
         txn.commit().await.map_err(storage)?;
         Ok(UserRoleMutationResult {
             user_oid: command.user_oid,
@@ -1404,17 +1405,16 @@ impl RbacManagementRepositoryImpl {
                 .map_err(storage)?
                 .as_uuid()
         };
-        for user_role_oid in &user_role_oids {
-            append_semantic_audit(
-                &txn,
-                &command.authority,
-                "rbac.user.roles.revoke",
-                "user_role",
-                Uuid::from(*user_role_oid),
-                &command.reason,
-            )
-            .await?;
-        }
+        let revoked: Vec<AuditRef> = roles.iter().map(LockedRole::audit_ref).collect();
+        append_semantic_audit(
+            &txn,
+            &command.authority,
+            AuditRecord::success(AuditAction::UserRoleRevoke, Uuid::from(command.user_oid))
+                .with_changes(|changes| {
+                    changes.delta(AuditField::Roles, &[], &revoked);
+                }),
+        )
+        .await?;
         txn.commit().await.map_err(storage)?;
         Ok(UserRoleMutationResult {
             user_oid: command.user_oid,

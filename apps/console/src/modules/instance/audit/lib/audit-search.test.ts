@@ -41,13 +41,15 @@ describe('audit-search', () => {
 
   it('builds GraphQL variables with user time zone and actor include flags', () => {
     const vars = auditEventsQueryVariables(
-      { q: ' status:success ', size: 50, after: 'cur-2' },
+      'SIGN_IN',
+      { q: ' outcome:failure ', size: 50, after: 'cur-2' },
       'Asia/Shanghai',
       { includeActorUser: true, includeActorClient: false },
     )
 
     expect(vars).toEqual({
-      query: 'status:success',
+      category: 'SIGN_IN',
+      query: 'outcome:failure',
       timeZone: 'Asia/Shanghai',
       orderBy: 'OCCURRED_AT_DESC',
       first: 50,
@@ -56,35 +58,36 @@ describe('audit-search', () => {
       includeActorClient: false,
     })
 
-    const defaultVars = auditEventsQueryVariables({}, 'UTC', {
+    const defaultVars = auditEventsQueryVariables(undefined, {}, 'UTC', {
       includeActorUser: false,
       includeActorClient: false,
     })
     expect(defaultVars.first).toBe(AUDIT_EVENTS_PAGE_SIZE)
     expect(defaultVars.query).toBeUndefined()
+    expect(defaultVars.category).toBeUndefined()
   })
 
   it('distinguishes detail selection and trailing query spaces in search key while ignoring them in query key', () => {
     expect(
-      auditEventsSearchKey({ q: 'action:user.create' }),
+      auditEventsSearchKey({ q: 'action:user_create' }),
     ).not.toBe(
       auditEventsSearchKey({
-        q: 'action:user.create',
+        q: 'action:user_create',
         event: 'QXVkaXRFdmVudDox',
       }),
     )
 
-    expect(auditEventsSearchKey({ q: 'action:user.create ' })).not.toBe(
-      auditEventsSearchKey({ q: 'action:user.create' }),
+    expect(auditEventsSearchKey({ q: 'action:user_create ' })).not.toBe(
+      auditEventsSearchKey({ q: 'action:user_create' }),
     )
 
     expect(
-      auditEventsQueryKey({ q: 'action:user.create' } as Parameters<
+      auditEventsQueryKey({ q: 'action:user_create' } as Parameters<
         typeof auditEventsQueryKey
       >[0]),
     ).toBe(
       auditEventsQueryKey({
-        q: ' action:user.create ',
+        q: ' action:user_create ',
         event: 'QXVkaXRFdmVudDox',
       } as Parameters<typeof auditEventsQueryKey>[0]),
     )

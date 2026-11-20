@@ -9,18 +9,24 @@ use identity_application::{
 };
 use identity_domain::{
     audit::{
-        AuditEventOid, AuditEventOrder, AuditEventOrderDirection, AuditEventOrderField,
-        AuditQueryRepository,
+        AuditAction, AuditActor, AuditActorKind, AuditCategory, AuditChangeValue, AuditEventOid,
+        AuditEventOrder, AuditEventOrderDirection, AuditEventOrderField, AuditField, AuditOutcome,
+        AuditQueryRepository, AuditQueryRepositoryError, AuditRecord,
     },
     data_protection::DataProtectionError,
     global_id::{encode, kind},
 };
-use identity_infrastructure::database::repository::{
-    audit_query::AuditQueryRepositoryImpl, client_management::ClientManagementRepositoryImpl,
+use identity_infrastructure::database::{
+    audit::{self, AuditRequestContext},
+    repository::{
+        audit_query::AuditQueryRepositoryImpl, client_management::ClientManagementRepositoryImpl,
+    },
 };
+use sea_orm::TransactionTrait;
+use serde_json::json;
 use uuid::Uuid;
 
-use super::{isolated, sql};
+use super::{isolated, row, sql};
 
 struct PassthroughTestProtector;
 
@@ -62,15 +68,43 @@ impl DataProtector for PassthroughTestProtector {
     }
 }
 
+fn page(query: &str) -> AuditEventPageRequest {
+    AuditEventPageRequest {
+        category: None,
+        query: Some(query.to_owned()),
+        time_zone: None,
+        order: AuditEventOrder::default(),
+        first: Some(20),
+        after: None,
+        last: None,
+        before: None,
+    }
+}
+
+fn count(query: &str) -> AuditEventCountRequest {
+    AuditEventCountRequest {
+        category: None,
+        query: Some(query.to_owned()),
+        time_zone: None,
+        snapshot_at: None,
+    }
+}
+
+fn oids(result: &identity_application::audit::AuditEventPageResult) -> Vec<Uuid> {
+    result
+        .items
+        .iter()
+        .map(|item| item.event.oid.as_uuid())
+        .collect()
+}
+
 #[tokio::test]
 #[ignore = "requires explicitly configured PostgreSQL test database"]
-async fn postgres_audit_query_supports_lucene_time_zones_null_not_and_frozen_cursors() {
+async fn postgres_audit_query_supports_lucene_time_zones_enums_and_frozen_cursors() {
     isolated(|db| async move {
         let actor_user_oid = Uuid::new_v4();
         let actor_client_oid = Uuid::new_v4();
         let target_user_oid = Uuid::new_v4();
-        let resource_oid = Uuid::new_v4();
-        let subject_oid = Uuid::new_v4();
 
         let e1_oid = Uuid::new_v4();
         let e2_oid = Uuid::new_v4();
@@ -83,7 +117,7 @@ async fn postgres_audit_query_supports_lucene_time_zones_null_not_and_frozen_cur
         // - e1: 2025-03-09T16:30:00Z = 2025-03-10 00:30:00+08:00 (Mar 10 in Shanghai, Mar 9 in UTC)
         // - e2: 2025-03-10T15:30:00Z = 2025-03-10 23:30:00+08:00 (Mar 10 in both)
         // - e3: 2025-03-10T16:30:00Z = 2025-03-11 00:30:00+08:00 (Mar 11 in Shanghai, Mar 10 in UTC)
-        // - e4: now - 10s (nullable action & reason left NULL)
+        // - e4: now - 10s, a failed sign-in with no failure-free nullable columns
         let recent = (Utc::now() - Duration::seconds(10)).to_rfc3339();
 
         sql(
@@ -96,33 +130,33 @@ async fn postgres_audit_query_supports_lucene_time_zones_null_not_and_frozen_cur
                 SELECT id, '["client_credentials"]'::jsonb, '["client_secret_basic"]'::jsonb
                 FROM client WHERE oid = '{actor_client_oid}';
 
-                INSERT INTO security_audit (
-                    oid, occurred_at, transaction_id, resource_type, resource_oid, subject_oid,
-                    operation, status, actor_type, actor_oid, action, target_type, target_oid,
-                    reason, request_id, trace_id, event_kind
+                INSERT INTO audit (
+                    oid, occurred_at, category, action, outcome, failure_reason,
+                    actor_kind, actor_oid, actor_label, target_kind, target_oid, target_label,
+                    client_oid, auth_methods, ip_address, user_agent, request_id, trace_id, changes
                 ) VALUES
                 (
-                    '{e1_oid}', '2025-03-09T16:30:00Z', 101, 'user', '{resource_oid}', '{subject_oid}',
-                    'mutation', 'success', 'user', '{actor_user_oid}', 'user.create', 'user', '{target_user_oid}',
-                    'Provisioned Operator', 'req-alpha', 'trace-alpha', 'semantic'
+                    '{e1_oid}', '2025-03-09T16:30:00Z', 'management', 'user_create', 'success', NULL,
+                    'user', '{actor_user_oid}', 'operator', 'user', '{target_user_oid}', 'alice',
+                    NULL, NULL, NULL, NULL, 'req-alpha', 'trace-alpha',
+                    '[{{"field":"username","type":"value","new":"alice"}}]'
                 ),
                 (
-                    '{e2_oid}', '2025-03-10T15:30:00Z', 102, 'user', '{resource_oid}', NULL,
-                    'mutation', 'success', 'client', '{actor_client_oid}', 'user.delete', 'user', '{target_user_oid}',
-                    'Cleanup Inactive', 'req-beta', 'trace-beta', 'semantic'
+                    '{e2_oid}', '2025-03-10T15:30:00Z', 'management', 'user_update', 'success', NULL,
+                    'client', '{actor_client_oid}', 'Batch Lookup App', 'user', '{target_user_oid}', 'Alice',
+                    NULL, NULL, NULL, NULL, 'req-beta', 'trace-beta', NULL
                 ),
                 (
-                    '{e3_oid}', '2025-03-10T16:30:00Z', 103, 'client', '{actor_client_oid}', NULL,
-                    'mutation', 'success', 'system', '{nil}', 'client.update', 'client', '{actor_client_oid}',
-                    'bootstrap reconciliation', 'req-gamma', NULL, 'semantic'
+                    '{e3_oid}', '2025-03-10T16:30:00Z', 'management', 'client_update', 'success', NULL,
+                    'system', NULL, NULL, 'client', '{actor_client_oid}', 'Batch Lookup App',
+                    NULL, NULL, NULL, NULL, 'req-gamma', NULL, NULL
                 ),
                 (
-                    '{e4_oid}', '{recent}', 104, 'session', '{resource_oid}', NULL,
-                    'authorization', NULL, 'unknown', NULL, NULL, NULL, NULL,
-                    NULL, NULL, NULL, 'semantic'
+                    '{e4_oid}', '{recent}', 'sign_in', 'sign_in', 'failure', 'invalid_credential',
+                    'anonymous', NULL, NULL, 'user', '{target_user_oid}', 'alice',
+                    '{actor_client_oid}', '["password"]', '203.0.113.7', 'Mozilla/5.0 Test', NULL, NULL, NULL
                 );
-                "#,
-                nil = Uuid::nil()
+                "#
             ),
         )
         .await;
@@ -131,177 +165,121 @@ async fn postgres_audit_query_supports_lucene_time_zones_null_not_and_frozen_cur
         let service = AuditQueryService::new(repo.clone(), Arc::new(PassthroughTestProtector));
 
         // 1. Time-zone-aware calendar date filtering
-        let shanghai_nov20 = service
+        let shanghai = service
             .list_events(AuditEventPageRequest {
-                query: Some("occurredAt:2025-03-10".to_owned()),
                 time_zone: Some("Asia/Shanghai".to_owned()),
-                order: AuditEventOrder::default(),
-                first: Some(20),
-                after: None,
-                last: None,
-                before: None,
+                ..page("occurredAt:2025-03-10")
             })
             .await
             .unwrap();
-        let shanghai_oids: Vec<Uuid> = shanghai_nov20.items.iter().map(|i| i.event.oid.as_uuid()).collect();
-        assert_eq!(shanghai_oids, vec![e2_oid, e1_oid]);
-
-        let utc_nov20 = service
+        assert_eq!(oids(&shanghai), vec![e2_oid, e1_oid]);
+        let utc = service
             .list_events(AuditEventPageRequest {
-                query: Some("occurredAt:2025-03-10".to_owned()),
                 time_zone: Some("UTC".to_owned()),
-                order: AuditEventOrder::default(),
-                first: Some(20),
-                after: None,
-                last: None,
-                before: None,
+                ..page("occurredAt:2025-03-10")
             })
             .await
             .unwrap();
-        let utc_oids: Vec<Uuid> = utc_nov20.items.iter().map(|i| i.event.oid.as_uuid()).collect();
-        assert_eq!(utc_oids, vec![e3_oid, e2_oid]);
+        assert_eq!(oids(&utc), vec![e3_oid, e2_oid]);
 
-        // 2. NOT over nullable columns must still keep rows whose action/reason is NULL
-        let not_create = service
-            .list_events(AuditEventPageRequest {
-                query: Some("NOT action:user.create".to_owned()),
-                time_zone: None,
-                order: AuditEventOrder::default(),
-                first: Some(20),
-                after: None,
-                last: None,
-                before: None,
-            })
-            .await
-            .unwrap();
-        let not_create_oids: Vec<Uuid> = not_create.items.iter().map(|i| i.event.oid.as_uuid()).collect();
-        assert!(not_create_oids.contains(&e4_oid), "row with NULL action must match NOT");
-        assert!(not_create_oids.contains(&e3_oid));
-        assert!(not_create_oids.contains(&e2_oid));
-        assert!(!not_create_oids.contains(&e1_oid));
+        // 2. NOT over a nullable column keeps rows where it is NULL
+        let not_failed = oids(&service.list_events(page("NOT failureReason:invalid_credential")).await.unwrap());
+        assert_eq!(not_failed, vec![e3_oid, e2_oid, e1_oid]);
 
-        // 3. Prefix, wildcard, Relay Global ID, and FreeText search
+        // 3. Enumerated values ignore letter case; labels and request facts match case-insensitively
+        assert_eq!(service.count_events(count("outcome:FAILURE")).await.unwrap(), 1);
+        assert_eq!(service.count_events(count("action:USER_*")).await.unwrap(), 2);
+        assert_eq!(service.count_events(count("action:client_?pdate")).await.unwrap(), 1);
+        assert_eq!(service.count_events(count("targetLabel:ALICE")).await.unwrap(), 3);
+        assert_eq!(service.count_events(count("ipAddress:203.0.113.*")).await.unwrap(), 1);
+        assert_eq!(service.count_events(count("authMethod:password")).await.unwrap(), 1);
+        assert_eq!(service.count_events(count(&format!("client:{actor_client_oid}"))).await.unwrap(), 1);
+        assert_eq!(service.count_events(count(&actor_user_oid.to_string())).await.unwrap(), 1);
+        let unknown = service.count_events(count("outcome:denied")).await.unwrap_err();
+        assert_eq!(unknown.code(), AuditErrorCode::QueryUnknownValue as u32);
+
+        // 4. Relay Global IDs and the category argument
         let target_gid = encode::<kind::User>(target_user_oid);
-        let global_id_matches = service
+        let by_target = service
+            .list_events(page(&format!("target:{target_gid} AND action:user_*")))
+            .await
+            .unwrap();
+        assert_eq!(oids(&by_target), vec![e2_oid, e1_oid]);
+        let sign_ins = service
             .list_events(AuditEventPageRequest {
-                query: Some(format!("target:{target_gid} AND action:user.*")),
-                time_zone: None,
-                order: AuditEventOrder::default(),
-                first: Some(20),
-                after: None,
-                last: None,
-                before: None,
+                category: Some(AuditCategory::SignIn),
+                ..page("")
             })
             .await
             .unwrap();
-        assert_eq!(
-            global_id_matches.items.iter().map(|i| i.event.oid.as_uuid()).collect::<Vec<_>>(),
-            vec![e2_oid, e1_oid]
-        );
+        assert_eq!(oids(&sign_ins), vec![e4_oid]);
 
-        let wildcard_matches = service
-            .count_events(AuditEventCountRequest {
-                query: Some("action:client.?pdate".to_owned()),
-                time_zone: None,
-                snapshot_at: None,
-            })
-            .await
-            .unwrap();
-        assert_eq!(wildcard_matches, 1);
-
-        let free_text_uuid = service
-            .count_events(AuditEventCountRequest {
-                query: Some(actor_user_oid.to_string()),
-                time_zone: None,
-                snapshot_at: None,
-            })
-            .await
-            .unwrap();
-        assert_eq!(free_text_uuid, 1);
-
-        // 4. Bidirectional Relay keyset pagination + frozen snapshot_at + filter mismatch rejection
+        // 5. Bidirectional Relay keyset pagination + frozen snapshot_at + filter mismatch rejection
         let asc = AuditEventOrder {
             field: AuditEventOrderField::OccurredAt,
             direction: AuditEventOrderDirection::Asc,
         };
-        let p1 = service
-            .list_events(AuditEventPageRequest {
-                query: Some("occurredAt:[2025-03-09T00:00:00Z TO now]".to_owned()),
-                time_zone: Some("UTC".to_owned()),
-                order: asc,
-                first: Some(2),
-                after: None,
-                last: None,
-                before: None,
-            })
-            .await
-            .unwrap();
-        assert_eq!(p1.items.iter().map(|i| i.event.oid.as_uuid()).collect::<Vec<_>>(), vec![e1_oid, e2_oid]);
+        let range = AuditEventPageRequest {
+            time_zone: Some("UTC".to_owned()),
+            order: asc,
+            first: Some(2),
+            ..page("occurredAt:[2025-03-09T00:00:00Z TO now]")
+        };
+        let p1 = service.list_events(range.clone()).await.unwrap();
+        assert_eq!(oids(&p1), vec![e1_oid, e2_oid]);
         assert!(!p1.has_previous_page);
         assert!(p1.has_next_page);
 
         let p2 = service
             .list_events(AuditEventPageRequest {
-                query: Some("occurredAt:[2025-03-09T00:00:00Z TO now]".to_owned()),
-                time_zone: Some("UTC".to_owned()),
-                order: asc,
-                first: Some(2),
                 after: Some(p1.items[1].cursor.clone()),
-                last: None,
-                before: None,
+                ..range.clone()
             })
             .await
             .unwrap();
-        assert_eq!(p2.items.iter().map(|i| i.event.oid.as_uuid()).collect::<Vec<_>>(), vec![e3_oid, e4_oid]);
+        assert_eq!(oids(&p2), vec![e3_oid, e4_oid]);
         assert!(p2.has_previous_page);
         assert!(!p2.has_next_page);
         assert_eq!(p1.snapshot_at.timestamp_micros(), p2.snapshot_at.timestamp_micros());
 
         let back_to_p1 = service
             .list_events(AuditEventPageRequest {
-                query: Some("occurredAt:[2025-03-09T00:00:00Z TO now]".to_owned()),
-                time_zone: Some("UTC".to_owned()),
-                order: asc,
                 first: None,
-                after: None,
                 last: Some(2),
                 before: Some(p2.items[0].cursor.clone()),
+                ..range.clone()
             })
             .await
             .unwrap();
-        assert_eq!(
-            back_to_p1.items.iter().map(|i| i.event.oid.as_uuid()).collect::<Vec<_>>(),
-            vec![e1_oid, e2_oid]
-        );
+        assert_eq!(oids(&back_to_p1), vec![e1_oid, e2_oid]);
         assert!(!back_to_p1.has_previous_page);
         assert!(back_to_p1.has_next_page);
 
-        let mismatch_err = service
-            .list_events(AuditEventPageRequest {
-                query: Some("action:user.*".to_owned()),
-                time_zone: Some("UTC".to_owned()),
-                order: asc,
-                first: Some(2),
-                after: Some(p1.items[1].cursor.clone()),
-                last: None,
-                before: None,
-            })
-            .await
-            .unwrap_err();
-        assert_eq!(mismatch_err.code(), AuditErrorCode::InvalidCursor as u32);
+        // A cursor cannot move to another tab or query.
+        for other in [
+            AuditEventPageRequest { query: Some("action:user_*".to_owned()), ..range.clone() },
+            AuditEventPageRequest { category: Some(AuditCategory::Management), ..range.clone() },
+        ] {
+            let mismatch = service
+                .list_events(AuditEventPageRequest {
+                    after: Some(p1.items[1].cursor.clone()),
+                    ..other
+                })
+                .await
+                .unwrap_err();
+            assert_eq!(mismatch.code(), AuditErrorCode::InvalidCursor as u32);
+        }
 
-        // 5. find_event, list_distinct_actions, and ClientManagementRepositoryImpl::find_clients
+        // 6. Stored rows decode into typed events
         let found = service.find_event(AuditEventOid::from_uuid(e1_oid)).await.unwrap().unwrap();
-        assert_eq!(found.request_id.as_deref(), Some("req-alpha"));
-        let actions = repo.list_distinct_actions().await.unwrap();
-        assert_eq!(
-            actions,
-            vec![
-                "client.update".to_owned(),
-                "user.create".to_owned(),
-                "user.delete".to_owned()
-            ]
-        );
+        assert_eq!(found.action, AuditAction::UserCreate);
+        assert_eq!(found.actor.kind, AuditActorKind::User);
+        assert_eq!(found.target.as_ref().and_then(|target| target.label.as_deref()), Some("alice"));
+        assert_eq!(found.changes[0].field, AuditField::Username);
+        let failed = service.find_event(AuditEventOid::from_uuid(e4_oid)).await.unwrap().unwrap();
+        assert_eq!(failed.outcome, AuditOutcome::Failure);
+        assert_eq!(failed.client_oid, Some(actor_client_oid));
+        assert_eq!(failed.ip_address.as_deref(), Some("203.0.113.7"));
 
         let client_repo = ClientManagementRepositoryImpl::new(db.clone());
         let clients = client_repo
@@ -311,6 +289,99 @@ async fn postgres_audit_query_supports_lucene_time_zones_null_not_and_frozen_cur
         assert_eq!(clients.len(), 1);
         assert_eq!(clients[0].oid, actor_client_oid);
         assert_eq!(clients[0].name, "Batch Lookup App");
+    })
+    .await;
+}
+
+#[tokio::test]
+#[ignore = "requires explicitly configured PostgreSQL test database"]
+async fn postgres_audit_writer_snapshots_labels_and_request_context_inside_the_transaction() {
+    isolated(|db| async move {
+        let user_oid = Uuid::new_v4();
+        let role_oid = Uuid::new_v4();
+        sql(
+            &db,
+            &format!(
+                r#"
+                INSERT INTO "user" (oid,name,name_normalized,email,email_normalized)
+                VALUES ('{user_oid}','operator','operator','operator@example.test','operator@example.test');
+                INSERT INTO role (oid,name,names) VALUES ('{role_oid}','Auditors','{{}}');
+                "#
+            ),
+        )
+        .await;
+
+        let request = AuditRequestContext {
+            ip_address: Some("2001:db8::1".parse().unwrap()),
+            user_agent: Some("Mozilla/5.0 Test".to_owned()),
+        };
+        audit::with_request(request, async {
+            let txn = db.begin().await.unwrap();
+            audit::record(
+                &txn,
+                AuditRecord::success(AuditAction::RoleUpdate, role_oid)
+                    .actor(AuditActor::user(user_oid))
+                    .with_changes(|changes| {
+                        changes.diff(AuditField::Name, "Readers", "Auditors");
+                    }),
+            )
+            .await
+            .unwrap();
+            txn.commit().await.unwrap();
+
+            // A rolled-back change leaves no audit record behind.
+            let txn = db.begin().await.unwrap();
+            audit::record(&txn, AuditRecord::success(AuditAction::RoleDisable, role_oid))
+                .await
+                .unwrap();
+            txn.rollback().await.unwrap();
+        })
+        .await;
+
+        let stored = row(
+            &db,
+            &format!("SELECT count(*)::bigint AS n FROM audit WHERE target_oid = '{role_oid}'"),
+        )
+        .await;
+        assert_eq!(stored.try_get::<i64>("", "n").unwrap(), 1);
+
+        let repo = AuditQueryRepositoryImpl::new(db.clone());
+        let service = AuditQueryService::new(Arc::new(repo), Arc::new(PassthroughTestProtector));
+        let result = service.list_events(page(&format!("target:{role_oid}"))).await.unwrap();
+        let event = &result.items[0].event;
+        assert_eq!(event.category, AuditCategory::Management);
+        assert_eq!(event.actor.label.as_deref(), Some("operator"));
+        assert_eq!(event.target.as_ref().and_then(|target| target.label.as_deref()), Some("Auditors"));
+        assert_eq!(event.ip_address.as_deref(), Some("2001:db8::1"));
+        assert_eq!(event.user_agent.as_deref(), Some("Mozilla/5.0 Test"));
+        assert!(matches!(
+            &event.changes[0].value,
+            AuditChangeValue::Value { old: Some(old), new: Some(new) }
+                if *old == json!("Readers") && *new == json!("Auditors")
+        ));
+    })
+    .await;
+}
+
+#[tokio::test]
+#[ignore = "requires explicitly configured PostgreSQL test database"]
+async fn postgres_audit_query_rejects_rows_with_unknown_enum_values() {
+    isolated(|db| async move {
+        let oid = Uuid::new_v4();
+        sql(
+            &db,
+            &format!(
+                "INSERT INTO audit (oid, category, action, outcome, actor_kind) \
+                 VALUES ('{oid}', 'management', 'retired_action', 'success', 'system')"
+            ),
+        )
+        .await;
+        let repo = AuditQueryRepositoryImpl::new(db.clone());
+        let error = repo
+            .find_event(AuditEventOid::from_uuid(oid))
+            .await
+            .unwrap_err();
+        assert!(matches!(error, AuditQueryRepositoryError::CorruptRecord));
     })
     .await;
 }

@@ -4,6 +4,11 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+use super::event::{
+    AuditAction, AuditActor, AuditAuthMethod, AuditCategory, AuditChange, AuditFailureReason,
+    AuditOutcome, AuditTargetKind,
+};
+
 /// Stable UUID object identifier (`oid`) of a persisted security audit record.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 #[serde(transparent)]
@@ -39,29 +44,33 @@ impl From<AuditEventOid> for Uuid {
     }
 }
 
-/// Immutable semantic security audit record persisted in `security_audit`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+/// An immutable audit record as persisted in `audit`.
+#[derive(Debug, Clone, PartialEq)]
 pub struct AuditEvent {
     pub id: i64,
     pub oid: AuditEventOid,
     pub occurred_at: DateTime<Utc>,
-    pub transaction_id: i64,
-    pub resource_type: String,
-    pub resource_oid: Uuid,
-    pub subject_oid: Option<Uuid>,
-    pub operation: String,
-    pub credential_type: Option<String>,
-    pub previous_status: Option<String>,
-    pub status: Option<String>,
-    pub actor_type: Option<String>,
-    pub actor_oid: Option<Uuid>,
-    pub action: Option<String>,
-    pub target_type: Option<String>,
-    pub target_oid: Option<Uuid>,
-    pub reason: Option<String>,
+    pub category: AuditCategory,
+    pub action: AuditAction,
+    pub outcome: AuditOutcome,
+    pub failure_reason: Option<AuditFailureReason>,
+    pub actor: AuditActor,
+    pub target: Option<AuditTarget>,
+    pub client_oid: Option<Uuid>,
+    pub auth_methods: Vec<AuditAuthMethod>,
+    pub ip_address: Option<String>,
+    pub user_agent: Option<String>,
     pub request_id: Option<String>,
     pub trace_id: Option<String>,
-    pub event_kind: Option<String>,
+    pub changes: Vec<AuditChange>,
+}
+
+/// The object an audited action applied to, with its display snapshot.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AuditTarget {
+    pub kind: AuditTargetKind,
+    pub oid: Uuid,
+    pub label: Option<String>,
 }
 
 /// Stable keyset tie-breaker for security audit event pagination.

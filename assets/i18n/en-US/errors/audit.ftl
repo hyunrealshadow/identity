@@ -12,3 +12,4 @@ E30010 = Comparison operators are not supported for audit field { $field }.
 E30011 = Range queries are not supported for audit field { $field }.
 E30012 = Regular expression filters are not supported in audit queries.
 E30013 = Fuzzy or term boost modifiers are not supported in audit queries.
+E30014 = Unknown value for audit field { $field }: { $value }.

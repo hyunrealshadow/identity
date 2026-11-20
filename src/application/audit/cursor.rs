@@ -1,6 +1,9 @@
 use chrono::{DateTime, Utc};
 use identity_domain::{
-    audit::{AuditEventOrder, AuditEventOrderDirection, AuditEventOrderField, AuditEventSortKey},
+    audit::{
+        AuditCategory, AuditEventOrder, AuditEventOrderDirection, AuditEventOrderField,
+        AuditEventSortKey,
+    },
     time_zone::TimeZone,
 };
 use serde::{Deserialize, Serialize};
@@ -33,11 +36,14 @@ pub struct DecodedAuditCursor {
 
 #[must_use]
 pub fn audit_filter_hash(
+    category: Option<AuditCategory>,
     normalized_query: &str,
     time_zone: TimeZone,
     order: AuditEventOrder,
 ) -> String {
     let mut hasher = Sha256::new();
+    hasher.update(category.map_or("", <&'static str>::from).as_bytes());
+    hasher.update([0]);
     hasher.update(normalized_query.as_bytes());
     hasher.update([0]);
     hasher.update(time_zone.name().as_bytes());

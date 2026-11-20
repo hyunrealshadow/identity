@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
+use identity_domain::audit::{AuditAction, AuditActor, AuditRecord};
 use identity_domain::{
     auth::{
         AuthenticationContextClass, SESSION_EXPIRY, SessionOid, SessionStatus,
@@ -12,6 +13,7 @@ use identity_domain::{
     },
     client_authorization::ClientAuthorizationType,
 };
+use sea_orm::TransactionTrait;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, EntityTrait, QueryFilter,
     QueryOrder, QuerySelect, SelectTwo, Set,
@@ -360,14 +362,13 @@ impl SessionRepository for SessionRepositoryImpl {
             amr: Set(json!(input.amr)),
             ..Default::default()
         };
-        let transaction = audit::begin(&self.db, "session.created")
+        let transaction = self
+            .db
+            .begin()
             .await
             .map_err(|e| SessionRepositoryError::CreateFailed(Box::new(e)))?;
         let model = active
             .insert(&transaction)
-            .await
-            .map_err(|e| SessionRepositoryError::CreateFailed(Box::new(e)))?;
-        audit::record(&transaction, "session.created", "session", model.oid)
             .await
             .map_err(|e| SessionRepositoryError::CreateFailed(Box::new(e)))?;
         transaction
@@ -405,7 +406,9 @@ impl SessionRepository for SessionRepositoryImpl {
         acr_expires_at: DateTime<Utc>,
         amr: &[String],
     ) -> Result<Session, SessionRepositoryError> {
-        let transaction = audit::begin(&self.db, "session.reauthenticate_by_oid")
+        let transaction = self
+            .db
+            .begin()
             .await
             .map_err(|error| SessionRepositoryError::ReauthenticateFailed(Box::new(error)))?;
         lock_session(&transaction, oid)
@@ -447,14 +450,6 @@ impl SessionRepository for SessionRepositoryImpl {
             .update(&transaction)
             .await
             .map_err(|error| SessionRepositoryError::ReauthenticateFailed(Box::new(error)))?;
-        audit::record(
-            &transaction,
-            "session.reauthenticate_by_oid",
-            "session",
-            Uuid::from(oid),
-        )
-        .await
-        .map_err(|error| SessionRepositoryError::ReauthenticateFailed(Box::new(error)))?;
         transaction
             .commit()
             .await
@@ -469,7 +464,9 @@ impl SessionRepository for SessionRepositoryImpl {
         oid: SessionOid,
         revoked_at: DateTime<Utc>,
     ) -> Result<Option<Session>, SessionRepositoryError> {
-        let transaction = audit::begin(&self.db, "session.revoke_by_oid")
+        let transaction = self
+            .db
+            .begin()
             .await
             .map_err(|error| SessionRepositoryError::RevokeFailed(Box::new(error)))?;
         lock_session(&transaction, oid)
@@ -533,9 +530,8 @@ impl SessionRepository for SessionRepositoryImpl {
         if !already_revoked {
             audit::record(
                 &transaction,
-                "session.revoke_by_oid",
-                "session",
-                Uuid::from(oid),
+                AuditRecord::success(AuditAction::SessionRevoke, Uuid::from(oid))
+                    .default_actor(AuditActor::user(u_model.oid)),
             )
             .await
             .map_err(|error| SessionRepositoryError::RevokeFailed(Box::new(error)))?;

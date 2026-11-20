@@ -41,9 +41,170 @@ export type AssignUserRolesInput = {
   userId: string | number;
 };
 
+/** A stable public audit action, named object first, then verb. */
+export type AuditAction =
+  | 'ACCOUNT_CREDENTIAL_REPLACE'
+  | 'ACCOUNT_IDENTIFIER_UPDATE'
+  | 'ACCOUNT_LOCK'
+  | 'ACCOUNT_PASSKEY_ADD'
+  | 'ACCOUNT_PASSKEY_REMOVE'
+  | 'ACCOUNT_PASSKEY_UPDATE'
+  | 'ACCOUNT_PASSWORD_CHANGE'
+  | 'ACCOUNT_PROFILE_UPDATE'
+  | 'ACCOUNT_RECOVERY_CODE_REGENERATE'
+  | 'ACCOUNT_TOTP_DISABLE'
+  | 'ACCOUNT_TOTP_ENABLE'
+  | 'CLIENT_CREATE'
+  | 'CLIENT_CREDENTIAL_REVOKE'
+  | 'CLIENT_DELETE'
+  | 'CLIENT_DISABLE'
+  | 'CLIENT_ENABLE'
+  | 'CLIENT_JWKS_URI_SET'
+  | 'CLIENT_PUBLIC_KEY_ADD'
+  | 'CLIENT_REGISTER'
+  | 'CLIENT_REGISTRATION_DELETE'
+  | 'CLIENT_REGISTRATION_UPDATE'
+  | 'CLIENT_SCOPE_UPDATE'
+  | 'CLIENT_SECRET_CREATE'
+  | 'CLIENT_SECRET_ROTATE'
+  | 'CLIENT_UPDATE'
+  | 'CONSENT_DENY'
+  | 'CONSENT_GRANT'
+  | 'DEVICE_APPROVE'
+  | 'DEVICE_DENY'
+  | 'DEVICE_REVOKE'
+  | 'GROUP_CREATE'
+  | 'GROUP_DELETE'
+  | 'GROUP_DISABLE'
+  | 'GROUP_ENABLE'
+  | 'GROUP_MEMBER_ADD'
+  | 'GROUP_MEMBER_REMOVE'
+  | 'GROUP_ROLE_UPDATE'
+  | 'GROUP_UPDATE'
+  | 'KEY_CREATE'
+  | 'KEY_REVOKE'
+  | 'KEY_ROTATE'
+  | 'RESOURCE_CREATE'
+  | 'RESOURCE_DISABLE'
+  | 'RESOURCE_ENABLE'
+  | 'RESOURCE_UPDATE'
+  | 'ROLE_CREATE'
+  | 'ROLE_DISABLE'
+  | 'ROLE_ENABLE'
+  | 'ROLE_PERMISSION_UPDATE'
+  | 'ROLE_UPDATE'
+  | 'SCOPE_CREATE'
+  | 'SCOPE_DISABLE'
+  | 'SCOPE_ENABLE'
+  | 'SCOPE_UPDATE'
+  | 'SESSION_REAUTHENTICATE'
+  | 'SESSION_REVOKE'
+  | 'SETTING_AUTHENTICATION_UPDATE'
+  | 'SETTING_PROTOCOL_UPDATE'
+  | 'SIGN_IN'
+  | 'TOKEN_REPLAY'
+  | 'TOKEN_REVOKE'
+  | 'USER_CREATE'
+  | 'USER_DISABLE'
+  | 'USER_ENABLE'
+  | 'USER_ROLE_GRANT'
+  | 'USER_ROLE_REVOKE'
+  | 'USER_UNLOCK'
+  | 'USER_UPDATE';
+
+/** Who performed the action. */
+export type AuditActorKind =
+  | 'ANONYMOUS'
+  | 'CLIENT'
+  | 'SYSTEM'
+  | 'USER';
+
+/** How a person authenticated. */
+export type AuditAuthMethod =
+  | 'OTP'
+  | 'PASSKEY'
+  | 'PASSWORD'
+  | 'RECOVERY_CODE';
+
+/** Which audit log an event belongs to. */
+export type AuditCategory =
+  | 'ACCOUNT'
+  | 'AUTHORIZATION'
+  | 'MANAGEMENT'
+  | 'SIGN_IN';
+
+export type AuditChangeKind =
+  /** A secret changed; its values are never recorded. */
+  | 'REDACTED'
+  /** `added` and `removed` hold collection members. */
+  | 'SET'
+  /** `oldValue` and `newValue` hold the values. */
+  | 'VALUE';
+
 export type AuditEventOrder =
   | 'OCCURRED_AT_ASC'
   | 'OCCURRED_AT_DESC';
+
+/** Why an attempt failed. */
+export type AuditFailureReason =
+  | 'INVALID_CREDENTIAL'
+  | 'INVALID_OTP'
+  | 'INVALID_RECOVERY_CODE'
+  | 'REPLAY_DETECTED';
+
+/** A changed attribute of an audited object. */
+export type AuditField =
+  | 'ADDRESS'
+  | 'BIRTHDATE'
+  | 'DESCRIPTION'
+  | 'DESCRIPTIONS'
+  | 'EMAIL'
+  | 'EMAIL_VERIFIED'
+  | 'ENABLED'
+  | 'FAMILY_NAME'
+  | 'GENDER'
+  | 'GIVEN_NAME'
+  | 'LOCALE'
+  | 'MEMBERS'
+  | 'MIDDLE_NAME'
+  | 'NAME'
+  | 'NAMES'
+  | 'NICKNAME'
+  | 'PASSKEY'
+  | 'PASSWORD'
+  | 'PERMISSIONS'
+  | 'PHONE_NUMBER'
+  | 'PICTURE'
+  | 'PREFERENCES'
+  | 'PROFILE'
+  | 'RECOVERY_CODES'
+  | 'ROLES'
+  | 'SCOPES'
+  | 'SETTINGS'
+  | 'TIME_ZONE'
+  | 'TOTP'
+  | 'USERNAME'
+  | 'WEBSITE';
+
+/** Result of the audited attempt. */
+export type AuditOutcome =
+  | 'FAILURE'
+  | 'SUCCESS';
+
+/** Type of the object an action applies to. */
+export type AuditTargetKind =
+  | 'AUTHORIZATION'
+  | 'CLIENT'
+  | 'DEVICE_AUTHORIZATION'
+  | 'GROUP'
+  | 'KEY'
+  | 'PASSKEY'
+  | 'RESOURCE'
+  | 'ROLE'
+  | 'SCOPE'
+  | 'SESSION'
+  | 'SETTING'
+  | 'USER';
 
 /** Where a user's role or permission comes from. */
 export type AuthorizationSource =
@@ -886,9 +1047,10 @@ export type InstanceDashboardQueryVariables = Exact<{
 
 export type InstanceDashboardQuery = { instanceOverview: { generatedAt: string, users?: { total: number, enabled: number, createdLast7Days: number, registrations: Array<{ date: string, count: number }> } | null, clients?: { total: number, enabled: number, builtIn: number } | null, sessions?: { active: number, createdLast24Hours: number } | null, resources?: { total: number, enabled: number } | null } };
 
-export type AuditEventFieldsFragment = { id: string, occurredAt: string, transactionId: string, action: string | null, operation: string, eventKind: string | null, actorType: string | null, actorOid: string | null, actorGlobalId: string | null, targetType: string | null, targetOid: string | null, targetGlobalId: string | null, resourceType: string, resourceOid: string, resourceGlobalId: string | null, subjectOid: string | null, subjectGlobalId: string | null, status: string | null, previousStatus: string | null, credentialType: string | null, reason: string | null, requestId: string | null, traceId: string | null, actorUser?: { id: string, username: string, email: string, nickname: string | null } | null, actorClient?: { id: string, name: string, names: Array<{ locale: string, value: string }> } | null };
+export type AuditEventFieldsFragment = { id: string, occurredAt: string, category: AuditCategory, action: AuditAction, outcome: AuditOutcome, failureReason: AuditFailureReason | null, clientId: string | null, authMethods: Array<AuditAuthMethod>, ipAddress: string | null, userAgent: string | null, requestId: string | null, traceId: string | null, actor: { kind: AuditActorKind, id: string | null, oid: string | null, label: string | null, user?: { id: string, username: string, email: string, nickname: string | null } | null, client?: { id: string, name: string, names: Array<{ locale: string, value: string }> } | null }, target: { kind: AuditTargetKind, id: string | null, oid: string, label: string | null } | null, changes: Array<{ field: AuditField, kind: AuditChangeKind, oldValue: unknown, newValue: unknown, added: Array<unknown>, removed: Array<unknown> }> };
 
 export type AuditEventsQueryQueryVariables = Exact<{
+  category?: AuditCategory | null | undefined;
   query?: string | null | undefined;
   timeZone?: string | null | undefined;
   orderBy?: AuditEventOrder | null | undefined;
@@ -901,7 +1063,7 @@ export type AuditEventsQueryQueryVariables = Exact<{
 }>;
 
 
-export type AuditEventsQueryQuery = { auditEvents: { totalCount: number, pageInfo: { hasPreviousPage: boolean, hasNextPage: boolean, startCursor: string | null, endCursor: string | null }, edges: Array<{ cursor: string, node: { id: string, occurredAt: string, transactionId: string, action: string | null, operation: string, eventKind: string | null, actorType: string | null, actorOid: string | null, actorGlobalId: string | null, targetType: string | null, targetOid: string | null, targetGlobalId: string | null, resourceType: string, resourceOid: string, resourceGlobalId: string | null, subjectOid: string | null, subjectGlobalId: string | null, status: string | null, previousStatus: string | null, credentialType: string | null, reason: string | null, requestId: string | null, traceId: string | null, actorUser?: { id: string, username: string, email: string, nickname: string | null } | null, actorClient?: { id: string, name: string, names: Array<{ locale: string, value: string }> } | null } }> } };
+export type AuditEventsQueryQuery = { auditEvents: { totalCount: number, pageInfo: { hasPreviousPage: boolean, hasNextPage: boolean, startCursor: string | null, endCursor: string | null }, edges: Array<{ cursor: string, node: { id: string, occurredAt: string, category: AuditCategory, action: AuditAction, outcome: AuditOutcome, failureReason: AuditFailureReason | null, clientId: string | null, authMethods: Array<AuditAuthMethod>, ipAddress: string | null, userAgent: string | null, requestId: string | null, traceId: string | null, actor: { kind: AuditActorKind, id: string | null, oid: string | null, label: string | null, user?: { id: string, username: string, email: string, nickname: string | null } | null, client?: { id: string, name: string, names: Array<{ locale: string, value: string }> } | null }, target: { kind: AuditTargetKind, id: string | null, oid: string, label: string | null } | null, changes: Array<{ field: AuditField, kind: AuditChangeKind, oldValue: unknown, newValue: unknown, added: Array<unknown>, removed: Array<unknown> }> } }> } };
 
 export type AuditEventDetailQueryQueryVariables = Exact<{
   id: string | number;
@@ -910,12 +1072,7 @@ export type AuditEventDetailQueryQueryVariables = Exact<{
 }>;
 
 
-export type AuditEventDetailQueryQuery = { auditEvent: { id: string, occurredAt: string, transactionId: string, action: string | null, operation: string, eventKind: string | null, actorType: string | null, actorOid: string | null, actorGlobalId: string | null, targetType: string | null, targetOid: string | null, targetGlobalId: string | null, resourceType: string, resourceOid: string, resourceGlobalId: string | null, subjectOid: string | null, subjectGlobalId: string | null, status: string | null, previousStatus: string | null, credentialType: string | null, reason: string | null, requestId: string | null, traceId: string | null, actorUser?: { id: string, username: string, email: string, nickname: string | null } | null, actorClient?: { id: string, name: string, names: Array<{ locale: string, value: string }> } | null } | null };
-
-export type AuditEventActionsQueryQueryVariables = Exact<{ [key: string]: never; }>;
-
-
-export type AuditEventActionsQueryQuery = { auditEventActions: Array<string> };
+export type AuditEventDetailQueryQuery = { auditEvent: { id: string, occurredAt: string, category: AuditCategory, action: AuditAction, outcome: AuditOutcome, failureReason: AuditFailureReason | null, clientId: string | null, authMethods: Array<AuditAuthMethod>, ipAddress: string | null, userAgent: string | null, requestId: string | null, traceId: string | null, actor: { kind: AuditActorKind, id: string | null, oid: string | null, label: string | null, user?: { id: string, username: string, email: string, nickname: string | null } | null, client?: { id: string, name: string, names: Array<{ locale: string, value: string }> } | null }, target: { kind: AuditTargetKind, id: string | null, oid: string, label: string | null } | null, changes: Array<{ field: AuditField, kind: AuditChangeKind, oldValue: unknown, newValue: unknown, added: Array<unknown>, removed: Array<unknown> }> } | null };
 
 export type ConsoleKeyFieldsFragment = { id: string, keyId: string, use: KeyUse, status: KeyStatus, inUse: boolean, algorithms: Array<string>, keyIds: Array<string>, hasCertificate: boolean, rotatedFromId: string | null, createdAt: string, expiresAt: string | null, rotatedAt: string | null, revokedAt: string | null };
 
@@ -1442,40 +1599,49 @@ export const AuditEventFieldsFragmentDoc = new TypedDocumentString(`
     fragment AuditEventFields on AuditEvent {
   id
   occurredAt
-  transactionId
+  category
   action
-  operation
-  eventKind
-  actorType
-  actorOid
-  actorGlobalId
-  targetType
-  targetOid
-  targetGlobalId
-  resourceType
-  resourceOid
-  resourceGlobalId
-  subjectOid
-  subjectGlobalId
-  status
-  previousStatus
-  credentialType
-  reason
+  outcome
+  failureReason
+  actor {
+    kind
+    id
+    oid
+    label
+    user @include(if: $includeActorUser) {
+      id
+      username
+      email
+      nickname
+    }
+    client @include(if: $includeActorClient) {
+      id
+      name
+      names {
+        locale
+        value
+      }
+    }
+  }
+  target {
+    kind
+    id
+    oid
+    label
+  }
+  clientId
+  authMethods
+  ipAddress
+  userAgent
   requestId
   traceId
-  actorUser @include(if: $includeActorUser) {
-    id
-    username
-    email
-    nickname
-  }
-  actorClient @include(if: $includeActorClient) {
-    id
-    name
-    names {
-      locale
-      value
-    }
+  changes {
+    field
+    kind
+    oldValue
+    newValue
+    added
+    removed
   }
 }
     `, {"fragmentName":"AuditEventFields"}) as unknown as TypedDocumentString<AuditEventFieldsFragment, unknown>;
@@ -2205,8 +2371,9 @@ export const InstanceDashboardDocument = new TypedDocumentString(`
 }
     `) as unknown as TypedDocumentString<InstanceDashboardQuery, InstanceDashboardQueryVariables>;
 export const AuditEventsQueryDocument = new TypedDocumentString(`
-    query AuditEventsQuery($query: String, $timeZone: String, $orderBy: AuditEventOrder, $first: Int, $after: String, $last: Int, $before: String, $includeActorUser: Boolean!, $includeActorClient: Boolean!) {
+    query AuditEventsQuery($category: AuditCategory, $query: String, $timeZone: String, $orderBy: AuditEventOrder, $first: Int, $after: String, $last: Int, $before: String, $includeActorUser: Boolean!, $includeActorClient: Boolean!) {
   auditEvents(
+    category: $category
     query: $query
     timeZone: $timeZone
     orderBy: $orderBy
@@ -2233,40 +2400,49 @@ export const AuditEventsQueryDocument = new TypedDocumentString(`
     fragment AuditEventFields on AuditEvent {
   id
   occurredAt
-  transactionId
+  category
   action
-  operation
-  eventKind
-  actorType
-  actorOid
-  actorGlobalId
-  targetType
-  targetOid
-  targetGlobalId
-  resourceType
-  resourceOid
-  resourceGlobalId
-  subjectOid
-  subjectGlobalId
-  status
-  previousStatus
-  credentialType
-  reason
+  outcome
+  failureReason
+  actor {
+    kind
+    id
+    oid
+    label
+    user @include(if: $includeActorUser) {
+      id
+      username
+      email
+      nickname
+    }
+    client @include(if: $includeActorClient) {
+      id
+      name
+      names {
+        locale
+        value
+      }
+    }
+  }
+  target {
+    kind
+    id
+    oid
+    label
+  }
+  clientId
+  authMethods
+  ipAddress
+  userAgent
   requestId
   traceId
-  actorUser @include(if: $includeActorUser) {
-    id
-    username
-    email
-    nickname
-  }
-  actorClient @include(if: $includeActorClient) {
-    id
-    name
-    names {
-      locale
-      value
-    }
+  changes {
+    field
+    kind
+    oldValue
+    newValue
+    added
+    removed
   }
 }`) as unknown as TypedDocumentString<AuditEventsQueryQuery, AuditEventsQueryQueryVariables>;
 export const AuditEventDetailQueryDocument = new TypedDocumentString(`
@@ -2278,47 +2454,51 @@ export const AuditEventDetailQueryDocument = new TypedDocumentString(`
     fragment AuditEventFields on AuditEvent {
   id
   occurredAt
-  transactionId
+  category
   action
-  operation
-  eventKind
-  actorType
-  actorOid
-  actorGlobalId
-  targetType
-  targetOid
-  targetGlobalId
-  resourceType
-  resourceOid
-  resourceGlobalId
-  subjectOid
-  subjectGlobalId
-  status
-  previousStatus
-  credentialType
-  reason
-  requestId
-  traceId
-  actorUser @include(if: $includeActorUser) {
+  outcome
+  failureReason
+  actor {
+    kind
     id
-    username
-    email
-    nickname
-  }
-  actorClient @include(if: $includeActorClient) {
-    id
-    name
-    names {
-      locale
-      value
+    oid
+    label
+    user @include(if: $includeActorUser) {
+      id
+      username
+      email
+      nickname
+    }
+    client @include(if: $includeActorClient) {
+      id
+      name
+      names {
+        locale
+        value
+      }
     }
   }
+  target {
+    kind
+    id
+    oid
+    label
+  }
+  clientId
+  authMethods
+  ipAddress
+  userAgent
+  requestId
+  traceId
+  changes {
+    field
+    kind
+    oldValue
+    newValue
+    added
+    removed
+  }
 }`) as unknown as TypedDocumentString<AuditEventDetailQueryQuery, AuditEventDetailQueryQueryVariables>;
-export const AuditEventActionsQueryDocument = new TypedDocumentString(`
-    query AuditEventActionsQuery {
-  auditEventActions
-}
-    `) as unknown as TypedDocumentString<AuditEventActionsQueryQuery, AuditEventActionsQueryQueryVariables>;
 export const ConsoleKeysDocument = new TypedDocumentString(`
     query ConsoleKeys($filter: KeyFilter, $first: Int, $after: String, $last: Int, $before: String) {
   keys(

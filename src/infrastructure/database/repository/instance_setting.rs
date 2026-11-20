@@ -5,6 +5,7 @@
 //! values, writes the changes and appends the semantic audit record before
 //! committing. An audit failure rolls the change back.
 
+use identity_domain::audit::{AuditChanges, AuditField, AuditRecord};
 use std::collections::HashMap;
 
 use async_trait::async_trait;
@@ -14,8 +15,8 @@ use identity_application::{
         AppSettings, BreachedPasswordCheckEnabledSetting, InstallationSettings,
         OpenIdConnectSettings, PasswordHashSetting,
         management::{
-            InstanceSettingRepository, InstanceSettingRepositoryError, InstanceSettingsState,
-            UpdateInstanceSettingsTransaction,
+            InstanceSettingRepository, InstanceSettingRepositoryError, InstanceSettingSection,
+            InstanceSettingsState, UpdateInstanceSettingsTransaction,
         },
     },
 };
@@ -113,13 +114,27 @@ impl InstanceSettingRepository for InstanceSettingRepositoryImpl {
         write_settings(&txn, changes).await.map_err(storage)?;
         let next = load_state(&txn).await?;
 
+        let mut audited = AuditChanges::new();
+        match section {
+            InstanceSettingSection::Protocol => audited.diff(
+                AuditField::Settings,
+                &current.openid_connect,
+                &next.openid_connect,
+            ),
+            InstanceSettingSection::Authentication => audited.diff(
+                AuditField::Settings,
+                &(
+                    &current.password_hash,
+                    current.breached_password_check_enabled,
+                ),
+                &(&next.password_hash, next.breached_password_check_enabled),
+            ),
+        };
         append_semantic_audit(
             &txn,
             &authority,
-            section.audit_action(),
-            "setting",
-            section.audit_target_oid(),
-            "",
+            AuditRecord::success(section.audit_action(), section.audit_target_oid())
+                .changes(audited),
         )
         .await
         .map_err(from_management)?;

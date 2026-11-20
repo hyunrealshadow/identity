@@ -160,32 +160,171 @@ input AssignUserRolesInput {
 	clientMutationId: String
 }
 
+"""
+A stable public audit action, named object first, then verb.
+"""
+enum AuditAction {
+	USER_CREATE
+	USER_UPDATE
+	USER_ENABLE
+	USER_DISABLE
+	USER_UNLOCK
+	USER_ROLE_GRANT
+	USER_ROLE_REVOKE
+	GROUP_CREATE
+	GROUP_UPDATE
+	GROUP_ENABLE
+	GROUP_DISABLE
+	GROUP_DELETE
+	GROUP_MEMBER_ADD
+	GROUP_MEMBER_REMOVE
+	GROUP_ROLE_UPDATE
+	ROLE_CREATE
+	ROLE_UPDATE
+	ROLE_ENABLE
+	ROLE_DISABLE
+	ROLE_PERMISSION_UPDATE
+	RESOURCE_CREATE
+	RESOURCE_UPDATE
+	RESOURCE_ENABLE
+	RESOURCE_DISABLE
+	SCOPE_CREATE
+	SCOPE_UPDATE
+	SCOPE_ENABLE
+	SCOPE_DISABLE
+	CLIENT_CREATE
+	CLIENT_UPDATE
+	CLIENT_DELETE
+	CLIENT_ENABLE
+	CLIENT_DISABLE
+	CLIENT_SECRET_CREATE
+	CLIENT_SECRET_ROTATE
+	CLIENT_PUBLIC_KEY_ADD
+	CLIENT_JWKS_URI_SET
+	CLIENT_CREDENTIAL_REVOKE
+	CLIENT_SCOPE_UPDATE
+	CLIENT_REGISTER
+	CLIENT_REGISTRATION_UPDATE
+	CLIENT_REGISTRATION_DELETE
+	KEY_CREATE
+	KEY_ROTATE
+	KEY_REVOKE
+	SETTING_PROTOCOL_UPDATE
+	SETTING_AUTHENTICATION_UPDATE
+	ACCOUNT_PROFILE_UPDATE
+	ACCOUNT_IDENTIFIER_UPDATE
+	ACCOUNT_PASSWORD_CHANGE
+	ACCOUNT_CREDENTIAL_REPLACE
+	ACCOUNT_TOTP_ENABLE
+	ACCOUNT_TOTP_DISABLE
+	ACCOUNT_RECOVERY_CODE_REGENERATE
+	ACCOUNT_PASSKEY_ADD
+	ACCOUNT_PASSKEY_UPDATE
+	ACCOUNT_PASSKEY_REMOVE
+	SIGN_IN
+	ACCOUNT_LOCK
+	SESSION_REAUTHENTICATE
+	SESSION_REVOKE
+	CONSENT_GRANT
+	CONSENT_DENY
+	TOKEN_REVOKE
+	TOKEN_REPLAY
+	DEVICE_APPROVE
+	DEVICE_DENY
+	DEVICE_REVOKE
+}
+
+type AuditActor {
+	kind: AuditActorKind!
+	"""
+	Global ID of the user or client actor.
+	"""
+	id: ID
+	oid: String
+	"""
+	Display name when the action happened.
+	"""
+	label: String
+	user: User @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	client: Client @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+}
+
+"""
+Who performed the action.
+"""
+enum AuditActorKind {
+	USER
+	CLIENT
+	SYSTEM
+	ANONYMOUS
+}
+
+"""
+How a person authenticated.
+"""
+enum AuditAuthMethod {
+	PASSWORD
+	OTP
+	PASSKEY
+	RECOVERY_CODE
+}
+
+"""
+Which audit log an event belongs to.
+"""
+enum AuditCategory {
+	MANAGEMENT
+	ACCOUNT
+	SIGN_IN
+	AUTHORIZATION
+}
+
+"""
+One changed attribute of an audited object.
+"""
+type AuditChange {
+	field: AuditField!
+	kind: AuditChangeKind!
+	oldValue: JSON
+	newValue: JSON
+	added: [JSON!]!
+	removed: [JSON!]!
+}
+
+enum AuditChangeKind {
+	"""
+	`oldValue` and `newValue` hold the values.
+	"""
+	VALUE
+	"""
+	`added` and `removed` hold collection members.
+	"""
+	SET
+	"""
+	A secret changed; its values are never recorded.
+	"""
+	REDACTED
+}
+
 type AuditEvent implements Node {
 	id: ID!
 	occurredAt: DateTime!
-	transactionId: String!
-	action: String
-	operation: String!
-	eventKind: String
-	actorType: String
-	actorOid: String
-	actorGlobalId: ID
-	targetType: String
-	targetOid: String
-	targetGlobalId: ID
-	resourceType: String!
-	resourceOid: String!
-	resourceGlobalId: ID
-	subjectOid: String
-	subjectGlobalId: ID
-	status: String
-	previousStatus: String
-	credentialType: String
-	reason: String
+	category: AuditCategory!
+	action: AuditAction!
+	outcome: AuditOutcome!
+	failureReason: AuditFailureReason
+	actor: AuditActor!
+	target: AuditTarget
+	"""
+	The OAuth client application through which the action happened.
+	"""
+	clientId: ID
+	authMethods: [AuditAuthMethod!]!
+	ipAddress: String
+	userAgent: String
 	requestId: String
 	traceId: String
-	actorUser: User @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
-	actorClient: Client @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	changes: [AuditChange!]!
 }
 
 type AuditEventConnection {
@@ -221,6 +360,95 @@ type AuditEventEdge {
 enum AuditEventOrder {
 	OCCURRED_AT_ASC
 	OCCURRED_AT_DESC
+}
+
+"""
+Why an attempt failed.
+"""
+enum AuditFailureReason {
+	INVALID_CREDENTIAL
+	INVALID_OTP
+	INVALID_RECOVERY_CODE
+	REPLAY_DETECTED
+}
+
+"""
+A changed attribute of an audited object.
+"""
+enum AuditField {
+	NAME
+	NAMES
+	DESCRIPTION
+	DESCRIPTIONS
+	ENABLED
+	USERNAME
+	EMAIL
+	EMAIL_VERIFIED
+	PHONE_NUMBER
+	GIVEN_NAME
+	FAMILY_NAME
+	MIDDLE_NAME
+	NICKNAME
+	PROFILE
+	PICTURE
+	WEBSITE
+	GENDER
+	BIRTHDATE
+	TIME_ZONE
+	LOCALE
+	ADDRESS
+	PREFERENCES
+	PASSWORD
+	TOTP
+	RECOVERY_CODES
+	PASSKEY
+	ROLES
+	PERMISSIONS
+	MEMBERS
+	SCOPES
+	SETTINGS
+}
+
+"""
+Result of the audited attempt.
+"""
+enum AuditOutcome {
+	SUCCESS
+	FAILURE
+}
+
+"""
+The object an audited action applied to.
+"""
+type AuditTarget {
+	kind: AuditTargetKind!
+	"""
+	Global ID, for kinds that have one.
+	"""
+	id: ID
+	oid: String!
+	"""
+	Display name when the action happened.
+	"""
+	label: String
+}
+
+"""
+Type of the object an action applies to.
+"""
+enum AuditTargetKind {
+	USER
+	CLIENT
+	ROLE
+	GROUP
+	SCOPE
+	RESOURCE
+	KEY
+	SETTING
+	SESSION
+	PASSKEY
+	AUTHORIZATION
+	DEVICE_AUTHORIZATION
 }
 
 type AuthenticationContext {
@@ -1636,8 +1864,7 @@ type QueryRoot {
 	"""
 	keys(filter: KeyFilter, first: Int, after: String, last: Int, before: String): KeyConnection! @access(policy: {scopes: ["management.key.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	auditEvent(id: ID!): AuditEvent @access(policy: {scopes: ["management.audit.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
-	auditEvents(query: String, timeZone: String, orderBy: AuditEventOrder, first: Int, after: String, last: Int, before: String): AuditEventConnection! @access(policy: {scopes: ["management.audit.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
-	auditEventActions: [String!]! @access(policy: {scopes: ["management.audit.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	auditEvents(category: AuditCategory, query: String, timeZone: String, orderBy: AuditEventOrder, first: Int, after: String, last: Int, before: String): AuditEventConnection! @access(policy: {scopes: ["management.audit.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 }
 
 type RecoveryCodeEnrollmentPayload {

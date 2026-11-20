@@ -1,12 +1,18 @@
-//! Security audit query domain models, native Lucene parser, and repository port.
+//! Security audit events, query domain models, native Lucene parser, and repository port.
 
+pub mod event;
 pub mod model;
 pub mod query;
 pub mod repository;
 
+pub use event::{
+    AuditAction, AuditActor, AuditActorKind, AuditAuthMethod, AuditCategory, AuditChange,
+    AuditChangeValue, AuditChanges, AuditCorrelation, AuditFailureReason, AuditField, AuditOutcome,
+    AuditRecord, AuditRef, AuditTargetKind,
+};
 pub use model::{
     AuditEvent, AuditEventOid, AuditEventOrder, AuditEventOrderDirection, AuditEventOrderField,
-    AuditEventSortKey,
+    AuditEventSortKey, AuditTarget,
 };
 pub use query::{
     AuditIdentifierMatch, AuditQueryError, AuditQueryExpr, AuditQueryField, AuditTextMatcher,

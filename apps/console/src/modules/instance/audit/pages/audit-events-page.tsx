@@ -5,7 +5,6 @@ import { useNavigate } from '@tanstack/react-router'
 import { useMemo } from 'react'
 
 import { AsyncState } from '#/components/async-state'
-import { CopyableValue } from '#/components/copy-button'
 import { CursorPagination } from '#/components/cursor-pagination'
 import { PageHeader } from '#/components/page-header'
 import { ResourceTable } from '#/components/resource-table'
@@ -14,20 +13,24 @@ import { TableRowActions } from '#/components/table-row-actions'
 import type { AuditEventFieldsFragment } from '#/generated/graphql'
 import { formatDateTime } from '#/lib/format'
 import { failureDescriptionKey, failureTitleKey } from '#/lib/graphql/presentation'
-import { type MessageKey, useLocale, useTranslator } from '#/lib/i18n'
+import { useLocale, useTranslator } from '#/lib/i18n'
 import { resolveTimeZone } from '#/lib/time-zone'
 import { useCursorPagination } from '#/lib/use-cursor-pagination'
 import { useUrlFilters } from '#/lib/use-url-filters'
 import { useWorkspace } from '#/lib/workspace'
 import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
-import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
 import { AuditEventDetailSheet } from '../components/audit-event-detail-sheet'
 import { AuditQueryBar } from '../components/audit-query-bar'
-import { useAuditEventActions, useAuditEventDetail, useAuditEvents } from '../hooks/use-audit-events'
-import { AUDIT_QUERY_ERROR_CODES } from '../lib/audit-catalog'
+import { useAuditEventDetail, useAuditEvents } from '../hooks/use-audit-events'
+import { AUDIT_QUERY_ERROR_CODES, auditQueryValue } from '../lib/audit-catalog'
 import { appendLuceneClause, buildAuditLuceneFields } from '../lib/audit-fields'
-import { auditValueLabel } from '../lib/audit-labels'
+import type { AuditLog } from '../lib/audit-logs'
+import {
+  AUDIT_FAILURE_REASON_LABELS,
+  AUDIT_OUTCOME_LABELS,
+} from '../lib/audit-labels'
+import { auditActionLabel, auditActorName, auditTargetName } from '../lib/audit-presentation'
 import { auditScope } from '../lib/audit-scope'
 import {
   AUDIT_EVENTS_PAGE_SIZE,
@@ -53,36 +56,50 @@ function AuditEventsLoadingSkeleton() {
   )
 }
 
-function summarizeActor(
-  event: AuditEventFieldsFragment,
-  locale: 'en-US' | 'zh-CN',
-  t: (key: MessageKey) => string,
-): string | null {
-  if (event.actorUser) {
-    return event.actorUser.nickname?.trim() || event.actorUser.username
-  }
-  if (event.actorClient) {
-    return resolveLocalizedText(event.actorClient.names, locale) ?? event.actorClient.name
-  }
-  const actorType = auditValueLabel(t, 'actorType', event.actorType)
-  if (actorType && event.actorOid) {
-    return `${actorType} (${event.actorOid.slice(0, 8)})`
-  }
-  return actorType
+function AuditEventSummary({
+  event,
+  locale,
+  onOpen,
+}: {
+  event: AuditEventFieldsFragment
+  locale: string
+  onOpen: () => void
+}) {
+  const t = useTranslator()
+  const target = auditTargetName(event, t)
+  return (
+    <button
+      type="button"
+      className="min-w-0 cursor-pointer text-left text-sm underline-offset-4 hover:underline"
+      onClick={onOpen}
+    >
+      <span className="font-medium text-foreground">{auditActorName(event, locale, t)}</span>{' '}
+      <span className="text-muted-foreground">{auditActionLabel(event, t)}</span>
+      {target ? (
+        <>
+          {' '}
+          <span className="font-medium text-foreground">{target}</span>
+        </>
+      ) : null}
+    </button>
+  )
 }
 
-function summarizeTarget(
-  event: AuditEventFieldsFragment,
-  t: (key: MessageKey) => string,
-): string | null {
-  const targetType = auditValueLabel(t, 'entityType', event.targetType)
-  if (targetType && event.targetOid) {
-    return `${targetType} (${event.targetOid.slice(0, 8)})`
+function AuditOutcomeBadge({ event }: { event: AuditEventFieldsFragment }) {
+  const t = useTranslator()
+  if (event.outcome === 'SUCCESS') {
+    return <Badge variant="outline">{t(AUDIT_OUTCOME_LABELS.SUCCESS)}</Badge>
   }
-  return targetType
+  return (
+    <Badge variant="destructive">
+      {event.failureReason
+        ? t(AUDIT_FAILURE_REASON_LABELS[event.failureReason])
+        : t(AUDIT_OUTCOME_LABELS.FAILURE)}
+    </Badge>
+  )
 }
 
-export function AuditEventsPage({ search }: { search: AuditEventsSearch }) {
+export function AuditEventsPage({ log, search }: { log: AuditLog; search: AuditEventsSearch }) {
   const t = useTranslator()
   const { locale, timeZone } = useLocale()
   const navigate = useNavigate()
@@ -99,7 +116,7 @@ export function AuditEventsPage({ search }: { search: AuditEventsSearch }) {
     keyOf: auditEventsSearchKey,
     appliedOf: auditEventsAppliedFilters,
     navigate: (next, { replace }) =>
-      void navigate({ to: '/audit-events', search: next, replace }),
+      void navigate({ to: log.path, search: next, replace }),
   })
 
   const appliedSearch: AuditEventsSearch = {
@@ -111,36 +128,7 @@ export function AuditEventsPage({ search }: { search: AuditEventsSearch }) {
   }
   const appliedKey = auditEventsQueryKey(appliedSearch)
 
-  const actionsQuery = useAuditEventActions(scope.read && scope.readActions)
-
-  const fields = useMemo(
-    () =>
-      buildAuditLuceneFields(
-        {
-          action: t('auditFieldActionDesc'),
-          actorType: t('auditFieldActorTypeDesc'),
-          actor: t('auditFieldActorDesc'),
-          targetType: t('auditFieldTargetTypeDesc'),
-          target: t('auditFieldTargetDesc'),
-          resourceType: t('auditFieldResourceTypeDesc'),
-          resource: t('auditFieldResourceDesc'),
-          subject: t('auditFieldSubjectDesc'),
-          operation: t('auditFieldOperationDesc'),
-          status: t('auditFieldStatusDesc'),
-          previousStatus: t('auditFieldPreviousStatusDesc'),
-          credentialType: t('auditFieldCredentialTypeDesc'),
-          eventKind: t('auditFieldEventKindDesc'),
-          requestId: t('auditFieldRequestIdDesc'),
-          traceId: t('auditFieldTraceIdDesc'),
-          reason: t('auditFieldReasonDesc'),
-          occurredAt: t('auditFieldOccurredAtDesc'),
-        },
-        actionsQuery.data?.auditEventActions,
-        (kind, value) => auditValueLabel(t, kind, value),
-      ),
-    [actionsQuery.data?.auditEventActions, t],
-  )
-
+  const fields = useMemo(() => buildAuditLuceneFields(t), [t])
   // A query that fails the shared syntax check is never sent; the query bar
   // explains it instead of the table showing a request failure.
   const appliedSyntaxError = useMemo(
@@ -156,12 +144,13 @@ export function AuditEventsPage({ search }: { search: AuditEventsSearch }) {
   const variables = useMemo(
     () =>
       scope.read && !appliedSyntaxError
-        ? auditEventsQueryVariables(appliedSearch, resolvedTimeZone, {
+        ? auditEventsQueryVariables(log.category, appliedSearch, resolvedTimeZone, {
             includeActorUser: scope.readActorUser,
             includeActorClient: scope.readActorClient,
           })
         : null,
     [
+      log.category,
       scope.read,
       scope.readActorUser,
       scope.readActorClient,
@@ -241,7 +230,7 @@ export function AuditEventsPage({ search }: { search: AuditEventsSearch }) {
 
   return (
     <>
-      <PageHeader title={t('auditTitle')} description={t('auditDescription')} />
+      <PageHeader title={t(log.title)} description={t(log.description)} />
       <ConsoleWorkspaceGate loading={<AuditEventsLoadingSkeleton />}>
         {!scope.read ? (
           <RbacAccessRestricted
@@ -352,20 +341,21 @@ export function AuditEventsPage({ search }: { search: AuditEventsSearch }) {
               }
               columns={[
                 {
-                  id: 'action',
-                  label: t('auditColumnAction'),
+                  id: 'event',
+                  label: t('auditColumnEvent'),
                   primary: true,
                   render: (event) => (
-                    <button
-                      type="button"
-                      className="cursor-pointer text-left font-medium text-foreground underline-offset-4 hover:underline"
-                      onClick={() =>
-                        go({ ...search, event: event.id }, { replace: false })
-                      }
-                    >
-                      {event.action ?? event.operation}
-                    </button>
+                    <AuditEventSummary
+                      event={event}
+                      locale={locale}
+                      onOpen={() => go({ ...search, event: event.id }, { replace: false })}
+                    />
                   ),
+                },
+                {
+                  id: 'outcome',
+                  label: t('auditColumnOutcome'),
+                  render: (event) => <AuditOutcomeBadge event={event} />,
                 },
                 {
                   id: 'occurredAt',
@@ -378,46 +368,13 @@ export function AuditEventsPage({ search }: { search: AuditEventsSearch }) {
                   ),
                 },
                 {
-                  id: 'actor',
-                  label: t('auditColumnActor'),
-                  render: (event) => {
-                    const summary = summarizeActor(event, locale, t)
-                    return summary ? (
-                      <span className="text-sm">{summary}</span>
-                    ) : null
-                  },
-                },
-                {
-                  id: 'target',
-                  label: t('auditColumnTarget'),
-                  render: (event) => {
-                    const summary = summarizeTarget(event, t)
-                    return summary ? (
-                      <span className="text-sm">{summary}</span>
-                    ) : null
-                  },
-                },
-                {
-                  id: 'operation',
-                  label: t('auditColumnOperation'),
-                  render: (event) => (
-                    <span className="text-sm">{auditValueLabel(t, 'operation', event.operation)}</span>
-                  ),
-                },
-                {
-                  id: 'status',
-                  label: t('auditColumnStatus'),
+                  id: 'source',
+                  label: t('auditColumnSource'),
                   render: (event) =>
-                    event.status ? (
-                      <Badge variant="outline">{auditValueLabel(t, 'status', event.status)}</Badge>
-                    ) : null,
-                },
-                {
-                  id: 'requestId',
-                  label: t('auditColumnRequestId'),
-                  render: (event) =>
-                    event.requestId ? (
-                      <CopyableValue value={event.requestId} label={t('auditColumnRequestId')} />
+                    event.ipAddress ? (
+                      <span className="font-mono text-xs text-muted-foreground">
+                        {event.ipAddress}
+                      </span>
                     ) : null,
                 },
                 {
@@ -425,7 +382,7 @@ export function AuditEventsPage({ search }: { search: AuditEventsSearch }) {
                   label: t('auditColumnActions'),
                   render: (event) => (
                     <TableRowActions
-                      subject={event.action ?? event.operation}
+                      subject={auditActionLabel(event, t)}
                       actions={[
                         {
                           id: 'details',
@@ -433,30 +390,35 @@ export function AuditEventsPage({ search }: { search: AuditEventsSearch }) {
                           onAction: () =>
                             go({ ...search, event: event.id }, { replace: false }),
                         },
-                        ...(event.action
-                          ? [
-                              {
-                                id: 'filter-action',
-                                label: t('auditFilterByAction'),
-                                onAction: () => appendFilter('action', event.action!),
-                              },
-                            ]
-                          : []),
-                        ...(event.actorOid
+                        {
+                          id: 'filter-action',
+                          label: t('auditFilterByAction'),
+                          onAction: () => appendFilter('action', auditQueryValue(event.action)),
+                        },
+                        ...(event.actor.oid
                           ? [
                               {
                                 id: 'filter-actor',
                                 label: t('auditFilterByActor'),
-                                onAction: () => appendFilter('actor', event.actorOid!),
+                                onAction: () => appendFilter('actor', event.actor.oid!),
                               },
                             ]
                           : []),
-                        ...(event.requestId
+                        ...(event.target
                           ? [
                               {
-                                id: 'filter-request-id',
-                                label: t('auditFilterByRequestId'),
-                                onAction: () => appendFilter('requestId', event.requestId!),
+                                id: 'filter-target',
+                                label: t('auditFilterByTarget'),
+                                onAction: () => appendFilter('target', event.target!.oid),
+                              },
+                            ]
+                          : []),
+                        ...(event.ipAddress
+                          ? [
+                              {
+                                id: 'filter-ip-address',
+                                label: t('auditFilterByIpAddress'),
+                                onAction: () => appendFilter('ipAddress', event.ipAddress!),
                               },
                             ]
                           : []),

@@ -20,6 +20,7 @@ use crate::database::{
     },
 };
 use chrono::{DateTime, Duration, Utc};
+use identity_domain::audit::{AuditAction, AuditActor, AuditRecord};
 use identity_domain::{
     auth::SessionOid,
     client_authorization::{
@@ -127,14 +128,6 @@ pub(super) async fn claim_device_request(
         .exec(&transaction)
         .await
         .map_err(query_failed)?;
-    audit::record(
-        &transaction,
-        "device_authorization.claimed",
-        "device_authorization_request",
-        request_oid,
-    )
-    .await
-    .map_err(query_failed)?;
     transaction.commit().await.map_err(query_failed)?;
     Ok(true)
 }
@@ -326,9 +319,8 @@ pub(super) async fn approve_device_request(
         .map_err(query_failed)?;
     audit::record(
         &transaction,
-        "device_authorization.approved",
-        "device_authorization",
-        relation_oid,
+        AuditRecord::success(AuditAction::DeviceApprove, relation_oid)
+            .default_actor(AuditActor::user(user_oid)),
     )
     .await
     .map_err(query_failed)?;
@@ -379,9 +371,8 @@ pub(super) async fn deny_device_request(
         .map_err(query_failed)?;
     audit::record(
         &transaction,
-        "device_authorization.denied",
-        "device_authorization_request",
-        request_oid,
+        AuditRecord::success(AuditAction::DeviceDeny, request_oid)
+            .default_actor(AuditActor::user(user_oid)),
     )
     .await
     .map_err(query_failed)?;

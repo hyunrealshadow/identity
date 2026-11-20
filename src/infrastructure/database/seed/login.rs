@@ -5,6 +5,7 @@
 //! protocol shape back to what Login needs, so an upgrade or a stray edit never
 //! leaves sign-in broken. Redirect URIs and credentials stay as installed.
 
+use identity_domain::audit::{AuditAction, AuditActor, AuditRecord};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DatabaseTransaction,
     DbBackend, EntityTrait, QueryFilter, Set, Statement, TransactionTrait,
@@ -103,9 +104,12 @@ async fn ensure_login_client_in_transaction(db: &DatabaseTransaction) -> Result<
         client_authorization_boundary::withdraw_client_authorizations(db, client.id)
             .await
             .map_err(AppError::internal)?;
-        audit::record(db, "client.update", "client", oid)
-            .await
-            .map_err(AppError::internal)?;
+        audit::record(
+            db,
+            AuditRecord::success(AuditAction::ClientUpdate, oid).actor(AuditActor::system()),
+        )
+        .await
+        .map_err(AppError::internal)?;
     }
     Ok(())
 }

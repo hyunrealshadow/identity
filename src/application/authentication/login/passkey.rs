@@ -7,8 +7,8 @@ use crate::{
     error::{AppError, codes::auth::AuthErrorCode},
 };
 use identity_domain::auth::{
-    AMR_MFA, AMR_PASSWORD, AuthenticationContextClass, LoginFailureReason, LoginStatus,
-    MAX_FAILED_ATTEMPTS, model::Login,
+    AMR_MFA, AMR_PASSKEY, AMR_PASSWORD, AuthenticationContextClass, LoginFailureReason,
+    LoginStatus, MAX_FAILED_ATTEMPTS, model::Login,
 };
 use uuid::Uuid;
 
@@ -73,7 +73,7 @@ impl LoginService {
         self.user_repo.reset_failed_attempts(user.oid).await?;
         // A user-verified passkey is multi-factor and phishing resistant on
         // its own; a preceding password is recorded but adds no class.
-        let mut amr = vec!["passkey".to_owned(), AMR_MFA.to_owned()];
+        let mut amr = vec![AMR_PASSKEY.to_owned(), AMR_MFA.to_owned()];
         if login.status == LoginStatus::MFA_REQUIRED {
             amr.push(AMR_PASSWORD.to_owned());
         }

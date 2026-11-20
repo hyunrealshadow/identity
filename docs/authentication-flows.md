@@ -217,7 +217,7 @@ cannot be redeemed twice.
 - Refresh tokens rotate. A successfully redeemed refresh token is replaced, and
   the response carries the new one.
 - Reuse detection matters: presenting an already-replaced refresh token revokes
-  the whole token family and writes a `refresh_token.reuse_detected` audit event.
+  the whole token family and writes a failed `token_replay` audit record.
 - Management scopes are never persisted as a refreshable grant; such a request is
   rejected rather than silently downgraded.
 - A machine token is withdrawn through the client credential that issued it.

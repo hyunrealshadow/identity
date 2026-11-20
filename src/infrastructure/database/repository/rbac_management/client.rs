@@ -4,6 +4,8 @@
 //! protocol/identity assignments (`resource_id IS NULL`) are preserved. Built-in
 //! definitions may be referenced but never edited here.
 
+use identity_domain::audit::{AuditAction, AuditRecord};
+use identity_domain::audit::{AuditChanges, AuditField};
 use std::collections::{BTreeMap, BTreeSet};
 
 use identity_application::rbac::{
@@ -18,7 +20,7 @@ use uuid::Uuid;
 
 use super::{
     RbacManagementRepositoryImpl,
-    audit::append_semantic_audit,
+    audit::{append_semantic_audit, scope_refs},
     authority::recheck_authority,
     catalog::{ensure_assignable_api_scope, ensure_assignable_protocol_scope, resolve_scopes},
     delegation,
@@ -251,6 +253,22 @@ impl RbacManagementRepositoryImpl {
             .map(|(id, _)| *id)
             .collect::<BTreeSet<_>>();
         delegation::ensure_delegable_permissions(&txn, &command.authority, &extended).await?;
+        let added = requested
+            .keys()
+            .filter(|id| !current.contains_key(*id))
+            .copied()
+            .collect::<BTreeSet<_>>();
+        let removed = current
+            .keys()
+            .filter(|id| !requested.contains_key(*id))
+            .copied()
+            .collect::<BTreeSet<_>>();
+        let mut scope_changes = AuditChanges::new();
+        scope_changes.delta(
+            AuditField::Scopes,
+            &scope_refs(&txn, &added).await?,
+            &scope_refs(&txn, &removed).await?,
+        );
         if !current.is_empty() {
             let mut binds = Binds::new();
             let client = binds.push(client_id);
@@ -302,10 +320,8 @@ impl RbacManagementRepositoryImpl {
         append_semantic_audit(
             &txn,
             &command.authority,
-            "client.scopes.set",
-            "client",
-            command.client_oid,
-            &command.reason,
+            AuditRecord::success(AuditAction::ClientScopeUpdate, command.client_oid)
+                .changes(scope_changes),
         )
         .await?;
         txn.commit().await.map_err(storage)?;

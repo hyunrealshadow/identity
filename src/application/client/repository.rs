@@ -6,6 +6,7 @@
 //! the client's authorization boundary changes, and append the semantic audit
 //! fact before committing.
 
+use identity_domain::audit::AuditAction;
 use std::{error::Error as StdError, sync::Arc};
 
 use async_trait::async_trait;
@@ -159,7 +160,7 @@ pub struct AddClientCredentialTransaction {
     /// Replaces the stored hint derived from `data`, such as a key thumbprint.
     pub hint: Option<String>,
     pub expires_at: Option<DateTime<Utc>>,
-    pub action: &'static str,
+    pub action: AuditAction,
     pub reason: String,
     pub authority: RbacManagementAuthority,
 }

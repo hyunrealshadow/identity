@@ -6,9 +6,8 @@ export function auditScope(permissions: EffectivePermissions | null | undefined)
   return {
     read: fieldAffordance(permissions, 'query', 'auditEvents'),
     readDetail: fieldAffordance(permissions, 'query', 'auditEvent'),
-    readActions: fieldAffordance(permissions, 'query', 'auditEventActions'),
-    readActorUser: fieldAffordance(permissions, 'AuditEvent', 'actorUser'),
-    readActorClient: fieldAffordance(permissions, 'AuditEvent', 'actorClient'),
+    readActorUser: fieldAffordance(permissions, 'AuditActor', 'user'),
+    readActorClient: fieldAffordance(permissions, 'AuditActor', 'client'),
   }
 }
 

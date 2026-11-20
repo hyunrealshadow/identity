@@ -19,6 +19,7 @@ use identity_application::{
     },
     rbac::RbacManagementAuthority,
 };
+use identity_domain::audit::{AuditAction, AuditRecord};
 use identity_domain::{
     authorization::{ManagementScope, PolicyVersion},
     client::model::ClientOid,
@@ -67,8 +68,6 @@ use crate::database::{
         shared::encode_nonnullable_expiry,
     },
 };
-
-const AUDIT_TARGET: &str = "client";
 
 async fn begin(
     db: &DatabaseConnection,
@@ -126,12 +125,12 @@ async fn finish(
     txn: DatabaseTransaction,
     model: client::Model,
     withdraw: bool,
-    action: &'static str,
+    action: AuditAction,
     authority: &RbacManagementAuthority,
-    reason: &str,
 ) -> Result<(), ClientManagementRepositoryError> {
     let client_id = model.id;
     let oid = model.oid;
+    let name = model.name.clone();
     let mut active: client::ActiveModel = model.into();
     active.version = Set(Uuid::new_v4());
     active.updated_at = Set(Some(Utc::now().into()));
@@ -141,9 +140,13 @@ async fn finish(
             .await
             .map_err(storage)?;
     }
-    append_semantic_audit(&txn, authority, action, AUDIT_TARGET, oid, reason)
-        .await
-        .map_err(from_management)?;
+    append_semantic_audit(
+        &txn,
+        authority,
+        AuditRecord::success(action, oid).label(name),
+    )
+    .await
+    .map_err(from_management)?;
     txn.commit().await.map_err(storage)
 }
 
@@ -352,10 +355,7 @@ pub(super) async fn create(
     append_semantic_audit(
         &txn,
         &command.authority,
-        "client.create",
-        AUDIT_TARGET,
-        command.client_oid,
-        &command.reason,
+        AuditRecord::success(AuditAction::ClientCreate, command.client_oid),
     )
     .await
     .map_err(from_management)?;
@@ -453,9 +453,8 @@ pub(super) async fn update(
         txn,
         model,
         changed,
-        "client.update",
+        AuditAction::ClientUpdate,
         &command.authority,
-        &command.reason,
     )
     .await?;
     reload(db, command.client_oid).await
@@ -481,13 +480,12 @@ pub(super) async fn set_enabled(
         txn,
         model,
         !enabled,
-        if enabled {
-            "client.enable"
-        } else {
-            "client.disable"
-        },
+        AuditAction::toggle(
+            enabled,
+            AuditAction::ClientEnable,
+            AuditAction::ClientDisable,
+        ),
         &command.authority,
-        &command.reason,
     )
     .await?;
     reload(db, command.client_oid).await
@@ -501,14 +499,12 @@ pub(super) async fn delete(
     let model = lock_client(&txn, command.client_oid, command.expected_version).await?;
     // Protocol configuration, platforms, origins, credentials, scope
     // assignments, consents and issued artifacts are removed by cascade.
+    let model_name = model.name.clone();
     model.delete(&txn).await.map_err(storage)?;
     append_semantic_audit(
         &txn,
         &command.authority,
-        "client.delete",
-        AUDIT_TARGET,
-        command.client_oid,
-        &command.reason,
+        AuditRecord::success(AuditAction::ClientDelete, command.client_oid).label(model_name),
     )
     .await
     .map_err(from_management)?;
@@ -597,12 +593,11 @@ pub(super) async fn create_secret(
         model,
         revoked.is_some(),
         if revoked.is_some() {
-            "client.secret.rotate"
+            AuditAction::ClientSecretRotate
         } else {
-            "client.secret.create"
+            AuditAction::ClientSecretCreate
         },
         &command.authority,
-        &command.reason,
     )
     .await?;
     Ok(ClientSecretResult {
@@ -633,9 +628,8 @@ pub(super) async fn revoke_credential(
         txn,
         model,
         true,
-        "client.credential.revoke",
+        AuditAction::ClientCredentialRevoke,
         &command.authority,
-        &command.reason,
     )
     .await?;
     Ok(ClientCredentialRevokeResult {
@@ -687,15 +681,7 @@ pub(super) async fn add_credential(
     let credential = credential_record(credential)?;
     sync_auth_methods(&txn, model.id).await?;
     // An additional key only widens how the client may authenticate.
-    finish(
-        txn,
-        model,
-        false,
-        command.action,
-        &command.authority,
-        &command.reason,
-    )
-    .await?;
+    finish(txn, model, false, command.action, &command.authority).await?;
     Ok(ClientCredentialResult {
         client: reload(db, command.client_oid).await?,
         credential,

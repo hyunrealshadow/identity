@@ -3,6 +3,8 @@
 //! A resource is an authorization boundary only. It stores no accepted-scope
 //! JSON and no separate policy row; owned scope rows are the single catalog.
 
+use identity_domain::audit::{AuditAction, AuditRecord};
+use identity_domain::audit::{AuditChanges, AuditField};
 use std::collections::BTreeSet;
 
 use identity_application::rbac::{
@@ -254,10 +256,10 @@ impl RbacManagementRepositoryImpl {
         append_semantic_audit(
             &txn,
             &command.authority,
-            "rbac.resource.create",
-            "resource",
-            Uuid::from(command.resource_oid),
-            &command.reason,
+            AuditRecord::success(
+                AuditAction::ResourceCreate,
+                Uuid::from(command.resource_oid),
+            ),
         )
         .await?;
         let record = load_resource_unlocked(&txn, command.resource_oid).await?;
@@ -287,6 +289,8 @@ impl RbacManagementRepositoryImpl {
         let Some(name) = command.name else {
             return Err(RbacManagementRepositoryError::EmptyUpdate);
         };
+        let mut changes = AuditChanges::new();
+        changes.diff(AuditField::Name, &current.name, &name);
         txn.execute_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,
             "UPDATE resource SET name = $2, version = gen_random_uuid(), \
@@ -298,10 +302,11 @@ impl RbacManagementRepositoryImpl {
         append_semantic_audit(
             &txn,
             &command.authority,
-            "rbac.resource.update",
-            "resource",
-            Uuid::from(command.resource_oid),
-            &command.reason,
+            AuditRecord::success(
+                AuditAction::ResourceUpdate,
+                Uuid::from(command.resource_oid),
+            )
+            .changes(changes),
         )
         .await?;
         let record = load_resource_unlocked(&txn, command.resource_oid).await?;
@@ -363,14 +368,14 @@ impl RbacManagementRepositoryImpl {
         append_semantic_audit(
             &txn,
             &command.authority,
-            if enabled {
-                "rbac.resource.enable"
-            } else {
-                "rbac.resource.disable"
-            },
-            "resource",
-            Uuid::from(command.resource_oid),
-            &command.reason,
+            AuditRecord::success(
+                AuditAction::toggle(
+                    enabled,
+                    AuditAction::ResourceEnable,
+                    AuditAction::ResourceDisable,
+                ),
+                Uuid::from(command.resource_oid),
+            ),
         )
         .await?;
         let record = load_resource_unlocked(&txn, command.resource_oid).await?;

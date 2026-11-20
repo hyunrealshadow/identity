@@ -12,6 +12,7 @@
 //! - never touches user group memberships or historical revoked relations;
 //! - preserves identities while refreshing display text and fixed definitions.
 
+use identity_domain::audit::{AuditAction, AuditActor, AuditRecord};
 use std::collections::{BTreeMap, BTreeSet};
 
 use async_trait::async_trait;
@@ -459,9 +460,8 @@ async fn ensure_role_permissions(
     advance_users_affected_by_role(transaction, role_id).await?;
     audit::record(
         transaction,
-        "rbac.role.permissions.reconcile",
-        "role",
-        preset.role_oid.0,
+        AuditRecord::success(AuditAction::RolePermissionUpdate, preset.role_oid.0)
+            .actor(AuditActor::system()),
     )
     .await
     .map_err(AppError::internal)?;
@@ -610,9 +610,8 @@ ORDER BY user_id
         }
         audit::record(
             transaction,
-            "rbac.group.roles.reconcile",
-            "user_group",
-            group_oid,
+            AuditRecord::success(AuditAction::GroupRoleUpdate, group_oid)
+                .actor(AuditActor::system()),
         )
         .await
         .map_err(AppError::internal)?;

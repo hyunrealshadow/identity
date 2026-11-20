@@ -7,6 +7,7 @@
 //! response types, grants and logout metadata are reconciled on restart so older test volumes receive
 //! corrected fixture settings too.
 
+use identity_domain::audit::{AuditAction, AuditActor, AuditRecord};
 use std::env;
 
 use async_trait::async_trait;
@@ -267,9 +268,13 @@ pub async fn run(db: &DatabaseConnection) -> Result<(), AppError> {
         material_change |= assign_all_built_in_oidc_scopes(&txn, client_id).await?;
 
         if material_change {
-            audit::record(&txn, "client.update", "client", client_oid)
-                .await
-                .map_err(AppError::internal)?;
+            audit::record(
+                &txn,
+                AuditRecord::success(AuditAction::ClientUpdate, client_oid)
+                    .actor(AuditActor::system()),
+            )
+            .await
+            .map_err(AppError::internal)?;
         }
     }
 

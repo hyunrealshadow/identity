@@ -187,6 +187,7 @@ pub fn authentication_is_fresh(auth_time: i64, now: i64, max_age_seconds: u64) -
 pub const AMR_PASSWORD: &str = "pwd";
 pub const AMR_OTP: &str = "otp";
 pub const AMR_MFA: &str = "mfa";
+pub const AMR_PASSKEY: &str = "passkey";
 /// Private value because RFC 8176 does not register a recovery-code AMR.
 pub const AMR_RECOVERY_CODE: &str = "urn:identity:amr:recovery-code";
 

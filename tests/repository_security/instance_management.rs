@@ -22,6 +22,7 @@ use identity_application::{
         },
     },
 };
+use identity_domain::audit::AuditAction;
 use identity_domain::{
     authorization::ManagementScope,
     key::{
@@ -52,12 +53,11 @@ use super::{
     common::isolated,
 };
 
-async fn audit_count(db: &DatabaseConnection, action: &str, target: Uuid) -> i64 {
+async fn audit_count(db: &DatabaseConnection, action: AuditAction, target: Uuid) -> i64 {
     db.query_one_raw(Statement::from_sql_and_values(
         DbBackend::Postgres,
-        "SELECT count(*)::bigint AS value FROM security_audit \
-         WHERE action=$1 AND target_oid=$2 AND event_kind='semantic'",
-        [action.into(), target.into()],
+        "SELECT count(*)::bigint AS value FROM audit WHERE action=$1 AND target_oid=$2",
+        [action.to_string().into(), target.into()],
     ))
     .await
     .unwrap()
@@ -112,7 +112,7 @@ async fn postgres_instance_settings_are_versioned_audited_and_human_only() {
             InstanceSettingSection::Authentication.version(&before)
         );
         assert_eq!(repo.load().await.unwrap(), after);
-        assert_eq!(audit_count(&db, "setting.protocol.update", section.audit_target_oid()).await, 1);
+        assert_eq!(audit_count(&db, AuditAction::SettingProtocolUpdate, section.audit_target_oid()).await, 1);
 
         // A stale editor loses: no write and no audit record.
         let stale = repo.update(enable_registration(&owner, version)).await.unwrap_err();
@@ -120,7 +120,7 @@ async fn postgres_instance_settings_are_versioned_audited_and_human_only() {
             stale,
             InstanceSettingRepositoryError::VersionConflict { current_version } if current_version == next
         ));
-        assert_eq!(audit_count(&db, "setting.protocol.update", section.audit_target_oid()).await, 1);
+        assert_eq!(audit_count(&db, AuditAction::SettingProtocolUpdate, section.audit_target_oid()).await, 1);
     })
     .await;
 }
@@ -203,7 +203,7 @@ async fn postgres_key_lifecycle_always_keeps_a_key_in_use() {
         assert_eq!(rotated.successor.algorithms, ["XChaCha20-Poly1305"]);
         assert!(rotated.previous.expires_at.unwrap() <= now + Duration::days(30));
         assert_eq!(
-            audit_count(&db, "key.rotate", Uuid::from(original)).await,
+            audit_count(&db, AuditAction::KeyRotate, Uuid::from(original)).await,
             1
         );
 
@@ -236,7 +236,7 @@ async fn postgres_key_lifecycle_always_keeps_a_key_in_use() {
         let revoked = repo.revoke(revoke(&owner, original)).await.unwrap();
         assert_eq!(revoked.status(Utc::now()), ManagedKeyStatus::Revoked);
         assert_eq!(
-            audit_count(&db, "key.revoke", Uuid::from(original)).await,
+            audit_count(&db, AuditAction::KeyRevoke, Uuid::from(original)).await,
             1
         );
         let twice = repo.revoke(revoke(&owner, original)).await.unwrap_err();
@@ -245,7 +245,7 @@ async fn postgres_key_lifecycle_always_keeps_a_key_in_use() {
             "{twice:?}"
         );
         assert_eq!(
-            audit_count(&db, "key.revoke", Uuid::from(original)).await,
+            audit_count(&db, AuditAction::KeyRevoke, Uuid::from(original)).await,
             1
         );
 
@@ -272,8 +272,14 @@ async fn postgres_key_lifecycle_always_keeps_a_key_in_use() {
             replaced.successor.status(Utc::now()),
             ManagedKeyStatus::Active
         );
-        assert_eq!(audit_count(&db, "key.rotate", Uuid::from(current)).await, 1);
-        assert_eq!(audit_count(&db, "key.revoke", Uuid::from(current)).await, 1);
+        assert_eq!(
+            audit_count(&db, AuditAction::KeyRotate, Uuid::from(current)).await,
+            1
+        );
+        assert_eq!(
+            audit_count(&db, AuditAction::KeyRevoke, Uuid::from(current)).await,
+            1
+        );
     })
     .await;
 }
@@ -345,7 +351,7 @@ async fn postgres_signing_key_rotation_publishes_new_key_ids() {
         assert_eq!(added.status(Utc::now()), ManagedKeyStatus::Active);
         assert_eq!(added.algorithms.first().map(String::as_str), Some("EdDSA"));
         assert_eq!(
-            audit_count(&db, "key.create", Uuid::from(added.oid)).await,
+            audit_count(&db, AuditAction::KeyCreate, Uuid::from(added.oid)).await,
             1
         );
 

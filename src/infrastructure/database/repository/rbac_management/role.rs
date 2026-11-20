@@ -1,5 +1,7 @@
 //! Role persistence and explicit role-permission membership.
 
+use identity_domain::audit::{AuditAction, AuditRecord};
+use identity_domain::audit::{AuditChanges, AuditField};
 use std::collections::BTreeSet;
 
 use identity_application::rbac::{
@@ -18,7 +20,7 @@ use uuid::Uuid;
 use super::{
     super::authorization_lifecycle,
     RbacManagementRepositoryImpl,
-    audit::append_semantic_audit,
+    audit::{append_semantic_audit, scope_refs},
     authority::recheck_authority,
     delegation,
     support::{
@@ -332,10 +334,7 @@ impl RbacManagementRepositoryImpl {
         append_semantic_audit(
             &txn,
             &command.authority,
-            "rbac.role.create",
-            "role",
-            Uuid::from(command.role_oid),
-            &command.reason,
+            AuditRecord::success(AuditAction::RoleCreate, Uuid::from(command.role_oid)),
         )
         .await?;
         let record = load_role(&txn, command.role_oid, false).await?;
@@ -380,8 +379,15 @@ impl RbacManagementRepositoryImpl {
                 .unwrap_or_else(|| current_metadata.descriptions.clone()),
         )
         .map_err(|_| corrupt())?;
-        let name = command.name.unwrap_or(current.name);
-        let description = command.description.unwrap_or(current.description);
+        let name = command.name.unwrap_or_else(|| current.name.clone());
+        let description = command
+            .description
+            .unwrap_or_else(|| current.description.clone());
+        let mut changes = AuditChanges::new();
+        changes
+            .diff(AuditField::Name, &current.name, &name)
+            .diff(AuditField::Description, &current.description, &description)
+            .localized(&current_metadata, &metadata);
         let (names, descriptions) = metadata_json(&metadata);
         // Display edits advance the row's UUID change token. They do not fan
         // out user authority: only enable/disable and membership changes do.
@@ -403,10 +409,8 @@ impl RbacManagementRepositoryImpl {
         append_semantic_audit(
             &txn,
             &command.authority,
-            "rbac.role.update",
-            "role",
-            Uuid::from(command.role_oid),
-            &command.reason,
+            AuditRecord::success(AuditAction::RoleUpdate, Uuid::from(command.role_oid))
+                .changes(changes),
         )
         .await?;
         let record = load_role(&txn, command.role_oid, false).await?;
@@ -474,14 +478,10 @@ impl RbacManagementRepositoryImpl {
         append_semantic_audit(
             &txn,
             &command.authority,
-            if enabled {
-                "rbac.role.enable"
-            } else {
-                "rbac.role.disable"
-            },
-            "role",
-            Uuid::from(command.role_oid),
-            &command.reason,
+            AuditRecord::success(
+                AuditAction::toggle(enabled, AuditAction::RoleEnable, AuditAction::RoleDisable),
+                Uuid::from(command.role_oid),
+            ),
         )
         .await?;
         let record = load_role(&txn, command.role_oid, false).await?;
@@ -572,7 +572,14 @@ impl RbacManagementRepositoryImpl {
             return Ok(current);
         }
         let added: BTreeSet<i64> = requested_ids.difference(&current_ids).copied().collect();
+        let removed: BTreeSet<i64> = current_ids.difference(&requested_ids).copied().collect();
         delegation::ensure_delegable_permissions(&txn, &command.authority, &added).await?;
+        let mut permission_changes = AuditChanges::new();
+        permission_changes.delta(
+            AuditField::Permissions,
+            &scope_refs(&txn, &added).await?,
+            &scope_refs(&txn, &removed).await?,
+        );
         txn.execute_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,
             "DELETE FROM role_permission WHERE role_id = $1",
@@ -606,10 +613,11 @@ impl RbacManagementRepositoryImpl {
         append_semantic_audit(
             &txn,
             &command.authority,
-            "rbac.role.permissions.set",
-            "role",
-            Uuid::from(command.role_oid),
-            &command.reason,
+            AuditRecord::success(
+                AuditAction::RolePermissionUpdate,
+                Uuid::from(command.role_oid),
+            )
+            .changes(permission_changes),
         )
         .await?;
         let record = load_role(&txn, command.role_oid, false).await?;

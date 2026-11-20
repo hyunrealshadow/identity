@@ -5,6 +5,7 @@
 //! scheduled rotation, re-check the key's lifecycle state under a row lock and
 //! append the semantic audit record before committing.
 
+use identity_domain::audit::{AuditAction, AuditRecord};
 use std::collections::HashMap;
 
 use async_trait::async_trait;
@@ -371,9 +372,13 @@ impl KeyManagementRepository for KeyManagementRepositoryImpl {
         let successor_oid = insert_successor(&txn, &previous, material, now)
             .await
             .map_err(storage)?;
-        append_semantic_audit(&txn, &authority, "key.rotate", "key", previous.oid, "")
-            .await
-            .map_err(from_management)?;
+        append_semantic_audit(
+            &txn,
+            &authority,
+            AuditRecord::success(AuditAction::KeyRotate, previous.oid),
+        )
+        .await
+        .map_err(from_management)?;
         if revoke_previous {
             KeyEntity::update_many()
                 .col_expr(KeyColumn::RevokedAt, Expr::value(Some(now.fixed_offset())))
@@ -382,9 +387,13 @@ impl KeyManagementRepository for KeyManagementRepositoryImpl {
                 .exec(&txn)
                 .await
                 .map_err(storage)?;
-            append_semantic_audit(&txn, &authority, "key.revoke", "key", previous.oid, "")
-                .await
-                .map_err(from_management)?;
+            append_semantic_audit(
+                &txn,
+                &authority,
+                AuditRecord::success(AuditAction::KeyRevoke, previous.oid),
+            )
+            .await
+            .map_err(from_management)?;
         }
         let previous_record = find_record(&txn, previous.oid).await?;
         let successor = find_record(&txn, successor_oid).await?;
@@ -417,9 +426,13 @@ impl KeyManagementRepository for KeyManagementRepositoryImpl {
         let oid = insert_key(&txn, &key_type, data, jwks, None, now)
             .await
             .map_err(storage)?;
-        append_semantic_audit(&txn, &authority, "key.create", "key", oid, "")
-            .await
-            .map_err(from_management)?;
+        append_semantic_audit(
+            &txn,
+            &authority,
+            AuditRecord::success(AuditAction::KeyCreate, oid),
+        )
+        .await
+        .map_err(from_management)?;
         let record = find_record(&txn, oid).await?;
         txn.commit().await.map_err(storage)?;
         Ok(record)
@@ -467,9 +480,13 @@ impl KeyManagementRepository for KeyManagementRepositoryImpl {
             .exec(&txn)
             .await
             .map_err(storage)?;
-        append_semantic_audit(&txn, &authority, "key.revoke", "key", current.oid, "")
-            .await
-            .map_err(from_management)?;
+        append_semantic_audit(
+            &txn,
+            &authority,
+            AuditRecord::success(AuditAction::KeyRevoke, current.oid),
+        )
+        .await
+        .map_err(from_management)?;
         let record = find_record(&txn, current.oid).await?;
         txn.commit().await.map_err(storage)?;
         Ok(record)

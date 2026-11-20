@@ -5,6 +5,7 @@
 //! concurrency guarantees come from row locks and partial unique indexes, not
 //! from process-local state.
 
+use identity_domain::audit::{AuditAction, AuditActor, AuditRecord};
 use std::{error::Error, fmt::Display};
 
 use async_trait::async_trait;
@@ -323,14 +324,6 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
                 query_failed(error)
             }
         })?;
-        audit::record(
-            &transaction,
-            "device_authorization.requested",
-            "device_authorization_request",
-            model.oid,
-        )
-        .await
-        .map_err(query_failed)?;
         transaction.commit().await.map_err(query_failed)?;
 
         to_device_domain(to_domain(model, client_oid))
@@ -429,9 +422,7 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
         if revoked {
             audit::record(
                 &transaction,
-                "device_authorization.revoked",
-                "device_authorization",
-                device_authorization_oid,
+                AuditRecord::success(AuditAction::DeviceRevoke, device_authorization_oid),
             )
             .await
             .map_err(query_failed)?;
@@ -469,9 +460,8 @@ impl DeviceAuthorizationRepository for DeviceAuthorizationRepositoryImpl {
         for relation in &revoked {
             audit::record(
                 &transaction,
-                "device_authorization.revoked",
-                "device_authorization",
-                relation.oid,
+                AuditRecord::success(AuditAction::DeviceRevoke, relation.oid)
+                    .default_actor(AuditActor::user(user_oid)),
             )
             .await
             .map_err(query_failed)?;

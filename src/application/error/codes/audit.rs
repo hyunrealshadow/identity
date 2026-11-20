@@ -19,6 +19,7 @@ pub enum AuditErrorCode {
     QueryUnsupportedRangeField = 30011,
     QueryUnsupportedRegex = 30012,
     QueryUnsupportedSyntax = 30013,
+    QueryUnknownValue = 30014,
 }
 
 impl AuditErrorCode {
@@ -38,7 +39,8 @@ impl AuditErrorCode {
             | Self::QueryUnsupportedOperator
             | Self::QueryUnsupportedRangeField
             | Self::QueryUnsupportedRegex
-            | Self::QueryUnsupportedSyntax => ErrorKind::Validation,
+            | Self::QueryUnsupportedSyntax
+            | Self::QueryUnknownValue => ErrorKind::Validation,
         }
     }
 }
@@ -154,6 +156,13 @@ pub const AUDIT_ERROR_INVENTORY: &[AuditErrorCodeDefinition] = &[
         AuditErrorCode::QueryUnsupportedSyntax,
         "E30013",
         &[],
+        &[],
+        "audit",
+    ),
+    entry(
+        AuditErrorCode::QueryUnknownValue,
+        "E30014",
+        &["field", "value"],
         &[],
         "audit",
     ),

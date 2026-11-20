@@ -107,9 +107,7 @@ pub(super) async fn disable_totp(
     user_oid: UserOid,
 ) -> Result<bool, UserCredentialRepositoryError> {
     let failure = |error| UserCredentialRepositoryError::DeleteFailed(Box::new(error));
-    let txn = audit::begin(db, "security.disable_totp")
-        .await
-        .map_err(failure)?;
+    let txn = db.begin().await.map_err(failure)?;
     lock_user_credentials(&txn, user_oid)
         .await
         .map_err(failure)?;
@@ -138,9 +136,16 @@ pub(super) async fn disable_totp(
         withdraw_user_authority_in_txn(&txn, user_id)
             .await
             .map_err(failure)?;
-        audit::record(&txn, "security.disable_totp", "user", Uuid::from(user_oid))
-            .await
-            .map_err(failure)?;
+        audit::record(
+            &txn,
+            AuditRecord::success(AuditAction::AccountTotpDisable, Uuid::from(user_oid))
+                .default_actor(AuditActor::user(Uuid::from(user_oid)))
+                .with_changes(|changes| {
+                    changes.secret(AuditField::Totp);
+                }),
+        )
+        .await
+        .map_err(failure)?;
     }
     txn.commit().await.map_err(failure)?;
     Ok(deleted)

@@ -381,20 +381,13 @@ export const schemaMetadata: SchemaMetadata = {
         }
       }
     },
-    "AuditEvent": {
+    "AuditActor": {
       "kind": "OBJECT",
-      "interfaces": [
-        "Node"
-      ],
+      "interfaces": [],
       "possibleTypes": [],
       "fields": {
-        "action": {
-          "name": "action",
-          "returnType": "String",
-          "policies": []
-        },
-        "actorClient": {
-          "name": "actorClient",
+        "client": {
+          "name": "client",
           "returnType": "Client",
           "policies": [
             {
@@ -407,23 +400,28 @@ export const schemaMetadata: SchemaMetadata = {
             }
           ]
         },
-        "actorGlobalId": {
-          "name": "actorGlobalId",
+        "id": {
+          "name": "id",
           "returnType": "ID",
           "policies": []
         },
-        "actorOid": {
-          "name": "actorOid",
+        "kind": {
+          "name": "kind",
+          "returnType": "AuditActorKind",
+          "policies": []
+        },
+        "label": {
+          "name": "label",
           "returnType": "String",
           "policies": []
         },
-        "actorType": {
-          "name": "actorType",
+        "oid": {
+          "name": "oid",
           "returnType": "String",
           "policies": []
         },
-        "actorUser": {
-          "name": "actorUser",
+        "user": {
+          "name": "user",
           "returnType": "User",
           "policies": [
             {
@@ -435,15 +433,86 @@ export const schemaMetadata: SchemaMetadata = {
               "runtime": true
             }
           ]
-        },
-        "credentialType": {
-          "name": "credentialType",
-          "returnType": "String",
+        }
+      }
+    },
+    "AuditChange": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "added": {
+          "name": "added",
+          "returnType": "JSON",
           "policies": []
         },
-        "eventKind": {
-          "name": "eventKind",
-          "returnType": "String",
+        "field": {
+          "name": "field",
+          "returnType": "AuditField",
+          "policies": []
+        },
+        "kind": {
+          "name": "kind",
+          "returnType": "AuditChangeKind",
+          "policies": []
+        },
+        "newValue": {
+          "name": "newValue",
+          "returnType": "JSON",
+          "policies": []
+        },
+        "oldValue": {
+          "name": "oldValue",
+          "returnType": "JSON",
+          "policies": []
+        },
+        "removed": {
+          "name": "removed",
+          "returnType": "JSON",
+          "policies": []
+        }
+      }
+    },
+    "AuditEvent": {
+      "kind": "OBJECT",
+      "interfaces": [
+        "Node"
+      ],
+      "possibleTypes": [],
+      "fields": {
+        "action": {
+          "name": "action",
+          "returnType": "AuditAction",
+          "policies": []
+        },
+        "actor": {
+          "name": "actor",
+          "returnType": "AuditActor",
+          "policies": []
+        },
+        "authMethods": {
+          "name": "authMethods",
+          "returnType": "AuditAuthMethod",
+          "policies": []
+        },
+        "category": {
+          "name": "category",
+          "returnType": "AuditCategory",
+          "policies": []
+        },
+        "changes": {
+          "name": "changes",
+          "returnType": "AuditChange",
+          "policies": []
+        },
+        "clientId": {
+          "name": "clientId",
+          "returnType": "ID",
+          "policies": []
+        },
+        "failureReason": {
+          "name": "failureReason",
+          "returnType": "AuditFailureReason",
           "policies": []
         },
         "id": {
@@ -451,24 +520,19 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "ID",
           "policies": []
         },
+        "ipAddress": {
+          "name": "ipAddress",
+          "returnType": "String",
+          "policies": []
+        },
         "occurredAt": {
           "name": "occurredAt",
           "returnType": "DateTime",
           "policies": []
         },
-        "operation": {
-          "name": "operation",
-          "returnType": "String",
-          "policies": []
-        },
-        "previousStatus": {
-          "name": "previousStatus",
-          "returnType": "String",
-          "policies": []
-        },
-        "reason": {
-          "name": "reason",
-          "returnType": "String",
+        "outcome": {
+          "name": "outcome",
+          "returnType": "AuditOutcome",
           "policies": []
         },
         "requestId": {
@@ -476,49 +540,9 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "String",
           "policies": []
         },
-        "resourceGlobalId": {
-          "name": "resourceGlobalId",
-          "returnType": "ID",
-          "policies": []
-        },
-        "resourceOid": {
-          "name": "resourceOid",
-          "returnType": "String",
-          "policies": []
-        },
-        "resourceType": {
-          "name": "resourceType",
-          "returnType": "String",
-          "policies": []
-        },
-        "status": {
-          "name": "status",
-          "returnType": "String",
-          "policies": []
-        },
-        "subjectGlobalId": {
-          "name": "subjectGlobalId",
-          "returnType": "ID",
-          "policies": []
-        },
-        "subjectOid": {
-          "name": "subjectOid",
-          "returnType": "String",
-          "policies": []
-        },
-        "targetGlobalId": {
-          "name": "targetGlobalId",
-          "returnType": "ID",
-          "policies": []
-        },
-        "targetOid": {
-          "name": "targetOid",
-          "returnType": "String",
-          "policies": []
-        },
-        "targetType": {
-          "name": "targetType",
-          "returnType": "String",
+        "target": {
+          "name": "target",
+          "returnType": "AuditTarget",
           "policies": []
         },
         "traceId": {
@@ -526,8 +550,8 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "String",
           "policies": []
         },
-        "transactionId": {
-          "name": "transactionId",
+        "userAgent": {
+          "name": "userAgent",
           "returnType": "String",
           "policies": []
         }
@@ -573,6 +597,33 @@ export const schemaMetadata: SchemaMetadata = {
         "node": {
           "name": "node",
           "returnType": "AuditEvent",
+          "policies": []
+        }
+      }
+    },
+    "AuditTarget": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "id": {
+          "name": "id",
+          "returnType": "ID",
+          "policies": []
+        },
+        "kind": {
+          "name": "kind",
+          "returnType": "AuditTargetKind",
+          "policies": []
+        },
+        "label": {
+          "name": "label",
+          "returnType": "String",
+          "policies": []
+        },
+        "oid": {
+          "name": "oid",
+          "returnType": "String",
           "policies": []
         }
       }
@@ -3852,20 +3903,6 @@ export const schemaMetadata: SchemaMetadata = {
         "auditEvent": {
           "name": "auditEvent",
           "returnType": "AuditEvent",
-          "policies": [
-            {
-              "scopes": [
-                "management.audit.read"
-              ],
-              "authentication": "AAL2",
-              "userOnly": false,
-              "runtime": true
-            }
-          ]
-        },
-        "auditEventActions": {
-          "name": "auditEventActions",
-          "returnType": "String",
           "policies": [
             {
               "scopes": [

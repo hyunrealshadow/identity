@@ -11,8 +11,9 @@ use identity_application::user::{
     repository::UserCredentialRepository,
 };
 use identity_domain::{
+    audit::AuditAction,
     auth::{
-        AuthenticationContextClass, LoginStatus, SessionOid,
+        AuthenticationContextClass, LoginFailureReason, LoginStatus, SessionOid,
         repository::{CreateSessionInput, LoginRepository, SessionRepository},
     },
     authorization::{ActorContext, HumanAuthenticationContext, RequestId},
@@ -47,36 +48,37 @@ async fn scalar(db: &DatabaseConnection, query: &str) -> i64 {
 
 struct SemanticAudit {
     action: String,
-    target_type: String,
-    actor_type: String,
+    target_kind: Option<String>,
+    actor_kind: String,
     actor_oid: Option<Uuid>,
-    request_id: Option<String>,
+    failure_reason: Option<String>,
+    auth_methods: Option<serde_json::Value>,
 }
 
 async fn latest_semantic_audit(db: &DatabaseConnection, target_oid: Uuid) -> Option<SemanticAudit> {
     let row = db
         .query_one_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,
-            "SELECT action,target_type,actor_type,actor_oid,request_id FROM security_audit \
-             WHERE target_oid=$1 AND event_kind='semantic' ORDER BY id DESC LIMIT 1",
+            "SELECT action,target_kind,actor_kind,actor_oid,failure_reason,auth_methods FROM audit \
+             WHERE target_oid=$1 ORDER BY id DESC LIMIT 1",
             [target_oid.into()],
         ))
         .await
         .unwrap()?;
     Some(SemanticAudit {
         action: row.try_get("", "action").unwrap(),
-        target_type: row.try_get("", "target_type").unwrap(),
-        actor_type: row.try_get("", "actor_type").unwrap(),
+        target_kind: row.try_get("", "target_kind").unwrap(),
+        actor_kind: row.try_get("", "actor_kind").unwrap(),
         actor_oid: row.try_get("", "actor_oid").unwrap(),
-        request_id: row.try_get("", "request_id").unwrap(),
+        failure_reason: row.try_get("", "failure_reason").unwrap(),
+        auth_methods: row.try_get("", "auth_methods").unwrap(),
     })
 }
 
 async fn semantic_count_for_request(db: &DatabaseConnection, request_id: &str) -> i64 {
     db.query_one_raw(Statement::from_sql_and_values(
         DbBackend::Postgres,
-        "SELECT count(*)::bigint n FROM security_audit \
-         WHERE request_id=$1 AND event_kind='semantic'",
+        "SELECT count(*)::bigint n FROM audit WHERE request_id=$1",
         [request_id.to_owned().into()],
     ))
     .await
@@ -86,31 +88,24 @@ async fn semantic_count_for_request(db: &DatabaseConnection, request_id: &str) -
     .unwrap()
 }
 
-async fn semantic_count_for_target(db: &DatabaseConnection, target_oid: Uuid, action: &str) -> i64 {
+async fn semantic_count_for_target(
+    db: &DatabaseConnection,
+    target_oid: Uuid,
+    action: Option<AuditAction>,
+) -> i64 {
     db.query_one_raw(Statement::from_sql_and_values(
         DbBackend::Postgres,
-        "SELECT count(*)::bigint n FROM security_audit \
-         WHERE target_oid=$1 AND action=$2 AND event_kind='semantic'",
-        [target_oid.into(), action.to_owned().into()],
+        "SELECT count(*)::bigint n FROM audit WHERE target_oid=$1 AND ($2::text IS NULL OR action=$2)",
+        [
+            target_oid.into(),
+            action.map(|action| action.to_string()).into(),
+        ],
     ))
     .await
     .unwrap()
     .unwrap()
     .try_get("", "n")
     .unwrap()
-}
-
-async fn assert_latest_action(
-    db: &DatabaseConnection,
-    target_oid: Uuid,
-    target_type: &str,
-    action: &str,
-) {
-    let audit = latest_semantic_audit(db, target_oid)
-        .await
-        .expect("semantic audit fact");
-    assert_eq!(audit.action, action);
-    assert_eq!(audit.target_type, target_type);
 }
 
 fn password(hash: &str) -> Password {
@@ -129,6 +124,7 @@ fn password(hash: &str) -> Password {
 fn input(user_oid: Uuid) -> CreateSessionInput {
     CreateSessionInput {
         user_oid,
+        client_oid: None,
         device_name: None,
         device_type: None,
         os_name: None,
@@ -186,13 +182,16 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
         .await
         .unwrap();
     assert_eq!(established.user_oid, user);
-    let complete_audit = latest_semantic_audit(&db, Uuid::from(established.oid))
+    // Completing a login records one sign-in by the user, with its methods.
+    let complete_audit = latest_semantic_audit(&db, user)
         .await
-        .expect("complete_login semantic fact");
-    assert_eq!(complete_audit.action, "session.complete_login");
-    assert_eq!(complete_audit.target_type, "session");
-    assert_eq!(complete_audit.actor_type, "unknown");
-    assert_eq!(complete_audit.actor_oid, None);
+        .expect("sign-in fact");
+    assert_eq!(complete_audit.action, AuditAction::SignIn.to_string());
+    assert_eq!(complete_audit.target_kind.as_deref(), Some("user"));
+    assert_eq!(complete_audit.actor_kind, "user");
+    assert_eq!(complete_audit.actor_oid, Some(user));
+    assert_eq!(complete_audit.auth_methods, Some(serde_json::json!(["password"])));
+    assert_eq!(semantic_count_for_target(&db, Uuid::from(established.oid), None).await, 0);
     assert!(
         sessions
             .complete_authentication(fresh_login, None, input(user))
@@ -209,46 +208,25 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
         .await
         .unwrap();
     assert_eq!(renewed.oid, SessionOid(keep));
-
-    // Direct repository paths record their own semantic facts.
-    let direct = sessions.create(input(user)).await.unwrap();
-    let created_audit = latest_semantic_audit(&db, Uuid::from(direct.oid))
+    let reauth_audit = latest_semantic_audit(&db, keep)
         .await
-        .expect("session.created semantic fact");
-    assert_eq!(created_audit.action, "session.created");
-    assert_eq!(created_audit.target_type, "session");
+        .expect("reauthentication fact");
+    assert_eq!(reauth_audit.action, AuditAction::SessionReauthenticate.to_string());
+    assert_eq!(reauth_audit.actor_oid, Some(user));
 
-    let reauth_request_id = format!("reauth-{}", Uuid::from(direct.oid));
-    let actor = ActorContext::for_user(
-        UserOid(user),
-        HumanAuthenticationContext::aal1(None),
-        RequestId::new(reauth_request_id.clone()).unwrap(),
-        None,
-    );
-    let reauthenticated = audit::with_actor(
-        actor,
-        sessions.reauthenticate_by_oid(
+    // Session bookkeeping outside sign-in is not an audit fact; revocation is.
+    let direct = sessions.create(input(user)).await.unwrap();
+    sessions
+        .reauthenticate_by_oid(
             direct.oid,
             user,
             AuthenticationContextClass::MultiFactor,
             Utc::now() + ChronoDuration::hours(1),
             &["pwd".to_owned()],
-        ),
-    )
-    .await
-    .unwrap();
-    assert_eq!(reauthenticated.oid, direct.oid);
-    let reauth_audit = latest_semantic_audit(&db, Uuid::from(direct.oid))
+        )
         .await
-        .expect("session.reauthenticate_by_oid semantic fact");
-    assert_eq!(reauth_audit.action, "session.reauthenticate_by_oid");
-    assert_eq!(reauth_audit.target_type, "session");
-    assert_eq!(reauth_audit.actor_type, "user");
-    assert_eq!(reauth_audit.actor_oid, Some(user));
-    assert_eq!(
-        reauth_audit.request_id.as_deref(),
-        Some(reauth_request_id.as_str())
-    );
+        .unwrap();
+    assert_eq!(semantic_count_for_target(&db, Uuid::from(direct.oid), None).await, 0);
 
     let revoked = sessions
         .revoke_by_oid(direct.oid, Utc::now())
@@ -257,9 +235,12 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
     assert!(revoked.is_some());
     let revoke_audit = latest_semantic_audit(&db, Uuid::from(direct.oid))
         .await
-        .expect("session.revoke_by_oid semantic fact");
-    assert_eq!(revoke_audit.action, "session.revoke_by_oid");
-    assert_eq!(revoke_audit.target_type, "session");
+        .expect("session revocation fact");
+    assert_eq!(revoke_audit.action, AuditAction::SessionRevoke.to_string());
+    assert_eq!(revoke_audit.target_kind.as_deref(), Some("session"));
+    // Without an authenticated request the session owner signed out.
+    assert_eq!(revoke_audit.actor_kind, "user");
+    assert_eq!(revoke_audit.actor_oid, Some(user));
     // Re-revoking the same session is a no-op for the journal.
     assert!(
         sessions
@@ -269,57 +250,43 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
             .is_some()
     );
     assert_eq!(
-        semantic_count_for_target(&db, Uuid::from(direct.oid), "session.revoke_by_oid").await,
+        semantic_count_for_target(&db, Uuid::from(direct.oid), Some(AuditAction::SessionRevoke))
+            .await,
         1
     );
 
-    // Direct login transitions record their own semantic facts without creating sessions.
+    // Login state transitions are protocol steps, not audit facts; only a
+    // failed attempt is, as an anonymous sign-in failure against the account.
     let logins = LoginRepositoryImpl::new(db.clone());
     let login = logins.create_pending(client, relation, &[]).await.unwrap();
-    assert_latest_action(&db, login.oid, "login", "login.created").await;
-
     logins.bind_user(login.oid, user).await.unwrap();
-    assert_latest_action(&db, login.oid, "login", "login.identifier_verified").await;
-
     logins
         .update_status(login.oid, LoginStatus::MFA_REQUIRED, None, None)
         .await
         .unwrap();
-    assert_latest_action(&db, login.oid, "login", "login.mfa_required").await;
-
+    let sign_ins_before = semantic_count_for_target(&db, user, Some(AuditAction::SignIn)).await;
     assert_eq!(
         logins
-            .increment_failed_attempts(login.oid, None)
+            .increment_failed_attempts(login.oid, Some(LoginFailureReason::InvalidOtp))
             .await
             .unwrap(),
         1
     );
-    assert_latest_action(&db, login.oid, "login", "login.failed_attempt").await;
-
+    let failure = latest_semantic_audit(&db, user).await.expect("failed sign-in fact");
+    assert_eq!(failure.action, AuditAction::SignIn.to_string());
+    assert_eq!(failure.actor_kind, "anonymous");
+    assert_eq!(failure.failure_reason.as_deref(), Some("invalid_otp"));
+    assert_eq!(
+        semantic_count_for_target(&db, user, Some(AuditAction::SignIn)).await,
+        sign_ins_before + 1
+    );
     logins.reset_failed_attempts(login.oid).await.unwrap();
-    assert_latest_action(&db, login.oid, "login", "login.failed_attempts_reset").await;
-
     logins.reset_identity(login.oid).await.unwrap();
-    assert_latest_action(&db, login.oid, "login", "login.identity_reset").await;
-
     logins
         .bind_session(login.oid, SessionOid(keep))
         .await
         .unwrap();
-    assert_latest_action(&db, login.oid, "login", "login.session_bound").await;
-
-    let second = logins.create_pending(client, relation, &[]).await.unwrap();
-    logins.bind_user(second.oid, user).await.unwrap();
-    logins
-        .update_status(
-            second.oid,
-            LoginStatus::AUTHENTICATED,
-            Some(SessionOid(keep)),
-            Some(AuthenticationContextClass::SingleFactor),
-        )
-        .await
-        .unwrap();
-    assert_latest_action(&db, second.oid, "login", "login.authenticated").await;
+    assert_eq!(semantic_count_for_target(&db, login.oid, None).await, 0);
 
     assert!(
         repo.change_password_and_revoke(
@@ -339,7 +306,7 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
         &db,
         &format!(
             r#"
-      ALTER TABLE security_audit ADD CONSTRAINT security_test_audit_failure
+      ALTER TABLE audit ADD CONSTRAINT security_test_audit_failure
         CHECK (request_id IS DISTINCT FROM '{audit_failure_request}') NOT VALID;
     "#
         ),
@@ -376,7 +343,7 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
     );
     sql(
         &db,
-        "ALTER TABLE security_audit DROP CONSTRAINT security_test_audit_failure",
+        "ALTER TABLE audit DROP CONSTRAINT security_test_audit_failure",
     )
     .await;
 
@@ -510,7 +477,7 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
         .await
         .is_err()
     );
-    assert_eq!(scalar(&db, "SELECT count(*)::bigint n FROM security_audit a WHERE to_jsonb(a)::text LIKE '%OLD-HASH%'").await, 0);
+    assert_eq!(scalar(&db, "SELECT count(*)::bigint n FROM audit a WHERE to_jsonb(a)::text LIKE '%OLD-HASH%'").await, 0);
     }).await;
 }
 
@@ -551,15 +518,19 @@ async fn profile_audit_survives_dropped_events_and_rolls_back_with_the_write() {
     .await
     .unwrap();
     let row=db.query_one_raw(Statement::from_sql_and_values(DbBackend::Postgres,
-        "SELECT actor_oid,target_oid,action FROM security_audit WHERE request_id=$1 AND event_kind='semantic'",[request_id.into()])).await.unwrap().unwrap();
+        "SELECT actor_oid,target_oid,action,changes FROM audit WHERE request_id=$1",[request_id.into()])).await.unwrap().unwrap();
     assert_eq!(row.try_get::<Uuid>("", "actor_oid").unwrap(), oid);
     assert_eq!(row.try_get::<Uuid>("", "target_oid").unwrap(), oid);
     assert_eq!(
         row.try_get::<String>("", "action").unwrap(),
-        "account.update_profile"
+        AuditAction::AccountProfileUpdate.to_string()
+    );
+    assert_eq!(
+        row.try_get::<serde_json::Value>("", "changes").unwrap(),
+        serde_json::json!([{ "field": "nickname", "type": "value", "new": "durable" }])
     );
     let failed_id = format!("fail-{oid}");
-    db.execute_unprepared(&format!("ALTER TABLE security_audit ADD CONSTRAINT identity_test_fail_audit CHECK (request_id IS DISTINCT FROM '{failed_id}') NOT VALID")).await.unwrap();
+    db.execute_unprepared(&format!("ALTER TABLE audit ADD CONSTRAINT identity_test_fail_audit CHECK (request_id IS DISTINCT FROM '{failed_id}') NOT VALID")).await.unwrap();
     let actor = ActorContext::for_user(
         UserOid(oid),
         HumanAuthenticationContext::aal1(None),
@@ -578,7 +549,7 @@ async fn profile_audit_survives_dropped_events_and_rolls_back_with_the_write() {
     )
     .await;
     db.execute_unprepared(
-        "ALTER TABLE security_audit DROP CONSTRAINT identity_test_fail_audit",
+        "ALTER TABLE audit DROP CONSTRAINT identity_test_fail_audit",
     )
     .await
     .unwrap();
@@ -638,7 +609,7 @@ async fn mfa_enrollment_login_keeps_its_registration_until_authenticated() {
             .update_status(login, LoginStatus::MFA_ENROLLMENT_REQUIRED, None, None)
             .await
             .unwrap();
-        assert_latest_action(&db, login, "login", "login.mfa_enrollment_required").await;
+        assert_eq!(semantic_count_for_target(&db, login, None).await, 0);
 
         challenges.store(registration, challenge("first")).await.unwrap();
         let second = challenge("second");

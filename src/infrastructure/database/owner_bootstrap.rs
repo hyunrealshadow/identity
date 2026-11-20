@@ -9,6 +9,9 @@ use identity_application::{
     error::{AppError, codes::authorization::AuthorizationErrorCode as Code},
     setting::InstallationSettings,
 };
+use identity_domain::audit::{
+    AuditAction, AuditActor, AuditCorrelation, AuditField, AuditRecord, AuditRef, AuditTargetKind,
+};
 use identity_domain::{
     authorization::{GrantReason, RequestId},
     rbac::{GroupMembershipOid, GroupOid, OWNER_PRESET},
@@ -16,11 +19,11 @@ use identity_domain::{
 };
 use sea_orm::{
     ConnectionTrait, DatabaseConnection, DatabaseTransaction, DbBackend, DbErr, Statement,
-    TransactionTrait, Value,
+    TransactionTrait,
 };
 use uuid::Uuid;
 
-use crate::observability::context;
+use crate::database::audit;
 
 use super::{repository, repository::authorization_lifecycle};
 
@@ -101,14 +104,7 @@ pub async fn bootstrap_owner(
     authorization_lifecycle::renew_user_version_in_txn(&transaction, user_id)
         .await
         .map_err(AppError::internal)?;
-    record_group_membership_audit(
-        &transaction,
-        "rbac.owner.bootstrap",
-        membership_oid.0,
-        reason.as_str(),
-        &request_id,
-    )
-    .await?;
+    record_owner_membership_audit(&transaction, user, Some(&request_id)).await?;
     transaction.commit().await.map_err(AppError::internal)?;
     Ok(membership_oid.0)
 }
@@ -134,40 +130,29 @@ async fn built_in_group_id(
     row.try_get::<i64>("", "id").map_err(AppError::internal)
 }
 
-/// Append one system-actor semantic fact for a group membership transition.
-pub(crate) async fn record_group_membership_audit(
+/// Records the system adding `user` to the built-in owner group.
+pub(crate) async fn record_owner_membership_audit(
     transaction: &DatabaseTransaction,
-    action: &'static str,
-    target_oid: Uuid,
-    reason: &str,
-    request_id: &RequestId,
+    user: UserOid,
+    request_id: Option<&RequestId>,
 ) -> Result<(), AppError> {
-    let trace_id =
-        context::current_request_correlation().and_then(|correlation| correlation.trace_id);
-    transaction
-        .execute_raw(Statement::from_sql_and_values(
-            DbBackend::Postgres,
-            r#"
-INSERT INTO security_audit (
-    resource_type, resource_oid, subject_oid, operation, status,
-    actor_type, actor_oid, action, target_type, target_oid,
-    reason, request_id, trace_id, event_kind
-) VALUES (
-    'group_membership', $1, NULL, 'mutation', 'success',
-    'system', $2, $3, 'group_membership', $1,
-    $4, $5, $6, 'semantic'
-)
-"#,
-            [
-                target_oid.into(),
-                Uuid::nil().into(),
-                action.into(),
-                reason.to_owned().into(),
-                request_id.as_str().to_owned().into(),
-                Value::String(trace_id),
-            ],
-        ))
-        .await
-        .map_err(AppError::internal)?;
-    Ok(())
+    let mut record = AuditRecord::success(AuditAction::GroupMemberAdd, OWNER_PRESET.group_oid.0);
+    if let Some(request_id) = request_id {
+        record.correlation = Some(AuditCorrelation {
+            request_id: Some(request_id.as_str().to_owned()),
+            trace_id: None,
+        });
+    }
+    audit::record(
+        transaction,
+        record.actor(AuditActor::system()).with_changes(|changes| {
+            changes.delta(
+                AuditField::Members,
+                &[AuditRef::new(AuditTargetKind::User, user.0, None)],
+                &[] as &[AuditRef],
+            );
+        }),
+    )
+    .await
+    .map_err(AppError::internal)
 }

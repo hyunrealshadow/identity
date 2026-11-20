@@ -8,12 +8,13 @@ use identity_application::{
     user::{
         CredentialData, CredentialType, OtpCredentialData, Password, RecoveryCodeCredentialData,
         UserCredential, UserCredentialOid, UserOid,
-        credential::{MAX_PASSKEYS_PER_USER, StoredPasskey},
+        credential::{MAX_PASSKEYS_PER_USER, PasskeyCredentialData, StoredPasskey},
         repository::{
             PasskeyCredentialRepository, UserCredentialRepository, UserCredentialRepositoryError,
         },
     },
 };
+use identity_domain::audit::{AuditAction, AuditActor, AuditChanges, AuditField, AuditRecord};
 use identity_domain::{auth::SessionOid, authorization::owner::OwnerProtectionError};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, DbErr, EntityTrait, QueryFilter,
@@ -46,6 +47,16 @@ mod password_change;
 
 pub struct UserCredentialRepositoryImpl {
     db: DatabaseConnection,
+}
+
+/// The audit attribute of a stored credential type.
+const fn credential_audit_field(credential_type: CredentialType) -> AuditField {
+    match credential_type {
+        CredentialType::Password => AuditField::Password,
+        CredentialType::Otp => AuditField::Totp,
+        CredentialType::RecoveryCode => AuditField::RecoveryCodes,
+        CredentialType::Passkey => AuditField::Passkey,
+    }
 }
 
 impl UserCredentialRepositoryImpl {
@@ -209,6 +220,10 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
     ) -> Result<(), UserCredentialRepositoryError> {
         // Only password/passkey replacement can remove a login path. Recovery
         // code and OTP maintenance must not contend on the global owner lock.
+        let replaced_types: Vec<CredentialType> = replacements
+            .iter()
+            .map(|(credential_type, _)| *credential_type)
+            .collect();
         let touches_login_credential = replacements.iter().any(|(credential_type, _)| {
             matches!(
                 credential_type,
@@ -239,7 +254,9 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
                 Ok((credential_type.as_ref().to_owned(), serialized))
             })
             .collect::<Result<Vec<_>, UserCredentialRepositoryError>>()?;
-        let txn = audit::begin(&self.db, "security.replace_by_user_oid")
+        let txn = self
+            .db
+            .begin()
             .await
             .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
         // Owner-removing writes share one cross-entry serialization point.
@@ -318,11 +335,15 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
                 .await
                 .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
         }
+        let mut replaced = AuditChanges::new();
+        for credential_type in &replaced_types {
+            replaced.secret(credential_audit_field(*credential_type));
+        }
         audit::record(
             &txn,
-            "security.replace_by_user_oid",
-            "user",
-            Uuid::from(user_oid),
+            AuditRecord::success(AuditAction::AccountCredentialReplace, Uuid::from(user_oid))
+                .default_actor(AuditActor::user(Uuid::from(user_oid)))
+                .changes(replaced),
         )
         .await
         .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
@@ -341,7 +362,9 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         enrolling_login: Option<Uuid>,
     ) -> Result<bool, UserCredentialRepositoryError> {
         let otp = to_value(otp).map_err(UserCredentialRepositoryError::Serialization)?;
-        let txn = audit::begin(&self.db, "security.enable_totp_if_disabled")
+        let txn = self
+            .db
+            .begin()
             .await
             .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
         lock_user_credentials(&txn, user_oid)
@@ -399,9 +422,13 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
         audit::record(
             &txn,
-            "security.enable_totp_if_disabled",
-            "user",
-            Uuid::from(user_oid),
+            AuditRecord::success(AuditAction::AccountTotpEnable, Uuid::from(user_oid))
+                .default_actor(AuditActor::user(Uuid::from(user_oid)))
+                .with_changes(|changes| {
+                    changes
+                        .secret(AuditField::Totp)
+                        .secret(AuditField::RecoveryCodes);
+                }),
         )
         .await
         .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
@@ -426,7 +453,9 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
             .map(to_value)
             .collect::<Result<Vec<_>, _>>()
             .map_err(UserCredentialRepositoryError::Serialization)?;
-        let txn = audit::begin(&self.db, "security.replace_recovery_codes_if_mfa_enabled")
+        let txn = self
+            .db
+            .begin()
             .await
             .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
         lock_user_credentials(&txn, user_oid)
@@ -466,9 +495,14 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         }
         audit::record(
             &txn,
-            "security.replace_recovery_codes_if_mfa_enabled",
-            "user",
-            Uuid::from(user_oid),
+            AuditRecord::success(
+                AuditAction::AccountRecoveryCodeRegenerate,
+                Uuid::from(user_oid),
+            )
+            .default_actor(AuditActor::user(Uuid::from(user_oid)))
+            .with_changes(|changes| {
+                changes.secret(AuditField::RecoveryCodes);
+            }),
         )
         .await
         .map_err(|e| UserCredentialRepositoryError::ReplaceFailed(Box::new(e)))?;
@@ -599,9 +633,7 @@ impl PasskeyCredentialRepository for UserCredentialRepositoryImpl {
         recovery_codes: Vec<RecoveryCodeCredentialData>,
         enrolling_login: Option<Uuid>,
     ) -> Result<(), AppError> {
-        let txn = audit::begin(&self.db, "security.insert")
-            .await
-            .map_err(AppError::internal)?;
+        let txn = self.db.begin().await.map_err(AppError::internal)?;
         lock_user_credentials(&txn, user_oid)
             .await
             .map_err(AppError::internal)?;
@@ -641,7 +673,7 @@ impl PasskeyCredentialRepository for UserCredentialRepositoryImpl {
             oid: Set(key.id),
             user_id: Set(user_id),
             r#type: Set(CredentialType::Passkey.to_string()),
-            data: Set(to_value(key.data).map_err(AppError::internal)?),
+            data: Set(to_value(&key.data).map_err(AppError::internal)?),
             expires_at: Set(None),
             created_at: Set(Utc::now().into()),
             ..Default::default()
@@ -656,9 +688,14 @@ impl PasskeyCredentialRepository for UserCredentialRepositoryImpl {
         withdraw_user_authority_for_enrollment_in_txn(&txn, user_id, enrolling_login)
             .await
             .map_err(AppError::internal)?;
-        audit::record(&txn, "security.insert", "user_credential", passkey_oid)
-            .await
-            .map_err(AppError::internal)?;
+        audit::record(
+            &txn,
+            AuditRecord::success(AuditAction::AccountPasskeyAdd, passkey_oid)
+                .label(key.data.name.clone())
+                .default_actor(AuditActor::user(Uuid::from(user_oid))),
+        )
+        .await
+        .map_err(AppError::internal)?;
         txn.commit().await.map_err(AppError::internal)
     }
 
@@ -672,27 +709,31 @@ impl PasskeyCredentialRepository for UserCredentialRepositoryImpl {
         if before.id != after.id || before.data.credential_id != after.data.credential_id {
             return Ok(false);
         }
-        let txn = audit::begin(&self.db, "security.update")
-            .await
-            .map_err(AppError::internal)?;
+        let txn = self.db.begin().await.map_err(AppError::internal)?;
         let result = txn.execute_raw(Statement::from_sql_and_values(DbBackend::Postgres,
             "UPDATE user_credential SET data = $1, updated_at = now() WHERE oid = $2 AND user_id = (SELECT id FROM \"user\" WHERE oid = $3) AND type = 'passkey' AND data = $4 AND (expires_at IS NULL OR expires_at > now())",
             [to_value(&after.data).map_err(AppError::internal)?.into(), before.id.into(), Uuid::from(user).into(), to_value(&before.data).map_err(AppError::internal)?.into()]
         )).await.map_err(AppError::internal)?;
         let updated = result.rows_affected() == 1;
         if updated {
-            audit::record(&txn, "security.update", "user_credential", before.id)
-                .await
-                .map_err(AppError::internal)?;
+            audit::record(
+                &txn,
+                AuditRecord::success(AuditAction::AccountPasskeyUpdate, before.id)
+                    .label(after.data.name.clone())
+                    .default_actor(AuditActor::user(Uuid::from(user)))
+                    .with_changes(|changes| {
+                        changes.diff(AuditField::Name, &before.data.name, &after.data.name);
+                    }),
+            )
+            .await
+            .map_err(AppError::internal)?;
         }
         txn.commit().await.map_err(AppError::internal)?;
         Ok(updated)
     }
 
     async fn delete(&self, user: UserOid, id: Uuid) -> Result<bool, AppError> {
-        let txn = audit::begin(&self.db, "security.delete")
-            .await
-            .map_err(AppError::internal)?;
+        let txn = self.db.begin().await.map_err(AppError::internal)?;
         // Serialize with owner binding/account changes before touching the
         // credential set.
         lock_owner_lifecycle(&txn)
@@ -710,16 +751,17 @@ impl PasskeyCredentialRepository for UserCredentialRepositoryImpl {
             .await
             .map_err(AppError::internal)?
             .ok_or(UserCredentialRepositoryError::CredentialNotFound)?;
-        let deleted = UserCredentialEntity::delete_many()
+        let removed = UserCredentialEntity::delete_many()
             .filter(UserCredentialColumn::UserId.eq(user_id))
             .filter(UserCredentialColumn::Oid.eq(id))
             .filter(UserCredentialColumn::Type.eq(CredentialType::Passkey.as_ref()))
-            .exec(&txn)
+            .exec_with_returning(&txn)
             .await
             .map_err(AppError::internal)?
-            .rows_affected
-            > 0;
-        if deleted {
+            .into_iter()
+            .next();
+        let deleted = removed.is_some();
+        if let Some(removed) = removed {
             // The deletion is visible in this transaction; reject before audit
             // and commit if it removed the last recoverable full-capability
             // administrator login path.
@@ -739,7 +781,15 @@ impl PasskeyCredentialRepository for UserCredentialRepositoryImpl {
             withdraw_user_authority_in_txn(&txn, user_id)
                 .await
                 .map_err(AppError::internal)?;
-            audit::record(&txn, "security.delete", "user_credential", id)
+            let name = serde_json::from_value::<PasskeyCredentialData>(removed.data)
+                .map(|data| data.name)
+                .ok();
+            let mut record = AuditRecord::success(AuditAction::AccountPasskeyRemove, id)
+                .default_actor(AuditActor::user(Uuid::from(user)));
+            if let Some(name) = name {
+                record = record.label(name);
+            }
+            audit::record(&txn, record)
                 .await
                 .map_err(AppError::internal)?;
         }

@@ -1,10 +1,12 @@
 use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset, Utc};
+use identity_domain::audit::{AuditAction, AuditActor, AuditChanges, AuditField, AuditRecord};
 use identity_domain::user::{
     MfaMethod, User, UserOid, UserTheme,
     normalization::normalize_identifier,
     repository::{UserIdentifierUpdate, UserProfilePatch, UserRepository, UserRepositoryError},
 };
+use sea_orm::TransactionTrait;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, EntityTrait,
     ExprTrait, QueryFilter, QuerySelect, Set, sea_query::Expr,
@@ -106,6 +108,64 @@ macro_rules! apply_patch {
     };
 }
 
+/// Records every changed user attribute between two stored versions.
+pub(crate) fn user_attribute_changes(
+    changes: &mut AuditChanges,
+    before: &user::Model,
+    after: &user::Model,
+) {
+    changes
+        .diff(AuditField::Username, &before.name, &after.name)
+        .diff(AuditField::Email, &before.email, &after.email)
+        .diff(
+            AuditField::EmailVerified,
+            &before.email_verified,
+            &after.email_verified,
+        )
+        .diff(
+            AuditField::PhoneNumber,
+            &before.phone_number,
+            &after.phone_number,
+        )
+        .diff(AuditField::Nickname, &before.nickname, &after.nickname)
+        .diff(AuditField::GivenName, &before.given_name, &after.given_name)
+        .diff(
+            AuditField::FamilyName,
+            &before.family_name,
+            &after.family_name,
+        )
+        .diff(
+            AuditField::MiddleName,
+            &before.middle_name,
+            &after.middle_name,
+        )
+        .diff(AuditField::Profile, &before.profile, &after.profile)
+        .diff(AuditField::Picture, &before.picture, &after.picture)
+        .diff(AuditField::Website, &before.website, &after.website)
+        .diff(AuditField::Gender, &before.gender, &after.gender)
+        .diff(AuditField::Birthdate, &before.birthdate, &after.birthdate)
+        .diff(AuditField::TimeZone, &before.zone_info, &after.zone_info)
+        .diff(AuditField::Locale, &before.locale, &after.locale)
+        .diff(
+            AuditField::Preferences,
+            &before.preferences,
+            &after.preferences,
+        )
+        .diff(AuditField::Address, &address(before), &address(after))
+        .diff(AuditField::Enabled, &before.enabled, &after.enabled);
+}
+
+fn address(model: &user::Model) -> [&Option<String>; 6] {
+    [
+        &model.address_formatted,
+        &model.address_street_address,
+        &model.address_locality,
+        &model.address_region,
+        &model.address_postal_code,
+        &model.address_country,
+    ]
+}
+
 impl UserRepositoryImpl {
     pub fn new(db: DatabaseConnection) -> Self {
         Self { db }
@@ -118,7 +178,9 @@ impl UserRepositoryImpl {
         mut patch: UserProfilePatch,
     ) -> Result<Option<User>, UserRepositoryError> {
         // Serialize preference patches with profile/theme changes to preserve all JSON keys.
-        let txn = audit::begin(&self.db, "account.update_profile")
+        let txn = self
+            .db
+            .begin()
             .await
             .map_err(|error| UserRepositoryError::QueryFailed(Box::new(error)))?;
         let Some(model) = UserEntity::find()
@@ -130,6 +192,7 @@ impl UserRepositoryImpl {
         else {
             return Ok(None);
         };
+        let before = model.clone();
         let mut preferences = model.preferences.clone();
         let mut active: user::ActiveModel = model.into();
         apply_patch!(
@@ -174,9 +237,13 @@ impl UserRepositoryImpl {
             .await
             .map_err(|error| UserRepositoryError::QueryFailed(Box::new(error)))?
             .as_uuid();
-        audit::record(&txn, "account.update_profile", "user", oid.0)
-            .await
-            .map_err(|error| UserRepositoryError::QueryFailed(Box::new(error)))?;
+        audit::record(
+            &txn,
+            AuditRecord::success(AuditAction::AccountProfileUpdate, oid.0)
+                .with_changes(|changes| user_attribute_changes(changes, &before, &model)),
+        )
+        .await
+        .map_err(|error| UserRepositoryError::QueryFailed(Box::new(error)))?;
         let user = to_domain(model)?;
         txn.commit()
             .await
@@ -190,7 +257,9 @@ impl UserRepositoryImpl {
         oid: UserOid,
         update: UserIdentifierUpdate,
     ) -> Result<Option<User>, UserRepositoryError> {
-        let txn = audit::begin(&self.db, "account.update_identifier")
+        let txn = self
+            .db
+            .begin()
             .await
             .map_err(|error| UserRepositoryError::QueryFailed(Box::new(error)))?;
         let Some(model) = UserEntity::find()
@@ -203,6 +272,7 @@ impl UserRepositoryImpl {
             return Ok(None);
         };
 
+        let before = model.clone();
         let mut active: user::ActiveModel = model.clone().into();
         match &update {
             UserIdentifierUpdate::Username { value, normalized } => {
@@ -247,9 +317,16 @@ impl UserRepositoryImpl {
                     .await
                     .map_err(|error| UserRepositoryError::QueryFailed(Box::new(error)))?
                     .as_uuid();
-                audit::record(&txn, "account.update_identifier", "user", oid.0)
-                    .await
-                    .map_err(|error| UserRepositoryError::QueryFailed(Box::new(error)))?;
+                audit::record(
+                    &txn,
+                    AuditRecord::success(AuditAction::AccountIdentifierUpdate, oid.0).with_changes(
+                        |changes| {
+                            user_attribute_changes(changes, &before, &model);
+                        },
+                    ),
+                )
+                .await
+                .map_err(|error| UserRepositoryError::QueryFailed(Box::new(error)))?;
                 let user = to_domain(model)?;
                 txn.commit()
                     .await
@@ -347,7 +424,9 @@ impl UserRepository for UserRepositoryImpl {
     ) -> Result<i32, UserRepositoryError> {
         let oid = Uuid::from(user_oid);
         let now = Utc::now().fixed_offset();
-        let transaction = audit::begin(&self.db, "account.increment_failed_attempts")
+        let transaction = self
+            .db
+            .begin()
             .await
             .map_err(|error| UserRepositoryError::UpdateFailedAttempts(Box::new(error)))?;
         let updated = UserEntity::update_many()
@@ -398,14 +477,14 @@ impl UserRepository for UserRepositoryImpl {
                 .await
                 .map_err(|error| UserRepositoryError::UpdateFailedAttempts(Box::new(error)))?;
         }
-        audit::record(
-            &transaction,
-            "account.increment_failed_attempts",
-            "user",
-            oid,
-        )
-        .await
-        .map_err(|error| UserRepositoryError::UpdateFailedAttempts(Box::new(error)))?;
+        if !was_locked && attempts >= lock_threshold {
+            audit::record(
+                &transaction,
+                AuditRecord::success(AuditAction::AccountLock, oid).actor(AuditActor::system()),
+            )
+            .await
+            .map_err(|error| UserRepositoryError::UpdateFailedAttempts(Box::new(error)))?;
+        }
         transaction
             .commit()
             .await
@@ -417,7 +496,9 @@ impl UserRepository for UserRepositoryImpl {
     async fn reset_failed_attempts(&self, user_oid: UserOid) -> Result<(), UserRepositoryError> {
         let oid = Uuid::from(user_oid);
         let now = Utc::now().fixed_offset();
-        let transaction = audit::begin(&self.db, "account.reset_failed_attempts")
+        let transaction = self
+            .db
+            .begin()
             .await
             .map_err(|error| UserRepositoryError::ResetFailedAttempts(Box::new(error)))?;
         let current = UserEntity::find()
@@ -457,9 +538,6 @@ impl UserRepository for UserRepositoryImpl {
                 .await
                 .map_err(|error| UserRepositoryError::ResetFailedAttempts(Box::new(error)))?;
         }
-        audit::record(&transaction, "account.reset_failed_attempts", "user", oid)
-            .await
-            .map_err(|error| UserRepositoryError::ResetFailedAttempts(Box::new(error)))?;
         transaction
             .commit()
             .await

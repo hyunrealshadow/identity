@@ -105,15 +105,38 @@ when issued and are never readable afterwards.
 
 ## Security auditing
 
-Identity records security-relevant changes to accounts, credentials, sessions,
-and authorizations. Audit records exclude passwords, authentication secrets,
-and token contents.
+Identity keeps one append-only `audit` journal with four categories:
 
-Repositories append audit facts explicitly in the same transaction as each
-security transition. A failed audit insert rolls back the change. Request and
-trace identifiers link the response to the fact; an anonymous login transition
-keeps its actor unknown instead of impersonating the target account. Activity
-touches, polling timestamps and replay counters do not produce change events.
+| Category | Covers |
+|---|---|
+| `management` | Users, clients, roles, groups, scopes, API resources, keys, and instance settings |
+| `account` | A person's own profile, identifiers, password, authenticator app, recovery codes, and passkeys |
+| `sign_in` | Sign-in results, account lockout, reauthentication, and ended sessions |
+| `authorization` | Consent, device approvals, authorization revocation, and token revocation or replay |
+
+Each record names a public action (such as `role_update` or `sign_in`), its
+outcome (`success` or `failure` with a failure reason), the actor (`user`,
+`client`, `system`, or `anonymous`), the target, the OAuth client involved, and
+the request's client IP address, User-Agent, and request/trace identifiers.
+Actor and target names are snapshotted when the record is written, so the log
+stays readable after renames and deletions. Changes list only the attributes
+that changed: values for ordinary fields, added and removed members for
+collections such as roles, permissions, and scopes, and a bare "changed" marker
+for secrets. Passwords, authenticator secrets, recovery codes, and token
+contents are never recorded. Enumerated columns hold the stable values of the
+backend enums; a stored value the backend does not recognize is rejected as a
+corrupt record.
+
+A sign-in produces one record, not one per protocol step: success with the
+methods used, or failure with its reason. A failure before the person is
+authenticated has an anonymous actor and the account as its target. Login state
+transitions, activity touches, polling timestamps, and replay counters do not
+produce records.
+
+Repositories write each record in the same transaction as the change it
+describes, in a single statement, so a failed audit insert rolls the change back
+and auditing adds no extra round trip. The journal stores IP addresses and
+User-Agents, which are personal data; plan retention accordingly.
 
 The audit repository exposes append and read operations only. Database roles
 must separately restrict direct modification of historical facts; application

@@ -25,7 +25,7 @@ pub struct AuditEventQuery {
 }
 
 /// Repository page result preserving bidirectional cursor edge flags.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct AuditEventPage {
     pub items: Vec<AuditEvent>,
     pub has_previous_page: bool,
@@ -55,6 +55,4 @@ pub trait AuditQueryRepository: Send + Sync {
         &self,
         oid: AuditEventOid,
     ) -> Result<Option<AuditEvent>, AuditQueryRepositoryError>;
-
-    async fn list_distinct_actions(&self) -> Result<Vec<String>, AuditQueryRepositoryError>;
 }

@@ -12,9 +12,12 @@ use identity_domain::{
 };
 use uuid::Uuid;
 
+use identity_domain::audit as domain;
+
 use super::{
+    enums::AuditCategory,
     integration,
-    types::{AuditEventNode, AuditEventOrder, decode_audit_event_oid},
+    types::{AuditEventNode, AuditEventOrder, PreloadedActor, decode_audit_event_oid},
 };
 use crate::graphql::schema::{
     access::access,
@@ -56,6 +59,7 @@ impl AuditQuery {
     async fn audit_events(
         &self,
         ctx: &Context<'_>,
+        category: Option<AuditCategory>,
         #[graphql(validator(chars_max_length = 2048))] query: Option<String>,
         #[graphql(validator(chars_max_length = 100))] time_zone: Option<String>,
         order_by: Option<AuditEventOrder>,
@@ -68,25 +72,32 @@ impl AuditQuery {
         let request = request_context(ctx)?;
         let order = order_by.unwrap_or_else(AuditEventOrder::default_order);
 
-        let result =
-            integration::list_events(request, query.clone(), time_zone.clone(), order, page)
-                .await
-                .map_err(|error| app_error(ctx, error))?;
+        let category = category.map(domain::AuditCategory::from);
+        let result = integration::list_events(
+            request,
+            category,
+            query.clone(),
+            time_zone.clone(),
+            order,
+            page,
+        )
+        .await
+        .map_err(|error| app_error(ctx, error))?;
 
         let snapshot_at = result.snapshot_at;
         let additional = connection::connection_total(ctx, async {
-            integration::count_events(request, query, time_zone, snapshot_at)
+            integration::count_events(request, category, query, time_zone, snapshot_at)
                 .await
                 .map_err(|error| app_error(ctx, error))
         })
         .await?;
 
-        let want_users = connection_selects_field(ctx, "actorUser")
+        let want_users = connection_selects_actor(ctx, "user")
             && ManagementGuard::new(ManagementScope::UsersRead, ManagementTarget::instance())
                 .check(ctx)
                 .await
                 .is_ok();
-        let want_clients = connection_selects_field(ctx, "actorClient")
+        let want_clients = connection_selects_actor(ctx, "client")
             && ManagementGuard::new(ManagementScope::ClientsRead, ManagementTarget::instance())
                 .check(ctx)
                 .await
@@ -96,8 +107,8 @@ impl AuditQuery {
             let user_oids = result
                 .items
                 .iter()
-                .filter(|item| item.event.actor_type.as_deref() == Some("user"))
-                .filter_map(|item| item.event.actor_oid.filter(|oid| !oid.is_nil()))
+                .filter(|item| item.event.actor.kind == domain::AuditActorKind::User)
+                .filter_map(|item| item.event.actor.oid)
                 .collect::<HashSet<_>>()
                 .into_iter()
                 .map(UserOid)
@@ -120,8 +131,8 @@ impl AuditQuery {
             let client_oids: Vec<ClientOid> = result
                 .items
                 .iter()
-                .filter(|item| item.event.actor_type.as_deref() == Some("client"))
-                .filter_map(|item| item.event.actor_oid.filter(|oid| !oid.is_nil()))
+                .filter(|item| item.event.actor.kind == domain::AuditActorKind::Client)
+                .filter_map(|item| item.event.actor.oid)
                 .collect::<HashSet<_>>()
                 .into_iter()
                 .collect();
@@ -147,54 +158,41 @@ impl AuditQuery {
         connection
             .edges
             .extend(result.items.into_iter().map(|item| {
-                let user = if want_users && item.event.actor_type.as_deref() == Some("user") {
-                    item.event
-                        .actor_oid
-                        .and_then(|oid| preloaded_users.get(&oid).cloned())
-                } else {
-                    None
-                };
-                let client = if want_clients && item.event.actor_type.as_deref() == Some("client") {
-                    item.event
-                        .actor_oid
-                        .and_then(|oid| preloaded_clients.get(&oid).cloned())
-                } else {
-                    None
+                let actor = &item.event.actor;
+                let preloaded = PreloadedActor {
+                    user: actor
+                        .oid
+                        .filter(|_| actor.kind == domain::AuditActorKind::User)
+                        .and_then(|oid| preloaded_users.get(&oid).cloned()),
+                    user_loaded: want_users,
+                    client: actor
+                        .oid
+                        .filter(|_| actor.kind == domain::AuditActorKind::Client)
+                        .and_then(|oid| preloaded_clients.get(&oid).cloned()),
+                    client_loaded: want_clients,
                 };
                 Edge::new(
                     RbacConnectionCursor::from_backend(item.cursor),
-                    AuditEventNode::with_preloaded_actors(
-                        item.event,
-                        user,
-                        want_users,
-                        client,
-                        want_clients,
-                    ),
+                    AuditEventNode::with_preloaded_actor(item.event, preloaded),
                 )
             }));
         Ok(connection)
     }
-
-    #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::AuditRead, ManagementTarget::instance())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::AuditRead))
-    )]
-    async fn audit_event_actions(&self, ctx: &Context<'_>) -> Result<Vec<String>> {
-        let request = request_context(ctx)?;
-        integration::list_distinct_actions(request)
-            .await
-            .map_err(|error| app_error(ctx, error))
-    }
 }
 
-fn connection_selects_field(ctx: &Context<'_>, field_name: &str) -> bool {
+fn connection_selects_actor(ctx: &Context<'_>, field_name: &str) -> bool {
     let look_ahead = ctx.look_ahead();
     look_ahead
         .field("edges")
         .field("node")
+        .field("actor")
         .field(field_name)
         .exists()
-        || look_ahead.field("nodes").field(field_name).exists()
+        || look_ahead
+            .field("nodes")
+            .field("actor")
+            .field(field_name)
+            .exists()
 }
 
 #[cfg(test)]
@@ -220,7 +218,7 @@ mod tests {
         // so any complexity > 3000 would surface as a GraphQL parse/validation complexity error.
         let query = r#"
             query {
-                auditEvents(first: 100, query: "action:user.*", timeZone: "Asia/Shanghai", orderBy: OCCURRED_AT_DESC) {
+                auditEvents(first: 100, category: MANAGEMENT, query: "action:user_*", timeZone: "Asia/Shanghai", orderBy: OCCURRED_AT_DESC) {
                     totalCount
                     pageInfo {
                         hasPreviousPage
@@ -233,40 +231,49 @@ mod tests {
                         node {
                             id
                             occurredAt
-                            transactionId
+                            category
                             action
-                            operation
-                            eventKind
-                            actorType
-                            actorOid
-                            actorGlobalId
-                            targetType
-                            targetOid
-                            targetGlobalId
-                            resourceType
-                            resourceOid
-                            resourceGlobalId
-                            subjectOid
-                            subjectGlobalId
-                            status
-                            previousStatus
-                            credentialType
-                            reason
+                            outcome
+                            failureReason
+                            actor {
+                                kind
+                                id
+                                oid
+                                label
+                                user {
+                                    id
+                                    username
+                                    email
+                                    nickname
+                                }
+                                client {
+                                    id
+                                    name
+                                    names {
+                                        locale
+                                        value
+                                    }
+                                }
+                            }
+                            target {
+                                kind
+                                id
+                                oid
+                                label
+                            }
+                            clientId
+                            authMethods
+                            ipAddress
+                            userAgent
                             requestId
                             traceId
-                            actorUser {
-                                id
-                                username
-                                email
-                                nickname
-                            }
-                            actorClient {
-                                id
-                                name
-                                names {
-                                    locale
-                                    value
-                                }
+                            changes {
+                                field
+                                kind
+                                oldValue
+                                newValue
+                                added
+                                removed
                             }
                         }
                     }

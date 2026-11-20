@@ -1,75 +1,287 @@
-//! Explicit security facts on the caller's business transaction.
+//! Append-only writer for the `audit` journal.
 //!
-//! Request actor state is task-local, never PostgreSQL session configuration.
-//! Anonymous protocol transitions retain an unknown actor rather than treating
-//! the target account as the caller. No credential or token data is recorded.
-use std::future::Future;
+//! Callers describe what happened with a typed [`AuditRecord`] and write it on
+//! the transaction of the business change it describes, so a failed insert
+//! rolls the change back. Request facts (actor, client address, User-Agent,
+//! request and trace identifiers) come from task-local context captured once
+//! per request; a record only carries what its call site knows. Each record is
+//! a single `INSERT` whose missing display labels are snapshotted by
+//! subqueries in the same statement, so auditing adds no round trips.
+//! Credentials, tokens, and secret values are never recorded.
 
-use identity_domain::authorization::{ActorContext, ActorPrincipal};
+use std::{future::Future, net::IpAddr};
+
+use identity_domain::{
+    audit::{AuditActor, AuditActorKind, AuditRecord, AuditTargetKind},
+    authorization::ActorContext,
+};
 use sea_orm::{
-    ConnectionTrait, DatabaseConnection, DatabaseTransaction, DbBackend, DbErr, Statement,
+    ColumnTrait, ConnectionTrait, DatabaseConnection, DbErr, EntityName, EntityTrait,
     TransactionTrait,
+    sea_query::{Expr, Query, SelectStatement, SimpleExpr},
 };
 use uuid::Uuid;
 
-use crate::observability::context;
+use crate::{
+    database::entity::{
+        audit::{Column as AuditColumn, Entity as AuditEntity},
+        client, resource, role, scope, user, user_group,
+    },
+    observability::context,
+};
+
+/// Longest stored User-Agent; longer values are truncated on a char boundary.
+const MAX_USER_AGENT_LEN: usize = 512;
+
+/// Client facts of the inbound request.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct AuditRequestContext {
+    pub ip_address: Option<IpAddr>,
+    pub user_agent: Option<String>,
+}
 
 tokio::task_local! {
     static ACTOR: ActorContext;
+    static REQUEST: AuditRequestContext;
+    static SYSTEM: ();
 }
 
+/// Attribute audit records written by `future` to an authenticated actor.
 pub async fn with_actor<F: Future>(actor: ActorContext, future: F) -> F::Output {
     ACTOR.scope(actor, future).await
 }
 
-pub async fn begin(
-    db: &DatabaseConnection,
-    _action: &'static str,
-) -> Result<DatabaseTransaction, DbErr> {
-    db.begin().await
+/// Attach the inbound request's client facts to audit records.
+pub async fn with_request<F: Future>(request: AuditRequestContext, future: F) -> F::Output {
+    REQUEST.scope(request, future).await
 }
 
-/// Record only after a successful transition, before committing its transaction.
-/// The journal has no update/delete API; a failed insert must abort the change.
-#[tracing::instrument(skip_all, name = "db.audit", fields(db.system = "postgresql", audit.action = action, audit.target_type = target_type))]
-pub async fn record(
-    transaction: &DatabaseTransaction,
-    action: &'static str,
-    target_type: &'static str,
-    target_oid: Uuid,
-) -> Result<(), DbErr> {
-    let actor = ACTOR.try_with(Clone::clone).ok();
-    let correlation = context::current_request_correlation();
-    let (kind, oid) = match actor.as_ref().map(|actor| &actor.principal) {
-        Some(ActorPrincipal::User { user_oid, .. }) => ("user", Some(Uuid::from(*user_oid))),
-        Some(ActorPrincipal::Client { client_oid }) => ("client", Some(*client_oid)),
-        None => ("unknown", None),
-    };
-    let request_id = actor
-        .as_ref()
-        .map(|actor| actor.request_id.as_str().to_owned())
-        .or_else(|| correlation.as_ref().map(|value| value.request_id.clone()));
-    let trace_id = actor
-        .as_ref()
-        .and_then(|actor| {
-            actor
-                .trace_id
-                .as_ref()
-                .map(|value| value.as_str().to_owned())
-        })
-        .or_else(|| correlation.and_then(|value| value.trace_id));
-    transaction
-        .execute_raw(Statement::from_sql_and_values(
-            DbBackend::Postgres,
-            r#"INSERT INTO security_audit
-               (resource_type,resource_oid,subject_oid,operation,status,
-                actor_type,actor_oid,action,target_type,target_oid,reason,request_id,trace_id,event_kind)
-               VALUES ($1,$2,CASE WHEN $3='user' THEN $4::uuid ELSE NULL END,'mutation','success',
-                       $3,$4,$5,$1,$2,$6,$7,$8,'semantic')"#,
-            [target_type.into(), target_oid.into(), kind.into(), oid.into(), action.into(),
-             if actor.is_some() { "authenticated_action" } else { "protocol_transition" }.into(),
-             request_id.into(), trace_id.into()],
-        ))
-        .await?;
+/// Attribute audit records written by `future` to Identity itself, for seed
+/// reconciliation and installation bootstrap.
+pub async fn as_system<F: Future>(future: F) -> F::Output {
+    SYSTEM.scope((), future).await
+}
+
+/// Append `record` on `conn`, normally the business change's transaction.
+#[tracing::instrument(
+    skip_all,
+    name = "db.audit",
+    fields(
+        db.system = "postgresql",
+        audit.action = %record.action,
+        audit.category = %record.action.category(),
+        audit.outcome = %record.outcome,
+    )
+)]
+pub async fn record<C: ConnectionTrait>(conn: &C, record: AuditRecord) -> Result<(), DbErr> {
+    let actor = resolve_actor(record.actor.clone(), record.default_actor.clone());
+    let (request_id, trace_id) = correlation(&record);
+    let request = REQUEST.try_with(Clone::clone).unwrap_or_default();
+    let target_kind = record.target_oid.map(|_| record.action.target_kind());
+    let changes = (!record.changes.is_empty())
+        .then(|| serde_json::to_value(&record.changes))
+        .transpose()
+        .map_err(|error| DbErr::Custom(format!("audit changes are not serializable: {error}")))?;
+    let auth_methods = (!record.auth_methods.is_empty()).then(|| {
+        serde_json::Value::from(
+            record
+                .auth_methods
+                .iter()
+                .map(|method| <&'static str>::from(*method))
+                .collect::<Vec<_>>(),
+        )
+    });
+
+    let actor_label = label_expr(
+        actor.label.clone(),
+        match actor.kind {
+            AuditActorKind::User => Some(AuditTargetKind::User),
+            AuditActorKind::Client => Some(AuditTargetKind::Client),
+            AuditActorKind::System | AuditActorKind::Anonymous => None,
+        },
+        actor.oid,
+    );
+    let target_label = label_expr(record.target_label.clone(), target_kind, record.target_oid);
+
+    let mut insert = Query::insert();
+    insert
+        .into_table(AuditEntity.table_ref())
+        .columns([
+            AuditColumn::Category,
+            AuditColumn::Action,
+            AuditColumn::Outcome,
+            AuditColumn::FailureReason,
+            AuditColumn::ActorKind,
+            AuditColumn::ActorOid,
+            AuditColumn::ActorLabel,
+            AuditColumn::TargetKind,
+            AuditColumn::TargetOid,
+            AuditColumn::TargetLabel,
+            AuditColumn::ClientOid,
+            AuditColumn::AuthMethods,
+            AuditColumn::IpAddress,
+            AuditColumn::UserAgent,
+            AuditColumn::RequestId,
+            AuditColumn::TraceId,
+            AuditColumn::Changes,
+        ])
+        .values([
+            Expr::val(<&'static str>::from(record.action.category())),
+            Expr::val(<&'static str>::from(record.action)),
+            Expr::val(<&'static str>::from(record.outcome)),
+            Expr::val(record.failure_reason.map(<&'static str>::from)),
+            Expr::val(<&'static str>::from(actor.kind)),
+            Expr::val(actor.oid),
+            actor_label,
+            Expr::val(target_kind.map(<&'static str>::from)),
+            Expr::val(record.target_oid),
+            target_label,
+            Expr::val(record.client_oid),
+            Expr::val(auth_methods),
+            Expr::val(request.ip_address.map(|address| address.to_string())),
+            Expr::val(request.user_agent.map(truncate_user_agent)),
+            Expr::val(request_id),
+            Expr::val(trace_id),
+            Expr::val(changes),
+        ])
+        .map_err(|error| DbErr::Custom(format!("audit insert is malformed: {error}")))?;
+    conn.execute(&insert).await?;
     Ok(())
+}
+
+/// Append `record` in its own transaction. Only for facts that have no
+/// business write to join, such as a rejected attempt.
+pub async fn record_standalone(db: &DatabaseConnection, record: AuditRecord) -> Result<(), DbErr> {
+    let transaction = db.begin().await?;
+    self::record(&transaction, record).await?;
+    transaction.commit().await
+}
+
+fn resolve_actor(explicit: Option<AuditActor>, fallback: Option<AuditActor>) -> AuditActor {
+    if let Some(actor) = explicit {
+        return actor;
+    }
+    if let Ok(actor) = ACTOR.try_with(|actor| AuditActor::from_principal(&actor.principal)) {
+        return actor;
+    }
+    if let Some(actor) = fallback {
+        return actor;
+    }
+    if SYSTEM.try_with(|()| ()).is_ok() {
+        return AuditActor::system();
+    }
+    AuditActor::anonymous()
+}
+
+fn correlation(record: &AuditRecord) -> (Option<String>, Option<String>) {
+    let explicit = record.correlation.clone().unwrap_or_default();
+    let actor = ACTOR
+        .try_with(|actor| {
+            (
+                actor.request_id.as_str().to_owned(),
+                actor.trace_id.as_ref().map(|id| id.as_str().to_owned()),
+            )
+        })
+        .ok();
+    let request = context::current_request_correlation();
+    let request_id = explicit
+        .request_id
+        .or_else(|| actor.as_ref().map(|(id, _)| id.clone()))
+        .or_else(|| request.as_ref().map(|value| value.request_id.clone()));
+    let trace_id = explicit
+        .trace_id
+        .or_else(|| actor.and_then(|(_, trace)| trace))
+        .or_else(|| request.and_then(|value| value.trace_id));
+    (request_id, trace_id)
+}
+
+/// The supplied label, or the object's current name read in the same statement.
+fn label_expr(
+    label: Option<String>,
+    kind: Option<AuditTargetKind>,
+    oid: Option<Uuid>,
+) -> SimpleExpr {
+    if let Some(label) = label {
+        return Expr::val(label);
+    }
+    match (kind, oid) {
+        (Some(kind), Some(oid)) => label_query(kind, oid).map_or_else(
+            || Expr::val(Option::<String>::None),
+            |select| SimpleExpr::SubQuery(None, Box::new(select.into())),
+        ),
+        _ => Expr::val(Option::<String>::None),
+    }
+}
+
+/// Reads the display name of an object. Kinds without a name column take
+/// their label from the call site.
+fn label_query(kind: AuditTargetKind, oid: Uuid) -> Option<SelectStatement> {
+    fn name_of<E: EntityTrait>(
+        entity: E,
+        oid_column: E::Column,
+        label: E::Column,
+        oid: Uuid,
+    ) -> SelectStatement {
+        Query::select()
+            .column(label)
+            .from(entity)
+            .and_where(oid_column.eq(oid))
+            .limit(1)
+            .to_owned()
+    }
+    Some(match kind {
+        AuditTargetKind::User => name_of(user::Entity, user::Column::Oid, user::Column::Name, oid),
+        AuditTargetKind::Client => name_of(
+            client::Entity,
+            client::Column::Oid,
+            client::Column::Name,
+            oid,
+        ),
+        AuditTargetKind::Role => name_of(role::Entity, role::Column::Oid, role::Column::Name, oid),
+        AuditTargetKind::Group => name_of(
+            user_group::Entity,
+            user_group::Column::Oid,
+            user_group::Column::Name,
+            oid,
+        ),
+        AuditTargetKind::Scope => {
+            name_of(scope::Entity, scope::Column::Oid, scope::Column::Code, oid)
+        }
+        AuditTargetKind::Resource => name_of(
+            resource::Entity,
+            resource::Column::Oid,
+            resource::Column::Name,
+            oid,
+        ),
+        AuditTargetKind::Key
+        | AuditTargetKind::Setting
+        | AuditTargetKind::Session
+        | AuditTargetKind::Passkey
+        | AuditTargetKind::Authorization
+        | AuditTargetKind::DeviceAuthorization => return None,
+    })
+}
+
+fn truncate_user_agent(mut value: String) -> String {
+    if value.len() > MAX_USER_AGENT_LEN {
+        let mut end = MAX_USER_AGENT_LEN;
+        while !value.is_char_boundary(end) {
+            end -= 1;
+        }
+        value.truncate(end);
+    }
+    value
+}
+
+#[cfg(test)]
+mod tests {
+    use super::truncate_user_agent;
+
+    #[test]
+    fn user_agent_truncation_keeps_whole_characters() {
+        let value = "浏".repeat(200);
+        let truncated = truncate_user_agent(value);
+        assert!(truncated.len() <= 512);
+        assert!(truncated.chars().all(|ch| ch == '浏'));
+    }
 }

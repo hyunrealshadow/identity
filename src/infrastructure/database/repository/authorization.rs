@@ -13,10 +13,6 @@ use std::collections::BTreeSet;
 use async_trait::async_trait;
 use identity_domain::{
     authorization::{
-        audit::{
-            AuditSubjectKind, AuthorizationAuditContext, AuthorizationAuditError,
-            AuthorizationAuditJournal, AuthorizationAuditStorageError,
-        },
         authority::{
             ClientScopeAuthority, UserPermissionAuthority, is_trusted_management_permission,
         },
@@ -33,7 +29,7 @@ use identity_domain::{
 };
 use sea_orm::{
     ConnectionTrait, DatabaseConnection, DatabaseTransaction, DbBackend, DbErr, Statement,
-    TransactionTrait, Value,
+    TransactionTrait,
 };
 use serde_json::Value as SerdeJsonValue;
 use uuid::Uuid;
@@ -198,56 +194,6 @@ GROUP BY u.id
     }))
 }
 
-fn audit_actor_type(audit: &AuthorizationAuditContext) -> &'static str {
-    match audit.actor.kind {
-        AuditSubjectKind::User => "user",
-        AuditSubjectKind::Client => "client",
-        AuditSubjectKind::System => "system",
-        _ => audit.actor.kind.as_str(),
-    }
-}
-
-/// Append one semantic audit fact on the caller's transaction. Any error must
-/// be propagated so the business write rolls back.
-pub async fn append_semantic_audit(
-    txn: &DatabaseTransaction,
-    context: &AuthorizationAuditContext,
-) -> Result<(), AuthorizationAuditStorageError> {
-    let trace_id = context
-        .trace_id
-        .as_ref()
-        .map(|trace| trace.as_str().to_owned());
-    txn.execute_raw(Statement::from_sql_and_values(
-        DbBackend::Postgres,
-        r#"
-INSERT INTO security_audit (
-    resource_type, resource_oid, subject_oid, operation, status,
-    actor_type, actor_oid, action, target_type, target_oid,
-    reason, request_id, trace_id, event_kind
-) VALUES (
-    $1, $2, CASE WHEN $3 = 'user' THEN $4::uuid ELSE NULL END, 'authorization', 'success',
-    $3, $4, $5, $6, $7,
-    $8, $9, $10, 'semantic'
-)
-"#,
-        [
-            context.target.kind.as_str().to_owned().into(),
-            context.target.oid.into(),
-            audit_actor_type(context).to_owned().into(),
-            context.actor.oid.into(),
-            context.action.to_owned().into(),
-            context.target.kind.as_str().to_owned().into(),
-            context.target.oid.into(),
-            context.reason.clone().into(),
-            context.request_id.as_str().to_owned().into(),
-            Value::String(trace_id),
-        ],
-    ))
-    .await
-    .map_err(|error| AuthorizationAuditStorageError(Box::new(error)))?;
-    Ok(())
-}
-
 #[async_trait]
 impl ManagementAuthorityRepository for AuthorizationRepositoryImpl {
     async fn find_user_permission_authority(
@@ -349,59 +295,5 @@ impl OwnerRecoverabilityPort for AuthorizationRepositoryImpl {
             .map_err(fail)?;
         txn.commit().await.map_err(fail)?;
         Ok(snapshot)
-    }
-}
-
-#[async_trait]
-impl AuthorizationAuditJournal for AuthorizationRepositoryImpl {
-    async fn record(
-        &self,
-        context: &AuthorizationAuditContext,
-    ) -> Result<(), AuthorizationAuditError> {
-        let txn = self
-            .db
-            .begin()
-            .await
-            .map_err(|_| AuthorizationAuditError::WriteFailed)?;
-        append_semantic_audit(&txn, context)
-            .await
-            .map_err(|_| AuthorizationAuditError::WriteFailed)?;
-        txn.commit()
-            .await
-            .map_err(|_| AuthorizationAuditError::WriteFailed)?;
-        Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use identity_domain::authorization::{
-        RequestId,
-        audit::{AuditSubject, AuditSubjectKind, AuthorizationAuditContext},
-    };
-    use uuid::Uuid;
-
-    use super::audit_actor_type;
-
-    #[test]
-    fn audit_actor_type_never_confuses_human_and_machine() {
-        let user = AuthorizationAuditContext::new(
-            AuditSubject::new(AuditSubjectKind::User, Uuid::new_v4()),
-            "rbac.user.roles.assign",
-            AuditSubject::new(AuditSubjectKind::Role, Uuid::new_v4()),
-            "test",
-            RequestId::new("request-1").unwrap(),
-            None,
-        );
-        let client = AuthorizationAuditContext::new(
-            AuditSubject::new(AuditSubjectKind::Client, Uuid::new_v4()),
-            "client.scope.set",
-            AuditSubject::new(AuditSubjectKind::Permission, Uuid::new_v4()),
-            "test",
-            RequestId::new("request-2").unwrap(),
-            None,
-        );
-        assert_eq!(audit_actor_type(&user), "user");
-        assert_eq!(audit_actor_type(&client), "client");
     }
 }

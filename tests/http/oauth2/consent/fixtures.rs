@@ -486,6 +486,11 @@ async fn consent_test_state_for(
                     )])
                 })
                 .collect::<Vec<_>>()])
+            // The audit record names the client the user decided for.
+            .append_query_results([[BTreeMap::from([(
+                "oid".to_owned(),
+                Value::from(client_oid),
+            )])]])
             .append_exec_results([
                 // update the stored interaction
                 MockExecResult {

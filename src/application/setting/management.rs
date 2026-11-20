@@ -11,6 +11,7 @@
 //! The repository re-checks live authority, compares the version and appends
 //! the semantic audit record inside the write transaction.
 
+use identity_domain::audit::AuditAction;
 use std::sync::Arc;
 
 use async_trait::async_trait;
@@ -86,10 +87,10 @@ impl InstanceSettingSection {
     }
 
     #[must_use]
-    pub const fn audit_action(self) -> &'static str {
+    pub const fn audit_action(self) -> AuditAction {
         match self {
-            Self::Protocol => "setting.protocol.update",
-            Self::Authentication => "setting.authentication.update",
+            Self::Protocol => AuditAction::SettingProtocolUpdate,
+            Self::Authentication => AuditAction::SettingAuthenticationUpdate,
         }
     }
 
@@ -427,7 +428,7 @@ impl InstanceSettingService {
         section: InstanceSettingSection,
         result: &Result<InstanceSettingsView, AppError>,
     ) {
-        let mut event = BusinessEvent::business(section.audit_action())
+        let mut event = BusinessEvent::business(section.audit_action().into())
             .attribute("section", EventValue::Text(section.as_str().to_owned()));
         match result {
             Ok(_) => event = event.outcome("success"),

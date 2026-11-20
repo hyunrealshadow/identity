@@ -1,3 +1,4 @@
+use identity_domain::audit::{AuditAction, AuditActor, AuditRecord};
 use std::collections::BTreeMap;
 
 use async_trait::async_trait;
@@ -704,9 +705,8 @@ pub(super) async fn retire_built_in_scopes(
         advance_users_affected_by_role(transaction, role_id).await?;
         audit::record(
             transaction,
-            "rbac.role.permissions.reconcile",
-            "role",
-            role_oid,
+            AuditRecord::success(AuditAction::RolePermissionUpdate, role_oid)
+                .actor(AuditActor::system()),
         )
         .await
         .map_err(AppError::internal)?;
@@ -733,9 +733,13 @@ pub(super) async fn retire_built_in_scopes(
         client_authorization_boundary::withdraw_client_authorizations(transaction, client_id)
             .await
             .map_err(AppError::internal)?;
-        audit::record(transaction, "client.update", "client", client_oid)
-            .await
-            .map_err(AppError::internal)?;
+        audit::record(
+            transaction,
+            AuditRecord::success(AuditAction::ClientScopeUpdate, client_oid)
+                .actor(AuditActor::system()),
+        )
+        .await
+        .map_err(AppError::internal)?;
     }
 
     Ok(())

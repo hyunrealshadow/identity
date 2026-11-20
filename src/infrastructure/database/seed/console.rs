@@ -16,6 +16,7 @@
 
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
+use identity_domain::audit::{AuditAction, AuditActor, AuditRecord};
 use identity_domain::{
     authorization::catalog::{ManagementScope, validate_catalog},
     openid_connect::{ApiScope, ScopeSet, model::claim::StandardScopes},
@@ -229,9 +230,12 @@ async fn ensure_console_client_scopes_in_transaction(
         client_authorization_boundary::withdraw_client_authorizations(db, existing.id)
             .await
             .map_err(AppError::internal)?;
-        audit::record(db, "client.update", "client", oid)
-            .await
-            .map_err(AppError::internal)?;
+        audit::record(
+            db,
+            AuditRecord::success(AuditAction::ClientScopeUpdate, oid).actor(AuditActor::system()),
+        )
+        .await
+        .map_err(AppError::internal)?;
     }
     Ok(())
 }
@@ -335,9 +339,13 @@ async fn configure_console_client(
                 .await
                 .map_err(AppError::internal)?;
         }
-        audit::record(db, "client.update", "client", console_oid)
-            .await
-            .map_err(AppError::internal)?;
+        audit::record(
+            db,
+            AuditRecord::success(AuditAction::ClientUpdate, console_oid)
+                .actor(AuditActor::system()),
+        )
+        .await
+        .map_err(AppError::internal)?;
     }
     Ok(())
 }

@@ -3,6 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 
 import type { EffectivePermissions } from '#/lib/workspace'
+import {
+  ALL_AUDIT_LOG,
+  AUDIT_CATEGORY_LOGS,
+} from '#/modules/instance/audit/lib/audit-logs'
 import { AuditEventsPage } from '#/modules/instance/audit/pages/audit-events-page'
 import { renderWithLocale } from '#/test/render'
 
@@ -35,34 +39,45 @@ const mocks = vi.hoisted(() => ({
             node: {
               id: 'QXVkaXRFdmVudDo1NTBlODQwMC1lMjliLTQxZDQtYTcxNi00NDY2NTU0NDAwMDA',
               occurredAt: '2026-11-20T09:15:00Z',
-              transactionId: '42',
-              action: 'user.create',
-              operation: 'mutation',
-              eventKind: 'semantic',
-              actorType: 'user',
-              actorOid: '550e8400-e29b-41d4-a716-446655440000',
-              actorGlobalId: 'VXNlcjo1NTBlODQwMC1lMjliLTQxZDQtYTcxNi00NDY2NTU0NDAwMDA',
-              targetType: 'user',
-              targetOid: '660e8400-e29b-41d4-a716-446655440001',
-              targetGlobalId: 'VXNlcjo2NjBlODQwMC1lMjliLTQxZDQtYTcxNi00NDY2NTU0NDAwMDE',
-              resourceType: 'user',
-              resourceOid: '660e8400-e29b-41d4-a716-446655440001',
-              resourceGlobalId: 'VXNlcjo2NjBlODQwMC1lMjliLTQxZDQtYTcxNi00NDY2NTU0NDAwMDE',
-              subjectOid: null,
-              subjectGlobalId: null,
-              status: 'success',
-              previousStatus: null,
-              credentialType: null,
-              reason: 'Provisioned operator account',
+              category: 'MANAGEMENT',
+              action: 'ROLE_UPDATE',
+              outcome: 'SUCCESS',
+              failureReason: null,
+              actor: {
+                kind: 'USER',
+                id: 'VXNlcjo1NTBlODQwMC1lMjliLTQxZDQtYTcxNi00NDY2NTU0NDAwMDA',
+                oid: '550e8400-e29b-41d4-a716-446655440000',
+                label: 'alice',
+                user: {
+                  id: 'VXNlcjo1NTBlODQwMC1lMjliLTQxZDQtYTcxNi00NDY2NTU0NDAwMDA',
+                  username: 'alice',
+                  email: 'alice@example.test',
+                  nickname: 'Alice Operator',
+                },
+                client: null,
+              },
+              target: {
+                kind: 'ROLE',
+                id: 'Um9sZTo2NjBlODQwMC1lMjliLTQxZDQtYTcxNi00NDY2NTU0NDAwMDE',
+                oid: '660e8400-e29b-41d4-a716-446655440001',
+                label: 'Auditors',
+              },
+              clientId: null,
+              authMethods: [],
+              ipAddress: '203.0.113.7',
+              userAgent: 'Mozilla/5.0 Test',
               requestId: 'req-audit-1',
               traceId: 'trace-audit-1',
-              actorUser: {
-                id: 'VXNlcjo1NTBlODQwMC1lMjliLTQxZDQtYTcxNi00NDY2NTU0NDAwMDA',
-                username: 'alice',
-                email: 'alice@example.test',
-                nickname: 'Alice Operator',
-              },
-              actorClient: null,
+              changes: [
+                {
+                  field: 'NAME',
+                  kind: 'VALUE',
+                  oldValue: 'Readers',
+                  newValue: 'Auditors',
+                  added: [],
+                  removed: [],
+                },
+              ],
             },
           },
         ],
@@ -110,10 +125,6 @@ vi.mock('#/modules/instance/audit/hooks/use-audit-events', () => ({
     data: null,
     refresh: vi.fn(),
   }),
-  useAuditEventActions: () => ({
-    status: 'ready',
-    data: { auditEventActions: ['user.create', 'client.update'] },
-  }),
 }))
 
 function permissions(effective: string[]): EffectivePermissions {
@@ -139,9 +150,9 @@ describe('AuditEventsPage', () => {
   it('denies view when management.audit.read is missing', () => {
     mocks.permissions = permissions(['management.user.read'])
 
-    renderWithLocale(<AuditEventsPage search={{}} />)
+    renderWithLocale(<AuditEventsPage log={ALL_AUDIT_LOG} search={{}} />)
 
-    expect(screen.getByText('Audit events are not available')).toBeTruthy()
+    expect(screen.getByText('Audit log is not available')).toBeTruthy()
     expect(mocks.eventsCalls.every((call) => !call.enabled)).toBe(true)
   })
 
@@ -150,6 +161,7 @@ describe('AuditEventsPage', () => {
 
     const view = renderWithLocale(
       <AuditEventsPage
+        log={ALL_AUDIT_LOG}
         search={{
           event: 'QXVkaXRFdmVudDo1NTBlODQwMC1lMjliLTQxZDQtYTcxNi00NDY2NTU0NDAwMDA',
         }}
@@ -161,8 +173,11 @@ describe('AuditEventsPage', () => {
       includeActorClient: false,
     })
 
-    expect(screen.getByText('Provisioned operator account')).toBeTruthy()
-    expect(screen.getAllByText('Alice Operator').length).toBeGreaterThanOrEqual(1)
+    // The recorded name stands in for the account the caller cannot read,
+    // and the drawer shows what changed.
+    expect(screen.getAllByText('alice').length).toBeGreaterThanOrEqual(1)
+    expect(screen.getByText('Readers')).toBeTruthy()
+    expect(screen.getByText('Mozilla/5.0 Test')).toBeTruthy()
 
     const filterByActor = screen.getByRole('button', { name: 'Filter by actor' })
     fireEvent.click(filterByActor)
@@ -184,7 +199,7 @@ describe('AuditEventsPage', () => {
       'management.client.read',
     ])
 
-    renderWithLocale(<AuditEventsPage search={{}} />)
+    renderWithLocale(<AuditEventsPage log={ALL_AUDIT_LOG} search={{}} />)
 
     expect(mocks.eventsCalls.at(-1)?.variables).toMatchObject({
       includeActorUser: true,
@@ -204,22 +219,24 @@ describe('AuditEventsPage', () => {
   it('does not send an invalid query opened from a link and explains it at the query bar', () => {
     mocks.permissions = permissions(['management.audit.read'])
 
-    renderWithLocale(<AuditEventsPage search={{ q: 'targetType:' }} />)
+    renderWithLocale(<AuditEventsPage log={ALL_AUDIT_LOG} search={{ q: 'targetKind:' }} />)
 
     expect(mocks.eventsCalls.length).toBeGreaterThan(0)
     expect(mocks.eventsCalls.every((call) => call.variables === null)).toBe(true)
     const alert = screen.getByRole('alert')
-    expect(alert.textContent).toContain('targetType:')
+    expect(alert.textContent).toContain('targetKind:')
     expect(screen.getByText('The query has errors')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
   })
 
   it('navigates with event parameter when clicking a row action title button', async () => {
-    mocks.permissions = permissions(['management.audit.read'])
+    mocks.permissions = permissions(['management.audit.read', 'management.user.read'])
 
-    renderWithLocale(<AuditEventsPage search={{}} />)
+    renderWithLocale(<AuditEventsPage log={ALL_AUDIT_LOG} search={{}} />)
 
-    const rowActionButton = screen.getByRole('button', { name: 'user.create' })
+    const rowActionButton = screen.getByRole('button', {
+      name: 'Alice Operator Updated role Auditors',
+    })
     fireEvent.click(rowActionButton)
 
     await waitFor(() => {
@@ -229,5 +246,20 @@ describe('AuditEventsPage', () => {
     expect(navArg.search.event).toBe(
       'QXVkaXRFdmVudDo1NTBlODQwMC1lMjliLTQxZDQtYTcxNi00NDY2NTU0NDAwMDA',
     )
+  })
+
+  it('queries only its own category and keeps navigation on its route', async () => {
+    mocks.permissions = permissions(['management.audit.read'])
+    const log = AUDIT_CATEGORY_LOGS.SIGN_IN
+
+    renderWithLocale(<AuditEventsPage log={log} search={{}} />)
+
+    expect(screen.getByRole('heading', { name: 'Sign-ins', level: 1 })).toBeTruthy()
+    expect(mocks.eventsCalls.at(-1)?.variables).toMatchObject({ category: 'SIGN_IN' })
+    fireEvent.click(screen.getByRole('button', { name: '24h' }))
+    await waitFor(() => {
+      expect(mocks.navigate).toHaveBeenCalled()
+    })
+    expect(mocks.navigate.mock.calls.at(-1)?.[0].to).toBe('/audit-events/sign-in')
   })
 })

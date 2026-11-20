@@ -7,7 +7,6 @@ use user_credential::Column as UserCredentialColumn;
 use uuid::Uuid as UuidUuid;
 
 use super::super::{authorization_lifecycle::withdraw_user_authority_in_txn, session};
-use crate::database::audit as database_audit;
 
 impl UserCredentialRepositoryImpl {
     pub(super) async fn change_password_transaction(
@@ -19,9 +18,7 @@ impl UserCredentialRepositoryImpl {
         keep: Option<SessionOid>,
     ) -> Result<u32, UserCredentialRepositoryError> {
         let fail = |error| UserCredentialRepositoryError::UpdatePasswordFailed(Box::new(error));
-        let txn = database_audit::begin(&self.db, "security.change_password_transaction")
-            .await
-            .map_err(fail)?;
+        let txn = self.db.begin().await.map_err(fail)?;
         lock_user_credentials(&txn, user).await.map_err(fail)?;
         let owner = UserEntity::find()
             .filter(UserColumn::Oid.eq(Uuid::from(user)))
@@ -107,9 +104,11 @@ impl UserCredentialRepositoryImpl {
             .map_err(fail)?;
         audit::record(
             &txn,
-            "security.change_password_transaction",
-            "user_credential",
-            credential.0,
+            AuditRecord::success(AuditAction::AccountPasswordChange, Uuid::from(user))
+                .default_actor(AuditActor::user(Uuid::from(user)))
+                .with_changes(|changes| {
+                    changes.secret(AuditField::Password);
+                }),
         )
         .await
         .map_err(fail)?;

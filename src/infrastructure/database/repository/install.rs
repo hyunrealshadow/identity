@@ -2,7 +2,6 @@ use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use chrono::Utc;
 use identity_domain::{
-    authorization::RequestId,
     rbac::{GroupMembershipOid, OWNER_PRESET},
     user::normalization::{normalize_email, normalize_username},
 };
@@ -60,7 +59,6 @@ use crate::{
             },
         },
     },
-    observability::context,
 };
 
 pub struct InstallRepositoryImpl {
@@ -200,18 +198,10 @@ impl InstallRepository for InstallRepositoryImpl {
         authorization_lifecycle::renew_user_version_in_txn(&txn, created_user.id)
             .await
             .map_err(AppError::internal)?;
-        let request_id = RequestId::new(
-            context::current_request_correlation()
-                .map(|context| context.request_id)
-                .unwrap_or_else(|| Uuid::new_v4().to_string()),
-        )
-        .expect("generated or validated request ID");
-        owner_bootstrap::record_group_membership_audit(
+        owner_bootstrap::record_owner_membership_audit(
             &txn,
-            "rbac.group_membership.install",
-            membership_oid.0,
-            "initial_installation",
-            &request_id,
+            identity_domain::user::UserOid(created_user.oid),
+            None,
         )
         .await?;
         // The installation input is authoritative for the console origin, so

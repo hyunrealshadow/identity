@@ -38,7 +38,7 @@ missing or invalid token yields `401` with
 ## Schema conventions
 
 - Queries are **flat functional fields** (`user`, `users`, `role`, `client`,
-  `auditEvents`, `auditEvent`, `auditEventActions`, `instanceOverview`,
+  `auditEvents`, `auditEvent`, `instanceOverview`,
   `effectivePermissions`, …). There are no `viewer` or
   `management` wrapper namespaces.
 - Mutations are **explicitly named verbs** (`createUser`, `setRolePermissions`,
@@ -165,18 +165,24 @@ sessions exclude revoked, expired, and unavailable-account sessions, and do not
 mean that a device is online. Aggregate reads produce query spans, not
 security-change audit facts.
 
-**Audit log queries.** `auditEvents(query:timeZone:orderBy:first:after:last:before:)`,
-`auditEvent(id:)`, and `auditEventActions` require `management.audit.read`
-(`AAL2`). `query` accepts the server-parsed Lucene filter DSL (up to 2048
-characters, nesting depth 16, and 64 leaf clauses), resolving `occurredAt` bare
-dates and calendar math against `timeZone` (default `UTC`). Encrypted cursors
-bind the normalized query, time zone, sort order, and initial `snapshot_at`
-timestamp so relative ranges such as `now-24h` stay consistent across pages.
-`AuditEvent.actorUser` and `AuditEvent.actorClient` carry separate `@access`
-guards (`management.user.read` and `management.client.read`) and are batch
-preloaded only when selected and permitted. Validation failures return typed
-localized codes `30000`–`30013` attached to `query` / `timeZone` / pagination
-fields.
+**Audit log queries.** `auditEvents(category:query:timeZone:orderBy:first:after:last:before:)`
+and `auditEvent(id:)` require `management.audit.read` (`AAL2`). Every
+enumerable attribute of `AuditEvent` — `category`, `action`, `outcome`,
+`failureReason`, actor and target kinds, `authMethods`, and changed `field`s —
+is a GraphQL enum, so the schema is the action catalog. `category` selects one
+audit log. `query` accepts the server-parsed Lucene filter DSL (up to 2048
+characters, nesting depth 16, and 64 leaf clauses) over fields named after
+`AuditEvent`; enumerated values are the enum names in any letter case
+(`action:role_update`, `action:ROLE_*`), and unknown values are rejected.
+`occurredAt` bare dates and calendar math resolve against `timeZone` (default
+`UTC`). Encrypted cursors bind the category, normalized query, time zone, sort
+order, and initial `snapshot_at` timestamp so relative ranges such as `now-24h`
+stay consistent across pages. `AuditActor.user` and `AuditActor.client` carry
+separate `@access` guards (`management.user.read` and `management.client.read`)
+and are batch preloaded only when selected and permitted; `AuditActor.label`
+keeps the recorded name for callers without those scopes. Validation failures
+return typed localized codes `30000`–`30014` attached to `query` / `timeZone` /
+pagination fields.
 
 ## Limits
 

@@ -1,3 +1,4 @@
+mod enums;
 pub(crate) mod integration;
 mod query;
 mod types;

@@ -3,9 +3,16 @@ use chrono::{
     TimeZone as _, Timelike, Utc,
 };
 use chrono_tz::Tz;
+use std::str::FromStr;
+
+use strum::{AsRefStr, EnumIter, EnumString, IntoStaticStr};
 use thiserror::Error;
 use uuid::Uuid;
 
+use super::event::{
+    AuditAction, AuditActorKind, AuditAuthMethod, AuditCategory, AuditFailureReason, AuditOutcome,
+    AuditTargetKind,
+};
 use crate::{global_id::DecodedGlobalId, time_zone::TimeZone};
 
 pub const MAX_AUDIT_QUERY_LENGTH: usize = 2048;
@@ -13,86 +20,79 @@ pub const MAX_AUDIT_QUERY_DEPTH: usize = 16;
 pub const MAX_AUDIT_QUERY_CLAUSES: usize = 64;
 
 /// Searchable structured fields exposed by the native audit Lucene query DSL.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+/// Names match the GraphQL `AuditEvent` fields they filter.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Hash, AsRefStr, IntoStaticStr, EnumString, EnumIter,
+)]
+#[strum(serialize_all = "camelCase")]
 pub enum AuditQueryField {
+    Category,
     Action,
-    ActorType,
+    Outcome,
+    FailureReason,
+    ActorKind,
     Actor,
-    TargetType,
+    ActorLabel,
+    TargetKind,
     Target,
-    ResourceType,
-    Resource,
-    Subject,
-    Operation,
-    Status,
-    PreviousStatus,
-    CredentialType,
-    EventKind,
+    TargetLabel,
+    Client,
+    AuthMethod,
+    IpAddress,
+    UserAgent,
     RequestId,
     TraceId,
-    Reason,
     OccurredAt,
 }
 
 impl AuditQueryField {
     #[must_use]
     pub fn parse(name: &str) -> Option<Self> {
-        match name {
-            "action" => Some(Self::Action),
-            "actorType" => Some(Self::ActorType),
-            "actor" => Some(Self::Actor),
-            "targetType" => Some(Self::TargetType),
-            "target" => Some(Self::Target),
-            "resourceType" => Some(Self::ResourceType),
-            "resource" => Some(Self::Resource),
-            "subject" => Some(Self::Subject),
-            "operation" => Some(Self::Operation),
-            "status" => Some(Self::Status),
-            "previousStatus" => Some(Self::PreviousStatus),
-            "credentialType" => Some(Self::CredentialType),
-            "eventKind" => Some(Self::EventKind),
-            "requestId" => Some(Self::RequestId),
-            "traceId" => Some(Self::TraceId),
-            "reason" => Some(Self::Reason),
-            "occurredAt" => Some(Self::OccurredAt),
-            _ => None,
-        }
+        name.parse().ok()
     }
 
     #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::Action => "action",
-            Self::ActorType => "actorType",
-            Self::Actor => "actor",
-            Self::TargetType => "targetType",
-            Self::Target => "target",
-            Self::ResourceType => "resourceType",
-            Self::Resource => "resource",
-            Self::Subject => "subject",
-            Self::Operation => "operation",
-            Self::Status => "status",
-            Self::PreviousStatus => "previousStatus",
-            Self::CredentialType => "credentialType",
-            Self::EventKind => "eventKind",
-            Self::RequestId => "requestId",
-            Self::TraceId => "traceId",
-            Self::Reason => "reason",
-            Self::OccurredAt => "occurredAt",
-        }
+    pub fn as_str(self) -> &'static str {
+        self.into()
     }
 
     #[must_use]
     pub const fn is_identifier(self) -> bool {
-        matches!(
-            self,
-            Self::Actor | Self::Target | Self::Resource | Self::Subject
-        )
+        matches!(self, Self::Actor | Self::Target | Self::Client)
     }
 
     #[must_use]
     pub const fn is_date(self) -> bool {
         matches!(self, Self::OccurredAt)
+    }
+
+    /// The stored form of an enumerated field's value, accepting any letter
+    /// case. `None` means the value is unknown; non-enumerated fields keep
+    /// their value as typed.
+    #[must_use]
+    pub fn canonical_value(self, value: &str) -> Option<String> {
+        fn stored<E: FromStr + Into<&'static str>>(value: &str) -> Option<String> {
+            E::from_str(value).ok().map(|known| known.into().to_owned())
+        }
+        match self {
+            Self::Category => stored::<AuditCategory>(value),
+            Self::Action => stored::<AuditAction>(value),
+            Self::Outcome => stored::<AuditOutcome>(value),
+            Self::FailureReason => stored::<AuditFailureReason>(value),
+            Self::ActorKind => stored::<AuditActorKind>(value),
+            Self::TargetKind => stored::<AuditTargetKind>(value),
+            Self::AuthMethod => stored::<AuditAuthMethod>(value),
+            Self::Actor
+            | Self::ActorLabel
+            | Self::Target
+            | Self::TargetLabel
+            | Self::Client
+            | Self::IpAddress
+            | Self::UserAgent
+            | Self::RequestId
+            | Self::TraceId
+            | Self::OccurredAt => Some(value.to_owned()),
+        }
     }
 }
 
@@ -113,7 +113,7 @@ pub enum AuditIdentifierMatch {
     Exists,
 }
 
-/// Inclusive or exclusive UTC bound on `security_audit.occurred_at`.
+/// Inclusive or exclusive UTC bound on `audit.occurred_at`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AuditTimeBound {
     pub instant: DateTime<Utc>,
@@ -155,6 +155,8 @@ pub enum AuditQueryError {
     SyntaxError { detail: &'static str },
     #[error("unknown audit query field: {field}")]
     UnknownField { field: String },
+    #[error("unknown value for {field}: {value}")]
+    UnknownValue { field: &'static str, value: String },
     #[error("invalid date or date math value for occurredAt: {value}")]
     InvalidDateValue { value: String },
     #[error("invalid UUID or global identifier for {field}: {value}")]
@@ -221,7 +223,7 @@ enum UnaryOp {
 
 #[derive(Debug, Clone)]
 enum Atom {
-    Word { text: String, had_colon: bool },
+    Word { text: String },
     Quoted(String),
 }
 
@@ -656,33 +658,10 @@ impl<'a> Parser<'a> {
                 self.record_clause()?;
                 build_field_predicate(field, &value, true, self.reference_now, self.tz)
             }
-            Atom::Word { text, had_colon } => {
+            Atom::Word { text, .. } => {
                 if matches!(text.as_str(), "AND" | "OR" | "NOT") {
                     return Err(AuditQueryError::SyntaxError {
                         detail: "boolean keyword cannot be used as an unquoted field value",
-                    });
-                }
-                if had_colon
-                    && !field.is_date()
-                    && !field.is_identifier()
-                    && !matches!(
-                        field,
-                        AuditQueryField::RequestId
-                            | AuditQueryField::TraceId
-                            | AuditQueryField::Reason
-                            | AuditQueryField::Action
-                            | AuditQueryField::Operation
-                            | AuditQueryField::ResourceType
-                            | AuditQueryField::TargetType
-                            | AuditQueryField::ActorType
-                            | AuditQueryField::Status
-                            | AuditQueryField::PreviousStatus
-                            | AuditQueryField::CredentialType
-                            | AuditQueryField::EventKind
-                    )
-                {
-                    return Err(AuditQueryError::SyntaxError {
-                        detail: "unexpected colon in field value",
                     });
                 }
                 self.record_clause()?;
@@ -843,7 +822,6 @@ impl<'a> Parser<'a> {
 
     fn read_unquoted_word(&mut self, stop_at_colon: bool) -> Result<Atom, AuditQueryError> {
         let start = self.pos;
-        let mut had_colon = false;
         while let Some(ch) = self.peek_char() {
             if ch.is_whitespace() {
                 break;
@@ -854,11 +832,8 @@ impl<'a> Parser<'a> {
             if self.rest().starts_with("&&") || self.rest().starts_with("||") {
                 break;
             }
-            if ch == ':' {
-                if stop_at_colon {
-                    break;
-                }
-                had_colon = true;
+            if ch == ':' && stop_at_colon {
+                break;
             }
             self.pos += ch.len_utf8();
         }
@@ -873,7 +848,6 @@ impl<'a> Parser<'a> {
         }
         Ok(Atom::Word {
             text: self.src[start..self.pos].to_owned(),
-            had_colon,
         })
     }
 }
@@ -931,7 +905,17 @@ fn build_field_predicate(
         });
     }
 
-    let matcher = build_text_matcher(value, quoted);
+    let matcher = match build_text_matcher(value, quoted) {
+        AuditTextMatcher::Exact(exact) => {
+            AuditTextMatcher::Exact(field.canonical_value(&exact).ok_or_else(|| {
+                AuditQueryError::UnknownValue {
+                    field: field.as_str(),
+                    value: exact,
+                }
+            })?)
+        }
+        other => other,
+    };
     Ok(AuditQueryExpr::Text { field, matcher })
 }
 
@@ -1447,7 +1431,7 @@ mod tests {
     #[test]
     fn boolean_precedence_implicit_and_and_field_grouping() {
         let parsed = parse_audit_query(
-            "action:(user.create OR user.delete) -status:failed && actorType:user OR traceId:*",
+            "action:(user_create OR GROUP_DELETE) -outcome:failure && actorKind:user OR traceId:*",
             ref_now(),
             utc(),
         )
@@ -1460,19 +1444,19 @@ mod tests {
                     AuditQueryExpr::Or(vec![
                         AuditQueryExpr::Text {
                             field: AuditQueryField::Action,
-                            matcher: AuditTextMatcher::Exact("user.create".to_owned()),
+                            matcher: AuditTextMatcher::Exact("user_create".to_owned()),
                         },
                         AuditQueryExpr::Text {
                             field: AuditQueryField::Action,
-                            matcher: AuditTextMatcher::Exact("user.delete".to_owned()),
+                            matcher: AuditTextMatcher::Exact("group_delete".to_owned()),
                         },
                     ]),
                     AuditQueryExpr::Not(Box::new(AuditQueryExpr::Text {
-                        field: AuditQueryField::Status,
-                        matcher: AuditTextMatcher::Exact("failed".to_owned()),
+                        field: AuditQueryField::Outcome,
+                        matcher: AuditTextMatcher::Exact("failure".to_owned()),
                     })),
                     AuditQueryExpr::Text {
-                        field: AuditQueryField::ActorType,
+                        field: AuditQueryField::ActorKind,
                         matcher: AuditTextMatcher::Exact("user".to_owned()),
                     },
                 ]),
@@ -1487,7 +1471,7 @@ mod tests {
     #[test]
     fn wildcards_and_quoted_strings_map_expected_matchers() {
         let parsed = parse_audit_query(
-            r#"action:user.* reason:"a:b \"c\"" targetType:*client* operation:up?ate "hello world""#,
+            r#"action:user_* userAgent:"a:b \"c\"" targetLabel:*client* ipAddress:10.0.0.? "hello world""#,
             ref_now(),
             utc(),
         )
@@ -1498,19 +1482,19 @@ mod tests {
             AuditQueryExpr::And(vec![
                 AuditQueryExpr::Text {
                     field: AuditQueryField::Action,
-                    matcher: AuditTextMatcher::Prefix("user.".to_owned()),
+                    matcher: AuditTextMatcher::Prefix("user_".to_owned()),
                 },
                 AuditQueryExpr::Text {
-                    field: AuditQueryField::Reason,
+                    field: AuditQueryField::UserAgent,
                     matcher: AuditTextMatcher::Exact("a:b \"c\"".to_owned()),
                 },
                 AuditQueryExpr::Text {
-                    field: AuditQueryField::TargetType,
+                    field: AuditQueryField::TargetLabel,
                     matcher: AuditTextMatcher::Contains("client".to_owned()),
                 },
                 AuditQueryExpr::Text {
-                    field: AuditQueryField::Operation,
-                    matcher: AuditTextMatcher::Wildcard("up?ate".to_owned()),
+                    field: AuditQueryField::IpAddress,
+                    matcher: AuditTextMatcher::Wildcard("10.0.0.?".to_owned()),
                 },
                 AuditQueryExpr::FreeText("hello world".to_owned()),
             ])
@@ -1521,7 +1505,7 @@ mod tests {
     fn identifiers_accept_raw_uuid_global_id_and_exists() {
         let oid = Uuid::new_v4();
         let gid = encode::<kind::User>(oid);
-        let query = format!("actor:{oid} target:{gid} subject:*");
+        let query = format!("actor:{oid} target:{gid} client:*");
 
         let parsed = parse_audit_query(&query, ref_now(), utc()).unwrap();
         assert_eq!(
@@ -1536,7 +1520,7 @@ mod tests {
                     value: AuditIdentifierMatch::Exact(oid),
                 },
                 AuditQueryExpr::Identifier {
-                    field: AuditQueryField::Subject,
+                    field: AuditQueryField::Client,
                     value: AuditIdentifierMatch::Exists,
                 },
             ])
@@ -1636,7 +1620,7 @@ mod tests {
         );
 
         let many = (0..=MAX_AUDIT_QUERY_CLAUSES)
-            .map(|i| format!("status:s{i}"))
+            .map(|i| format!("requestId:s{i}"))
             .collect::<Vec<_>>()
             .join(" ");
         assert_eq!(
@@ -1647,7 +1631,7 @@ mod tests {
         );
 
         let deep = format!(
-            "{}status:ok{}",
+            "{}outcome:success{}",
             "(".repeat(MAX_AUDIT_QUERY_DEPTH + 1),
             ")".repeat(MAX_AUDIT_QUERY_DEPTH + 1)
         );
@@ -1689,6 +1673,14 @@ mod tests {
                 .unwrap_err(),
             AuditQueryError::InvalidDateValue { .. }
         ));
+        assert_eq!(
+            parse_audit_query("outcome:denied", ref_now(), utc()).unwrap_err(),
+            AuditQueryError::UnknownValue {
+                field: "outcome",
+                value: "denied".to_owned()
+            }
+        );
+        assert!(parse_audit_query(r#"action:"role.update""#, ref_now(), utc()).is_err());
         assert!(matches!(
             parse_audit_query("action:\"unterminated", ref_now(), utc()).unwrap_err(),
             AuditQueryError::SyntaxError { .. }

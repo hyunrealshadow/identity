@@ -12,8 +12,8 @@ use super::{
     controllers::{auth, install, oauth2, observability, openid, well_known, workload_runtime},
     middleware::{
         RequestIdMiddleware, RequireUpstreamHttps, RequireWorkload, ResolveClientIp,
-        TraceContextMiddleware, require_login_workload, security_headers_middleware,
-        static_cache_control,
+        TraceContextMiddleware, audit_request_context, require_login_workload,
+        security_headers_middleware, static_cache_control,
     },
 };
 use crate::{
@@ -68,6 +68,7 @@ pub fn app_router(state: AppState, config: &AppConfig) -> Service {
             &config.server.tls.trusted_proxies,
             &config.server.tls.direct_http_clients,
         ))
+        .hoop(audit_request_context)
         .hoop(TraceContextMiddleware::new(TraceTrustPolicy::new(
             config.observability.trace_context.clone(),
         )))
@@ -109,6 +110,7 @@ pub fn internal_router(
             &config.server.tls.trusted_proxies,
             &config.server.tls.direct_http_clients,
         ))
+        .hoop(audit_request_context)
         .hoop(TraceContextMiddleware::new(TraceTrustPolicy::new(
             config.observability.trace_context.clone(),
         )))

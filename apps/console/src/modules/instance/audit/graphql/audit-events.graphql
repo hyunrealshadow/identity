@@ -1,44 +1,54 @@
 fragment AuditEventFields on AuditEvent {
   id
   occurredAt
-  transactionId
+  category
   action
-  operation
-  eventKind
-  actorType
-  actorOid
-  actorGlobalId
-  targetType
-  targetOid
-  targetGlobalId
-  resourceType
-  resourceOid
-  resourceGlobalId
-  subjectOid
-  subjectGlobalId
-  status
-  previousStatus
-  credentialType
-  reason
+  outcome
+  failureReason
+  actor {
+    kind
+    id
+    oid
+    label
+    user @include(if: $includeActorUser) {
+      id
+      username
+      email
+      nickname
+    }
+    client @include(if: $includeActorClient) {
+      id
+      name
+      names {
+        locale
+        value
+      }
+    }
+  }
+  target {
+    kind
+    id
+    oid
+    label
+  }
+  clientId
+  authMethods
+  ipAddress
+  userAgent
   requestId
   traceId
-  actorUser @include(if: $includeActorUser) {
-    id
-    username
-    email
-    nickname
-  }
-  actorClient @include(if: $includeActorClient) {
-    id
-    name
-    names {
-      locale
-      value
-    }
+  changes {
+    field
+    kind
+    oldValue
+    newValue
+    added
+    removed
   }
 }
 
 query AuditEventsQuery(
+  $category: AuditCategory
   $query: String
   $timeZone: String
   $orderBy: AuditEventOrder
@@ -50,6 +60,7 @@ query AuditEventsQuery(
   $includeActorClient: Boolean!
 ) {
   auditEvents(
+    category: $category
     query: $query
     timeZone: $timeZone
     orderBy: $orderBy
@@ -82,8 +93,4 @@ query AuditEventDetailQuery(
   auditEvent(id: $id) {
     ...AuditEventFields
   }
-}
-
-query AuditEventActionsQuery {
-  auditEventActions
 }

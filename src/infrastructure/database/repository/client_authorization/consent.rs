@@ -19,6 +19,7 @@ use crate::database::{
     },
 };
 use chrono::{DateTime, Utc};
+use identity_domain::audit::{AuditAction, AuditActor, AuditRecord};
 use identity_domain::{
     client::model::ClientOid,
     client_authorization::{
@@ -94,6 +95,11 @@ pub(super) async fn record_authorization_request_consent(
     if stored.interaction.consent_state != ConsentState::Pending {
         return Ok(false);
     }
+    let decided_by = stored
+        .interaction
+        .selected_user_oid
+        .as_deref()
+        .and_then(|oid| oid.parse::<Uuid>().ok());
 
     let grant = if consent_state == ConsentState::Approved {
         let user_oid = stored
@@ -212,20 +218,32 @@ pub(super) async fn record_authorization_request_consent(
             ))?;
     }
 
-    audit::record(
-        &transaction,
-        if consent_state == ConsentState::Approved {
-            "authorization.consent_approved"
-        } else {
-            "authorization.consent_denied"
-        },
-        "client_authorization",
-        oid,
-    )
-    .await
-    .map_err(query_error(
-        "client_authorization.record_authorization_request_consent",
-    ))?;
+    let client_oid = ClientEntity::find_by_id(model.client_id)
+        .select_only()
+        .column(ClientColumn::Oid)
+        .into_tuple::<Uuid>()
+        .one(&transaction)
+        .await
+        .map_err(query_error(
+            "client_authorization.record_authorization_request_consent",
+        ))?;
+    let action = if consent_state == ConsentState::Approved {
+        AuditAction::ConsentGrant
+    } else {
+        AuditAction::ConsentDeny
+    };
+    let mut record = AuditRecord::success(action, client_oid);
+    if let Some(user_oid) = decided_by {
+        record = record.default_actor(AuditActor::user(user_oid));
+    }
+    if let Some(client_oid) = client_oid {
+        record = record.client(client_oid);
+    }
+    audit::record(&transaction, record)
+        .await
+        .map_err(query_error(
+            "client_authorization.record_authorization_request_consent",
+        ))?;
     transaction.commit().await.map_err(query_error(
         "client_authorization.record_authorization_request_consent",
     ))?;

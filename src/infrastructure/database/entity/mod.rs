@@ -10,6 +10,7 @@ pub mod prelude;
 pub mod resource;
 pub mod user_group;
 
+pub mod audit;
 pub mod client;
 pub mod client_authorization;
 pub mod client_openid_connect;
@@ -23,7 +24,6 @@ pub mod login;
 pub mod role;
 pub mod role_permission;
 pub mod scope;
-pub mod security_audit;
 pub mod session;
 pub mod setting;
 pub mod user;

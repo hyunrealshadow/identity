@@ -7,6 +7,29 @@ fn id_row(id: i64) -> BTreeMap<String, Value> {
     BTreeMap::from([("id".to_owned(), id.into())])
 }
 
+fn deleted_passkey_row() -> BTreeMap<String, Value> {
+    let now = chrono::Utc::now().fixed_offset();
+    BTreeMap::from([
+        ("id".to_owned(), Value::from(7i64)),
+        ("oid".to_owned(), Value::from(Uuid::new_v4())),
+        ("user_id".to_owned(), Value::from(1i64)),
+        ("type".to_owned(), Value::from("passkey")),
+        (
+            "data".to_owned(),
+            Value::from(serde_json::json!({ "name": "Laptop", "credential_id": "AA", "key": {} })),
+        ),
+        (
+            "expires_at".to_owned(),
+            Value::ChronoDateTimeWithTimeZone(None),
+        ),
+        ("created_at".to_owned(), Value::from(now)),
+        (
+            "updated_at".to_owned(),
+            Value::ChronoDateTimeWithTimeZone(None),
+        ),
+    ])
+}
+
 #[tokio::test]
 async fn recovery_consumption_uses_the_same_account_lock_as_mfa_mutations() {
     let owner = Uuid::new_v4();
@@ -84,10 +107,16 @@ async fn mfa_removal_is_locked_and_clears_recovery_codes_only_after_the_last_met
                 rows_affected: 0,
                 last_insert_id: 0,
             });
-            exec_results.push(MockExecResult {
-                rows_affected: 1,
-                last_insert_id: 0,
-            });
+            if kind == CredentialType::Passkey {
+                // The passkey delete returns the removed row so its name can
+                // label the audit record; it runs right after the user lookup.
+                query_results.insert(1, vec![deleted_passkey_row()]);
+            } else {
+                exec_results.push(MockExecResult {
+                    rows_affected: 1,
+                    last_insert_id: 0,
+                });
+            }
             query_results.push(if remains { vec![id_row(2)] } else { Vec::new() });
             exec_results.push(MockExecResult {
                 rows_affected: 10,

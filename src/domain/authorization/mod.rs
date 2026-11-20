@@ -6,7 +6,6 @@
 //! never determine admission.
 
 pub mod actor;
-pub mod audit;
 pub mod authority;
 pub mod catalog;
 pub mod ids;
@@ -19,10 +18,6 @@ pub mod snapshot;
 pub use actor::{
     ActorContext, ActorContextError, ActorPrincipal, AuthenticationAssurance,
     HumanAuthenticationContext, PrincipalKind, RequestId, TraceId,
-};
-pub use audit::{
-    AuditSubject, AuditSubjectKind, AuthorizationAuditContext, AuthorizationAuditError,
-    AuthorizationAuditJournal, AuthorizationAuditStorageError,
 };
 pub use authority::{
     ClientScopeAuthority, UserPermissionAuthority, full_management_permissions,

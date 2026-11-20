@@ -17,6 +17,7 @@ use identity_application::{
     },
 };
 use identity_domain::{
+    audit::AuditAction,
     authorization::{
         ActorContext, HumanAuthenticationContext, ManagementAuthorityRepository,
         ManagementAuthorizationSnapshot, ManagementScope, RequestId,
@@ -147,9 +148,9 @@ async fn withdrawn(db: &DatabaseConnection, artifact: Uuid) -> bool {
     .await
 }
 
-async fn audit_count(db: &DatabaseConnection, action: &str, target: Uuid) -> i64 {
+async fn audit_count(db: &DatabaseConnection, action: AuditAction, target: Uuid) -> i64 {
     scalar::<i64>(db, &format!(
-        "SELECT count(*)::bigint AS value FROM security_audit WHERE action='{action}' AND target_oid='{target}'"
+        "SELECT count(*)::bigint AS value FROM audit WHERE action='{action}' AND target_oid='{target}'"
     )).await
 }
 
@@ -181,7 +182,7 @@ async fn postgres_client_management_rechecks_authority_and_withdraws_on_boundary
         assert!(created.enabled && !created.built_in);
         assert_eq!(created.settings.platforms[0].redirect_uris, ["https://app.example.test/callback"]);
         assert_eq!(created.cors_origins, ["https://app.example.test"]);
-        assert_eq!(audit_count(&db, "client.create", created.oid).await, 1);
+        assert_eq!(audit_count(&db, AuditAction::ClientCreate, created.oid).await, 1);
         assert!(protocol.find_by_oid(created.oid).await.unwrap().is_some());
 
         // A display edit keeps issued artifacts; a redirect change withdraws them.
@@ -357,7 +358,10 @@ async fn postgres_client_advanced_settings_withdraw_only_on_semantic_boundary_ch
         );
         assert_eq!(linked.advanced.contacts, ["ops@example.test"]);
         assert!(!withdrawn(&db, artifact).await);
-        assert_eq!(audit_count(&db, "client.update", created.oid).await, 1);
+        assert_eq!(
+            audit_count(&db, AuditAction::ClientUpdate, created.oid).await,
+            1
+        );
 
         // Resaving what was read back, including explicit defaults, changes nothing.
         let resaved = repo
@@ -454,7 +458,7 @@ async fn postgres_client_advanced_settings_withdraw_only_on_semantic_boundary_ch
         sql(
             &db,
             &format!(
-                "ALTER TABLE security_audit ADD CONSTRAINT client_test_audit_failure
+                "ALTER TABLE audit ADD CONSTRAINT client_test_audit_failure
                CHECK (target_oid IS DISTINCT FROM '{target}') NOT VALID"
             ),
         )
@@ -471,7 +475,7 @@ async fn postgres_client_advanced_settings_withdraw_only_on_semantic_boundary_ch
         assert!(failed.is_err());
         sql(
             &db,
-            "ALTER TABLE security_audit DROP CONSTRAINT client_test_audit_failure",
+            "ALTER TABLE audit DROP CONSTRAINT client_test_audit_failure",
         )
         .await;
         let unchanged = repo.find_client(created.oid).await.unwrap().unwrap();
@@ -555,7 +559,7 @@ async fn postgres_client_protocol_scopes_default_on_create_and_replace_with_the_
         }).await.unwrap();
         assert_eq!(assigned_codes(&db, web.oid).await, ["openid"]);
         assert!(withdrawn(&db, artifact).await);
-        assert_eq!(audit_count(&db, "client.scopes.set", web.oid).await, 1);
+        assert_eq!(audit_count(&db, AuditAction::ClientScopeUpdate, web.oid).await, 1);
 
         // A protocol scope is never held by the client itself; the rejected
         // change leaves the assignment and version untouched.
@@ -756,9 +760,14 @@ async fn postgres_seed_reconciles_renamed_scopes_presets_and_built_in_clients() 
             .collect::<Vec<_>>();
         assert_eq!(consent_codes, vec!["management.group_member.read", "user.read"]);
 
-        assert!(audit_count(&db, "client.update", legacy_app_oid).await >= 1);
-        assert!(audit_count(&db, "client.update", login_oid).await >= 1);
-        assert!(audit_count(&db, "client.update", console_oid).await >= 1);
+        assert!(audit_count(&db, AuditAction::ClientScopeUpdate, legacy_app_oid).await >= 1);
+        assert!(audit_count(&db, AuditAction::ClientUpdate, login_oid).await >= 1);
+        // Console reconciliation may change its scopes, its settings, or both.
+        assert!(
+            audit_count(&db, AuditAction::ClientUpdate, console_oid).await
+                + audit_count(&db, AuditAction::ClientScopeUpdate, console_oid).await
+                >= 1
+        );
 
         assert_eq!(scalar::<i64>(&db, &format!("SELECT count(*)::bigint AS value FROM role_permission rp JOIN \"role\" r ON r.id=rp.role_id WHERE r.oid='{owner_role_oid}'")).await, 29);
         assert_eq!(scalar::<i64>(&db, &format!("SELECT count(*)::bigint AS value FROM role_permission rp JOIN \"role\" r ON r.id=rp.role_id WHERE r.oid='{admin_role_oid}'")).await, 25);
@@ -954,7 +963,7 @@ async fn postgres_client_auth_methods_follow_credentials_within_their_limits() {
         version = rotated.client.version;
 
         // A public key adds private_key_jwt; only one JWKS URI may be usable.
-        let add = |data: OpenIdConnectCredentialData, version: Uuid, action: &'static str| {
+        let add = |data: OpenIdConnectCredentialData, version: Uuid, action: AuditAction| {
             AddClientCredentialTransaction {
                 client_oid: oid,
                 expected_version: version,
@@ -968,7 +977,7 @@ async fn postgres_client_auth_methods_follow_credentials_within_their_limits() {
             }
         };
         let key = repo
-            .add_client_credential(add(public_key(), version, "client.public_key.create"))
+            .add_client_credential(add(public_key(), version, AuditAction::ClientPublicKeyAdd))
             .await
             .unwrap();
         version = key.client.version;
@@ -976,9 +985,12 @@ async fn postgres_client_auth_methods_follow_credentials_within_their_limits() {
             key.client.settings.token_endpoint_auth_methods,
             [ClientSecretBasic, ClientSecretPost, PrivateKeyJwt]
         );
-        assert_eq!(audit_count(&db, "client.public_key.create", oid).await, 1);
+        assert_eq!(
+            audit_count(&db, AuditAction::ClientPublicKeyAdd, oid).await,
+            1
+        );
 
-        let mut jwks = add(jwks_uri(), version, "client.jwks_uri.create");
+        let mut jwks = add(jwks_uri(), version, AuditAction::ClientJwksUriSet);
         jwks.expires_at = None;
         let first = repo.add_client_credential(jwks.clone()).await.unwrap();
         version = first.client.version;

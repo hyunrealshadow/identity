@@ -1,155 +1,57 @@
-import type { LuceneField, LuceneFieldValueOption } from '@identity/lucene-input'
+import type { LuceneField } from '@identity/lucene-input'
 
+import type { MessageKey } from '#/lib/i18n'
+import { auditValueOptions, filterCatalogOptions } from './audit-catalog'
 import {
-  AUDIT_ACTOR_TYPE_OPTIONS,
-  AUDIT_ENTITY_TYPE_OPTIONS,
-  AUDIT_EVENT_KIND_OPTIONS,
-  AUDIT_OPERATION_OPTIONS,
-  AUDIT_STATUS_OPTIONS,
-  filterCatalogOptions,
-  mergeActionOptions,
-} from './audit-catalog'
-import type { AuditValueKind } from './audit-labels'
+  AUDIT_ACTION_LABELS,
+  AUDIT_ACTOR_KIND_LABELS,
+  AUDIT_AUTH_METHOD_LABELS,
+  AUDIT_CATEGORY_LABELS,
+  AUDIT_FAILURE_REASON_LABELS,
+  AUDIT_OUTCOME_LABELS,
+  AUDIT_TARGET_KIND_LABELS,
+} from './audit-labels'
 
-export interface AuditFieldDescriptions {
-  action: string
-  actorType: string
-  actor: string
-  targetType: string
-  target: string
-  resourceType: string
-  resource: string
-  subject: string
-  operation: string
-  status: string
-  previousStatus: string
-  credentialType: string
-  eventKind: string
-  requestId: string
-  traceId: string
-  reason: string
-  occurredAt: string
+type Translate = (key: MessageKey) => string
+
+type FieldSpec = {
+  name: string
+  type: LuceneField['type']
+  description: MessageKey
+  values?: Readonly<Record<string, MessageKey>>
 }
 
-/** Localized display name for a stored enum value, shown beside completions. */
-export type AuditValueLabeler = (kind: AuditValueKind, value: string) => string
+// Names match the backend query fields, which match the GraphQL AuditEvent fields.
+const AUDIT_QUERY_FIELDS: readonly FieldSpec[] = [
+  { name: 'category', type: 'keyword', description: 'auditFieldCategoryDesc', values: AUDIT_CATEGORY_LABELS },
+  { name: 'action', type: 'keyword', description: 'auditFieldActionDesc', values: AUDIT_ACTION_LABELS },
+  { name: 'outcome', type: 'keyword', description: 'auditFieldOutcomeDesc', values: AUDIT_OUTCOME_LABELS },
+  { name: 'failureReason', type: 'keyword', description: 'auditFieldFailureReasonDesc', values: AUDIT_FAILURE_REASON_LABELS },
+  { name: 'actorKind', type: 'keyword', description: 'auditFieldActorKindDesc', values: AUDIT_ACTOR_KIND_LABELS },
+  { name: 'actor', type: 'string', description: 'auditFieldActorDesc' },
+  { name: 'actorLabel', type: 'string', description: 'auditFieldActorLabelDesc' },
+  { name: 'targetKind', type: 'keyword', description: 'auditFieldTargetKindDesc', values: AUDIT_TARGET_KIND_LABELS },
+  { name: 'target', type: 'string', description: 'auditFieldTargetDesc' },
+  { name: 'targetLabel', type: 'string', description: 'auditFieldTargetLabelDesc' },
+  { name: 'client', type: 'string', description: 'auditFieldClientDesc' },
+  { name: 'authMethod', type: 'keyword', description: 'auditFieldAuthMethodDesc', values: AUDIT_AUTH_METHOD_LABELS },
+  { name: 'ipAddress', type: 'string', description: 'auditFieldIpAddressDesc' },
+  { name: 'userAgent', type: 'string', description: 'auditFieldUserAgentDesc' },
+  { name: 'requestId', type: 'string', description: 'auditFieldRequestIdDesc' },
+  { name: 'traceId', type: 'string', description: 'auditFieldTraceIdDesc' },
+  { name: 'occurredAt', type: 'datetime', description: 'auditFieldOccurredAtDesc' },
+]
 
-export function buildAuditLuceneFields(
-  descriptions: AuditFieldDescriptions,
-  liveActions?: readonly string[],
-  valueLabel?: AuditValueLabeler,
-): LuceneField[] {
-  const actionOptions = mergeActionOptions(liveActions)
-  const labeled = (
-    options: readonly LuceneFieldValueOption[],
-    kind: AuditValueKind,
-  ): readonly LuceneFieldValueOption[] => {
-    if (!valueLabel) return options
-    return options.map((option) => {
-      const detail = valueLabel(kind, option.value)
-      return detail === option.value ? option : { ...option, detail }
-    })
-  }
-  const actorTypeOptions = labeled(AUDIT_ACTOR_TYPE_OPTIONS, 'actorType')
-  const entityTypeOptions = labeled(AUDIT_ENTITY_TYPE_OPTIONS, 'entityType')
-  const operationOptions = labeled(AUDIT_OPERATION_OPTIONS, 'operation')
-  const statusOptions = labeled(AUDIT_STATUS_OPTIONS, 'status')
-  const eventKindOptions = labeled(AUDIT_EVENT_KIND_OPTIONS, 'eventKind')
-
-  return [
-    {
-      name: 'action',
-      type: 'keyword',
-      description: descriptions.action,
-      search: async (query) => filterCatalogOptions(actionOptions, query),
-    },
-    {
-      name: 'actorType',
-      type: 'keyword',
-      description: descriptions.actorType,
-      search: async (query) => filterCatalogOptions(actorTypeOptions, query),
-    },
-    {
-      name: 'actor',
-      type: 'string',
-      description: descriptions.actor,
-    },
-    {
-      name: 'targetType',
-      type: 'keyword',
-      description: descriptions.targetType,
-      search: async (query) => filterCatalogOptions(entityTypeOptions, query),
-    },
-    {
-      name: 'target',
-      type: 'string',
-      description: descriptions.target,
-    },
-    {
-      name: 'resourceType',
-      type: 'keyword',
-      description: descriptions.resourceType,
-      search: async (query) => filterCatalogOptions(entityTypeOptions, query),
-    },
-    {
-      name: 'resource',
-      type: 'string',
-      description: descriptions.resource,
-    },
-    {
-      name: 'subject',
-      type: 'string',
-      description: descriptions.subject,
-    },
-    {
-      name: 'operation',
-      type: 'keyword',
-      description: descriptions.operation,
-      search: async (query) => filterCatalogOptions(operationOptions, query),
-    },
-    {
-      name: 'status',
-      type: 'keyword',
-      description: descriptions.status,
-      search: async (query) => filterCatalogOptions(statusOptions, query),
-    },
-    {
-      name: 'previousStatus',
-      type: 'keyword',
-      description: descriptions.previousStatus,
-    },
-    {
-      name: 'credentialType',
-      type: 'keyword',
-      description: descriptions.credentialType,
-    },
-    {
-      name: 'eventKind',
-      type: 'keyword',
-      description: descriptions.eventKind,
-      search: async (query) => filterCatalogOptions(eventKindOptions, query),
-    },
-    {
-      name: 'requestId',
-      type: 'string',
-      description: descriptions.requestId,
-    },
-    {
-      name: 'traceId',
-      type: 'string',
-      description: descriptions.traceId,
-    },
-    {
-      name: 'reason',
-      type: 'string',
-      description: descriptions.reason,
-    },
-    {
-      name: 'occurredAt',
-      type: 'datetime',
-      description: descriptions.occurredAt,
-    },
-  ]
+export function buildAuditLuceneFields(t: Translate): LuceneField[] {
+  return AUDIT_QUERY_FIELDS.map((field) => {
+    const options = field.values ? auditValueOptions(field.values, t) : null
+    return {
+      name: field.name,
+      type: field.type,
+      description: t(field.description),
+      ...(options ? { search: async (query: string) => filterCatalogOptions(options, query) } : {}),
+    }
+  })
 }
 
 export function formatLuceneValue(value: string): string {

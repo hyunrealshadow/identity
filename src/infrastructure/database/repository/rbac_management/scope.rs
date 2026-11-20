@@ -4,6 +4,8 @@
 //! token issuance and resource projections. API scopes own `resource_id`;
 //! protocol/identity scopes leave it `NULL`.
 
+use identity_domain::audit::{AuditAction, AuditRecord};
+use identity_domain::audit::{AuditChanges, AuditField};
 use std::collections::BTreeSet;
 
 use identity_application::rbac::{
@@ -339,10 +341,7 @@ impl RbacManagementRepositoryImpl {
         append_semantic_audit(
             &txn,
             &command.authority,
-            "rbac.scope.create",
-            "scope",
-            command.scope_oid.0,
-            &command.reason,
+            AuditRecord::success(AuditAction::ScopeCreate, command.scope_oid.0),
         )
         .await?;
         let record = load_scope_unlocked(&txn, command.scope_oid).await?;
@@ -381,8 +380,24 @@ impl RbacManagementRepositoryImpl {
                 .unwrap_or_else(|| current.descriptions.clone()),
         )?;
         let (names, descriptions) = localized::encode_metadata(&metadata);
-        let name = command.name.unwrap_or(current.name);
-        let description = command.description.unwrap_or(current.description);
+        let name = command.name.unwrap_or_else(|| current.name.clone());
+        let description = command
+            .description
+            .unwrap_or_else(|| current.description.clone());
+        let mut changes = AuditChanges::new();
+        changes
+            .diff(AuditField::Name, &current.name, &name)
+            .diff(AuditField::Description, &current.description, &description)
+            .diff(
+                AuditField::Names,
+                &serde_json::to_value(&current.names).ok(),
+                &serde_json::to_value(&metadata.names).ok(),
+            )
+            .diff(
+                AuditField::Descriptions,
+                &serde_json::to_value(&current.descriptions).ok(),
+                &serde_json::to_value(&metadata.descriptions).ok(),
+            );
         txn.execute_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,
             "UPDATE \"scope\" SET name = $2, names = $3::jsonb, description = $4, \
@@ -401,10 +416,7 @@ impl RbacManagementRepositoryImpl {
         append_semantic_audit(
             &txn,
             &command.authority,
-            "rbac.scope.update",
-            "scope",
-            command.scope_oid.0,
-            &command.reason,
+            AuditRecord::success(AuditAction::ScopeUpdate, command.scope_oid.0).changes(changes),
         )
         .await?;
         let record = load_scope_unlocked(&txn, command.scope_oid).await?;
@@ -464,14 +476,10 @@ impl RbacManagementRepositoryImpl {
         append_semantic_audit(
             &txn,
             &command.authority,
-            if enabled {
-                "rbac.scope.enable"
-            } else {
-                "rbac.scope.disable"
-            },
-            "scope",
-            command.scope_oid.0,
-            &command.reason,
+            AuditRecord::success(
+                AuditAction::toggle(enabled, AuditAction::ScopeEnable, AuditAction::ScopeDisable),
+                command.scope_oid.0,
+            ),
         )
         .await?;
         let record = load_scope_unlocked(&txn, command.scope_oid).await?;

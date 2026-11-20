@@ -5,6 +5,8 @@
 //! Every removal tombstones the old OID; every new grant inserts a fresh OID.
 //! Group/relation versions are UUID change tokens; no numeric counters exist.
 
+use identity_domain::audit::{AuditAction, AuditRecord};
+use identity_domain::audit::{AuditChanges, AuditField};
 use std::collections::{BTreeMap, BTreeSet};
 
 use identity_application::rbac::{
@@ -43,6 +45,7 @@ use crate::database::repository::authorization_lifecycle::{
     ensure_recoverable_authorization_administrator, lock_owner_lifecycle,
     withdraw_user_authority_in_txn,
 };
+use crate::database::repository::rbac_management::audit::{role_refs, user_ref};
 
 fn invalid_localized(error: LocalizedTextError) -> GroupManagementRepositoryError {
     let field = match error {
@@ -241,10 +244,7 @@ impl GroupManagementRepositoryImpl {
         append_semantic_audit(
             &txn,
             &command.authority,
-            "rbac.group.create",
-            "user_group",
-            Uuid::from(command.group_oid),
-            &command.reason,
+            AuditRecord::success(AuditAction::GroupCreate, Uuid::from(command.group_oid)),
         )
         .await?;
         let row = txn
@@ -293,6 +293,16 @@ impl GroupManagementRepositoryImpl {
         let description = command
             .description
             .unwrap_or_else(|| current.description.clone());
+        let mut changes = AuditChanges::new();
+        changes
+            .diff(AuditField::Name, &current.name, &name)
+            .diff(AuditField::Description, &current.description, &description)
+            .diff(AuditField::Names, &current.names, &metadata.names)
+            .diff(
+                AuditField::Descriptions,
+                &current.descriptions,
+                &metadata.descriptions,
+            );
         let unchanged = name == current.name
             && description == current.description
             && metadata.names == current.names
@@ -321,10 +331,8 @@ impl GroupManagementRepositoryImpl {
         append_semantic_audit(
             &txn,
             &command.authority,
-            "rbac.group.update",
-            "user_group",
-            Uuid::from(command.group_oid),
-            &command.reason,
+            AuditRecord::success(AuditAction::GroupUpdate, Uuid::from(command.group_oid))
+                .changes(changes),
         )
         .await?;
         let row = txn
@@ -386,14 +394,10 @@ impl GroupManagementRepositoryImpl {
         append_semantic_audit(
             &txn,
             &command.authority,
-            if enabled {
-                "rbac.group.enable"
-            } else {
-                "rbac.group.disable"
-            },
-            "user_group",
-            Uuid::from(command.group_oid),
-            &command.reason,
+            AuditRecord::success(
+                AuditAction::toggle(enabled, AuditAction::GroupEnable, AuditAction::GroupDisable),
+                Uuid::from(command.group_oid),
+            ),
         )
         .await?;
         let row = txn
@@ -472,10 +476,8 @@ impl GroupManagementRepositoryImpl {
         append_semantic_audit(
             &txn,
             &command.authority,
-            "rbac.group.delete",
-            "user_group",
-            Uuid::from(command.group_oid),
-            &command.reason,
+            AuditRecord::success(AuditAction::GroupDelete, Uuid::from(command.group_oid))
+                .label(current.name.clone()),
         )
         .await?;
         txn.commit().await.map_err(storage)?;
@@ -553,10 +555,8 @@ impl GroupManagementRepositoryImpl {
         append_semantic_audit(
             &txn,
             &command.authority,
-            "rbac.group.members.add",
-            "group_membership",
-            Uuid::from(membership_oid),
-            &command.reason,
+            AuditRecord::success(AuditAction::GroupMemberAdd, Uuid::from(command.group_oid))
+                .changes(member_changes(&txn, command.user_oid, true).await?),
         )
         .await?;
         let membership = load_membership_by_oid(&txn, membership_oid).await?;
@@ -608,10 +608,11 @@ impl GroupManagementRepositoryImpl {
         append_semantic_audit(
             &txn,
             &command.authority,
-            "rbac.group.members.remove",
-            "group_membership",
-            Uuid::from(membership_oid),
-            &command.reason,
+            AuditRecord::success(
+                AuditAction::GroupMemberRemove,
+                Uuid::from(command.group_oid),
+            )
+            .changes(member_changes(&txn, command.user_oid, false).await?),
         )
         .await?;
         let membership = load_membership_by_oid(&txn, membership_oid).await?;
@@ -721,16 +722,20 @@ impl GroupManagementRepositoryImpl {
             .await
             .map_err(storage)?;
         }
+        let mut role_changes = AuditChanges::new();
+        role_changes.delta(
+            AuditField::Roles,
+            &role_refs(&txn, &added_ids).await.map_err(storage)?,
+            &role_refs(&txn, &removed_ids).await.map_err(storage)?,
+        );
         let group_version = renew_group_version(&txn, group_id).await?;
         renew_members(&txn, group_id).await?;
         ensure_recovery(&txn).await?;
         append_semantic_audit(
             &txn,
             &command.authority,
-            "rbac.group.roles.set",
-            "user_group",
-            Uuid::from(command.group_oid),
-            &command.reason,
+            AuditRecord::success(AuditAction::GroupRoleUpdate, Uuid::from(command.group_oid))
+                .changes(role_changes),
         )
         .await?;
         txn.commit().await.map_err(storage)?;
@@ -742,6 +747,22 @@ impl GroupManagementRepositoryImpl {
             removed_count: u32::try_from(removed_ids.len()).unwrap_or(u32::MAX),
         })
     }
+}
+
+/// The membership change of one user, labelled with the user's name.
+async fn member_changes(
+    txn: &DatabaseTransaction,
+    user_oid: UserOid,
+    added: bool,
+) -> Result<AuditChanges, GroupManagementRepositoryError> {
+    let member = user_ref(txn, Uuid::from(user_oid)).await.map_err(storage)?;
+    let mut changes = AuditChanges::new();
+    if added {
+        changes.delta(AuditField::Members, &[member], &[]);
+    } else {
+        changes.delta(AuditField::Members, &[], &[member]);
+    }
+    Ok(changes)
 }
 
 #[cfg(test)]

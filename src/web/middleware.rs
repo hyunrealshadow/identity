@@ -5,6 +5,7 @@ use http::{HeaderValue, StatusCode, header, header::HeaderName};
 use identity_domain::openid_connect::{
     AuthenticatedWorkload, BuiltInWorkload, WorkloadAuthenticator,
 };
+use identity_infrastructure::database::audit::{self, AuditRequestContext};
 use identity_infrastructure::observability::context::{
     self as trace_context, ParentDecision, TraceTrustPolicy,
 };
@@ -313,6 +314,29 @@ impl Handler for ResolveClientIp {
         depot.insert_typed(ClientIp(resolve_client_ip(req, &self.trusted_proxies)));
         ctrl.call_next(req, depot, res).await;
     }
+}
+
+/// Makes the request's client address and User-Agent available to audit
+/// records written while handling it. Runs after [`ResolveClientIp`].
+#[handler]
+pub async fn audit_request_context(
+    req: &mut Request,
+    depot: &mut Depot,
+    res: &mut Response,
+    ctrl: &mut FlowCtrl,
+) {
+    let context = AuditRequestContext {
+        ip_address: depot
+            .get_typed::<ClientIp>()
+            .ok()
+            .and_then(|client| client.0),
+        user_agent: req
+            .headers()
+            .get(header::USER_AGENT)
+            .and_then(|value| value.to_str().ok())
+            .map(str::to_owned),
+    };
+    audit::with_request(context, ctrl.call_next(req, depot, res)).await;
 }
 
 #[must_use]

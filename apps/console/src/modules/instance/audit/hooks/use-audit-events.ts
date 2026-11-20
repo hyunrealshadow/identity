@@ -1,9 +1,6 @@
 import {
-  AuditEventActionsQueryDocument,
   AuditEventDetailQueryDocument,
   AuditEventsQueryDocument,
-  type AuditEventActionsQueryQuery,
-  type AuditEventActionsQueryQueryVariables,
   type AuditEventDetailQueryQuery,
   type AuditEventDetailQueryQueryVariables,
   type AuditEventsQueryQuery,
@@ -33,14 +30,5 @@ export function useAuditEventDetail(
     variables,
     enabled && Boolean(variables),
     'missing_audit_event_detail',
-  )
-}
-
-export function useAuditEventActions(enabled: boolean) {
-  return useConsoleQuery<AuditEventActionsQueryQuery, AuditEventActionsQueryQueryVariables>(
-    AuditEventActionsQueryDocument,
-    {},
-    enabled,
-    'missing_audit_event_actions',
   )
 }

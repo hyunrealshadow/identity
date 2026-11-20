@@ -110,6 +110,8 @@ pub enum LoginRepositoryError {
 #[derive(Debug)]
 pub struct CreateSessionInput {
     pub user_oid: Uuid,
+    /// Client application whose login established the session.
+    pub client_oid: Option<Uuid>,
     pub device_name: Option<String>,
     pub device_type: Option<String>,
     pub os_name: Option<String>,

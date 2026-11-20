@@ -12,17 +12,26 @@ import {
   Boxes,
   ChevronsLeft,
   ChevronsRight,
+  KeyRound,
   LayoutDashboard,
+  LogIn,
   Menu,
   ScrollText,
   Settings,
   Shield,
+  UserCog,
   UserRound,
   UsersRound,
+  Wrench,
   type LucideIcon,
 } from 'lucide-react'
 
 import { useTranslator, type MessageKey } from '#/lib/i18n'
+import {
+  ALL_AUDIT_LOG,
+  AUDIT_CATEGORY_LOGS,
+  type AuditLogPath,
+} from '#/modules/instance/audit/lib/audit-logs'
 
 interface NavEntry {
   label: MessageKey
@@ -33,7 +42,7 @@ interface NavEntry {
     | '/roles'
     | '/clients'
     | '/resources'
-    | '/audit-events'
+    | AuditLogPath
     | '/settings'
   icon: LucideIcon
 }
@@ -66,11 +75,22 @@ const groups: NavGroup[] = [
     ],
   },
   {
-    label: 'navInstance',
+    label: 'navAudit',
     entries: [
-      { label: 'navAuditEvents', to: '/audit-events', icon: ScrollText },
-      { label: 'navSettings', to: '/settings', icon: Settings },
+      { label: ALL_AUDIT_LOG.nav, to: ALL_AUDIT_LOG.path, icon: ScrollText },
+      { label: AUDIT_CATEGORY_LOGS.MANAGEMENT.nav, to: AUDIT_CATEGORY_LOGS.MANAGEMENT.path, icon: Wrench },
+      { label: AUDIT_CATEGORY_LOGS.SIGN_IN.nav, to: AUDIT_CATEGORY_LOGS.SIGN_IN.path, icon: LogIn },
+      { label: AUDIT_CATEGORY_LOGS.ACCOUNT.nav, to: AUDIT_CATEGORY_LOGS.ACCOUNT.path, icon: UserCog },
+      {
+        label: AUDIT_CATEGORY_LOGS.AUTHORIZATION.nav,
+        to: AUDIT_CATEGORY_LOGS.AUTHORIZATION.path,
+        icon: KeyRound,
+      },
     ],
+  },
+  {
+    label: 'navInstance',
+    entries: [{ label: 'navSettings', to: '/settings', icon: Settings }],
   },
 ]
 
@@ -163,7 +183,7 @@ export function NavigationLinks({
           title={collapsed ? label : undefined}
           onClick={onNavigate}
           className={`${base} ${collapsed ? 'justify-center' : ''}`}
-          activeOptions={{ exact: entry.to === '/' }}
+          activeOptions={{ exact: entry.to === '/' || entry.to === ALL_AUDIT_LOG.path }}
           activeProps={{
             className: `${base} console-nav-link-active font-medium ${collapsed ? 'justify-center' : ''}`,
           }}

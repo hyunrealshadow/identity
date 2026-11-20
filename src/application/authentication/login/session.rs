@@ -114,6 +114,7 @@ impl LoginService {
                 session_oid,
                 CreateSessionInput {
                     user_oid,
+                    client_oid: Some(login.client_oid),
                     device_name: ctx.device_name,
                     device_type: ctx.device_type,
                     os_name: ctx.os_name,

@@ -14,12 +14,14 @@ use crate::database::{
     },
 };
 use chrono::Utc;
+use identity_domain::audit::{AuditAction, AuditActor, AuditAuthMethod, AuditRecord};
 use identity_domain::auth::{
     SessionOid,
     challenge::ChallengeBinding,
     model::Session,
     repository::{CreateSessionInput, SessionRepositoryError},
 };
+use sea_orm::TransactionTrait;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseTransaction, DbBackend, DbErr,
     EntityTrait, QueryFilter, QueryOrder, QuerySelect, Set, Statement, sea_query::Expr,
@@ -56,9 +58,7 @@ impl SessionRepositoryImpl {
         input: CreateSessionInput,
     ) -> Result<Session, SessionRepositoryError> {
         let fail = |e| SessionRepositoryError::CreateFailed(Box::new(e));
-        let txn = audit::begin(&self.db, "session.complete_login")
-            .await
-            .map_err(fail)?;
+        let txn = self.db.begin().await.map_err(fail)?;
         lock_user_credentials(&txn, input.user_oid.into())
             .await
             .map_err(fail)?;
@@ -164,9 +164,22 @@ impl SessionRepositoryImpl {
         txn.execute_raw(Statement::from_sql_and_values(DbBackend::Postgres,
             "UPDATE login SET status = 'authenticated', session_id = $2, acr = $3, updated_at = now() WHERE oid = $1",
             [login_oid.into(), model.id.into(), model.acr.clone().into()])).await.map_err(fail)?;
-        audit::record(&txn, "session.complete_login", "session", model.oid)
-            .await
-            .map_err(fail)?;
+        let action = if existing.is_some() {
+            AuditAction::SessionReauthenticate
+        } else {
+            AuditAction::SignIn
+        };
+        let target = match action {
+            AuditAction::SessionReauthenticate => model.oid,
+            _ => owner.oid,
+        };
+        let mut record = AuditRecord::success(action, target)
+            .actor(AuditActor::user(owner.oid))
+            .auth_methods(AuditAuthMethod::from_amr_values(&input.amr));
+        if let Some(client_oid) = input.client_oid {
+            record = record.client(client_oid);
+        }
+        audit::record(&txn, record).await.map_err(fail)?;
         challenge::clear_for_binding(&txn, ChallengeBinding::Login(login_oid))
             .await
             .map_err(fail)?;

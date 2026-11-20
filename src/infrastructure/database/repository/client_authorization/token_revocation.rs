@@ -11,6 +11,7 @@ use crate::database::{
     repository::client_authorization_query as query,
 };
 use chrono::{DateTime, Utc};
+use identity_domain::audit::{AuditAction, AuditActor, AuditFailureReason, AuditRecord};
 use identity_domain::{
     client::model::ClientOid,
     client_authorization::{ClientAuthorizationRepositoryError, ClientAuthorizationType},
@@ -128,9 +129,11 @@ pub(super) async fn revoke_access_tokens_for_authorization_code(
     if changed.rows_affected > 0 {
         audit::record(
             &transaction,
-            "authorization.code_access_revoked",
-            "client_authorization",
-            authorization_code_oid,
+            AuditRecord::failure(
+                AuditAction::TokenReplay,
+                AuditFailureReason::ReplayDetected,
+                authorization_code_oid,
+            ),
         )
         .await
         .map_err(query_error(
@@ -175,16 +178,6 @@ pub(super) async fn revoke_if_active(
         .map_err(query_error("client_authorization.revoke_if_active"))?;
 
     let changed = result.rows_affected == 1;
-    if changed {
-        audit::record(
-            &transaction,
-            "authorization.revoked",
-            "client_authorization",
-            oid,
-        )
-        .await
-        .map_err(query_error("client_authorization.revoke_if_active"))?;
-    }
     transaction
         .commit()
         .await
@@ -256,9 +249,12 @@ pub(super) async fn revoke_refresh_token_family(
     }
     audit::record(
         &transaction,
-        "authorization.refresh_replay_revoked",
-        "client_authorization",
-        root_oid,
+        AuditRecord::failure(
+            AuditAction::TokenReplay,
+            AuditFailureReason::ReplayDetected,
+            root_oid,
+        )
+        .client(client_oid),
     )
     .await
     .map_err(query_error(
@@ -294,9 +290,9 @@ pub(super) async fn revoke_access_token_for_client(
     if result.rows_affected() > 0 {
         audit::record(
             &transaction,
-            "authorization.access_revoked",
-            "client_authorization",
-            access_oid,
+            AuditRecord::success(AuditAction::TokenRevoke, access_oid)
+                .client(client_oid)
+                .default_actor(AuditActor::client(client_oid)),
         )
         .await
         .map_err(query_error(
@@ -373,9 +369,9 @@ pub(super) async fn revoke_refresh_grant_for_client(
     }
     audit::record(
         &transaction,
-        "authorization.refresh_grant_revoked",
-        "client_authorization",
-        root_oid,
+        AuditRecord::success(AuditAction::TokenRevoke, root_oid)
+            .client(client_oid)
+            .default_actor(AuditActor::client(client_oid)),
     )
     .await
     .map_err(query_error(

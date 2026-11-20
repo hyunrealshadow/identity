@@ -21,7 +21,7 @@ mod m20260927_000001_create_client_openid_connect_cors_origin;
 mod m20261001_000001_create_resource;
 
 mod m20261016_000001_create_authentication_challenge;
-mod m20261017_000001_create_security_audit;
+mod m20261017_000001_create_audit;
 mod m20261022_000005_create_role;
 mod m20261022_000006_create_role_permission;
 mod m20261022_000007_create_user_role;
@@ -54,7 +54,7 @@ impl MigratorTrait for Migrator {
             Box::new(m20260907_000001_create_user_client_consent::Migration),
             Box::new(m20260927_000001_create_client_openid_connect_cors_origin::Migration),
             Box::new(m20261016_000001_create_authentication_challenge::Migration),
-            Box::new(m20261017_000001_create_security_audit::Migration),
+            Box::new(m20261017_000001_create_audit::Migration),
             Box::new(m20261022_000005_create_role::Migration),
             Box::new(m20261022_000006_create_role_permission::Migration),
             Box::new(m20261022_000007_create_user_role::Migration),

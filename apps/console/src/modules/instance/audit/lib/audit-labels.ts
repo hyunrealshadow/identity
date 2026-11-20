@@ -1,78 +1,166 @@
+import type {
+  AuditAction,
+  AuditActorKind,
+  AuditAuthMethod,
+  AuditCategory,
+  AuditFailureReason,
+  AuditField,
+  AuditOutcome,
+  AuditTargetKind,
+} from '#/generated/graphql'
 import type { MessageKey } from '#/lib/i18n'
 
-type Translate = (key: MessageKey) => string
-
-const ACTOR_TYPE_LABELS: Readonly<Record<string, MessageKey>> = {
-  user: 'auditActorTypeUser',
-  client: 'auditActorTypeClient',
-  system: 'auditActorTypeSystem',
-  unknown: 'auditActorTypeUnknown',
+// Typed by the generated schema enums: adding a backend value fails the
+// type check until it has a label here.
+export const AUDIT_ACTION_LABELS: Readonly<Record<AuditAction, MessageKey>> = {
+  ACCOUNT_CREDENTIAL_REPLACE: 'auditActionAccountCredentialReplace',
+  ACCOUNT_IDENTIFIER_UPDATE: 'auditActionAccountIdentifierUpdate',
+  ACCOUNT_LOCK: 'auditActionAccountLock',
+  ACCOUNT_PASSKEY_ADD: 'auditActionAccountPasskeyAdd',
+  ACCOUNT_PASSKEY_REMOVE: 'auditActionAccountPasskeyRemove',
+  ACCOUNT_PASSKEY_UPDATE: 'auditActionAccountPasskeyUpdate',
+  ACCOUNT_PASSWORD_CHANGE: 'auditActionAccountPasswordChange',
+  ACCOUNT_PROFILE_UPDATE: 'auditActionAccountProfileUpdate',
+  ACCOUNT_RECOVERY_CODE_REGENERATE: 'auditActionAccountRecoveryCodeRegenerate',
+  ACCOUNT_TOTP_DISABLE: 'auditActionAccountTotpDisable',
+  ACCOUNT_TOTP_ENABLE: 'auditActionAccountTotpEnable',
+  CLIENT_CREATE: 'auditActionClientCreate',
+  CLIENT_CREDENTIAL_REVOKE: 'auditActionClientCredentialRevoke',
+  CLIENT_DELETE: 'auditActionClientDelete',
+  CLIENT_DISABLE: 'auditActionClientDisable',
+  CLIENT_ENABLE: 'auditActionClientEnable',
+  CLIENT_JWKS_URI_SET: 'auditActionClientJwksUriSet',
+  CLIENT_PUBLIC_KEY_ADD: 'auditActionClientPublicKeyAdd',
+  CLIENT_REGISTER: 'auditActionClientRegister',
+  CLIENT_REGISTRATION_DELETE: 'auditActionClientRegistrationDelete',
+  CLIENT_REGISTRATION_UPDATE: 'auditActionClientRegistrationUpdate',
+  CLIENT_SCOPE_UPDATE: 'auditActionClientScopeUpdate',
+  CLIENT_SECRET_CREATE: 'auditActionClientSecretCreate',
+  CLIENT_SECRET_ROTATE: 'auditActionClientSecretRotate',
+  CLIENT_UPDATE: 'auditActionClientUpdate',
+  CONSENT_DENY: 'auditActionConsentDeny',
+  CONSENT_GRANT: 'auditActionConsentGrant',
+  DEVICE_APPROVE: 'auditActionDeviceApprove',
+  DEVICE_DENY: 'auditActionDeviceDeny',
+  DEVICE_REVOKE: 'auditActionDeviceRevoke',
+  GROUP_CREATE: 'auditActionGroupCreate',
+  GROUP_DELETE: 'auditActionGroupDelete',
+  GROUP_DISABLE: 'auditActionGroupDisable',
+  GROUP_ENABLE: 'auditActionGroupEnable',
+  GROUP_MEMBER_ADD: 'auditActionGroupMemberAdd',
+  GROUP_MEMBER_REMOVE: 'auditActionGroupMemberRemove',
+  GROUP_ROLE_UPDATE: 'auditActionGroupRoleUpdate',
+  GROUP_UPDATE: 'auditActionGroupUpdate',
+  KEY_CREATE: 'auditActionKeyCreate',
+  KEY_REVOKE: 'auditActionKeyRevoke',
+  KEY_ROTATE: 'auditActionKeyRotate',
+  RESOURCE_CREATE: 'auditActionResourceCreate',
+  RESOURCE_DISABLE: 'auditActionResourceDisable',
+  RESOURCE_ENABLE: 'auditActionResourceEnable',
+  RESOURCE_UPDATE: 'auditActionResourceUpdate',
+  ROLE_CREATE: 'auditActionRoleCreate',
+  ROLE_DISABLE: 'auditActionRoleDisable',
+  ROLE_ENABLE: 'auditActionRoleEnable',
+  ROLE_PERMISSION_UPDATE: 'auditActionRolePermissionUpdate',
+  ROLE_UPDATE: 'auditActionRoleUpdate',
+  SCOPE_CREATE: 'auditActionScopeCreate',
+  SCOPE_DISABLE: 'auditActionScopeDisable',
+  SCOPE_ENABLE: 'auditActionScopeEnable',
+  SCOPE_UPDATE: 'auditActionScopeUpdate',
+  SESSION_REAUTHENTICATE: 'auditActionSessionReauthenticate',
+  SESSION_REVOKE: 'auditActionSessionRevoke',
+  SETTING_AUTHENTICATION_UPDATE: 'auditActionSettingAuthenticationUpdate',
+  SETTING_PROTOCOL_UPDATE: 'auditActionSettingProtocolUpdate',
+  SIGN_IN: 'auditActionSignIn',
+  TOKEN_REPLAY: 'auditActionTokenReplay',
+  TOKEN_REVOKE: 'auditActionTokenRevoke',
+  USER_CREATE: 'auditActionUserCreate',
+  USER_DISABLE: 'auditActionUserDisable',
+  USER_ENABLE: 'auditActionUserEnable',
+  USER_ROLE_GRANT: 'auditActionUserRoleGrant',
+  USER_ROLE_REVOKE: 'auditActionUserRoleRevoke',
+  USER_UNLOCK: 'auditActionUserUnlock',
+  USER_UPDATE: 'auditActionUserUpdate',
 }
 
-const OPERATION_LABELS: Readonly<Record<string, MessageKey>> = {
-  mutation: 'auditOperationMutation',
-  authorization: 'auditOperationAuthorization',
+export const AUDIT_CATEGORY_LABELS: Readonly<Record<AuditCategory, MessageKey>> = {
+  ACCOUNT: 'auditCategoryAccount',
+  AUTHORIZATION: 'auditCategoryAuthorization',
+  MANAGEMENT: 'auditCategoryManagement',
+  SIGN_IN: 'auditCategorySignIn',
 }
 
-const STATUS_LABELS: Readonly<Record<string, MessageKey>> = {
-  success: 'auditStatusSuccess',
-  failed: 'auditStatusFailed',
+export const AUDIT_OUTCOME_LABELS: Readonly<Record<AuditOutcome, MessageKey>> = {
+  FAILURE: 'auditOutcomeFailure',
+  SUCCESS: 'auditOutcomeSuccess',
 }
 
-const EVENT_KIND_LABELS: Readonly<Record<string, MessageKey>> = {
-  semantic: 'auditEventKindSemantic',
+export const AUDIT_FAILURE_REASON_LABELS: Readonly<Record<AuditFailureReason, MessageKey>> = {
+  INVALID_CREDENTIAL: 'auditFailureReasonInvalidCredential',
+  INVALID_OTP: 'auditFailureReasonInvalidOtp',
+  INVALID_RECOVERY_CODE: 'auditFailureReasonInvalidRecoveryCode',
+  REPLAY_DETECTED: 'auditFailureReasonReplayDetected',
 }
 
-const ENTITY_TYPE_LABELS: Readonly<Record<string, MessageKey>> = {
-  user: 'auditEntityUser',
-  client: 'auditEntityClient',
-  resource: 'auditEntityResource',
-  scope: 'auditEntityScope',
-  role: 'auditEntityRole',
-  user_group: 'auditEntityUserGroup',
-  session: 'auditEntitySession',
-  key: 'auditEntityKey',
-  setting: 'auditEntitySetting',
-  login: 'auditEntityLogin',
-  user_credential: 'auditEntityUserCredential',
-  group_membership: 'auditEntityGroupMembership',
-  group_role: 'auditEntityGroupRole',
-  user_role: 'auditEntityUserRole',
-  client_authorization: 'auditEntityClientAuthorization',
-  device_authorization: 'auditEntityDeviceAuthorization',
-  device_authorization_request: 'auditEntityDeviceAuthorizationRequest',
+export const AUDIT_ACTOR_KIND_LABELS: Readonly<Record<AuditActorKind, MessageKey>> = {
+  ANONYMOUS: 'auditActorKindAnonymous',
+  CLIENT: 'auditActorKindClient',
+  SYSTEM: 'auditActorKindSystem',
+  USER: 'auditActorKindUser',
 }
 
-export const AUDIT_VALUE_LABELS = {
-  actorType: ACTOR_TYPE_LABELS,
-  operation: OPERATION_LABELS,
-  status: STATUS_LABELS,
-  eventKind: EVENT_KIND_LABELS,
-  entityType: ENTITY_TYPE_LABELS,
-} as const
+export const AUDIT_TARGET_KIND_LABELS: Readonly<Record<AuditTargetKind, MessageKey>> = {
+  AUTHORIZATION: 'auditTargetKindAuthorization',
+  CLIENT: 'auditTargetKindClient',
+  DEVICE_AUTHORIZATION: 'auditTargetKindDeviceAuthorization',
+  GROUP: 'auditTargetKindGroup',
+  KEY: 'auditTargetKindKey',
+  PASSKEY: 'auditTargetKindPasskey',
+  RESOURCE: 'auditTargetKindResource',
+  ROLE: 'auditTargetKindRole',
+  SCOPE: 'auditTargetKindScope',
+  SESSION: 'auditTargetKindSession',
+  SETTING: 'auditTargetKindSetting',
+  USER: 'auditTargetKindUser',
+}
 
-export type AuditValueKind = keyof typeof AUDIT_VALUE_LABELS
+export const AUDIT_AUTH_METHOD_LABELS: Readonly<Record<AuditAuthMethod, MessageKey>> = {
+  OTP: 'auditAuthMethodOtp',
+  PASSKEY: 'auditAuthMethodPasskey',
+  PASSWORD: 'auditAuthMethodPassword',
+  RECOVERY_CODE: 'auditAuthMethodRecoveryCode',
+}
 
-/**
- * Display label for a stored audit enum value. Values the Console does not
- * know yet (newer backend types) stay visible as their raw value.
- */
-export function auditValueLabel(
-  t: Translate,
-  kind: AuditValueKind,
-  value: string,
-): string
-export function auditValueLabel(
-  t: Translate,
-  kind: AuditValueKind,
-  value: string | null | undefined,
-): string | null
-export function auditValueLabel(
-  t: Translate,
-  kind: AuditValueKind,
-  value: string | null | undefined,
-): string | null {
-  if (value == null) return null
-  const key = AUDIT_VALUE_LABELS[kind][value]
-  return key ? t(key) : value
+export const AUDIT_FIELD_LABELS: Readonly<Record<AuditField, MessageKey>> = {
+  ADDRESS: 'auditFieldAddress',
+  BIRTHDATE: 'auditFieldBirthdate',
+  DESCRIPTION: 'auditFieldDescription',
+  DESCRIPTIONS: 'auditFieldDescriptions',
+  EMAIL: 'auditFieldEmail',
+  EMAIL_VERIFIED: 'auditFieldEmailVerified',
+  ENABLED: 'auditFieldEnabled',
+  FAMILY_NAME: 'auditFieldFamilyName',
+  GENDER: 'auditFieldGender',
+  GIVEN_NAME: 'auditFieldGivenName',
+  LOCALE: 'auditFieldLocale',
+  MEMBERS: 'auditFieldMembers',
+  MIDDLE_NAME: 'auditFieldMiddleName',
+  NAME: 'auditFieldName',
+  NAMES: 'auditFieldNames',
+  NICKNAME: 'auditFieldNickname',
+  PASSKEY: 'auditFieldPasskey',
+  PASSWORD: 'auditFieldPassword',
+  PERMISSIONS: 'auditFieldPermissions',
+  PHONE_NUMBER: 'auditFieldPhoneNumber',
+  PICTURE: 'auditFieldPicture',
+  PREFERENCES: 'auditFieldPreferences',
+  PROFILE: 'auditFieldProfile',
+  RECOVERY_CODES: 'auditFieldRecoveryCodes',
+  ROLES: 'auditFieldRoles',
+  SCOPES: 'auditFieldScopes',
+  SETTINGS: 'auditFieldSettings',
+  TIME_ZONE: 'auditFieldTimeZone',
+  TOTP: 'auditFieldTotp',
+  USERNAME: 'auditFieldUsername',
+  WEBSITE: 'auditFieldWebsite',
 }
