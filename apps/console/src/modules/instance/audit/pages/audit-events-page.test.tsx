@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 
@@ -168,14 +168,15 @@ describe('AuditEventsPage', () => {
       includeActorClient: false,
     })
 
-    // The recorded name stands in for the account the caller cannot read,
-    // and the drawer shows what changed.
-    expect(screen.getAllByText('alice').length).toBeGreaterThanOrEqual(1)
-    expect(screen.getByText('Readers')).toBeTruthy()
-    expect(screen.getByText('Mozilla/5.0 Test')).toBeTruthy()
+    // The drawer names the actor, shows what changed, and keeps the raw
+    // User-Agent among the diagnostics.
+    const drawer = screen.getByRole('dialog')
+    expect(within(drawer).getByText('alice@example.test')).toBeTruthy()
+    expect(within(drawer).getByText('Readers')).toBeTruthy()
+    expect(within(drawer).getByText('Mozilla/5.0 Test')).toBeTruthy()
 
-    const filterByActor = screen.getByRole('button', { name: 'Filter by actor' })
-    fireEvent.click(filterByActor)
+    fireEvent.click(within(drawer).getByRole('button', { name: /Filter similar events/ }))
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Filter by actor' }))
 
     await waitFor(() => {
       expect(mocks.navigate).toHaveBeenCalled()

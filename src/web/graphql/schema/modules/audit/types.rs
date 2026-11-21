@@ -172,6 +172,33 @@ impl AuditEventNode {
             .and_then(|oid| global_id(domain::AuditTargetKind::Client, oid))
     }
 
+    /// The OAuth client application through which the action happened.
+    #[graphql(
+        guard = "ManagementGuard::new(ManagementScope::ClientsRead, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::ClientsRead))
+    )]
+    async fn client(&self, ctx: &Context<'_>) -> GraphqlResult<Option<ClientNode>> {
+        let Some(oid) = self.event.client_oid else {
+            return Ok(None);
+        };
+        let actor_is_client = self.event.actor.kind == domain::AuditActorKind::Client
+            && self.event.actor.oid == Some(oid);
+        if actor_is_client && self.preloaded.client_loaded {
+            return Ok(self.preloaded.client.clone().map(ClientNode::new));
+        }
+        let request = request_context(ctx)?;
+        let client = client::integration::find_client(request, oid)
+            .await
+            .map_err(|error| app_error(ctx, error))?;
+        Ok(client.map(ClientNode::new))
+    }
+
+    /// Browser and operating system read from the recorded User-Agent.
+    #[graphql(complexity = 0)]
+    async fn device(&self) -> Option<AuditDeviceNode> {
+        AuditDeviceNode::parse(self.event.user_agent.as_deref()?)
+    }
+
     #[graphql(complexity = 0)]
     async fn auth_methods(&self) -> Vec<AuditAuthMethod> {
         self.event
@@ -209,6 +236,33 @@ impl AuditEventNode {
             .iter()
             .map(AuditChangeNode::from)
             .collect()
+    }
+}
+
+/// Browser and operating system of the request that produced an event.
+#[derive(SimpleObject)]
+#[graphql(name = "AuditDevice")]
+pub(crate) struct AuditDeviceNode {
+    browser: Option<String>,
+    browser_version: Option<String>,
+    os: Option<String>,
+    os_version: Option<String>,
+}
+
+impl AuditDeviceNode {
+    fn parse(user_agent: &str) -> Option<Self> {
+        let parsed = woothee::parser::Parser::new().parse(user_agent)?;
+        let known = |value: &str| {
+            (!value.is_empty() && value != woothee::woothee::VALUE_UNKNOWN)
+                .then(|| value.to_owned())
+        };
+        let device = Self {
+            browser: known(parsed.name),
+            browser_version: known(parsed.version),
+            os: known(parsed.os),
+            os_version: known(&parsed.os_version),
+        };
+        (device.browser.is_some() || device.os.is_some()).then_some(device)
     }
 }
 
@@ -356,5 +410,23 @@ impl From<&domain::AuditChange> for AuditChangeNode {
                 removed: Vec::new(),
             },
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AuditDeviceNode;
+
+    #[test]
+    fn device_reads_browser_and_os_and_drops_unrecognized_agents() {
+        let device = AuditDeviceNode::parse(
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36",
+        )
+        .expect("a browser user agent");
+        assert_eq!(device.browser.as_deref(), Some("Chrome"));
+        assert_eq!(device.browser_version.as_deref(), Some("142.0.0.0"));
+        assert_eq!(device.os.as_deref(), Some("Linux"));
+
+        assert!(AuditDeviceNode::parse("curl-ish/0").is_none());
     }
 }

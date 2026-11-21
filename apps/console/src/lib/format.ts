@@ -52,3 +52,18 @@ export function exactUtc(value: string | null | undefined): string | undefined {
   const date = parsed(value)
   return date?.toISOString()
 }
+
+/** Date and time to the second with the time zone, for records such as audit events. */
+export function formatPreciseDateTime(
+  value: string | null | undefined,
+  locale: Locale,
+  timeZone?: string,
+): string {
+  const date = parsed(value)
+  if (!date) return ''
+  return new Intl.DateTimeFormat(locale, {
+    timeZone: resolveTimeZone(timeZone),
+    dateStyle: 'medium',
+    timeStyle: 'long',
+  }).format(date)
+}

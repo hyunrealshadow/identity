@@ -1,8 +1,7 @@
 import { getLuceneDiagnostics } from '@identity/lucene-input'
-import { Badge } from '@identity/ui/components/badge'
 import { Skeleton } from '@identity/ui/components/skeleton'
 import { useNavigate } from '@tanstack/react-router'
-import { Fragment, useMemo } from 'react'
+import { useMemo } from 'react'
 
 import { AsyncState } from '#/components/async-state'
 import { CursorPagination } from '#/components/cursor-pagination'
@@ -21,15 +20,12 @@ import { useWorkspace } from '#/lib/workspace'
 import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
 import { AuditEventDetailSheet } from '../components/audit-event-detail-sheet'
+import { AuditEventSentence, AuditOutcomeBadge } from '../components/audit-event-parts'
 import { AuditQueryBar } from '../components/audit-query-bar'
 import { useAuditEventDetail, useAuditEvents } from '../hooks/use-audit-events'
 import { AUDIT_QUERY_ERROR_CODES, auditQueryValue } from '../lib/audit-catalog'
 import { appendLuceneClause, buildAuditLuceneFields } from '../lib/audit-fields'
-import {
-  AUDIT_FAILURE_REASON_LABELS,
-  AUDIT_OUTCOME_LABELS,
-} from '../lib/audit-labels'
-import { auditActionLabel, auditSentence } from '../lib/audit-presentation'
+import { auditActionLabel } from '../lib/audit-presentation'
 import { auditScope } from '../lib/audit-scope'
 import {
   AUDIT_EVENTS_PAGE_SIZE,
@@ -64,37 +60,14 @@ function AuditEventSummary({
   locale: string
   onOpen: () => void
 }) {
-  const t = useTranslator()
   return (
     <button
       type="button"
       className="min-w-0 cursor-pointer text-left text-sm text-muted-foreground underline-offset-4 hover:underline"
       onClick={onOpen}
     >
-      {auditSentence(event, locale, t).map((part, index) =>
-        part.role ? (
-          <span key={index} className="font-medium text-foreground">
-            {part.text}
-          </span>
-        ) : (
-          <Fragment key={index}>{part.text}</Fragment>
-        ),
-      )}
+      <AuditEventSentence event={event} locale={locale} />
     </button>
-  )
-}
-
-function AuditOutcomeBadge({ event }: { event: AuditEventFieldsFragment }) {
-  const t = useTranslator()
-  if (event.outcome === 'SUCCESS') {
-    return <Badge variant="outline">{t(AUDIT_OUTCOME_LABELS.SUCCESS)}</Badge>
-  }
-  return (
-    <Badge variant="destructive">
-      {event.failureReason
-        ? t(AUDIT_FAILURE_REASON_LABELS[event.failureReason])
-        : t(AUDIT_OUTCOME_LABELS.FAILURE)}
-    </Badge>
   )
 }
 
@@ -184,18 +157,22 @@ export function AuditEventsPage({ search }: { search: AuditEventsSearch }) {
     [items, search.event],
   )
 
+  // The detail adds the client application and the parsed device to the
+  // listed event, which stays on screen while it loads.
   const detailQuery = useAuditEventDetail(
-    search.event && !cachedEvent
+    search.event
       ? {
           id: search.event,
           includeActorUser: scope.readActorUser,
           includeActorClient: scope.readActorClient,
         }
       : null,
-    scope.readDetail && Boolean(search.event) && !cachedEvent,
+    scope.readDetail && Boolean(search.event),
   )
 
-  const activeDetailEvent = cachedEvent ?? detailQuery.data?.auditEvent
+  const loadedDetail =
+    detailQuery.data?.auditEvent?.id === search.event ? detailQuery.data?.auditEvent : undefined
+  const activeDetailEvent = loadedDetail ?? cachedEvent
 
   function runSearch(nextQuery?: string) {
     const queryValue = (nextQuery ?? search.q)?.trim() || undefined

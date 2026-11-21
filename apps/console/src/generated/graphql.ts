@@ -1073,7 +1073,7 @@ export type AuditEventDetailQueryQueryVariables = Exact<{
 }>;
 
 
-export type AuditEventDetailQueryQuery = { auditEvent: { id: string, occurredAt: string, category: AuditCategory, action: AuditAction, outcome: AuditOutcome, failureReason: AuditFailureReason | null, clientId: string | null, authMethods: Array<AuditAuthMethod>, ipAddress: string | null, userAgent: string | null, requestId: string | null, traceId: string | null, actor: { kind: AuditActorKind, id: string | null, oid: string | null, label: string | null, user?: { id: string, username: string, email: string, nickname: string | null } | null, client?: { id: string, name: string, names: Array<{ locale: string, value: string }> } | null }, target: { kind: AuditTargetKind, id: string | null, oid: string, label: string | null } | null, changes: Array<{ field: AuditField, kind: AuditChangeKind, oldValue: unknown, newValue: unknown, added: Array<unknown>, removed: Array<unknown> }> } | null };
+export type AuditEventDetailQueryQuery = { auditEvent: { id: string, occurredAt: string, category: AuditCategory, action: AuditAction, outcome: AuditOutcome, failureReason: AuditFailureReason | null, clientId: string | null, authMethods: Array<AuditAuthMethod>, ipAddress: string | null, userAgent: string | null, requestId: string | null, traceId: string | null, client?: { id: string, name: string, names: Array<{ locale: string, value: string }> } | null, device: { browser: string | null, browserVersion: string | null, os: string | null, osVersion: string | null } | null, actor: { kind: AuditActorKind, id: string | null, oid: string | null, label: string | null, user?: { id: string, username: string, email: string, nickname: string | null } | null, client?: { id: string, name: string, names: Array<{ locale: string, value: string }> } | null }, target: { kind: AuditTargetKind, id: string | null, oid: string, label: string | null } | null, changes: Array<{ field: AuditField, kind: AuditChangeKind, oldValue: unknown, newValue: unknown, added: Array<unknown>, removed: Array<unknown> }> } | null };
 
 export type ConsoleKeyFieldsFragment = { id: string, keyId: string, use: KeyUse, status: KeyStatus, inUse: boolean, algorithms: Array<string>, keyIds: Array<string>, hasCertificate: boolean, rotatedFromId: string | null, createdAt: string, expiresAt: string | null, rotatedAt: string | null, revokedAt: string | null };
 
@@ -2449,6 +2449,20 @@ export const AuditEventDetailQueryDocument = new TypedDocumentString(`
     query AuditEventDetailQuery($id: ID!, $includeActorUser: Boolean!, $includeActorClient: Boolean!) {
   auditEvent(id: $id) {
     ...AuditEventFields
+    client @include(if: $includeActorClient) {
+      id
+      name
+      names {
+        locale
+        value
+      }
+    }
+    device {
+      browser
+      browserVersion
+      os
+      osVersion
+    }
   }
 }
     fragment AuditEventFields on AuditEvent {

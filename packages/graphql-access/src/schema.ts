@@ -473,6 +473,33 @@ export const schemaMetadata: SchemaMetadata = {
         }
       }
     },
+    "AuditDevice": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "browser": {
+          "name": "browser",
+          "returnType": "String",
+          "policies": []
+        },
+        "browserVersion": {
+          "name": "browserVersion",
+          "returnType": "String",
+          "policies": []
+        },
+        "os": {
+          "name": "os",
+          "returnType": "String",
+          "policies": []
+        },
+        "osVersion": {
+          "name": "osVersion",
+          "returnType": "String",
+          "policies": []
+        }
+      }
+    },
     "AuditEvent": {
       "kind": "OBJECT",
       "interfaces": [
@@ -505,9 +532,28 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "AuditChange",
           "policies": []
         },
+        "client": {
+          "name": "client",
+          "returnType": "Client",
+          "policies": [
+            {
+              "scopes": [
+                "management.client.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
+        },
         "clientId": {
           "name": "clientId",
           "returnType": "ID",
+          "policies": []
+        },
+        "device": {
+          "name": "device",
+          "returnType": "AuditDevice",
           "policies": []
         },
         "failureReason": {

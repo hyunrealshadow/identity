@@ -1,4 +1,11 @@
+import { Badge } from '@identity/ui/components/badge'
 import { Button } from '@identity/ui/components/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@identity/ui/components/dropdown-menu'
 import {
   Sheet,
   SheetContent,
@@ -8,36 +15,53 @@ import {
 } from '@identity/ui/components/sheet'
 import { Skeleton } from '@identity/ui/components/skeleton'
 import { Link } from '@tanstack/react-router'
-import { Filter } from 'lucide-react'
+import {
+  AppWindow,
+  ArrowRight,
+  ChevronDown,
+  ChevronRight,
+  Filter,
+  Server,
+  Shapes,
+  ShieldQuestion,
+  UserRound,
+  type LucideIcon,
+} from 'lucide-react'
 import type { ReactNode } from 'react'
 
 import { AsyncState } from '#/components/async-state'
-import { CopyableValue } from '#/components/copy-button'
-import type { AuditEventFieldsFragment } from '#/generated/graphql'
-import { formatDateTime } from '#/lib/format'
+import { CopyButton } from '#/components/copy-button'
+import type {
+  AuditActorKind,
+  AuditEventDetailQueryQuery,
+  AuditEventFieldsFragment,
+  AuditTargetKind,
+} from '#/generated/graphql'
+import { formatPreciseDateTime } from '#/lib/format'
 import type { GraphQLIssue } from '#/lib/graphql/transport'
-import { useLocale, useTranslator } from '#/lib/i18n'
+import { useLocale, useTranslator, type MessageKey } from '#/lib/i18n'
+import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
 import { auditQueryValue } from '../lib/audit-catalog'
 import {
   AUDIT_ACTOR_KIND_LABELS,
   AUDIT_AUTH_METHOD_LABELS,
   AUDIT_CATEGORY_LABELS,
-  AUDIT_FAILURE_REASON_LABELS,
   AUDIT_FIELD_LABELS,
-  AUDIT_OUTCOME_LABELS,
   AUDIT_TARGET_KIND_LABELS,
 } from '../lib/audit-labels'
-import {
-  auditActionLabel,
-  auditActorName,
-  auditChangeValueText,
-  auditSentenceText,
-} from '../lib/audit-presentation'
+import { auditActorName, auditChangeValueText, auditSentenceText } from '../lib/audit-presentation'
+import { AuditEventSentence, AuditOutcomeBadge } from './audit-event-parts'
+
+type LoadedDetail = NonNullable<AuditEventDetailQueryQuery['auditEvent']>
+
+/** A listed event, completed by the detail query once it loads. */
+export type AuditEventDetail = AuditEventFieldsFragment &
+  Partial<Pick<LoadedDetail, 'client' | 'device'>>
 
 export interface AuditEventDetailSheetProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  event: AuditEventFieldsFragment | null | undefined
+  event: AuditEventDetail | null | undefined
   loading?: boolean
   error?: {
     kind: 'error' | 'forbidden'
@@ -51,102 +75,353 @@ export interface AuditEventDetailSheetProps {
   onAppendFilter: (field: string, value: string) => void
 }
 
-function DetailRow({
-  label,
-  value,
-  filterAction,
-}: {
-  label: string
-  value: ReactNode
-  filterAction?: { label: string; onClick: () => void }
-}) {
-  if (value === null || value === undefined || value === '') {
-    return null
-  }
-  return (
-    <div className="flex flex-col gap-1 border-b border-border/60 py-2.5 last:border-b-0 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
-      <dt className="shrink-0 text-xs font-medium text-muted-foreground sm:w-36">{label}</dt>
-      <dd className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2 text-sm text-foreground break-all">
-        <div className="min-w-0">{value}</div>
-        {filterAction ? (
-          <Button
-            type="button"
-            size="xs"
-            variant="ghost"
-            className="shrink-0"
-            onClick={filterAction.onClick}
-          >
-            <Filter className="size-3" aria-hidden="true" />
-            {filterAction.label}
-          </Button>
-        ) : null}
-      </dd>
-    </div>
-  )
+type Translate = ReturnType<typeof useTranslator>
+
+const ACTOR_ICONS: Record<AuditActorKind, LucideIcon> = {
+  USER: UserRound,
+  CLIENT: AppWindow,
+  SYSTEM: Server,
+  ANONYMOUS: ShieldQuestion,
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section>
-      <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-        {title}
-      </h3>
-      <dl className="divide-y divide-border/60 rounded-lg border border-border px-3.5">
-        {children}
-      </dl>
+    <section className="space-y-2">
+      <h3 className="text-xs font-medium text-muted-foreground">{title}</h3>
+      <dl className="space-y-3">{children}</dl>
     </section>
   )
 }
 
-function ChangeList({ event }: { event: AuditEventFieldsFragment }) {
-  const t = useTranslator()
-  const empty = t('auditChangeEmpty')
+function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <Section title={t('auditDetailSectionChanges')}>
-      {event.changes.map((change) => (
-        <DetailRow
-          key={change.field}
-          label={t(AUDIT_FIELD_LABELS[change.field])}
-          value={
-            change.kind === 'REDACTED' ? (
-              <span className="text-muted-foreground">{t('auditChangeRedacted')}</span>
-            ) : change.kind === 'SET' ? (
-              <div className="space-y-1">
-                {change.added.length > 0 ? (
-                  <div>
-                    <span className="mr-2 text-xs text-muted-foreground">{t('auditChangeAdded')}</span>
-                    {change.added.map((item) => auditChangeValueText(item, empty)).join(', ')}
-                  </div>
-                ) : null}
-                {change.removed.length > 0 ? (
-                  <div>
-                    <span className="mr-2 text-xs text-muted-foreground">
-                      {t('auditChangeRemoved')}
-                    </span>
-                    <span className="line-through decoration-muted-foreground/60">
-                      {change.removed.map((item) => auditChangeValueText(item, empty)).join(', ')}
-                    </span>
-                  </div>
-                ) : null}
-              </div>
+    <div className="grid grid-cols-[6rem_minmax(0,1fr)] items-baseline gap-x-4">
+      <dt className="text-sm text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 text-sm text-foreground">{children}</dd>
+    </div>
+  )
+}
+
+/** A person, application, or system named by the event. */
+function Party({
+  icon: Icon,
+  name,
+  detail,
+  link,
+}: {
+  icon: LucideIcon
+  name: string
+  detail?: string | null
+  link?: ReactNode
+}) {
+  return (
+    <div className="flex min-w-0 items-start gap-2.5">
+      <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md bg-muted">
+        <Icon className="size-3.5 text-muted-foreground" aria-hidden="true" />
+      </span>
+      <div className="min-w-0">
+        <div className="truncate font-medium">{link ?? name}</div>
+        {detail ? <div className="truncate text-xs text-muted-foreground">{detail}</div> : null}
+      </div>
+    </div>
+  )
+}
+
+function MonoValue({ value, label }: { value: string; label: string }) {
+  return (
+    <span className="flex min-w-0 items-start gap-1">
+      <span className="min-w-0 font-mono text-xs leading-6 break-all">{value}</span>
+      <CopyButton value={value} label={label} />
+    </span>
+  )
+}
+
+const linkClass = 'underline-offset-4 hover:underline'
+
+function targetLink(kind: AuditTargetKind, id: string, name: string): ReactNode {
+  switch (kind) {
+    case 'USER':
+      return (
+        <Link to="/users/$userId" params={{ userId: id }} className={linkClass}>
+          {name}
+        </Link>
+      )
+    case 'CLIENT':
+      return (
+        <Link to="/clients/$clientId" params={{ clientId: id }} className={linkClass}>
+          {name}
+        </Link>
+      )
+    case 'ROLE':
+      return (
+        <Link to="/roles/$roleId" params={{ roleId: id }} className={linkClass}>
+          {name}
+        </Link>
+      )
+    case 'GROUP':
+      return (
+        <Link to="/groups/$groupId" params={{ groupId: id }} className={linkClass}>
+          {name}
+        </Link>
+      )
+    case 'RESOURCE':
+      return (
+        <Link to="/resources/$resourceId" params={{ resourceId: id }} className={linkClass}>
+          {name}
+        </Link>
+      )
+    default:
+      return null
+  }
+}
+
+function ActorParty({ event, locale, t }: { event: AuditEventDetail; locale: string; t: Translate }) {
+  const { actor } = event
+  const kind = t(AUDIT_ACTOR_KIND_LABELS[actor.kind])
+  const name = auditActorName(event, locale, t)
+  if (actor.user) {
+    return (
+      <Party
+        icon={UserRound}
+        name={name}
+        detail={actor.user.email}
+        link={
+          <Link to="/users/$userId" params={{ userId: actor.user.id }} className={linkClass}>
+            {name}
+          </Link>
+        }
+      />
+    )
+  }
+  if (actor.client) {
+    return (
+      <Party
+        icon={AppWindow}
+        name={name}
+        detail={kind}
+        link={
+          <Link to="/clients/$clientId" params={{ clientId: actor.client.id }} className={linkClass}>
+            {name}
+          </Link>
+        }
+      />
+    )
+  }
+  // A deleted account or a reader without access keeps the recorded name.
+  return (
+    <Party
+      icon={ACTOR_ICONS[actor.kind]}
+      name={name}
+      detail={actor.label ? kind : actor.kind === 'ANONYMOUS' ? t('auditDetailAnonymousHint') : null}
+    />
+  )
+}
+
+function ChangeValue({ change, t }: { change: AuditEventDetail['changes'][number]; t: Translate }) {
+  const empty = t('auditChangeEmpty')
+  if (change.kind === 'REDACTED') {
+    return <span className="text-muted-foreground">{t('auditChangeRedacted')}</span>
+  }
+  if (change.kind === 'SET') {
+    return (
+      <div className="flex flex-wrap gap-1.5">
+        {change.added.map((item, index) => (
+          <Badge key={`added-${index}`} variant="secondary">
+            <span aria-label={t('auditChangeAdded')}>+</span>
+            {auditChangeValueText(item, empty)}
+          </Badge>
+        ))}
+        {change.removed.map((item, index) => (
+          <Badge key={`removed-${index}`} variant="outline" className="text-muted-foreground">
+            <span aria-label={t('auditChangeRemoved')}>−</span>
+            <span className="line-through">{auditChangeValueText(item, empty)}</span>
+          </Badge>
+        ))}
+      </div>
+    )
+  }
+  return (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+      <span className="text-muted-foreground line-through decoration-muted-foreground/60">
+        <span className="sr-only">{t('auditChangeBefore')} </span>
+        {auditChangeValueText(change.oldValue, empty)}
+      </span>
+      <ArrowRight className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
+      <span>
+        <span className="sr-only">{t('auditChangeAfter')} </span>
+        {auditChangeValueText(change.newValue, empty)}
+      </span>
+    </div>
+  )
+}
+
+function deviceText(device: AuditEventDetail['device']): string | null {
+  if (!device) return null
+  const browser = [device.browser, device.browserVersion?.split('.')[0]].filter(Boolean).join(' ')
+  const os = [device.os, device.osVersion].filter(Boolean).join(' ')
+  return [browser, os].filter(Boolean).join(' - ') || null
+}
+
+function FilterSimilarMenu({
+  event,
+  t,
+  onAppendFilter,
+}: {
+  event: AuditEventDetail
+  t: Translate
+  onAppendFilter: (field: string, value: string) => void
+}) {
+  const items: Array<{ label: MessageKey; field: string; value: string | null | undefined }> = [
+    { label: 'auditFilterByAction', field: 'action', value: auditQueryValue(event.action) },
+    { label: 'auditFilterByActor', field: 'actor', value: event.actor.oid },
+    { label: 'auditFilterByTarget', field: 'target', value: event.target?.oid },
+    { label: 'auditFilterByIpAddress', field: 'ipAddress', value: event.ipAddress },
+    { label: 'auditFilterByRequestId', field: 'requestId', value: event.requestId },
+  ]
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger render={<Button type="button" variant="outline" size="sm" />}>
+        <Filter className="size-3.5" aria-hidden="true" />
+        {t('auditDetailFilterSimilar')}
+        <ChevronDown className="size-3.5 text-muted-foreground" aria-hidden="true" />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="min-w-48">
+        {items.map((item) =>
+          item.value ? (
+            <DropdownMenuItem
+              key={item.field}
+              onClick={() => onAppendFilter(item.field, item.value as string)}
+            >
+              {t(item.label)}
+            </DropdownMenuItem>
+          ) : null,
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+function DetailBody({ event, t }: { event: AuditEventDetail; t: Translate }) {
+  const { locale } = useLocale()
+  const target = event.target
+  const targetName = target
+    ? (target.label ?? `${t(AUDIT_TARGET_KIND_LABELS[target.kind])} ${target.oid.slice(0, 8)}`)
+    : null
+  const clientName = event.client
+    ? (resolveLocalizedText(event.client.names, locale) ?? event.client.name)
+    : null
+  const device = deviceText(event.device)
+
+  return (
+    <>
+      <Section title={t('auditDetailSectionParties')}>
+        <Field label={t('auditDetailSectionWho')}>
+          <ActorParty event={event} locale={locale} t={t} />
+        </Field>
+        {target && targetName ? (
+          <Field label={t('auditDetailSectionWhat')}>
+            <Party
+              icon={target.kind === 'CLIENT' ? AppWindow : target.kind === 'USER' ? UserRound : Shapes}
+              name={targetName}
+              detail={t(AUDIT_TARGET_KIND_LABELS[target.kind])}
+              link={target.id ? targetLink(target.kind, target.id, targetName) : null}
+            />
+          </Field>
+        ) : null}
+        {event.clientId ? (
+          <Field label={t('auditDetailClient')}>
+            {event.client === undefined ? (
+              // Still loading with the detail query.
+              <Skeleton className="h-6 w-40" />
             ) : (
-              <div className="space-y-1">
-                <div>
-                  <span className="mr-2 text-xs text-muted-foreground">{t('auditChangeBefore')}</span>
-                  <span className="line-through decoration-muted-foreground/60">
-                    {auditChangeValueText(change.oldValue, empty)}
-                  </span>
-                </div>
-                <div>
-                  <span className="mr-2 text-xs text-muted-foreground">{t('auditChangeAfter')}</span>
-                  {auditChangeValueText(change.newValue, empty)}
-                </div>
+            <Party
+              icon={AppWindow}
+              name={clientName ?? t('auditDetailClientUnavailable')}
+              link={
+                clientName && event.client ? (
+                  <Link
+                    to="/clients/$clientId"
+                    params={{ clientId: event.client.id }}
+                    className={linkClass}
+                  >
+                    {clientName}
+                  </Link>
+                ) : null
+              }
+            />
+            )}
+          </Field>
+        ) : null}
+      </Section>
+
+      {event.changes.length > 0 ? (
+        <Section title={t('auditDetailSectionChanges')}>
+          {event.changes.map((change) => (
+            <Field key={change.field} label={t(AUDIT_FIELD_LABELS[change.field])}>
+              <ChangeValue change={change} t={t} />
+            </Field>
+          ))}
+        </Section>
+      ) : null}
+
+      {event.ipAddress || event.userAgent || event.authMethods.length > 0 ? (
+        <Section title={t('auditDetailSectionContext')}>
+          {event.authMethods.length > 0 ? (
+            <Field label={t('auditDetailAuthMethods')}>
+              <div className="flex flex-wrap gap-1.5">
+                {event.authMethods.map((method) => (
+                  <Badge key={method} variant="secondary">
+                    {t(AUDIT_AUTH_METHOD_LABELS[method])}
+                  </Badge>
+                ))}
               </div>
-            )
-          }
-        />
-      ))}
-    </Section>
+            </Field>
+          ) : null}
+          {event.ipAddress ? (
+            <Field label={t('auditDetailIpAddress')}>
+              <MonoValue value={event.ipAddress} label={t('auditDetailIpAddress')} />
+            </Field>
+          ) : null}
+          {event.userAgent ? (
+            <Field label={t('auditDetailDevice')}>
+              <span title={event.userAgent}>{device ?? t('auditDetailDeviceUnknown')}</span>
+            </Field>
+          ) : null}
+        </Section>
+      ) : null}
+
+      <details className="group rounded-lg border border-border">
+        <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-2 text-xs font-medium text-muted-foreground [&::-webkit-details-marker]:hidden">
+          <ChevronRight
+            className="size-3.5 transition-transform group-open:rotate-90"
+            aria-hidden="true"
+          />
+          {t('auditDetailSectionDiagnostics')}
+        </summary>
+        <dl className="space-y-3 border-t border-border px-3 py-3">
+          <Field label={t('auditDetailEventId')}>
+            <MonoValue value={event.id} label={t('auditDetailEventId')} />
+          </Field>
+          {event.requestId ? (
+            <Field label={t('auditDetailRequestId')}>
+              <MonoValue value={event.requestId} label={t('auditDetailRequestId')} />
+            </Field>
+          ) : null}
+          {event.traceId ? (
+            <Field label={t('auditDetailTraceId')}>
+              <MonoValue value={event.traceId} label={t('auditDetailTraceId')} />
+            </Field>
+          ) : null}
+          {event.userAgent ? (
+            <Field label={t('auditDetailUserAgent')}>
+              <span className="font-mono text-xs leading-5 break-all text-muted-foreground">
+                {event.userAgent}
+              </span>
+            </Field>
+          ) : null}
+        </dl>
+      </details>
+    </>
   )
 }
 
@@ -162,67 +437,59 @@ export function AuditEventDetailSheet({
   const t = useTranslator()
   const { locale, timeZone } = useLocale()
 
-  const actorAccount = (() => {
-    if (!event) return null
-    const { user, client } = event.actor
-    if (user) {
-      return (
-        <div className="flex flex-wrap items-center gap-2">
-          <Link
-            to="/users/$userId"
-            params={{ userId: user.id }}
-            className="font-medium underline-offset-4 hover:underline"
-          >
-            {user.nickname?.trim() || user.username}
-          </Link>
-          <span className="text-xs text-muted-foreground">{user.email}</span>
-        </div>
-      )
-    }
-    if (client) {
-      return (
-        <Link
-          to="/clients/$clientId"
-          params={{ clientId: client.id }}
-          className="font-medium underline-offset-4 hover:underline"
-        >
-          {auditActorName(event, locale, t)}
-        </Link>
-      )
-    }
-    return null
-  })()
-
-  const copyable = (value: string | null | undefined, label: string) =>
-    value ? <CopyableValue value={value} label={label} /> : null
-  const filter = (label: string, field: string, value: string | null | undefined) =>
-    value ? { label, onClick: () => onAppendFilter(field, value) } : undefined
-
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
         closeLabel={t('auditDetailClose')}
-        className="w-full overflow-y-auto sm:max-w-xl"
+        className="w-full gap-0 sm:max-w-lg"
       >
-        <SheetHeader className="border-b border-border pb-4">
-          <SheetTitle>
-            {event
-              ? auditSentenceText(event, locale, t)
-              : t('auditDetailTitle')}
+        <SheetHeader className="gap-3 border-b border-border px-6 pt-6 pb-5">
+          {event ? (
+            <div className="flex flex-wrap items-center gap-2 pr-8 text-xs text-muted-foreground">
+              <span>{t(AUDIT_CATEGORY_LABELS[event.category])}</span>
+              <code className="rounded bg-muted px-1.5 py-0.5 font-mono">
+                {auditQueryValue(event.action)}
+              </code>
+            </div>
+          ) : null}
+          <SheetTitle className="pr-8 text-base leading-snug font-normal text-muted-foreground">
+            {event ? (
+              <>
+                <span className="sr-only">{auditSentenceText(event, locale, t)}</span>
+                <span aria-hidden="true">
+                  <AuditEventSentence event={event} locale={locale} />
+                </span>
+              </>
+            ) : (
+              t('auditDetailTitle')
+            )}
           </SheetTitle>
-          <SheetDescription>
-            {event ? formatDateTime(event.occurredAt, locale, timeZone) : t('auditDescription')}
-          </SheetDescription>
+          {event ? (
+            <SheetDescription className="flex flex-wrap items-center gap-2">
+              <AuditOutcomeBadge event={event} />
+              <time dateTime={event.occurredAt}>
+                {formatPreciseDateTime(event.occurredAt, locale, timeZone)}
+              </time>
+            </SheetDescription>
+          ) : (
+            <SheetDescription className="sr-only">{t('auditDescription')}</SheetDescription>
+          )}
+          {event ? (
+            <div>
+              <FilterSimilarMenu event={event} t={t} onAppendFilter={onAppendFilter} />
+            </div>
+          ) : null}
         </SheetHeader>
 
-        <div className="mt-5 space-y-6">
+        <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
           {loading ? (
             <div className="space-y-4" aria-busy="true">
-              <Skeleton className="h-5 w-40" />
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
-              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-9 w-full" />
+              <Skeleton className="h-9 w-full" />
+              <Skeleton className="h-4 w-24" />
+              <Skeleton className="h-9 w-full" />
             </div>
           ) : error ? (
             <AsyncState
@@ -242,107 +509,7 @@ export function AuditEventDetailSheet({
               description={t('auditDetailUnavailableDescription')}
             />
           ) : (
-            <>
-              <Section title={t('auditDetailTitle')}>
-                <DetailRow
-                  label={t('auditDetailAction')}
-                  value={auditActionLabel(event, t)}
-                  filterAction={filter(
-                    t('auditFilterByAction'),
-                    'action',
-                    auditQueryValue(event.action),
-                  )}
-                />
-                <DetailRow
-                  label={t('auditDetailCategory')}
-                  value={t(AUDIT_CATEGORY_LABELS[event.category])}
-                />
-                <DetailRow
-                  label={t('auditDetailOutcome')}
-                  value={
-                    <span className={event.outcome === 'FAILURE' ? 'text-destructive' : undefined}>
-                      {t(AUDIT_OUTCOME_LABELS[event.outcome])}
-                    </span>
-                  }
-                />
-                <DetailRow
-                  label={t('auditDetailFailureReason')}
-                  value={
-                    event.failureReason ? t(AUDIT_FAILURE_REASON_LABELS[event.failureReason]) : null
-                  }
-                />
-                <DetailRow
-                  label={t('auditDetailAuthMethods')}
-                  value={
-                    event.authMethods.length > 0
-                      ? event.authMethods.map((method) => t(AUDIT_AUTH_METHOD_LABELS[method])).join(' + ')
-                      : null
-                  }
-                />
-                <DetailRow
-                  label={t('auditDetailOccurredAt')}
-                  value={formatDateTime(event.occurredAt, locale, timeZone)}
-                />
-                <DetailRow
-                  label={t('auditDetailEventId')}
-                  value={copyable(event.id, t('auditDetailEventId'))}
-                />
-              </Section>
-
-              <Section title={t('auditDetailSectionWho')}>
-                <DetailRow
-                  label={t('auditDetailKind')}
-                  value={t(AUDIT_ACTOR_KIND_LABELS[event.actor.kind])}
-                />
-                <DetailRow label={t('auditDetailName')} value={event.actor.label} />
-                <DetailRow label={t('auditDetailAccount')} value={actorAccount} />
-                <DetailRow
-                  label={t('auditDetailOid')}
-                  value={copyable(event.actor.oid, t('auditDetailOid'))}
-                  filterAction={filter(t('auditFilterByActor'), 'actor', event.actor.oid)}
-                />
-              </Section>
-
-              {event.target ? (
-                <Section title={t('auditDetailSectionWhat')}>
-                  <DetailRow
-                    label={t('auditDetailKind')}
-                    value={t(AUDIT_TARGET_KIND_LABELS[event.target.kind])}
-                  />
-                  <DetailRow label={t('auditDetailName')} value={event.target.label} />
-                  <DetailRow
-                    label={t('auditDetailOid')}
-                    value={copyable(event.target.oid, t('auditDetailOid'))}
-                    filterAction={filter(t('auditFilterByTarget'), 'target', event.target.oid)}
-                  />
-                </Section>
-              ) : null}
-
-              {event.changes.length > 0 ? <ChangeList event={event} /> : null}
-
-              <Section title={t('auditDetailSectionContext')}>
-                <DetailRow
-                  label={t('auditDetailClient')}
-                  value={copyable(event.clientId, t('auditDetailClient'))}
-                />
-                <DetailRow
-                  label={t('auditDetailIpAddress')}
-                  value={copyable(event.ipAddress, t('auditDetailIpAddress'))}
-                  filterAction={filter(t('auditFilterByIpAddress'), 'ipAddress', event.ipAddress)}
-                />
-                <DetailRow label={t('auditDetailUserAgent')} value={event.userAgent} />
-                <DetailRow
-                  label={t('auditDetailRequestId')}
-                  value={copyable(event.requestId, t('auditDetailRequestId'))}
-                  filterAction={filter(t('auditFilterByRequestId'), 'requestId', event.requestId)}
-                />
-                <DetailRow
-                  label={t('auditDetailTraceId')}
-                  value={copyable(event.traceId, t('auditDetailTraceId'))}
-                  filterAction={filter(t('auditFilterByTraceId'), 'traceId', event.traceId)}
-                />
-              </Section>
-            </>
+            <DetailBody event={event} t={t} />
           )}
         </div>
       </SheetContent>

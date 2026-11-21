@@ -90,5 +90,19 @@ query AuditEventDetailQuery(
 ) {
   auditEvent(id: $id) {
     ...AuditEventFields
+    client @include(if: $includeActorClient) {
+      id
+      name
+      names {
+        locale
+        value
+      }
+    }
+    device {
+      browser
+      browserVersion
+      os
+      osVersion
+    }
   }
 }

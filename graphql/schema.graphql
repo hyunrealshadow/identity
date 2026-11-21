@@ -306,6 +306,16 @@ enum AuditChangeKind {
 	REDACTED
 }
 
+"""
+Browser and operating system of the request that produced an event.
+"""
+type AuditDevice {
+	browser: String
+	browserVersion: String
+	os: String
+	osVersion: String
+}
+
 type AuditEvent implements Node {
 	id: ID!
 	occurredAt: DateTime!
@@ -319,6 +329,14 @@ type AuditEvent implements Node {
 	The OAuth client application through which the action happened.
 	"""
 	clientId: ID
+	"""
+	The OAuth client application through which the action happened.
+	"""
+	client: Client @access(policy: {scopes: ["management.client.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
+	Browser and operating system read from the recorded User-Agent.
+	"""
+	device: AuditDevice
 	authMethods: [AuditAuthMethod!]!
 	ipAddress: String
 	userAgent: String
