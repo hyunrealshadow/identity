@@ -129,7 +129,11 @@ corrupt record.
 
 A sign-in produces one record, not one per protocol step: success with the
 methods used, or failure with its reason. A failure before the person is
-authenticated has an anonymous actor and the account as its target. Login state
+authenticated has an anonymous actor and the account as its target. Rejections
+at identifier entry are recorded too: `account_locked` and `account_disabled`
+target the account, while `unknown_account` has no target and never stores the
+entered identifier; its IP address and User-Agent still show where repeated
+attempts come from. Login state
 transitions, activity touches, polling timestamps, and replay counters do not
 produce records.
 

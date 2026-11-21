@@ -152,7 +152,8 @@ export class LuceneCompletionDropdown {
     // (values after a field), which closing afterwards would discard.
     this.close();
     // A value completes its clause; a field or operator leads to further suggestions.
-    this.#skipNextUpdate = option.kind === 'value' && option.apply !== query;
+    this.#skipNextUpdate =
+      (option.kind === 'value' || option.kind === 'history') && option.apply !== query;
 
     view.dispatch({
       changes: { from, to, insert: option.apply },

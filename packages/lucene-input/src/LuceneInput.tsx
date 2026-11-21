@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { CompletionDropdown } from './CompletionDropdown'
 import type { LuceneCompletionDropdownState } from './lib/codemirror/completion-dropdown'
 import { createLuceneEditor, type LuceneEditorHandle } from './lib/codemirror'
+import { localizeSyntaxCompletion } from './lib/i18n'
 import type { ComponentDiagnostic, LuceneField, LuceneInputMessages } from './lib/types'
 
 export type LuceneInputProps = {
@@ -20,9 +21,15 @@ export type LuceneInputProps = {
   ariaLabel?: string
   /** Explain diagnostics in a hover tooltip; turn off while the host already shows them. */
   diagnosticTooltip?: boolean
+  /** Earlier queries, most recent first: offered on an empty input and cycled with Shift+Up/Down. */
+  history?: readonly string[]
+  /** Host content at the end of the suggestion panel footer, such as syntax help. */
+  completionFooter?: ReactNode
   id?: string
   className?: string
 }
+
+const NO_HISTORY: readonly string[] = []
 
 export function LuceneInput({
   value,
@@ -39,6 +46,8 @@ export function LuceneInput({
   readOnly = false,
   ariaLabel,
   diagnosticTooltip = true,
+  history = NO_HISTORY,
+  completionFooter,
   id,
   className,
 }: LuceneInputProps) {
@@ -75,6 +84,7 @@ export function LuceneInput({
       timeZone,
       messages,
       diagnosticTooltip,
+      history,
       onChange: (nextValue) => onChangeRef.current(nextValue),
       onSubmit: (currentValue) => onSubmitRef.current?.(currentValue),
       onDiagnostics: (nextDiagnostics) => onDiagnosticsRef.current?.(nextDiagnostics),
@@ -135,11 +145,21 @@ export function LuceneInput({
     handleRef.current?.setDiagnosticTooltip(diagnosticTooltip)
   }, [diagnosticTooltip])
 
+  useEffect(() => {
+    handleRef.current?.setHistory(history)
+  }, [history])
+
   return (
     <div id={id} className={className ? `lucene-input-root ${className}` : 'lucene-input-root'}>
       <div ref={hostRef} className="lucene-input-editor" />
       <CompletionDropdown
         state={completionState}
+        labels={{
+          add: localizeSyntaxCompletion('addAction', locale, messages),
+          historyHint: localizeSyntaxCompletion('historyHint', locale, messages),
+        }}
+        showHistoryHint={history.length > 0}
+        footer={completionFooter}
         onHover={(index) => handleRef.current?.hoverCompletion(index)}
         onSelect={(index) => handleRef.current?.selectCompletion(index)}
       />

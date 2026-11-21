@@ -30,6 +30,9 @@ pub(crate) enum AuditFailureReason {
     InvalidOtp,
     InvalidRecoveryCode,
     ReplayDetected,
+    UnknownAccount,
+    AccountLocked,
+    AccountDisabled,
 }
 
 /// Who performed the action.
@@ -56,7 +59,6 @@ pub(crate) enum AuditTargetKind {
     Setting,
     Session,
     Passkey,
-    Authorization,
     DeviceAuthorization,
 }
 

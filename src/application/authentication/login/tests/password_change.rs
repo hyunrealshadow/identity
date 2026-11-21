@@ -7,7 +7,7 @@ fn password_change_service() -> (LoginService, UserUserOid) {
     let login_repo = Arc::new(TestLoginRepo {
         state: Arc::new(Mutex::new(TestLoginRepoState {
             logins: vec![test_login(user_oid, 0)],
-            update_status_calls: Vec::new(),
+            ..Default::default()
         })),
     });
     let argon2_options = Argon2Options {

@@ -14,7 +14,7 @@ export type LuceneCompletionOption = {
   apply: string;
   detail?: string;
   info?: string;
-  kind: 'field' | 'syntax' | 'value';
+  kind: 'field' | 'syntax' | 'value' | 'history';
   section: string;
 };
 
@@ -26,6 +26,7 @@ export type LuceneCompletionResult = {
 };
 
 type SectionLabels = {
+  history: string;
   fields: string;
   syntax: string;
   values: string;
@@ -53,7 +54,8 @@ export async function getLuceneCompletions(
   locale: string,
   messages: LuceneInputMessages | undefined,
   fields: LuceneField[],
-  timeZone?: string
+  timeZone?: string,
+  history: readonly string[] = []
 ): Promise<LuceneCompletionResult | null> {
   const cursor = view.state.selection.main;
   if (!cursor.empty || !view.hasFocus) {
@@ -61,6 +63,16 @@ export async function getLuceneCompletions(
   }
 
   const value = view.state.doc.toString();
+  if (value.trim() === '') {
+    // An empty input offers recent searches, then every field to narrow by.
+    const recent = getHistoryCompletions(history, value.length, sectionLabels.history);
+    const fieldName = completionController.completeFields(value, cursor.head);
+    return combineLuceneCompletions(
+      recent,
+      fieldName ? toLuceneCompletion(fieldName, cursor.head, sectionLabels.fields, 'field') : null
+    );
+  }
+
   const fieldValue = await completionController.completeValue(value, cursor.head);
   if (fieldValue) {
     return toLuceneCompletion(fieldValue, cursor.head, sectionLabels.values, 'value');
@@ -96,6 +108,20 @@ export async function getLuceneCompletions(
   );
 }
 
+
+const MAX_HISTORY_COMPLETIONS = 5;
+
+function getHistoryCompletions(
+  history: readonly string[],
+  docLength: number,
+  section: string
+): LuceneCompletionResult | null {
+  const options = history
+    .filter((entry) => entry.trim() !== '')
+    .slice(0, MAX_HISTORY_COMPLETIONS)
+    .map((entry) => ({ label: entry, apply: entry, kind: 'history' as const, section }));
+  return options.length > 0 ? { from: 0, to: docLength, query: '', options } : null;
+}
 
 function combineLuceneCompletions(
   ...results: (LuceneCompletionResult | null)[]
@@ -214,12 +240,19 @@ function getLuceneSyntaxCompletions(
   messages: LuceneInputMessages | undefined
 ): LuceneCompletionResult | null {
   const token = readCompletionToken(value, position);
-  if (!token?.text || token.text.includes(':')) {
+  if (!token || token.text.includes(':')) {
+    return null;
+  }
+  // With nothing typed, offer the boolean operators only after a finished term.
+  if (!token.text && !followsCompleteTerm(value.slice(0, token.from))) {
     return null;
   }
 
   const query = token.text.toLowerCase();
   const options = luceneSyntaxCompletionOptions.filter((option) => {
+    if (!token.text && option.detail === 'group') {
+      return false;
+    }
     return option.label.toLowerCase().startsWith(query);
   });
 
@@ -650,6 +683,14 @@ function isComparableFieldType(type: LuceneFieldType): boolean {
 
 function isDateLikeFieldType(type: LuceneFieldType): boolean {
   return type === 'date' || type === 'time' || type === 'datetime';
+}
+
+function followsCompleteTerm(beforeToken: string): boolean {
+  const previous = beforeToken.trimEnd();
+  if (!previous || !/\s$/.test(beforeToken)) {
+    return false;
+  }
+  return !/(?:^|[\s(])(?:AND|OR|NOT)$/.test(previous) && !/[(:]$/.test(previous);
 }
 
 function readCompletionToken(value: string, position: number): { text: string; from: number } | null {

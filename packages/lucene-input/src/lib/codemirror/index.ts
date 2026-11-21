@@ -8,6 +8,7 @@ import {
 import { luceneDiagnostics, refreshDiagnostics, setDiagnosticTooltip } from './diagnostics';
 import { luceneEditorTheme } from './theme';
 import { getLuceneDiagnostics } from '../diagnostics';
+import { localizeSyntaxCompletion } from '../i18n';
 import { FieldCompletionController } from '../field-completion';
 import { preventNewlineKeymap, sanitizeSingleLineValue, singleLineTransactions } from '../single-line';
 import { luceneSyntaxHighlighting } from '../syntax-highlighting';
@@ -31,6 +32,8 @@ export type LuceneEditorConfig = {
   onCompletionChange?: (state: LuceneCompletionDropdownState | null) => void;
   /** Show diagnostics in a hover tooltip (default true). */
   diagnosticTooltip?: boolean;
+  /** Earlier queries, most recent first, cycled with Shift+Up and Shift+Down. */
+  history?: readonly string[];
 };
 
 export type LuceneEditorHandle = {
@@ -46,6 +49,7 @@ export type LuceneEditorHandle = {
   setReadOnly(readOnly: boolean): void;
   setAriaLabel(ariaLabel: string | undefined): void;
   setDiagnosticTooltip(enabled: boolean): void;
+  setHistory(history: readonly string[]): void;
   hoverCompletion(index: number): void;
   selectCompletion(index: number): void;
   closeCompletion(): boolean;
@@ -60,6 +64,11 @@ export function createLuceneEditor(config: LuceneEditorConfig): LuceneEditorHand
   let messages = config.messages;
   let isDisabled = Boolean(config.disabled);
   let isReadOnly = Boolean(config.readOnly);
+  let history = config.history ?? [];
+  // -1 is the query being written; it is kept while browsing history.
+  let historyIndex = -1;
+  let historyDraft = '';
+  let browsingHistory = false;
 
   const initialValue = sanitizeSingleLineValue(config.value);
   const completionController = new FieldCompletionController(fields, locale, messages);
@@ -139,6 +148,14 @@ export function createLuceneEditor(config: LuceneEditorConfig): LuceneEditorHand
             return true;
           }
         },
+        {
+          key: 'Shift-ArrowUp',
+          run: (view) => stepHistory(view, 1)
+        },
+        {
+          key: 'Shift-ArrowDown',
+          run: (view) => stepHistory(view, -1)
+        },
         ...preventNewlineKeymap
       ])
     ),
@@ -150,6 +167,9 @@ export function createLuceneEditor(config: LuceneEditorConfig): LuceneEditorHand
     ariaCompartment.of(buildContentAttributes(currentAriaLabel, isDisabled)),
     EditorView.updateListener.of((update) => {
       if (update.docChanged) {
+        if (!browsingHistory) {
+          historyIndex = -1;
+        }
         const nextValue = sanitizeSingleLineValue(update.state.doc.toString());
         config.onChange?.(nextValue);
         notifyDiagnostics(update.view);
@@ -171,17 +191,41 @@ export function createLuceneEditor(config: LuceneEditorConfig): LuceneEditorHand
         getLuceneCompletions(
           update.view,
           completionController,
-          getCompletionSectionLabels(locale),
+          getCompletionSectionLabels(locale, messages),
           locale,
           messages,
           fields,
-          timeZone
+          timeZone,
+          history
         )
       );
     }),
     luceneDiagnostics(computeDiagnostics, { tooltip: hostTooltip }),
     luceneEditorTheme()
   ];
+
+  function stepHistory(view: EditorView, step: number): boolean {
+    if (isDisabled || isReadOnly || history.length === 0) {
+      return false;
+    }
+    const nextIndex = Math.min(Math.max(historyIndex + step, -1), history.length - 1);
+    if (nextIndex === historyIndex) {
+      return true;
+    }
+    if (historyIndex === -1) {
+      historyDraft = view.state.doc.toString();
+    }
+    historyIndex = nextIndex;
+    const text = nextIndex === -1 ? historyDraft : sanitizeSingleLineValue(history[nextIndex] ?? '');
+    browsingHistory = true;
+    view.dispatch({
+      changes: { from: 0, to: view.state.doc.length, insert: text },
+      selection: { anchor: text.length }
+    });
+    browsingHistory = false;
+    completionUi.close();
+    return true;
+  }
 
   const view = new EditorView({
     parent: config.parent,
@@ -275,6 +319,10 @@ export function createLuceneEditor(config: LuceneEditorConfig): LuceneEditorHand
       hostTooltip = enabled;
       syncDiagnosticTooltip();
     },
+    setHistory(nextHistory: readonly string[]) {
+      history = nextHistory;
+      historyIndex = -1;
+    },
     hoverCompletion(index: number) {
       completionUi.hover(index);
     },
@@ -292,8 +340,14 @@ export function createLuceneEditor(config: LuceneEditorConfig): LuceneEditorHand
   };
 }
 
-function getCompletionSectionLabels(locale: string): { fields: string; syntax: string; values: string } {
-  return locale.startsWith('zh')
-    ? { fields: '字段', syntax: '语法', values: '字段值' }
-    : { fields: 'Fields', syntax: 'Syntax', values: 'Values' };
+function getCompletionSectionLabels(
+  locale: string,
+  messages: LuceneInputMessages | undefined
+): { history: string; fields: string; syntax: string; values: string } {
+  return {
+    history: localizeSyntaxCompletion('historySection', locale, messages),
+    fields: localizeSyntaxCompletion('fieldsSection', locale, messages),
+    syntax: localizeSyntaxCompletion('syntaxSection', locale, messages),
+    values: localizeSyntaxCompletion('valuesSection', locale, messages)
+  };
 }

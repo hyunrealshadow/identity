@@ -21,8 +21,9 @@
 .lucene-completion-panel {
   position: absolute;
   z-index: 50;
-  min-width: 240px;
-  max-width: min(440px, 100%);
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius, 0.5rem);
   background-color: var(--popover);
@@ -35,29 +36,27 @@
   list-style: none;
   margin: 0;
   padding: 4px;
-  max-height: 240px;
+  max-height: min(360px, 50vh);
   overflow-y: auto;
 }
 
 .lucene-completion-section {
-  padding: 6px 8px 3px;
-  font-size: 0.6875rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  padding: 8px 10px 4px;
+  font-size: 0.75rem;
+  font-weight: 500;
   color: var(--muted-foreground);
 }
 
 .lucene-completion-option {
   display: flex;
   width: 100%;
+  min-width: 0;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 8px;
   border: 0;
   border-radius: calc(var(--radius, 0.5rem) - 2px);
   background: transparent;
-  padding: 6px 8px;
+  padding: 6px 10px;
   text-align: left;
   font-size: 0.8125rem;
   line-height: 1.25rem;
@@ -71,28 +70,83 @@
   color: var(--accent-foreground);
 }
 
+.lucene-completion-icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  color: var(--muted-foreground);
+}
+
 .lucene-completion-label {
+  flex-shrink: 0;
+  max-width: 60%;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.lucene-completion-detail {
+.lucene-completion-option[data-kind='field'] .lucene-completion-label {
+  color: var(--lucene-token-field);
+}
+
+.lucene-completion-option[data-kind='syntax'] .lucene-completion-label {
+  color: var(--lucene-token-operator);
+}
+
+.lucene-completion-description {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-foreground);
+}
+
+.lucene-completion-action {
+  margin-left: auto;
   flex-shrink: 0;
+  padding-left: 12px;
   font-size: 0.75rem;
   color: var(--muted-foreground);
+  visibility: hidden;
 }
 
-.lucene-completion-option[data-selected='true'] .lucene-completion-detail {
-  color: var(--accent-foreground);
-  opacity: 0.8;
+.lucene-completion-option[data-kind='field'] .lucene-completion-action,
+.lucene-completion-option:hover .lucene-completion-action,
+.lucene-completion-option[data-selected='true'] .lucene-completion-action {
+  visibility: visible;
 }
 
-.lucene-completion-info {
+.lucene-completion-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 12px;
   border-top: 1px solid var(--border);
-  background-color: var(--muted);
-  padding: 6px 10px;
+  padding: 8px 14px;
   font-size: 0.75rem;
   color: var(--muted-foreground);
+}
+
+.lucene-completion-hint {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.lucene-completion-hint kbd {
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius, 0.5rem) - 4px);
+  background-color: var(--muted);
+  padding: 1px 6px;
+  font-family: inherit;
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  color: var(--foreground);
+}
+
+.lucene-completion-footer-extra {
+  min-width: 0;
 }

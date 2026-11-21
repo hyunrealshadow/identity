@@ -31,7 +31,7 @@ import {
   auditActionLabel,
   auditActorName,
   auditChangeValueText,
-  auditTargetName,
+  auditSentenceText,
 } from '../lib/audit-presentation'
 
 export interface AuditEventDetailSheetProps {
@@ -208,9 +208,7 @@ export function AuditEventDetailSheet({
         <SheetHeader className="border-b border-border pb-4">
           <SheetTitle>
             {event
-              ? [auditActorName(event, locale, t), auditActionLabel(event, t), auditTargetName(event, t)]
-                  .filter(Boolean)
-                  .join(' ')
+              ? auditSentenceText(event, locale, t)
               : t('auditDetailTitle')}
           </SheetTitle>
           <SheetDescription>

@@ -88,7 +88,13 @@ const enSyntaxCompletions: SyntaxCompletionDictionary = {
   last24HoursLabel: 'Last 24 hours',
   last7DaysLabel: 'Last 7 days',
   last30DaysLabel: 'Last 30 days',
-  completionPreview: 'Completes to {value}'
+  completionPreview: 'Completes to {value}',
+  fieldsSection: 'Narrow your search',
+  syntaxSection: 'Syntax',
+  valuesSection: 'Values',
+  addAction: 'Add',
+  historyHint: 'to cycle through history',
+  historySection: 'Recent searches'
 };
 
 const zhCNSyntaxCompletions: SyntaxCompletionDictionary = {
@@ -117,7 +123,13 @@ const zhCNSyntaxCompletions: SyntaxCompletionDictionary = {
   last24HoursLabel: '过去 24 小时',
   last7DaysLabel: '过去 7 天',
   last30DaysLabel: '过去 30 天',
-  completionPreview: '补全为 {value}'
+  completionPreview: '补全为 {value}',
+  fieldsSection: '缩小搜索范围',
+  syntaxSection: '语法',
+  valuesSection: '可选值',
+  addAction: '添加',
+  historyHint: '浏览搜索历史',
+  historySection: '最近搜索'
 };
 
 const syntaxCompletionDictionaries: Record<string, SyntaxCompletionDictionary> = {

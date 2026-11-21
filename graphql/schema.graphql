@@ -370,6 +370,9 @@ enum AuditFailureReason {
 	INVALID_OTP
 	INVALID_RECOVERY_CODE
 	REPLAY_DETECTED
+	UNKNOWN_ACCOUNT
+	ACCOUNT_LOCKED
+	ACCOUNT_DISABLED
 }
 
 """
@@ -447,7 +450,6 @@ enum AuditTargetKind {
 	SETTING
 	SESSION
 	PASSKEY
-	AUTHORIZATION
 	DEVICE_AUTHORIZATION
 }
 
@@ -1864,7 +1866,7 @@ type QueryRoot {
 	"""
 	keys(filter: KeyFilter, first: Int, after: String, last: Int, before: String): KeyConnection! @access(policy: {scopes: ["management.key.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	auditEvent(id: ID!): AuditEvent @access(policy: {scopes: ["management.audit.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
-	auditEvents(category: AuditCategory, query: String, timeZone: String, orderBy: AuditEventOrder, first: Int, after: String, last: Int, before: String): AuditEventConnection! @access(policy: {scopes: ["management.audit.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	auditEvents(query: String, timeZone: String, orderBy: AuditEventOrder, first: Int, after: String, last: Int, before: String): AuditEventConnection! @access(policy: {scopes: ["management.audit.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 }
 
 type RecoveryCodeEnrollmentPayload {

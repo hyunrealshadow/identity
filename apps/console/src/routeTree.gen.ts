@@ -15,10 +15,6 @@ import { Route as LogoutRouteImport } from './routes/logout'
 import { Route as AppdashboardIndexRouteImport } from './routes/_app/(dashboard)/index'
 import { Route as AppinstanceSettingsRouteRouteImport } from './routes/_app/(instance)/settings/route'
 import { Route as AppauditAuditEventsIndexRouteImport } from './routes/_app/(audit)/audit-events/index'
-import { Route as AppauditAuditEventsAccountRouteImport } from './routes/_app/(audit)/audit-events/account'
-import { Route as AppauditAuditEventsAuthorizationRouteImport } from './routes/_app/(audit)/audit-events/authorization'
-import { Route as AppauditAuditEventsManagementRouteImport } from './routes/_app/(audit)/audit-events/management'
-import { Route as AppauditAuditEventsSignInRouteImport } from './routes/_app/(audit)/audit-events/sign-in'
 import { Route as AppclientManagementClientsIndexRouteImport } from './routes/_app/(client-management)/clients/index'
 import { Route as AppclientManagementClientsClientIdRouteRouteImport } from './routes/_app/(client-management)/clients/$clientId/route'
 import { Route as AppclientManagementClientsNewRouteImport } from './routes/_app/(client-management)/clients/new'
@@ -90,30 +86,6 @@ const AppauditAuditEventsIndexRoute =
   AppauditAuditEventsIndexRouteImport.update({
     id: '/(audit)/audit-events/',
     path: '/audit-events/',
-    getParentRoute: () => AppRouteRoute,
-  } as any)
-const AppauditAuditEventsAccountRoute =
-  AppauditAuditEventsAccountRouteImport.update({
-    id: '/(audit)/audit-events/account',
-    path: '/audit-events/account',
-    getParentRoute: () => AppRouteRoute,
-  } as any)
-const AppauditAuditEventsAuthorizationRoute =
-  AppauditAuditEventsAuthorizationRouteImport.update({
-    id: '/(audit)/audit-events/authorization',
-    path: '/audit-events/authorization',
-    getParentRoute: () => AppRouteRoute,
-  } as any)
-const AppauditAuditEventsManagementRoute =
-  AppauditAuditEventsManagementRouteImport.update({
-    id: '/(audit)/audit-events/management',
-    path: '/audit-events/management',
-    getParentRoute: () => AppRouteRoute,
-  } as any)
-const AppauditAuditEventsSignInRoute =
-  AppauditAuditEventsSignInRouteImport.update({
-    id: '/(audit)/audit-events/sign-in',
-    path: '/audit-events/sign-in',
     getParentRoute: () => AppRouteRoute,
   } as any)
 const AppclientManagementClientsIndexRoute =
@@ -375,10 +347,6 @@ export interface FileRoutesByFullPath {
   '/groups/$groupId': typeof AppuserManagementGroupsGroupIdRouteRouteWithChildren
   '/roles/$roleId': typeof AppuserManagementRolesRoleIdRouteRouteWithChildren
   '/users/$userId': typeof AppuserManagementUsersUserIdRouteRouteWithChildren
-  '/audit-events/account': typeof AppauditAuditEventsAccountRoute
-  '/audit-events/authorization': typeof AppauditAuditEventsAuthorizationRoute
-  '/audit-events/management': typeof AppauditAuditEventsManagementRoute
-  '/audit-events/sign-in': typeof AppauditAuditEventsSignInRoute
   '/clients/new': typeof AppclientManagementClientsNewRoute
   '/settings/authentication': typeof AppinstanceSettingsAuthenticationRoute
   '/settings/encryption-keys': typeof AppinstanceSettingsEncryptionKeysRoute
@@ -421,10 +389,6 @@ export interface FileRoutesByTo {
   '/callback': typeof CallbackRoute
   '/logout': typeof LogoutRoute
   '/': typeof AppdashboardIndexRoute
-  '/audit-events/account': typeof AppauditAuditEventsAccountRoute
-  '/audit-events/authorization': typeof AppauditAuditEventsAuthorizationRoute
-  '/audit-events/management': typeof AppauditAuditEventsManagementRoute
-  '/audit-events/sign-in': typeof AppauditAuditEventsSignInRoute
   '/clients/new': typeof AppclientManagementClientsNewRoute
   '/settings/authentication': typeof AppinstanceSettingsAuthenticationRoute
   '/settings/encryption-keys': typeof AppinstanceSettingsEncryptionKeysRoute
@@ -475,10 +439,6 @@ export interface FileRoutesById {
   '/_app/(user-management)/groups/$groupId': typeof AppuserManagementGroupsGroupIdRouteRouteWithChildren
   '/_app/(user-management)/roles/$roleId': typeof AppuserManagementRolesRoleIdRouteRouteWithChildren
   '/_app/(user-management)/users/$userId': typeof AppuserManagementUsersUserIdRouteRouteWithChildren
-  '/_app/(audit)/audit-events/account': typeof AppauditAuditEventsAccountRoute
-  '/_app/(audit)/audit-events/authorization': typeof AppauditAuditEventsAuthorizationRoute
-  '/_app/(audit)/audit-events/management': typeof AppauditAuditEventsManagementRoute
-  '/_app/(audit)/audit-events/sign-in': typeof AppauditAuditEventsSignInRoute
   '/_app/(client-management)/clients/new': typeof AppclientManagementClientsNewRoute
   '/_app/(instance)/settings/authentication': typeof AppinstanceSettingsAuthenticationRoute
   '/_app/(instance)/settings/encryption-keys': typeof AppinstanceSettingsEncryptionKeysRoute
@@ -529,10 +489,6 @@ export interface FileRouteTypes {
     | '/groups/$groupId'
     | '/roles/$roleId'
     | '/users/$userId'
-    | '/audit-events/account'
-    | '/audit-events/authorization'
-    | '/audit-events/management'
-    | '/audit-events/sign-in'
     | '/clients/new'
     | '/settings/authentication'
     | '/settings/encryption-keys'
@@ -575,10 +531,6 @@ export interface FileRouteTypes {
     | '/callback'
     | '/logout'
     | '/'
-    | '/audit-events/account'
-    | '/audit-events/authorization'
-    | '/audit-events/management'
-    | '/audit-events/sign-in'
     | '/clients/new'
     | '/settings/authentication'
     | '/settings/encryption-keys'
@@ -628,10 +580,6 @@ export interface FileRouteTypes {
     | '/_app/(user-management)/groups/$groupId'
     | '/_app/(user-management)/roles/$roleId'
     | '/_app/(user-management)/users/$userId'
-    | '/_app/(audit)/audit-events/account'
-    | '/_app/(audit)/audit-events/authorization'
-    | '/_app/(audit)/audit-events/management'
-    | '/_app/(audit)/audit-events/sign-in'
     | '/_app/(client-management)/clients/new'
     | '/_app/(instance)/settings/authentication'
     | '/_app/(instance)/settings/encryption-keys'
@@ -719,34 +667,6 @@ declare module '@tanstack/react-router' {
       path: '/audit-events'
       fullPath: '/audit-events/'
       preLoaderRoute: typeof AppauditAuditEventsIndexRouteImport
-      parentRoute: typeof AppRouteRoute
-    }
-    '/_app/(audit)/audit-events/account': {
-      id: '/_app/(audit)/audit-events/account'
-      path: '/audit-events/account'
-      fullPath: '/audit-events/account'
-      preLoaderRoute: typeof AppauditAuditEventsAccountRouteImport
-      parentRoute: typeof AppRouteRoute
-    }
-    '/_app/(audit)/audit-events/authorization': {
-      id: '/_app/(audit)/audit-events/authorization'
-      path: '/audit-events/authorization'
-      fullPath: '/audit-events/authorization'
-      preLoaderRoute: typeof AppauditAuditEventsAuthorizationRouteImport
-      parentRoute: typeof AppRouteRoute
-    }
-    '/_app/(audit)/audit-events/management': {
-      id: '/_app/(audit)/audit-events/management'
-      path: '/audit-events/management'
-      fullPath: '/audit-events/management'
-      preLoaderRoute: typeof AppauditAuditEventsManagementRouteImport
-      parentRoute: typeof AppRouteRoute
-    }
-    '/_app/(audit)/audit-events/sign-in': {
-      id: '/_app/(audit)/audit-events/sign-in'
-      path: '/audit-events/sign-in'
-      fullPath: '/audit-events/sign-in'
-      preLoaderRoute: typeof AppauditAuditEventsSignInRouteImport
       parentRoute: typeof AppRouteRoute
     }
     '/_app/(client-management)/clients/': {
@@ -1197,10 +1117,6 @@ interface AppRouteRouteChildren {
   AppuserManagementGroupsGroupIdRouteRoute: typeof AppuserManagementGroupsGroupIdRouteRouteWithChildren
   AppuserManagementRolesRoleIdRouteRoute: typeof AppuserManagementRolesRoleIdRouteRouteWithChildren
   AppuserManagementUsersUserIdRouteRoute: typeof AppuserManagementUsersUserIdRouteRouteWithChildren
-  AppauditAuditEventsAccountRoute: typeof AppauditAuditEventsAccountRoute
-  AppauditAuditEventsAuthorizationRoute: typeof AppauditAuditEventsAuthorizationRoute
-  AppauditAuditEventsManagementRoute: typeof AppauditAuditEventsManagementRoute
-  AppauditAuditEventsSignInRoute: typeof AppauditAuditEventsSignInRoute
   AppclientManagementClientsNewRoute: typeof AppclientManagementClientsNewRoute
   AppuserManagementGroupsNewRoute: typeof AppuserManagementGroupsNewRoute
   AppuserManagementRolesNewRoute: typeof AppuserManagementRolesNewRoute
@@ -1226,10 +1142,6 @@ const AppRouteRouteChildren: AppRouteRouteChildren = {
     AppuserManagementRolesRoleIdRouteRouteWithChildren,
   AppuserManagementUsersUserIdRouteRoute:
     AppuserManagementUsersUserIdRouteRouteWithChildren,
-  AppauditAuditEventsAccountRoute: AppauditAuditEventsAccountRoute,
-  AppauditAuditEventsAuthorizationRoute: AppauditAuditEventsAuthorizationRoute,
-  AppauditAuditEventsManagementRoute: AppauditAuditEventsManagementRoute,
-  AppauditAuditEventsSignInRoute: AppauditAuditEventsSignInRoute,
   AppclientManagementClientsNewRoute: AppclientManagementClientsNewRoute,
   AppuserManagementGroupsNewRoute: AppuserManagementGroupsNewRoute,
   AppuserManagementRolesNewRoute: AppuserManagementRolesNewRoute,

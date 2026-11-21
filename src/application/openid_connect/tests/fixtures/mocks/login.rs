@@ -166,6 +166,15 @@ impl LoginRepository for MockLoginRepository {
             .push(login_oid);
         Ok(())
     }
+
+    async fn record_identification_failure(
+        &self,
+        _login_oid: Uuid,
+        _user_oid: Option<Uuid>,
+        _reason: identity_domain::audit::AuditFailureReason,
+    ) -> Result<(), LoginRepositoryError> {
+        Ok(())
+    }
 }
 
 /// Creates a MockLoginRepository with default behaviors matching the

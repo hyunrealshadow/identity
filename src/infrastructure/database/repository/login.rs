@@ -45,14 +45,18 @@ async fn login_parties<C: ConnectionTrait>(
         }
         None => None,
     };
-    let client_oid = ClientEntity::find_by_id(login.client_id)
+    Ok((user_oid, login_client_oid(conn, login.client_id).await?))
+}
+
+/// The OID of the client application a login belongs to.
+async fn login_client_oid<C: ConnectionTrait>(conn: &C, client_id: i64) -> Result<Uuid, DbErr> {
+    ClientEntity::find_by_id(client_id)
         .select_only()
         .column(ClientColumn::Oid)
         .into_tuple::<Uuid>()
         .one(conn)
         .await?
-        .ok_or_else(|| DbErr::RecordNotFound("login client".to_owned()))?;
-    Ok((user_oid, client_oid))
+        .ok_or_else(|| DbErr::RecordNotFound("login client".to_owned()))
 }
 
 fn decode_acr(
@@ -514,5 +518,34 @@ impl LoginRepository for LoginRepositoryImpl {
             .await
             .map_err(|e| LoginRepositoryError::ResetFailedAttempts(Box::new(e)))?;
         Ok(())
+    }
+
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "record_identification_failure"))]
+    async fn record_identification_failure(
+        &self,
+        login_oid: Uuid,
+        user_oid: Option<Uuid>,
+        reason: AuditFailureReason,
+    ) -> Result<(), LoginRepositoryError> {
+        let client_id = LoginEntity::find()
+            .select_only()
+            .column(LoginColumn::ClientId)
+            .filter(LoginColumn::Oid.eq(login_oid))
+            .into_tuple::<i64>()
+            .one(&self.db)
+            .await
+            .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
+            .ok_or(LoginRepositoryError::LoginNotFound)?;
+        let client_oid = login_client_oid(&self.db, client_id)
+            .await
+            .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?;
+        audit::record_standalone(
+            &self.db,
+            AuditRecord::failure(AuditAction::SignIn, reason, user_oid)
+                .actor(AuditActor::anonymous())
+                .client(client_oid),
+        )
+        .await
+        .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))
     }
 }

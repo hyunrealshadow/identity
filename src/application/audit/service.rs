@@ -3,9 +3,9 @@ use std::sync::Arc;
 use chrono::{DateTime, SubsecRound, Utc};
 use identity_domain::{
     audit::{
-        AuditCategory, AuditEvent, AuditEventOid, AuditEventOrder, AuditEventPageDirection,
-        AuditEventQuery, AuditEventSortKey, AuditQueryError, AuditQueryExpr, AuditQueryField,
-        AuditQueryRepository, AuditQueryRepositoryError, AuditTextMatcher, parse_audit_query,
+        AuditEvent, AuditEventOid, AuditEventOrder, AuditEventPageDirection, AuditEventQuery,
+        AuditEventSortKey, AuditQueryError, AuditQueryExpr, AuditQueryRepository,
+        AuditQueryRepositoryError, parse_audit_query,
     },
     time_zone::TimeZone,
 };
@@ -21,8 +21,6 @@ pub const MAX_AUDIT_PAGE_SIZE: usize = 100;
 
 #[derive(Debug, Clone)]
 pub struct AuditEventPageRequest {
-    /// Restricts results to one audit log; combined with `query`.
-    pub category: Option<AuditCategory>,
     pub query: Option<String>,
     pub time_zone: Option<String>,
     pub order: AuditEventOrder,
@@ -34,7 +32,6 @@ pub struct AuditEventPageRequest {
 
 #[derive(Debug, Clone)]
 pub struct AuditEventCountRequest {
-    pub category: Option<AuditCategory>,
     pub query: Option<String>,
     pub time_zone: Option<String>,
     pub snapshot_at: Option<DateTime<Utc>>,
@@ -79,12 +76,7 @@ impl AuditQueryService {
         let (direction, cursor_token, limit) = validate_pagination(&request)?;
         let normalized_query = normalize_query(request.query.as_deref());
         let time_zone = parse_time_zone(request.time_zone.as_deref())?;
-        let filter_hash = audit_filter_hash(
-            request.category,
-            &normalized_query,
-            time_zone,
-            request.order,
-        );
+        let filter_hash = audit_filter_hash(&normalized_query, time_zone, request.order);
 
         let (cursor_key, snapshot_at) = match cursor_token {
             Some(token) => {
@@ -100,10 +92,7 @@ impl AuditQueryService {
             None => (None, snapshot_instant(None)),
         };
 
-        let expr = with_category(
-            parse_query(&normalized_query, snapshot_at, time_zone)?,
-            request.category,
-        );
+        let expr = parse_query(&normalized_query, snapshot_at, time_zone)?;
         let page = self
             .repository
             .list_events(AuditEventQuery {
@@ -150,10 +139,7 @@ impl AuditQueryService {
         let normalized_query = normalize_query(request.query.as_deref());
         let time_zone = parse_time_zone(request.time_zone.as_deref())?;
         let snapshot_at = snapshot_instant(request.snapshot_at);
-        let expr = with_category(
-            parse_query(&normalized_query, snapshot_at, time_zone)?,
-            request.category,
-        );
+        let expr = parse_query(&normalized_query, snapshot_at, time_zone)?;
         self.repository
             .count_events(&expr)
             .await
@@ -241,20 +227,6 @@ fn parse_time_zone(raw: Option<&str>) -> Result<TimeZone, AppError> {
 /// on every page.
 fn snapshot_instant(requested: Option<DateTime<Utc>>) -> DateTime<Utc> {
     requested.unwrap_or_else(Utc::now).trunc_subsecs(6)
-}
-
-fn with_category(expr: AuditQueryExpr, category: Option<AuditCategory>) -> AuditQueryExpr {
-    let Some(category) = category else {
-        return expr;
-    };
-    let filter = AuditQueryExpr::Text {
-        field: AuditQueryField::Category,
-        matcher: AuditTextMatcher::Exact(<&'static str>::from(category).to_owned()),
-    };
-    match expr {
-        AuditQueryExpr::MatchAll => filter,
-        other => AuditQueryExpr::And(vec![filter, other]),
-    }
 }
 
 fn parse_query(
@@ -453,7 +425,6 @@ mod tests {
 
         let page1 = service
             .list_events(AuditEventPageRequest {
-                category: None,
                 query: Some("occurredAt:>=now-1h".to_owned()),
                 time_zone: Some("Asia/Shanghai".to_owned()),
                 order: AuditEventOrder::default(),
@@ -471,7 +442,6 @@ mod tests {
 
         let page2 = service
             .list_events(AuditEventPageRequest {
-                category: None,
                 query: Some("occurredAt:>=now-1h".to_owned()),
                 time_zone: Some("Asia/Shanghai".to_owned()),
                 order: AuditEventOrder::default(),
@@ -502,7 +472,6 @@ mod tests {
 
         let page1 = service
             .list_events(AuditEventPageRequest {
-                category: None,
                 query: Some("action:user.*".to_owned()),
                 time_zone: Some("UTC".to_owned()),
                 order: AuditEventOrder::default(),
@@ -516,7 +485,6 @@ mod tests {
 
         let err = service
             .list_events(AuditEventPageRequest {
-                category: None,
                 query: Some("action:client.*".to_owned()),
                 time_zone: Some("UTC".to_owned()),
                 order: AuditEventOrder::default(),
@@ -531,7 +499,6 @@ mod tests {
 
         let err = service
             .list_events(AuditEventPageRequest {
-                category: None,
                 query: Some("action:user.*".to_owned()),
                 time_zone: Some("Asia/Shanghai".to_owned()),
                 order: AuditEventOrder::default(),
@@ -552,7 +519,6 @@ mod tests {
 
         let too_many = service
             .list_events(AuditEventPageRequest {
-                category: None,
                 query: None,
                 time_zone: None,
                 order: AuditEventOrder::default(),
@@ -567,7 +533,6 @@ mod tests {
 
         let bad_tz = service
             .list_events(AuditEventPageRequest {
-                category: None,
                 query: None,
                 time_zone: Some("Mars/Olympus".to_owned()),
                 order: AuditEventOrder::default(),
@@ -582,7 +547,6 @@ mod tests {
 
         let unknown_field = service
             .list_events(AuditEventPageRequest {
-                category: None,
                 query: Some("bogus:1".to_owned()),
                 time_zone: None,
                 order: AuditEventOrder::default(),

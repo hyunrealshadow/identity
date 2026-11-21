@@ -48,7 +48,6 @@ fragment AuditEventFields on AuditEvent {
 }
 
 query AuditEventsQuery(
-  $category: AuditCategory
   $query: String
   $timeZone: String
   $orderBy: AuditEventOrder
@@ -60,7 +59,6 @@ query AuditEventsQuery(
   $includeActorClient: Boolean!
 ) {
   auditEvents(
-    category: $category
     query: $query
     timeZone: $timeZone
     orderBy: $orderBy

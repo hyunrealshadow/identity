@@ -51,6 +51,10 @@ pub enum AuditFailureReason {
     InvalidOtp,
     InvalidRecoveryCode,
     ReplayDetected,
+    /// The entered identifier matches no account; the identifier is not kept.
+    UnknownAccount,
+    AccountLocked,
+    AccountDisabled,
 }
 
 /// Who performed the action.
@@ -96,7 +100,6 @@ pub enum AuditTargetKind {
     Setting,
     Session,
     Passkey,
-    Authorization,
     DeviceAuthorization,
 }
 
@@ -295,8 +298,8 @@ audit_actions! {
     SessionRevoke => SignIn, Session;
     ConsentGrant => Authorization, Client;
     ConsentDeny => Authorization, Client;
-    TokenRevoke => Authorization, Authorization;
-    TokenReplay => Authorization, Authorization;
+    TokenRevoke => Authorization, User;
+    TokenReplay => Authorization, User;
     DeviceApprove => Authorization, DeviceAuthorization;
     DeviceDeny => Authorization, DeviceAuthorization;
     DeviceRevoke => Authorization, DeviceAuthorization;

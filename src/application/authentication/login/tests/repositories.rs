@@ -6,7 +6,10 @@ pub(super) struct TestUserRepo {
 
 #[async_trait]
 impl UserRepository for TestUserRepo {
-    async fn find_by_identifier(&self, _identifier: &str) -> Result<User, UserRepositoryError> {
+    async fn find_by_identifier(&self, identifier: &str) -> Result<User, UserRepositoryError> {
+        if identifier == UNKNOWN_IDENTIFIER {
+            return Err(UserRepositoryError::UserNotFound);
+        }
         Ok(self.user.lock().unwrap().clone())
     }
 
@@ -307,7 +310,11 @@ impl SessionRepository for TestSessionRepo {
 pub(super) struct TestLoginRepoState {
     pub(super) logins: Vec<Login>,
     pub(super) update_status_calls: Vec<(Uuid, LoginStatus)>,
+    pub(super) identification_failures: Vec<(Uuid, Option<Uuid>, AuditFailureReason)>,
 }
+
+/// An identifier [`TestUserRepo`] resolves to no account.
+pub(super) const UNKNOWN_IDENTIFIER: &str = "nobody@example.test";
 
 pub(super) struct TestLoginRepo {
     pub(super) state: Arc<Mutex<TestLoginRepoState>>,
@@ -410,6 +417,20 @@ impl LoginRepository for TestLoginRepo {
         if let Some(login) = state.logins.iter_mut().find(|login| login.oid == login_oid) {
             login.failed_attempts = 0;
         }
+        Ok(())
+    }
+
+    async fn record_identification_failure(
+        &self,
+        login_oid: Uuid,
+        user_oid: Option<Uuid>,
+        reason: AuditFailureReason,
+    ) -> Result<(), LoginRepositoryError> {
+        self.state
+            .lock()
+            .unwrap()
+            .identification_failures
+            .push((login_oid, user_oid, reason));
         Ok(())
     }
 }

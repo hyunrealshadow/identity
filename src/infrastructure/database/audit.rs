@@ -257,7 +257,6 @@ fn label_query(kind: AuditTargetKind, oid: Uuid) -> Option<SelectStatement> {
         | AuditTargetKind::Setting
         | AuditTargetKind::Session
         | AuditTargetKind::Passkey
-        | AuditTargetKind::Authorization
         | AuditTargetKind::DeviceAuthorization => return None,
     })
 }

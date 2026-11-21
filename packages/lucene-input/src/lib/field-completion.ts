@@ -129,10 +129,10 @@ export class FieldCompletionController {
 function readCurrentToken(value: string, position: number): { text: string; from: number } | null {
   const beforeCursor = value.slice(0, position);
   const match = /(?:^|[\s(])([^\s()]*)$/.exec(beforeCursor);
-  const text = match?.[1] ?? '';
-  if (!text) {
+  if (!match) {
     return null;
   }
+  const text = match[1] ?? '';
 
   return {
     text,

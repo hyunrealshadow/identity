@@ -1,13 +1,76 @@
-import { useEffect, useId, useRef } from 'react'
+import { useEffect, useId, useRef, type ReactNode } from 'react'
 import type { LuceneCompletionDropdownState } from './lib/codemirror/completion-dropdown'
+import type { LuceneCompletionOption } from './lib/codemirror/completion'
+
+export type CompletionDropdownLabels = {
+  add: string
+  historyHint: string
+}
 
 type CompletionDropdownProps = {
   state: LuceneCompletionDropdownState | null
+  labels: CompletionDropdownLabels
+  /** Show the Shift+Up / Shift+Down history hint. */
+  showHistoryHint?: boolean
+  /** Host content at the end of the footer, such as a syntax help link. */
+  footer?: ReactNode
   onHover: (index: number) => void
   onSelect: (index: number) => void
 }
 
-export function CompletionDropdown({ state, onHover, onSelect }: CompletionDropdownProps) {
+function FilterIcon() {
+  return (
+    <svg
+      className="lucene-completion-icon"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3 4h18l-7 8.5V19l-4 2v-8.5z" />
+    </svg>
+  )
+}
+
+function HistoryIcon() {
+  return (
+    <svg
+      className="lucene-completion-icon"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+      <path d="M3 3v5h5" />
+      <path d="M12 7v5l3 2" />
+    </svg>
+  )
+}
+
+function optionText(option: LuceneCompletionOption): string {
+  return option.kind === 'field' ? option.apply : option.label
+}
+
+function optionDescription(option: LuceneCompletionOption): string | undefined {
+  // Fields and syntax describe themselves in `info`; values carry their display name in `detail`.
+  return option.kind === 'value' ? (option.detail ?? option.info) : (option.info ?? option.detail)
+}
+
+export function CompletionDropdown({
+  state,
+  labels,
+  showHistoryHint = false,
+  footer,
+  onHover,
+  onSelect,
+}: CompletionDropdownProps) {
   const listboxId = useId()
   const activeOptionRef = useRef<HTMLButtonElement | null>(null)
 
@@ -19,30 +82,21 @@ export function CompletionDropdown({ state, onHover, onSelect }: CompletionDropd
     return null
   }
 
-  const { result, selectedIndex, anchor } = state
-  const activeOption = result.options[selectedIndex]
+  const { result, selectedIndex } = state
+  const hasFooter = showHistoryHint || Boolean(footer)
 
   let currentSection = ''
 
   return (
-    <div
-      className="lucene-completion-panel"
-      style={{
-        left: `${Math.min(anchor.left, 360)}px`,
-        top: `${anchor.bottom + 4}px`,
-      }}
-    >
-      <ul
-        id={listboxId}
-        role="listbox"
-        className="lucene-completion-list"
-      >
+    <div className="lucene-completion-panel">
+      <ul id={listboxId} role="listbox" className="lucene-completion-list">
         {result.options.map((option, index) => {
           const showSection = option.section !== currentSection
           if (showSection) {
             currentSection = option.section
           }
           const isSelected = index === selectedIndex
+          const description = optionDescription(option)
 
           return (
             <li key={`${option.kind}-${option.label}-${index}`} role="presentation">
@@ -57,23 +111,39 @@ export function CompletionDropdown({ state, onHover, onSelect }: CompletionDropd
                 role="option"
                 aria-selected={isSelected}
                 data-selected={isSelected ? 'true' : 'false'}
+                data-kind={option.kind}
                 className="lucene-completion-option"
                 onMouseDown={(event) => event.preventDefault()}
                 onMouseEnter={() => onHover(index)}
                 onClick={() => onSelect(index)}
               >
-                <span className="lucene-completion-label">{option.label}</span>
-                {option.detail ? (
-                  <span className="lucene-completion-detail">{option.detail}</span>
+                {option.kind === 'field' ? <FilterIcon /> : null}
+                {option.kind === 'history' ? <HistoryIcon /> : null}
+                <span className="lucene-completion-label">{optionText(option)}</span>
+                {description ? (
+                  <span className="lucene-completion-description">{description}</span>
                 ) : null}
+                <span className="lucene-completion-action" aria-hidden="true">
+                  {labels.add}
+                </span>
               </button>
             </li>
           )
         })}
       </ul>
-      {activeOption?.info ? (
-        <div className="lucene-completion-info" aria-live="polite">
-          {activeOption.info}
+      {hasFooter ? (
+        <div className="lucene-completion-footer">
+          {showHistoryHint ? (
+            <span className="lucene-completion-hint">
+              <kbd>Shift+↑</kbd>
+              <span aria-hidden="true">/</span>
+              <kbd>Shift+↓</kbd>
+              <span>{labels.historyHint}</span>
+            </span>
+          ) : (
+            <span />
+          )}
+          {footer ? <span className="lucene-completion-footer-extra">{footer}</span> : null}
         </div>
       ) : null}
     </div>

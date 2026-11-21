@@ -1,4 +1,4 @@
-import type { AuditCategory, AuditEventOrder } from '#/generated/graphql'
+import type { AuditEventOrder } from '#/generated/graphql'
 import { parsePageSize } from '#/lib/page-size'
 import { cursorPage } from '#/modules/user-management/lib/cursor-page'
 
@@ -36,13 +36,11 @@ export function normalizeAuditEventsSearch(
 }
 
 export function auditEventsQueryVariables(
-  category: AuditCategory | undefined,
   search: AuditEventsSearch,
   timeZone: string,
   options: { includeActorUser: boolean; includeActorClient: boolean },
 ) {
   return {
-    category,
     query: search.q?.trim() || undefined,
     timeZone,
     orderBy: search.order ?? ('OCCURRED_AT_DESC' as AuditEventOrder),

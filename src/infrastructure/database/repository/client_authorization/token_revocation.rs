@@ -2,6 +2,7 @@ use super::{query_error, query_failed};
 use crate::database::{
     audit,
     entity::{
+        client::Entity as ClientEntity,
         client_authorization,
         client_authorization::{
             Column as ClientAuthorizationColumn, Entity as ClientAuthorizationEntity,
@@ -23,6 +24,47 @@ use sea_orm::{
 };
 use serde_json::Value;
 use uuid::Uuid;
+
+/// The user a grant was issued to, from its stored data.
+fn grant_user(data: &Value) -> Option<Uuid> {
+    data["user_oid"]
+        .as_str()
+        .and_then(|oid| Uuid::parse_str(oid).ok())
+}
+
+/// The user and client of one stored grant, read in a single query.
+async fn grant_parties(
+    transaction: &DatabaseTransaction,
+    oid: Uuid,
+) -> Result<(Option<Uuid>, Option<Uuid>), DbErr> {
+    let row = ClientAuthorizationEntity::find()
+        .filter(ClientAuthorizationColumn::Oid.eq(oid))
+        .find_also_related(ClientEntity)
+        .one(transaction)
+        .await?;
+    Ok(row.map_or((None, None), |(grant, client)| {
+        (grant_user(&grant.data), client.map(|client| client.oid))
+    }))
+}
+
+/// A replayed or revoked token: the client presented it, and it belongs to
+/// the user it was issued to.
+fn token_record(
+    record: AuditRecord,
+    user_oid: Option<Uuid>,
+    client_oid: Option<Uuid>,
+) -> AuditRecord {
+    let mut record = AuditRecord {
+        target_oid: user_oid,
+        ..record
+    };
+    if let Some(client_oid) = client_oid {
+        record = record
+            .client(client_oid)
+            .default_actor(AuditActor::client(client_oid));
+    }
+    record
+}
 
 pub(super) async fn lock_refresh_family(
     transaction: &DatabaseTransaction,
@@ -127,12 +169,21 @@ pub(super) async fn revoke_access_tokens_for_authorization_code(
         ))?;
 
     if changed.rows_affected > 0 {
+        let (user_oid, client_oid) = grant_parties(&transaction, authorization_code_oid)
+            .await
+            .map_err(query_error(
+                "client_authorization.revoke_access_tokens_for_authorization_code",
+            ))?;
         audit::record(
             &transaction,
-            AuditRecord::failure(
-                AuditAction::TokenReplay,
-                AuditFailureReason::ReplayDetected,
-                authorization_code_oid,
+            token_record(
+                AuditRecord::failure(
+                    AuditAction::TokenReplay,
+                    AuditFailureReason::ReplayDetected,
+                    None,
+                ),
+                user_oid,
+                client_oid,
             ),
         )
         .await
@@ -249,12 +300,15 @@ pub(super) async fn revoke_refresh_token_family(
     }
     audit::record(
         &transaction,
-        AuditRecord::failure(
-            AuditAction::TokenReplay,
-            AuditFailureReason::ReplayDetected,
-            root_oid,
-        )
-        .client(client_oid),
+        token_record(
+            AuditRecord::failure(
+                AuditAction::TokenReplay,
+                AuditFailureReason::ReplayDetected,
+                None,
+            ),
+            grant_user(&data),
+            Some(client_oid),
+        ),
     )
     .await
     .map_err(query_error(
@@ -290,9 +344,16 @@ pub(super) async fn revoke_access_token_for_client(
     if result.rows_affected() > 0 {
         audit::record(
             &transaction,
-            AuditRecord::success(AuditAction::TokenRevoke, access_oid)
-                .client(client_oid)
-                .default_actor(AuditActor::client(client_oid)),
+            token_record(
+                AuditRecord::success(AuditAction::TokenRevoke, None),
+                grant_parties(&transaction, access_oid)
+                    .await
+                    .map_err(query_error(
+                        "client_authorization.revoke_access_token_for_client",
+                    ))?
+                    .0,
+                Some(client_oid),
+            ),
         )
         .await
         .map_err(query_error(
@@ -369,9 +430,11 @@ pub(super) async fn revoke_refresh_grant_for_client(
     }
     audit::record(
         &transaction,
-        AuditRecord::success(AuditAction::TokenRevoke, root_oid)
-            .client(client_oid)
-            .default_actor(AuditActor::client(client_oid)),
+        token_record(
+            AuditRecord::success(AuditAction::TokenRevoke, None),
+            grant_user(&data),
+            Some(client_oid),
+        ),
     )
     .await
     .map_err(query_error(

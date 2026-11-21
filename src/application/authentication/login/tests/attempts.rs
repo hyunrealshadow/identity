@@ -205,3 +205,87 @@ async fn otp_failures_across_fresh_logins_lock_the_user() {
         .expect_err("expected user lock to apply to another login");
     assert_error_code(error, AuthErrorCode::UserLocked);
 }
+
+fn unidentified_login() -> Login {
+    Login {
+        user_oid: None,
+        status: LoginStatus::CREATED,
+        ..test_login(Uuid::nil(), 0)
+    }
+}
+
+async fn identify_rejection(
+    user: User,
+    identifier: &str,
+) -> (
+    AppError,
+    Vec<(Uuid, Option<Uuid>, AuditFailureReason)>,
+    Uuid,
+) {
+    let login = unidentified_login();
+    let login_oid = login.oid;
+    let login_repo = Arc::new(TestLoginRepo {
+        state: Arc::new(Mutex::new(TestLoginRepoState {
+            logins: vec![login],
+            ..Default::default()
+        })),
+    });
+    let (service, _) = otp_service(Arc::clone(&login_repo), user);
+    let Err(error) = service.identify(login_oid, identifier).await else {
+        panic!("expected the identifier to be rejected");
+    };
+    let failures = login_repo
+        .state
+        .lock()
+        .unwrap()
+        .identification_failures
+        .clone();
+    (error, failures, login_oid)
+}
+
+#[tokio::test]
+async fn identify_audits_an_unknown_account_without_a_target() {
+    let (error, failures, login_oid) = identify_rejection(test_user(), UNKNOWN_IDENTIFIER).await;
+
+    assert_error_code(error, AuthErrorCode::UserNotFound);
+    assert_eq!(
+        failures,
+        vec![(login_oid, None, AuditFailureReason::UnknownAccount)]
+    );
+}
+
+#[tokio::test]
+async fn identify_audits_locked_and_disabled_accounts_against_the_account() {
+    let locked = User {
+        locked: true,
+        locked_until: Some(Utc::now() + Duration::minutes(10)),
+        ..test_user()
+    };
+    let locked_oid = Uuid::from(locked.oid);
+    let (error, failures, login_oid) = identify_rejection(locked, "user").await;
+    assert_error_code(error, AuthErrorCode::UserLocked);
+    assert_eq!(
+        failures,
+        vec![(
+            login_oid,
+            Some(locked_oid),
+            AuditFailureReason::AccountLocked
+        )]
+    );
+
+    let disabled = User {
+        enabled: false,
+        ..test_user()
+    };
+    let disabled_oid = Uuid::from(disabled.oid);
+    let (error, failures, login_oid) = identify_rejection(disabled, "user").await;
+    assert_error_code(error, AuthErrorCode::UserLocked);
+    assert_eq!(
+        failures,
+        vec![(
+            login_oid,
+            Some(disabled_oid),
+            AuditFailureReason::AccountDisabled
+        )]
+    );
+}

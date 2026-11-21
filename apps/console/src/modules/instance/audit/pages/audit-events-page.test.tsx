@@ -3,10 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ReactNode } from 'react'
 
 import type { EffectivePermissions } from '#/lib/workspace'
-import {
-  ALL_AUDIT_LOG,
-  AUDIT_CATEGORY_LOGS,
-} from '#/modules/instance/audit/lib/audit-logs'
 import { AuditEventsPage } from '#/modules/instance/audit/pages/audit-events-page'
 import { renderWithLocale } from '#/test/render'
 
@@ -150,7 +146,7 @@ describe('AuditEventsPage', () => {
   it('denies view when management.audit.read is missing', () => {
     mocks.permissions = permissions(['management.user.read'])
 
-    renderWithLocale(<AuditEventsPage log={ALL_AUDIT_LOG} search={{}} />)
+    renderWithLocale(<AuditEventsPage search={{}} />)
 
     expect(screen.getByText('Audit log is not available')).toBeTruthy()
     expect(mocks.eventsCalls.every((call) => !call.enabled)).toBe(true)
@@ -161,7 +157,6 @@ describe('AuditEventsPage', () => {
 
     const view = renderWithLocale(
       <AuditEventsPage
-        log={ALL_AUDIT_LOG}
         search={{
           event: 'QXVkaXRFdmVudDo1NTBlODQwMC1lMjliLTQxZDQtYTcxNi00NDY2NTU0NDAwMDA',
         }}
@@ -199,7 +194,7 @@ describe('AuditEventsPage', () => {
       'management.client.read',
     ])
 
-    renderWithLocale(<AuditEventsPage log={ALL_AUDIT_LOG} search={{}} />)
+    renderWithLocale(<AuditEventsPage search={{}} />)
 
     expect(mocks.eventsCalls.at(-1)?.variables).toMatchObject({
       includeActorUser: true,
@@ -219,7 +214,7 @@ describe('AuditEventsPage', () => {
   it('does not send an invalid query opened from a link and explains it at the query bar', () => {
     mocks.permissions = permissions(['management.audit.read'])
 
-    renderWithLocale(<AuditEventsPage log={ALL_AUDIT_LOG} search={{ q: 'targetKind:' }} />)
+    renderWithLocale(<AuditEventsPage search={{ q: 'targetKind:' }} />)
 
     expect(mocks.eventsCalls.length).toBeGreaterThan(0)
     expect(mocks.eventsCalls.every((call) => call.variables === null)).toBe(true)
@@ -232,10 +227,10 @@ describe('AuditEventsPage', () => {
   it('navigates with event parameter when clicking a row action title button', async () => {
     mocks.permissions = permissions(['management.audit.read', 'management.user.read'])
 
-    renderWithLocale(<AuditEventsPage log={ALL_AUDIT_LOG} search={{}} />)
+    renderWithLocale(<AuditEventsPage search={{}} />)
 
     const rowActionButton = screen.getByRole('button', {
-      name: 'Alice Operator Updated role Auditors',
+      name: 'Alice Operator updated role Auditors',
     })
     fireEvent.click(rowActionButton)
 
@@ -248,18 +243,19 @@ describe('AuditEventsPage', () => {
     )
   })
 
-  it('queries only its own category and keeps navigation on its route', async () => {
+  it('narrows by category through the query and stays on the audit log route', async () => {
     mocks.permissions = permissions(['management.audit.read'])
-    const log = AUDIT_CATEGORY_LOGS.SIGN_IN
 
-    renderWithLocale(<AuditEventsPage log={log} search={{}} />)
+    renderWithLocale(<AuditEventsPage search={{ q: 'category:sign_in' }} />)
 
-    expect(screen.getByRole('heading', { name: 'Sign-ins', level: 1 })).toBeTruthy()
-    expect(mocks.eventsCalls.at(-1)?.variables).toMatchObject({ category: 'SIGN_IN' })
+    expect(screen.getByRole('heading', { name: 'Audit log', level: 1 })).toBeTruthy()
+    expect(mocks.eventsCalls.at(-1)?.variables).not.toHaveProperty('category')
     fireEvent.click(screen.getByRole('button', { name: '24h' }))
     await waitFor(() => {
       expect(mocks.navigate).toHaveBeenCalled()
     })
-    expect(mocks.navigate.mock.calls.at(-1)?.[0].to).toBe('/audit-events/sign-in')
+    const navArg = mocks.navigate.mock.calls.at(-1)?.[0]
+    expect(navArg.to).toBe('/audit-events')
+    expect(navArg.search.q).toBe('occurredAt:[now-24h TO now] AND category:sign_in')
   })
 })

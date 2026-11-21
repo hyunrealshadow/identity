@@ -80,7 +80,7 @@ fn global_id(kind: domain::AuditTargetKind, oid: Uuid) -> Option<ID> {
         Kind::Key => GlobalId::<kind::Key>::new(oid).encode(),
         Kind::Session => GlobalId::<kind::Session>::new(oid).encode(),
         Kind::Passkey => GlobalId::<kind::Passkey>::new(oid).encode(),
-        Kind::Setting | Kind::Authorization | Kind::DeviceAuthorization => return None,
+        Kind::Setting | Kind::DeviceAuthorization => return None,
     };
     Some(ID(encoded))
 }

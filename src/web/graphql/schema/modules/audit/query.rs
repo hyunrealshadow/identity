@@ -15,7 +15,6 @@ use uuid::Uuid;
 use identity_domain::audit as domain;
 
 use super::{
-    enums::AuditCategory,
     integration,
     types::{AuditEventNode, AuditEventOrder, PreloadedActor, decode_audit_event_oid},
 };
@@ -59,7 +58,6 @@ impl AuditQuery {
     async fn audit_events(
         &self,
         ctx: &Context<'_>,
-        category: Option<AuditCategory>,
         #[graphql(validator(chars_max_length = 2048))] query: Option<String>,
         #[graphql(validator(chars_max_length = 100))] time_zone: Option<String>,
         order_by: Option<AuditEventOrder>,
@@ -72,21 +70,14 @@ impl AuditQuery {
         let request = request_context(ctx)?;
         let order = order_by.unwrap_or_else(AuditEventOrder::default_order);
 
-        let category = category.map(domain::AuditCategory::from);
-        let result = integration::list_events(
-            request,
-            category,
-            query.clone(),
-            time_zone.clone(),
-            order,
-            page,
-        )
-        .await
-        .map_err(|error| app_error(ctx, error))?;
+        let result =
+            integration::list_events(request, query.clone(), time_zone.clone(), order, page)
+                .await
+                .map_err(|error| app_error(ctx, error))?;
 
         let snapshot_at = result.snapshot_at;
         let additional = connection::connection_total(ctx, async {
-            integration::count_events(request, category, query, time_zone, snapshot_at)
+            integration::count_events(request, query, time_zone, snapshot_at)
                 .await
                 .map_err(|error| app_error(ctx, error))
         })
@@ -218,7 +209,7 @@ mod tests {
         // so any complexity > 3000 would surface as a GraphQL parse/validation complexity error.
         let query = r#"
             query {
-                auditEvents(first: 100, category: MANAGEMENT, query: "action:user_*", timeZone: "Asia/Shanghai", orderBy: OCCURRED_AT_DESC) {
+                auditEvents(first: 100, query: "category:management AND action:user_*", timeZone: "Asia/Shanghai", orderBy: OCCURRED_AT_DESC) {
                     totalCount
                     pageInfo {
                         hasPreviousPage

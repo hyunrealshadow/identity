@@ -147,10 +147,13 @@ export type AuditEventOrder =
 
 /** Why an attempt failed. */
 export type AuditFailureReason =
+  | 'ACCOUNT_DISABLED'
+  | 'ACCOUNT_LOCKED'
   | 'INVALID_CREDENTIAL'
   | 'INVALID_OTP'
   | 'INVALID_RECOVERY_CODE'
-  | 'REPLAY_DETECTED';
+  | 'REPLAY_DETECTED'
+  | 'UNKNOWN_ACCOUNT';
 
 /** A changed attribute of an audited object. */
 export type AuditField =
@@ -193,7 +196,6 @@ export type AuditOutcome =
 
 /** Type of the object an action applies to. */
 export type AuditTargetKind =
-  | 'AUTHORIZATION'
   | 'CLIENT'
   | 'DEVICE_AUTHORIZATION'
   | 'GROUP'
@@ -1050,7 +1052,6 @@ export type InstanceDashboardQuery = { instanceOverview: { generatedAt: string, 
 export type AuditEventFieldsFragment = { id: string, occurredAt: string, category: AuditCategory, action: AuditAction, outcome: AuditOutcome, failureReason: AuditFailureReason | null, clientId: string | null, authMethods: Array<AuditAuthMethod>, ipAddress: string | null, userAgent: string | null, requestId: string | null, traceId: string | null, actor: { kind: AuditActorKind, id: string | null, oid: string | null, label: string | null, user?: { id: string, username: string, email: string, nickname: string | null } | null, client?: { id: string, name: string, names: Array<{ locale: string, value: string }> } | null }, target: { kind: AuditTargetKind, id: string | null, oid: string, label: string | null } | null, changes: Array<{ field: AuditField, kind: AuditChangeKind, oldValue: unknown, newValue: unknown, added: Array<unknown>, removed: Array<unknown> }> };
 
 export type AuditEventsQueryQueryVariables = Exact<{
-  category?: AuditCategory | null | undefined;
   query?: string | null | undefined;
   timeZone?: string | null | undefined;
   orderBy?: AuditEventOrder | null | undefined;
@@ -2371,9 +2372,8 @@ export const InstanceDashboardDocument = new TypedDocumentString(`
 }
     `) as unknown as TypedDocumentString<InstanceDashboardQuery, InstanceDashboardQueryVariables>;
 export const AuditEventsQueryDocument = new TypedDocumentString(`
-    query AuditEventsQuery($category: AuditCategory, $query: String, $timeZone: String, $orderBy: AuditEventOrder, $first: Int, $after: String, $last: Int, $before: String, $includeActorUser: Boolean!, $includeActorClient: Boolean!) {
+    query AuditEventsQuery($query: String, $timeZone: String, $orderBy: AuditEventOrder, $first: Int, $after: String, $last: Int, $before: String, $includeActorUser: Boolean!, $includeActorClient: Boolean!) {
   auditEvents(
-    category: $category
     query: $query
     timeZone: $timeZone
     orderBy: $orderBy

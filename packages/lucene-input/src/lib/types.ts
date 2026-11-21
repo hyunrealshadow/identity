@@ -37,7 +37,13 @@ export type LuceneSyntaxCompletionCode =
   | 'last24HoursLabel'
   | 'last7DaysLabel'
   | 'last30DaysLabel'
-  | 'completionPreview';
+  | 'completionPreview'
+  | 'fieldsSection'
+  | 'syntaxSection'
+  | 'valuesSection'
+  | 'addAction'
+  | 'historyHint'
+  | 'historySection';
 
 export type LuceneFieldValueOption = {
   label: string;

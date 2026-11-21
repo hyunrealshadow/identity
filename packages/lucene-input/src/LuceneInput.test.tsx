@@ -50,7 +50,9 @@ async function openCompletions(value: string) {
 }
 
 const optionLabels = () =>
-  screen.getAllByRole('option').map((option) => option.textContent?.trim().split(/\s/)[0])
+  screen
+    .getAllByRole('option')
+    .map((option) => option.querySelector('.lucene-completion-label')?.textContent)
 
 describe('LuceneInput (React)', () => {
   it('renders controlled value and emits diagnostics', async () => {
@@ -212,5 +214,59 @@ describe('LuceneInput (React)', () => {
     await waitFor(() => {
       expect(optionLabels()).toContain('user_group')
     })
+  })
+
+  it('offers recent searches and every field when focused empty', async () => {
+    const props = {
+      onChange: vi.fn(),
+      fields,
+      locale: 'en',
+      ariaLabel: 'Query',
+      history: ['action:user.create', 'targetType:user'],
+    }
+    render(<LuceneInput value="" {...props} />)
+    const editor = screen.getByRole('combobox', { name: 'Query' })
+    await act(async () => {
+      editor.focus()
+      fireEvent.focus(editor)
+    })
+
+    await waitFor(() => {
+      expect(optionLabels()).toEqual([
+        'action:user.create',
+        'targetType:user',
+        'action:',
+        'occurredAt:',
+        'targetType:',
+      ])
+    })
+    expect(screen.getByText('Recent searches')).toBeTruthy()
+    expect(screen.getByText('Narrow your search')).toBeTruthy()
+    expect(screen.getByText('to cycle through history')).toBeTruthy()
+
+    fireEvent.click(screen.getByRole('option', { name: /targetType:user/ }))
+    expect(props.onChange).toHaveBeenCalledWith('targetType:user')
+  })
+
+  it('cycles through history with Shift+Up and Shift+Down and restores the draft', async () => {
+    const onChange = vi.fn()
+    render(
+      <LuceneInput
+        value="act"
+        onChange={onChange}
+        fields={fields}
+        ariaLabel="Query"
+        history={['newest', 'oldest']}
+      />,
+    )
+    const editor = screen.getByRole('combobox', { name: 'Query' })
+
+    fireEvent.keyDown(editor, { key: 'ArrowUp', code: 'ArrowUp', shiftKey: true })
+    expect(onChange).toHaveBeenLastCalledWith('newest')
+    fireEvent.keyDown(editor, { key: 'ArrowUp', code: 'ArrowUp', shiftKey: true })
+    expect(onChange).toHaveBeenLastCalledWith('oldest')
+    fireEvent.keyDown(editor, { key: 'ArrowDown', code: 'ArrowDown', shiftKey: true })
+    fireEvent.keyDown(editor, { key: 'ArrowDown', code: 'ArrowDown', shiftKey: true })
+    expect(onChange).toHaveBeenLastCalledWith('act')
   })
 })

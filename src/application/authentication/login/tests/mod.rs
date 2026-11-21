@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use identity_domain::{
+    audit::AuditFailureReason,
     auth::{
         AMR_MFA, AMR_OTP, AMR_PASSWORD, AuthenticationContextClass, LoginFailureReason,
         LoginStatus, MAX_FAILED_ATTEMPTS, MAX_OTP_ATTEMPTS, SessionStatus,
@@ -285,4 +286,5 @@ mod sessions;
 mod repositories;
 use repositories::{
     TestCredentialRepo, TestLoginRepo, TestLoginRepoState, TestSessionRepo, TestUserRepo,
+    UNKNOWN_IDENTIFIER,
 };

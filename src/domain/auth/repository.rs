@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 use thiserror::Error;
 use uuid::Uuid;
 
+use crate::audit::AuditFailureReason;
 use crate::auth::{
     AuthenticationContextClass, LoginFailureReason, LoginStatus,
     model::{ActiveSession, Login, Session, SessionOid},
@@ -255,4 +256,13 @@ pub trait LoginRepository: Send + Sync {
 
     /// Reset login `failed_attempts` to zero.
     async fn reset_failed_attempts(&self, login_oid: Uuid) -> Result<(), LoginRepositoryError>;
+
+    /// Audit a sign-in rejected at identifier entry: no account matched
+    /// (`user_oid` is `None`), or the account cannot sign in.
+    async fn record_identification_failure(
+        &self,
+        login_oid: Uuid,
+        user_oid: Option<Uuid>,
+        reason: AuditFailureReason,
+    ) -> Result<(), LoginRepositoryError>;
 }

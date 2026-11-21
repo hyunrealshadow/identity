@@ -70,7 +70,6 @@ impl DataProtector for PassthroughTestProtector {
 
 fn page(query: &str) -> AuditEventPageRequest {
     AuditEventPageRequest {
-        category: None,
         query: Some(query.to_owned()),
         time_zone: None,
         order: AuditEventOrder::default(),
@@ -83,7 +82,6 @@ fn page(query: &str) -> AuditEventPageRequest {
 
 fn count(query: &str) -> AuditEventCountRequest {
     AuditEventCountRequest {
-        category: None,
         query: Some(query.to_owned()),
         time_zone: None,
         snapshot_at: None,
@@ -198,20 +196,14 @@ async fn postgres_audit_query_supports_lucene_time_zones_enums_and_frozen_cursor
         let unknown = service.count_events(count("outcome:denied")).await.unwrap_err();
         assert_eq!(unknown.code(), AuditErrorCode::QueryUnknownValue as u32);
 
-        // 4. Relay Global IDs and the category argument
+        // 4. Relay Global IDs and the category field
         let target_gid = encode::<kind::User>(target_user_oid);
         let by_target = service
             .list_events(page(&format!("target:{target_gid} AND action:user_*")))
             .await
             .unwrap();
         assert_eq!(oids(&by_target), vec![e2_oid, e1_oid]);
-        let sign_ins = service
-            .list_events(AuditEventPageRequest {
-                category: Some(AuditCategory::SignIn),
-                ..page("")
-            })
-            .await
-            .unwrap();
+        let sign_ins = service.list_events(page("category:sign_in")).await.unwrap();
         assert_eq!(oids(&sign_ins), vec![e4_oid]);
 
         // 5. Bidirectional Relay keyset pagination + frozen snapshot_at + filter mismatch rejection
@@ -255,10 +247,10 @@ async fn postgres_audit_query_supports_lucene_time_zones_enums_and_frozen_cursor
         assert!(!back_to_p1.has_previous_page);
         assert!(back_to_p1.has_next_page);
 
-        // A cursor cannot move to another tab or query.
+        // A cursor cannot move to another query or time zone.
         for other in [
             AuditEventPageRequest { query: Some("action:user_*".to_owned()), ..range.clone() },
-            AuditEventPageRequest { category: Some(AuditCategory::Management), ..range.clone() },
+            AuditEventPageRequest { time_zone: Some("Asia/Shanghai".to_owned()), ..range.clone() },
         ] {
             let mismatch = service
                 .list_events(AuditEventPageRequest {
@@ -382,6 +374,116 @@ async fn postgres_audit_query_rejects_rows_with_unknown_enum_values() {
             .await
             .unwrap_err();
         assert!(matches!(error, AuditQueryRepositoryError::CorruptRecord));
+    })
+    .await;
+}
+
+#[tokio::test]
+#[ignore = "requires explicitly configured PostgreSQL test database"]
+async fn postgres_token_replay_names_the_presenting_client_and_the_token_owner() {
+    use identity_domain::client_authorization::repository::ClientAuthorizationRepository;
+    use identity_infrastructure::database::repository::client_authorization::ClientAuthorizationRepositoryImpl;
+
+    isolated(|db| async move {
+        let user_oid = Uuid::new_v4();
+        let client_oid = Uuid::new_v4();
+        let code_oid = Uuid::new_v4();
+        sql(
+            &db,
+            &format!(
+                r#"
+                INSERT INTO "user" (oid,name,name_normalized,email,email_normalized)
+                VALUES ('{user_oid}','replayed','replayed','replayed@example.test','replayed@example.test');
+                INSERT INTO client (oid,name,protocol) VALUES ('{client_oid}','Replay App','openid_connect');
+                INSERT INTO client_authorization (oid,client_id,type,data,expires_at)
+                  SELECT '{code_oid}',id,'authorization_code','{{"user_oid":"{user_oid}"}}',now()+interval '1 minute'
+                  FROM client WHERE oid='{client_oid}';
+                "#
+            ),
+        )
+        .await;
+
+        ClientAuthorizationRepositoryImpl::new(db.clone())
+            .revoke_access_tokens_for_authorization_code(code_oid)
+            .await
+            .unwrap();
+
+        let service = AuditQueryService::new(
+            Arc::new(AuditQueryRepositoryImpl::new(db.clone())),
+            Arc::new(PassthroughTestProtector),
+        );
+        let result = service.list_events(page("action:token_replay")).await.unwrap();
+        assert_eq!(result.items.len(), 1);
+        let event = &result.items[0].event;
+        assert_eq!(event.outcome, AuditOutcome::Failure);
+        assert_eq!(event.actor.kind, AuditActorKind::Client);
+        assert_eq!(event.actor.label.as_deref(), Some("Replay App"));
+        assert_eq!(event.client_oid, Some(client_oid));
+        let target = event.target.as_ref().unwrap();
+        assert_eq!(target.oid, user_oid);
+        assert_eq!(target.label.as_deref(), Some("replayed"));
+    })
+    .await;
+}
+
+#[tokio::test]
+#[ignore = "requires explicitly configured PostgreSQL test database"]
+async fn postgres_identifier_rejection_is_audited_without_keeping_the_identifier() {
+    use identity_domain::{audit::AuditFailureReason, auth::repository::LoginRepository};
+    use identity_infrastructure::database::repository::login::LoginRepositoryImpl;
+
+    isolated(|db| async move {
+        let client_oid = Uuid::new_v4();
+        let authorization_oid = Uuid::new_v4();
+        let login_oid = Uuid::new_v4();
+        sql(
+            &db,
+            &format!(
+                r#"
+                INSERT INTO client (oid,name,protocol) VALUES ('{client_oid}','Portal','openid_connect');
+                INSERT INTO client_authorization (oid,client_id,type,data,expires_at)
+                  SELECT '{authorization_oid}',id,'authorization_code','{{}}',now()+interval '1 minute'
+                  FROM client WHERE oid='{client_oid}';
+                INSERT INTO login (oid,client_id,client_authorization_id,status,expires_at)
+                  SELECT '{login_oid}',c.id,a.id,'created',now()+interval '5 minutes'
+                  FROM client c, client_authorization a
+                  WHERE c.oid='{client_oid}' AND a.oid='{authorization_oid}';
+                "#
+            ),
+        )
+        .await;
+
+        audit::with_request(
+            AuditRequestContext {
+                ip_address: Some("203.0.113.9".parse().unwrap()),
+                user_agent: Some("probe/1.0".to_owned()),
+            },
+            LoginRepositoryImpl::new(db.clone()).record_identification_failure(
+                login_oid,
+                None,
+                AuditFailureReason::UnknownAccount,
+            ),
+        )
+        .await
+        .unwrap();
+
+        let service = AuditQueryService::new(
+            Arc::new(AuditQueryRepositoryImpl::new(db.clone())),
+            Arc::new(PassthroughTestProtector),
+        );
+        let result = service
+            .list_events(page("action:sign_in AND failureReason:unknown_account"))
+            .await
+            .unwrap();
+        assert_eq!(result.items.len(), 1);
+        let event = &result.items[0].event;
+        assert_eq!(event.outcome, AuditOutcome::Failure);
+        assert_eq!(event.actor.kind, AuditActorKind::Anonymous);
+        assert!(event.target.is_none());
+        assert_eq!(event.client_oid, Some(client_oid));
+        assert_eq!(event.ip_address.as_deref(), Some("203.0.113.9"));
+        assert_eq!(event.user_agent.as_deref(), Some("probe/1.0"));
+        assert!(event.changes.is_empty());
     })
     .await;
 }

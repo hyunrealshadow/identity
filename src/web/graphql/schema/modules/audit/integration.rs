@@ -3,14 +3,13 @@ use identity_application::{
     audit::{AuditEventCountRequest, AuditEventPageRequest, AuditEventPageResult},
     error::AppError,
 };
-use identity_domain::audit::{AuditCategory, AuditEvent, AuditEventOid, AuditEventOrder};
+use identity_domain::audit::{AuditEvent, AuditEventOid, AuditEventOrder};
 
 use super::types::AuditEventOrder as GraphqlAuditEventOrder;
 use crate::graphql::schema::{RequestContext, modules::resource::support::PageArgs};
 
 pub(super) async fn list_events(
     request: &RequestContext,
-    category: Option<AuditCategory>,
     query: Option<String>,
     time_zone: Option<String>,
     order: GraphqlAuditEventOrder,
@@ -21,7 +20,6 @@ pub(super) async fn list_events(
         .services()
         .audit_query()
         .list_events(AuditEventPageRequest {
-            category,
             query,
             time_zone,
             order: AuditEventOrder::from(order),
@@ -35,7 +33,6 @@ pub(super) async fn list_events(
 
 pub(super) async fn count_events(
     request: &RequestContext,
-    category: Option<AuditCategory>,
     query: Option<String>,
     time_zone: Option<String>,
     snapshot_at: DateTime<Utc>,
@@ -45,7 +42,6 @@ pub(super) async fn count_events(
         .services()
         .audit_query()
         .count_events(AuditEventCountRequest {
-            category,
             query,
             time_zone,
             snapshot_at: Some(snapshot_at),

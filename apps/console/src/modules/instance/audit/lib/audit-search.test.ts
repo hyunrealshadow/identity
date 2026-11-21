@@ -41,14 +41,12 @@ describe('audit-search', () => {
 
   it('builds GraphQL variables with user time zone and actor include flags', () => {
     const vars = auditEventsQueryVariables(
-      'SIGN_IN',
       { q: ' outcome:failure ', size: 50, after: 'cur-2' },
       'Asia/Shanghai',
       { includeActorUser: true, includeActorClient: false },
     )
 
     expect(vars).toEqual({
-      category: 'SIGN_IN',
       query: 'outcome:failure',
       timeZone: 'Asia/Shanghai',
       orderBy: 'OCCURRED_AT_DESC',
@@ -58,13 +56,12 @@ describe('audit-search', () => {
       includeActorClient: false,
     })
 
-    const defaultVars = auditEventsQueryVariables(undefined, {}, 'UTC', {
+    const defaultVars = auditEventsQueryVariables({}, 'UTC', {
       includeActorUser: false,
       includeActorClient: false,
     })
     expect(defaultVars.first).toBe(AUDIT_EVENTS_PAGE_SIZE)
     expect(defaultVars.query).toBeUndefined()
-    expect(defaultVars.category).toBeUndefined()
   })
 
   it('distinguishes detail selection and trailing query spaces in search key while ignoring them in query key', () => {

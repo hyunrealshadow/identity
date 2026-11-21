@@ -2,7 +2,7 @@ import { getLuceneDiagnostics } from '@identity/lucene-input'
 import { Badge } from '@identity/ui/components/badge'
 import { Skeleton } from '@identity/ui/components/skeleton'
 import { useNavigate } from '@tanstack/react-router'
-import { useMemo } from 'react'
+import { Fragment, useMemo } from 'react'
 
 import { AsyncState } from '#/components/async-state'
 import { CursorPagination } from '#/components/cursor-pagination'
@@ -25,12 +25,11 @@ import { AuditQueryBar } from '../components/audit-query-bar'
 import { useAuditEventDetail, useAuditEvents } from '../hooks/use-audit-events'
 import { AUDIT_QUERY_ERROR_CODES, auditQueryValue } from '../lib/audit-catalog'
 import { appendLuceneClause, buildAuditLuceneFields } from '../lib/audit-fields'
-import type { AuditLog } from '../lib/audit-logs'
 import {
   AUDIT_FAILURE_REASON_LABELS,
   AUDIT_OUTCOME_LABELS,
 } from '../lib/audit-labels'
-import { auditActionLabel, auditActorName, auditTargetName } from '../lib/audit-presentation'
+import { auditActionLabel, auditSentence } from '../lib/audit-presentation'
 import { auditScope } from '../lib/audit-scope'
 import {
   AUDIT_EVENTS_PAGE_SIZE,
@@ -66,21 +65,21 @@ function AuditEventSummary({
   onOpen: () => void
 }) {
   const t = useTranslator()
-  const target = auditTargetName(event, t)
   return (
     <button
       type="button"
-      className="min-w-0 cursor-pointer text-left text-sm underline-offset-4 hover:underline"
+      className="min-w-0 cursor-pointer text-left text-sm text-muted-foreground underline-offset-4 hover:underline"
       onClick={onOpen}
     >
-      <span className="font-medium text-foreground">{auditActorName(event, locale, t)}</span>{' '}
-      <span className="text-muted-foreground">{auditActionLabel(event, t)}</span>
-      {target ? (
-        <>
-          {' '}
-          <span className="font-medium text-foreground">{target}</span>
-        </>
-      ) : null}
+      {auditSentence(event, locale, t).map((part, index) =>
+        part.role ? (
+          <span key={index} className="font-medium text-foreground">
+            {part.text}
+          </span>
+        ) : (
+          <Fragment key={index}>{part.text}</Fragment>
+        ),
+      )}
     </button>
   )
 }
@@ -99,7 +98,7 @@ function AuditOutcomeBadge({ event }: { event: AuditEventFieldsFragment }) {
   )
 }
 
-export function AuditEventsPage({ log, search }: { log: AuditLog; search: AuditEventsSearch }) {
+export function AuditEventsPage({ search }: { search: AuditEventsSearch }) {
   const t = useTranslator()
   const { locale, timeZone } = useLocale()
   const navigate = useNavigate()
@@ -116,7 +115,7 @@ export function AuditEventsPage({ log, search }: { log: AuditLog; search: AuditE
     keyOf: auditEventsSearchKey,
     appliedOf: auditEventsAppliedFilters,
     navigate: (next, { replace }) =>
-      void navigate({ to: log.path, search: next, replace }),
+      void navigate({ to: '/audit-events', search: next, replace }),
   })
 
   const appliedSearch: AuditEventsSearch = {
@@ -144,13 +143,12 @@ export function AuditEventsPage({ log, search }: { log: AuditLog; search: AuditE
   const variables = useMemo(
     () =>
       scope.read && !appliedSyntaxError
-        ? auditEventsQueryVariables(log.category, appliedSearch, resolvedTimeZone, {
+        ? auditEventsQueryVariables(appliedSearch, resolvedTimeZone, {
             includeActorUser: scope.readActorUser,
             includeActorClient: scope.readActorClient,
           })
         : null,
     [
-      log.category,
       scope.read,
       scope.readActorUser,
       scope.readActorClient,
@@ -230,7 +228,7 @@ export function AuditEventsPage({ log, search }: { log: AuditLog; search: AuditE
 
   return (
     <>
-      <PageHeader title={t(log.title)} description={t(log.description)} />
+      <PageHeader title={t('auditTitle')} description={t('auditDescription')} />
       <ConsoleWorkspaceGate loading={<AuditEventsLoadingSkeleton />}>
         {!scope.read ? (
           <RbacAccessRestricted

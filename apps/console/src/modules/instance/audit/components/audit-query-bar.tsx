@@ -14,6 +14,11 @@ import { RequestCorrelation } from '#/components/request-correlation'
 import type { GraphQLIssue } from '#/lib/graphql/transport'
 import { useTranslator } from '#/lib/i18n'
 import { applyTimeRangePreset } from '../lib/audit-fields'
+import {
+  readAuditQueryHistory,
+  withAuditQuery,
+  writeAuditQueryHistory,
+} from '../lib/audit-query-history'
 
 const QUICK_RANGES = [
   { key: 'auditQuickRange15m', range: '[now-15m TO now]' },
@@ -55,6 +60,7 @@ export function AuditQueryBar({
   const t = useTranslator()
   const [diagnostics, setDiagnostics] = useState<ComponentDiagnostic[]>([])
   const [submitRejected, setSubmitRejected] = useState(false)
+  const [history, setHistory] = useState(readAuditQueryHistory)
 
   const blockingDiagnostic = diagnostics.find((item) => item.severity === 'error')
   const syntaxError =
@@ -70,6 +76,11 @@ export function AuditQueryBar({
       return
     }
     setSubmitRejected(false)
+    if (value.trim()) {
+      const nextHistory = withAuditQuery(history, value)
+      setHistory(nextHistory)
+      writeAuditQueryHistory(nextHistory)
+    }
     onSearch(value)
   }
 
@@ -101,6 +112,8 @@ export function AuditQueryBar({
             placeholder={t('auditQueryPlaceholder')}
             ariaLabel={t('auditQueryLabel')}
             disabled={disabled}
+            history={history}
+            completionFooter={t('auditSyntaxHelp')}
           />
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -125,27 +138,24 @@ export function AuditQueryBar({
         </div>
       </form>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {QUICK_RANGES.map((preset) => (
-            <Button
-              key={preset.range}
-              type="button"
-              size="sm"
-              variant="outline"
-              disabled={disabled}
-              onClick={() => {
-                const next = applyTimeRangePreset(draftQuery, preset.range)
-                setSubmitRejected(false)
-                onDraftChange(next)
-                onSearch(next)
-              }}
-            >
-              {t(preset.key)}
-            </Button>
-          ))}
-        </div>
-        <p className="text-xs text-muted-foreground">{t('auditSyntaxHelp')}</p>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {QUICK_RANGES.map((preset) => (
+          <Button
+            key={preset.range}
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={disabled}
+            onClick={() => {
+              const next = applyTimeRangePreset(draftQuery, preset.range)
+              setSubmitRejected(false)
+              onDraftChange(next)
+              onSearch(next)
+            }}
+          >
+            {t(preset.key)}
+          </Button>
+        ))}
       </div>
 
       {syntaxError ? (

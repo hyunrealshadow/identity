@@ -17,12 +17,16 @@ use crate::{
 };
 use chrono::{DateTime, Duration, Utc};
 use identity_domain::{
+    audit::AuditFailureReason,
     auth::{
         AuthenticationContextClass, LOCK_DURATION, LoginStatus, MAX_FAILED_ATTEMPTS, SessionOid,
         model::{Login, Session},
         repository::{LoginRepository, SessionRepository},
     },
-    user::{MfaMethod as UserMfaMethod, repository::UserRepository},
+    user::{
+        MfaMethod as UserMfaMethod,
+        repository::{UserRepository, UserRepositoryError},
+    },
 };
 use std::sync::Arc;
 use uuid::Uuid;
@@ -272,21 +276,45 @@ impl LoginService {
         }
 
         // Look up user by normalized email or username.
-        let user = self.user_repo.find_by_identifier(identifier).await?;
+        let user = match self.user_repo.find_by_identifier(identifier).await {
+            Ok(user) => user,
+            Err(UserRepositoryError::UserNotFound) => {
+                self.login_repo
+                    .record_identification_failure(
+                        login_oid,
+                        None,
+                        AuditFailureReason::UnknownAccount,
+                    )
+                    .await?;
+                return Err(AppError::from_code(AuthErrorCode::UserNotFound));
+            }
+            Err(error) => return Err(error.into()),
+        };
 
         // Check if user is locked.
         if user.locked {
-            if let Some(until) = user.locked_until {
-                if Utc::now() < until {
-                    return Err(AppError::from_code(AuthErrorCode::UserLocked));
-                }
-                self.user_repo.reset_failed_attempts(user.oid).await?;
-            } else {
+            let still_locked = user.locked_until.is_none_or(|until| Utc::now() < until);
+            if still_locked {
+                self.login_repo
+                    .record_identification_failure(
+                        login_oid,
+                        Some(user.oid.into()),
+                        AuditFailureReason::AccountLocked,
+                    )
+                    .await?;
                 return Err(AppError::from_code(AuthErrorCode::UserLocked));
             }
+            self.user_repo.reset_failed_attempts(user.oid).await?;
         }
 
         if !user.enabled {
+            self.login_repo
+                .record_identification_failure(
+                    login_oid,
+                    Some(user.oid.into()),
+                    AuditFailureReason::AccountDisabled,
+                )
+                .await?;
             return Err(AppError::from_code(AuthErrorCode::UserLocked));
         }
 

@@ -4,10 +4,12 @@ import { resolveLocalizedText } from '#/modules/user-management/groups/lib/group
 import {
   AUDIT_ACTION_LABELS,
   AUDIT_ACTOR_KIND_LABELS,
+  AUDIT_SENTENCE_LABELS,
+  AUDIT_SENTENCE_WITHOUT_TARGET_LABELS,
   AUDIT_TARGET_KIND_LABELS,
 } from './audit-labels'
 
-type Translate = (key: MessageKey) => string
+type Translate = (key: MessageKey, values?: Record<string, string | number>) => string
 
 /**
  * Who performed the event: the live account when it is readable, then the
@@ -35,6 +37,55 @@ export function auditTargetName(event: AuditEventFieldsFragment, t: Translate): 
 
 export function auditActionLabel(event: AuditEventFieldsFragment, t: Translate): string {
   return t(AUDIT_ACTION_LABELS[event.action])
+}
+
+export interface AuditSentencePart {
+  text: string
+  /** Set on the parts naming the actor or the target. */
+  role?: 'actor' | 'target'
+}
+
+const ACTOR_MARK = '\u0001'
+const TARGET_MARK = '\u0002'
+
+/**
+ * The event as a localized sentence, such as "alice updated role Auditors",
+ * split so the actor and target can be emphasized.
+ */
+export function auditSentence(
+  event: AuditEventFieldsFragment,
+  locale: string,
+  t: Translate,
+): AuditSentencePart[] {
+  const key =
+    (event.target ? undefined : AUDIT_SENTENCE_WITHOUT_TARGET_LABELS[event.action]) ??
+    AUDIT_SENTENCE_LABELS[event.action]
+  const template = t(key, {
+    actor: ACTOR_MARK,
+    target: TARGET_MARK,
+  })
+  const actor = auditActorName(event, locale, t)
+  const target = auditTargetName(event, t) ?? t('auditTargetUnknown')
+  return template
+    .split(/([\u0001\u0002])/u)
+    .filter((part) => part !== '')
+    .map((part) =>
+      part === ACTOR_MARK
+        ? { text: actor, role: 'actor' as const }
+        : part === TARGET_MARK
+          ? { text: target, role: 'target' as const }
+          : { text: part },
+    )
+}
+
+export function auditSentenceText(
+  event: AuditEventFieldsFragment,
+  locale: string,
+  t: Translate,
+): string {
+  return auditSentence(event, locale, t)
+    .map((part) => part.text)
+    .join('')
 }
 
 /** Compact display of a recorded change value or collection member. */
