@@ -61,9 +61,11 @@ export function formatPreciseDateTime(
 ): string {
   const date = parsed(value)
   if (!date) return ''
-  return new Intl.DateTimeFormat(locale, {
-    timeZone: resolveTimeZone(timeZone),
-    dateStyle: 'medium',
-    timeStyle: 'long',
-  }).format(date)
+  const zone = resolveTimeZone(timeZone)
+  const day = new Intl.DateTimeFormat(locale, { timeZone: zone, dateStyle: 'medium' }).format(date)
+  const time = new Intl.DateTimeFormat(locale, { timeZone: zone, timeStyle: 'medium' }).format(date)
+  const offset = new Intl.DateTimeFormat(locale, { timeZone: zone, timeZoneName: 'shortOffset' })
+    .formatToParts(date)
+    .find((part) => part.type === 'timeZoneName')?.value
+  return offset ? `${day} ${time} (${offset})` : `${day} ${time}`
 }

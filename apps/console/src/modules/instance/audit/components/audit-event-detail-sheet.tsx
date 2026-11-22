@@ -19,7 +19,6 @@ import {
   AppWindow,
   ArrowRight,
   ChevronDown,
-  ChevronRight,
   Filter,
   Server,
   Shapes,
@@ -27,10 +26,10 @@ import {
   UserRound,
   type LucideIcon,
 } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { useRef, type ReactNode } from 'react'
 
 import { AsyncState } from '#/components/async-state'
-import { CopyButton } from '#/components/copy-button'
+import { CopyableValue } from '#/components/copy-button'
 import type {
   AuditActorKind,
   AuditEventDetailQueryQuery,
@@ -93,9 +92,20 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   )
 }
 
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({
+  label,
+  children,
+  centered = false,
+}: {
+  label: string
+  children: ReactNode
+  /** Centre the label on a value that starts with an icon, which has no text baseline. */
+  centered?: boolean
+}) {
   return (
-    <div className="grid grid-cols-[6rem_minmax(0,1fr)] items-baseline gap-x-4">
+    <div
+      className={`grid grid-cols-[6rem_minmax(0,1fr)] gap-x-4 ${centered ? 'items-center' : 'items-baseline'}`}
+    >
       <dt className="text-sm text-muted-foreground">{label}</dt>
       <dd className="min-w-0 text-sm text-foreground">{children}</dd>
     </div>
@@ -115,8 +125,8 @@ function Party({
   link?: ReactNode
 }) {
   return (
-    <div className="flex min-w-0 items-start gap-2.5">
-      <span className="mt-0.5 flex size-6 shrink-0 items-center justify-center rounded-md bg-muted">
+    <div className="flex min-w-0 items-center gap-2.5">
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted">
         <Icon className="size-3.5 text-muted-foreground" aria-hidden="true" />
       </span>
       <div className="min-w-0">
@@ -124,15 +134,6 @@ function Party({
         {detail ? <div className="truncate text-xs text-muted-foreground">{detail}</div> : null}
       </div>
     </div>
-  )
-}
-
-function MonoValue({ value, label }: { value: string; label: string }) {
-  return (
-    <span className="flex min-w-0 items-start gap-1">
-      <span className="min-w-0 font-mono text-xs leading-6 break-all">{value}</span>
-      <CopyButton value={value} label={label} />
-    </span>
   )
 }
 
@@ -315,11 +316,12 @@ function DetailBody({ event, t }: { event: AuditEventDetail; t: Translate }) {
   return (
     <>
       <Section title={t('auditDetailSectionParties')}>
-        <Field label={t('auditDetailSectionWho')}>
+        <Field label={t('auditDetailSectionWho')} centered>
           <ActorParty event={event} locale={locale} t={t} />
         </Field>
-        {target && targetName ? (
-          <Field label={t('auditDetailSectionWhat')}>
+        {/* A sign-in or self-service change acts on the actor itself. */}
+        {target && targetName && target.oid !== event.actor.oid ? (
+          <Field label={t('auditDetailSectionWhat')} centered>
             <Party
               icon={target.kind === 'CLIENT' ? AppWindow : target.kind === 'USER' ? UserRound : Shapes}
               name={targetName}
@@ -329,7 +331,7 @@ function DetailBody({ event, t }: { event: AuditEventDetail; t: Translate }) {
           </Field>
         ) : null}
         {event.clientId ? (
-          <Field label={t('auditDetailClient')}>
+          <Field label={t('auditDetailClient')} centered>
             {event.client === undefined ? (
               // Still loading with the detail query.
               <Skeleton className="h-6 w-40" />
@@ -379,7 +381,7 @@ function DetailBody({ event, t }: { event: AuditEventDetail; t: Translate }) {
           ) : null}
           {event.ipAddress ? (
             <Field label={t('auditDetailIpAddress')}>
-              <MonoValue value={event.ipAddress} label={t('auditDetailIpAddress')} />
+              <CopyableValue value={event.ipAddress} label={t('auditDetailIpAddress')} />
             </Field>
           ) : null}
           {event.userAgent ? (
@@ -390,37 +392,26 @@ function DetailBody({ event, t }: { event: AuditEventDetail; t: Translate }) {
         </Section>
       ) : null}
 
-      <details className="group rounded-lg border border-border">
-        <summary className="flex cursor-pointer list-none items-center gap-1.5 px-3 py-2 text-xs font-medium text-muted-foreground [&::-webkit-details-marker]:hidden">
-          <ChevronRight
-            className="size-3.5 transition-transform group-open:rotate-90"
-            aria-hidden="true"
-          />
-          {t('auditDetailSectionDiagnostics')}
-        </summary>
-        <dl className="space-y-3 border-t border-border px-3 py-3">
-          <Field label={t('auditDetailEventId')}>
-            <MonoValue value={event.id} label={t('auditDetailEventId')} />
+      <Section title={t('auditDetailSectionDiagnostics')}>
+        <Field label={t('auditDetailEventId')}>
+          <CopyableValue value={event.id} label={t('auditDetailEventId')} />
+        </Field>
+        {event.requestId ? (
+          <Field label={t('auditDetailRequestId')}>
+            <CopyableValue value={event.requestId} label={t('auditDetailRequestId')} />
           </Field>
-          {event.requestId ? (
-            <Field label={t('auditDetailRequestId')}>
-              <MonoValue value={event.requestId} label={t('auditDetailRequestId')} />
-            </Field>
-          ) : null}
-          {event.traceId ? (
-            <Field label={t('auditDetailTraceId')}>
-              <MonoValue value={event.traceId} label={t('auditDetailTraceId')} />
-            </Field>
-          ) : null}
-          {event.userAgent ? (
-            <Field label={t('auditDetailUserAgent')}>
-              <span className="font-mono text-xs leading-5 break-all text-muted-foreground">
-                {event.userAgent}
-              </span>
-            </Field>
-          ) : null}
-        </dl>
-      </details>
+        ) : null}
+        {event.traceId ? (
+          <Field label={t('auditDetailTraceId')}>
+            <CopyableValue value={event.traceId} label={t('auditDetailTraceId')} />
+          </Field>
+        ) : null}
+        {event.userAgent ? (
+          <Field label={t('auditDetailUserAgent')}>
+            <CopyableValue value={event.userAgent} label={t('auditDetailUserAgent')} />
+          </Field>
+        ) : null}
+      </Section>
     </>
   )
 }
@@ -436,6 +427,9 @@ export function AuditEventDetailSheet({
 }: AuditEventDetailSheetProps) {
   const t = useTranslator()
   const { locale, timeZone } = useLocale()
+  // Focus the content, not the first control, so opening does not look like
+  // the filter menu was chosen.
+  const bodyRef = useRef<HTMLDivElement>(null)
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
@@ -443,6 +437,7 @@ export function AuditEventDetailSheet({
         side="right"
         closeLabel={t('auditDetailClose')}
         className="w-full gap-0 sm:max-w-lg"
+        initialFocus={bodyRef}
       >
         <SheetHeader className="gap-3 border-b border-border px-6 pt-6 pb-5">
           {event ? (
@@ -482,7 +477,11 @@ export function AuditEventDetailSheet({
           ) : null}
         </SheetHeader>
 
-        <div className="flex-1 space-y-6 overflow-y-auto px-6 py-5">
+        <div
+          ref={bodyRef}
+          tabIndex={-1}
+          className="flex-1 space-y-6 overflow-y-auto px-6 py-5 outline-none"
+        >
           {loading ? (
             <div className="space-y-4" aria-busy="true">
               <Skeleton className="h-4 w-24" />

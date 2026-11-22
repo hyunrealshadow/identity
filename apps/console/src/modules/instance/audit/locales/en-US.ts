@@ -73,7 +73,7 @@ const auditMessages = {
   auditFieldAuthMethodDesc: 'Sign-in method',
   auditFieldIpAddressDesc: 'Client IP address, wildcards allowed',
   auditFieldUserAgentDesc: 'Client user agent',
-  auditFieldRequestIdDesc: 'Request correlation ID',
+  auditFieldRequestIdDesc: 'Request ID',
   auditFieldTraceIdDesc: 'Distributed trace ID',
   auditFieldOccurredAtDesc: 'Time in your time zone, for example occurredAt:[now-24h TO now]',
   auditActionAccountCredentialReplace: 'Replaced account credentials',

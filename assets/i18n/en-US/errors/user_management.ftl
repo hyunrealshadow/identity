@@ -10,6 +10,6 @@ E16014 = The { $field } filter is invalid.
 E16015 = The { $field } date range is invalid or reversed.
 E16016 = The page cursor is invalid or does not belong to this search.
 E16017 = The selected theme is invalid.
-E16018 = The client mutation identifier must be at most { $max } characters.
+E16018 = The client mutation ID must be at most { $max } characters.
 E16019 = User management storage is temporarily unavailable. No changes were committed.
 E16020 = The user's access could not be invalidated. No changes were committed.
