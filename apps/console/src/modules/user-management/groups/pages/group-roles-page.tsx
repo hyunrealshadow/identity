@@ -9,6 +9,7 @@ import {
 } from '@identity/ui/components/alert'
 import { Badge } from '@identity/ui/components/badge'
 import { Link, useNavigate } from '@tanstack/react-router'
+import { TableRowActions } from '#/components/table-row-actions'
 import { Info, TriangleAlert } from 'lucide-react'
 
 import { useMemo, useState } from 'react'
@@ -308,6 +309,11 @@ export function GroupRolesPage({
                   label: t('groupRolesColumnRelation'),
                   primary: false,
                 },
+                {
+                  id: 'groupRolesColumnActions',
+                  label: t('tableColumnActions'),
+                  primary: false,
+                },
               ]}
             >
               <DataTable.Body
@@ -349,7 +355,7 @@ export function GroupRolesPage({
                             <Link
                               to="/roles/$roleId"
                               params={{ roleId: role.id }}
-                              className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                              className="font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring text-link"
                             >
                               {name}
                             </Link>
@@ -370,6 +376,23 @@ export function GroupRolesPage({
                           enabled={edge.enabled}
                           revokedAt={edge.revokedAt}
                           roleEnabled={role.enabled}
+                        />
+                      </DataTable.Cell>
+                      <DataTable.Cell>
+                        <TableRowActions
+                          subject={name}
+                          actions={[
+                            {
+                              id: 'view',
+                              label: t('tableActionViewRole'),
+                              section: 'open',
+                              onAction: () =>
+                                void navigate({
+                                  to: '/roles/$roleId',
+                                  params: { roleId: role.id },
+                                }),
+                            },
+                          ]}
                         />
                       </DataTable.Cell>
                     </DataTable.Row>

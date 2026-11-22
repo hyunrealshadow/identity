@@ -26,7 +26,6 @@ const enUS = {
   roleGroupsColumnStatus: 'Status',
   roleGroupsColumnUpdated: 'Updated',
   roleGroupsColumnActions: 'Actions',
-  roleGroupsViewAction: 'View',
   roleGroupsViewFor: 'View {name}',
   roleGroupsPreviousPage: 'Previous page',
   roleGroupsNextPage: 'Next page',

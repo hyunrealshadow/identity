@@ -217,29 +217,34 @@ function KeysSection({ use, search }: { use: KeyUse; search: KeysSearch }) {
     const actions: TableRowAction[] = []
     if (key.status === 'ACTIVE') {
       if (scope.rotate) {
-        actions.push({ id: 'rotate', label: t('keysRotate'), onAction: () => ask('rotate', key) })
+        actions.push({
+          id: 'rotate',
+          label: t('keysRotate'),
+          section: 'state',
+          onAction: () => ask('rotate', key),
+        })
       }
       if (scope.rotateAndRevoke) {
         actions.push({
           id: 'rotateAndRevoke',
           label: t('keysRotateAndRevoke'),
-          danger: true,
+          section: 'danger',
           onAction: () => ask('rotateAndRevoke', key),
         })
       }
       if (scope.revoke && activeCount > 1) {
         actions.push({
           id: 'revoke',
-          label: t('keysRevoke'),
-          danger: true,
+          label: t('tableActionRevoke'),
+          section: 'danger',
           onAction: () => ask('revoke', key),
         })
       }
     } else if (scope.revoke && (key.status === 'RETIRED' || key.status === 'EXPIRED')) {
       actions.push({
         id: 'revoke',
-        label: t('keysRevoke'),
-        danger: true,
+        label: t('tableActionRevoke'),
+        section: 'danger',
         onAction: () => ask('revoke', key),
       })
     }

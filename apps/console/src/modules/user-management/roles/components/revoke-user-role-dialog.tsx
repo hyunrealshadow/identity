@@ -1,5 +1,5 @@
 import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
-import { XCircle } from 'lucide-react'
+import { useNavigate } from '@tanstack/react-router'
 
 import { TableRowActions } from '#/components/table-row-actions'
 import { useTranslator } from '#/lib/i18n'
@@ -31,6 +31,7 @@ function RevokeAssignmentDialog({
   reloadPending,
 }: Props & { perspective: 'role' | 'user' }) {
   const t = useTranslator()
+  const navigate = useNavigate()
   const state = useOverlayState()
   const mutation = useRelationMutation()
   const mutations = useRoleMutations()
@@ -42,16 +43,22 @@ function RevokeAssignmentDialog({
         subject={label}
         actions={[
           {
-            id: 'remove',
-            label: t(
-              fromUser ? 'userRolesRevokeAction' : 'roleUsersRevokeAction',
-            ),
-            danger: true,
+            id: 'view',
+            label: t(fromUser ? 'tableActionViewRole' : 'tableActionViewUser'),
+            section: 'open',
+            onAction: () =>
+              void (fromUser
+                ? navigate({ to: '/roles/$roleId', params: { roleId: assignment.roleId } })
+                : navigate({ to: '/users/$userId', params: { userId: assignment.userId } })),
+          },
+          {
+            id: 'revoke',
+            label: t('tableActionRevoke'),
+            section: 'danger',
             onAction: () => {
               mutation.setFeedback(null)
               state.open()
             },
-            icon: <XCircle className="size-4" aria-hidden="true" />,
           },
         ]}
       />

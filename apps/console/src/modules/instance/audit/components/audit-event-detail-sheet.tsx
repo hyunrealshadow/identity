@@ -137,7 +137,7 @@ function Party({
   )
 }
 
-const linkClass = 'underline-offset-4 hover:underline'
+const linkClass = 'text-link'
 
 function targetLink(kind: AuditTargetKind, id: string, name: string): ReactNode {
   switch (kind) {

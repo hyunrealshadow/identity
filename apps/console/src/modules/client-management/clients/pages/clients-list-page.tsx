@@ -1,7 +1,8 @@
 import { Button } from '@identity/ui/components/button'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { Plus } from 'lucide-react'
-import { useMemo } from 'react'
+import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
+import { useMemo, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
 import { CopyableValue } from '#/components/copy-button'
@@ -31,6 +32,10 @@ import {
   UserSelectField,
   UserTextField,
 } from '#/modules/user-management/users/components/user-form-fields'
+import {
+  ClientDeleteDialog,
+  ClientStateDialog,
+} from '../components/client-lifecycle-dialogs'
 import { ClientBuiltInChip, ClientStatusChip } from '../components/client-status'
 import { clientScope } from '../lib/client-scope'
 import {
@@ -42,6 +47,8 @@ import {
   type ClientsSearch,
 } from '../lib/clients-search'
 
+type ClientRow = NonNullable<ConsoleClientsQuery['clients']>['edges'][number]['node']
+
 export function ClientsListPage({ search }: { search: ClientsSearch }) {
   const t = useTranslator()
   const { locale, timeZone } = useLocale()
@@ -51,6 +58,10 @@ export function ClientsListPage({ search }: { search: ClientsSearch }) {
     () => clientScope(workspace.data?.effectivePermissions),
     [workspace.data?.effectivePermissions],
   )
+  // One confirmation at a time, mounted outside the row menus.
+  const stateDialog = useOverlayState()
+  const deleteDialog = useOverlayState()
+  const [target, setTarget] = useState<ClientRow | null>(null)
   // The URL always mirrors the filter form; queries use the applied filters.
   const { applied, go } = useUrlFilters<ClientsSearch, ClientsFilters>({
     search,
@@ -235,7 +246,7 @@ export function ClientsListPage({ search }: { search: ClientsSearch }) {
                       <Link
                         to="/clients/$clientId"
                         params={{ clientId: client.id }}
-                        className="font-medium hover:underline"
+                        className="font-medium text-link"
                       >
                         {resolveLocalizedText(client.names, locale) ?? client.name}
                       </Link>
@@ -273,8 +284,9 @@ export function ClientsListPage({ search }: { search: ClientsSearch }) {
                       subject={resolveLocalizedText(client.names, locale) ?? client.name}
                       actions={[
                         {
-                          id: 'open',
-                          label: t('clientsOpen'),
+                          id: 'view',
+                          label: t('tableActionViewDetails'),
+                          section: 'open',
                           onAction: () =>
                             void navigate({
                               to: '/clients/$clientId',
@@ -285,12 +297,43 @@ export function ClientsListPage({ search }: { search: ClientsSearch }) {
                           ? [
                               {
                                 id: 'credentials',
-                                label: t('clientsTabCredentials'),
+                                label: t('tableActionCredentials'),
+                                section: 'navigate' as const,
                                 onAction: () =>
                                   void navigate({
                                     to: '/clients/$clientId/credentials',
                                     params: { clientId: client.id },
                                   }),
+                              },
+                            ]
+                          : []),
+                        ...(!client.builtIn && scope.state
+                          ? [
+                              {
+                                id: 'state',
+                                label: t(
+                                  client.enabled ? 'tableActionDisable' : 'tableActionEnable',
+                                ),
+                                section: 'state' as const,
+                                isDisabled: !client.version,
+                                onAction: () => {
+                                  setTarget(client)
+                                  stateDialog.open()
+                                },
+                              },
+                            ]
+                          : []),
+                        ...(!client.builtIn && scope.delete
+                          ? [
+                              {
+                                id: 'delete',
+                                label: t('tableActionDelete'),
+                                section: 'danger' as const,
+                                isDisabled: !client.version,
+                                onAction: () => {
+                                  setTarget(client)
+                                  deleteDialog.open()
+                                },
                               },
                             ]
                           : []),
@@ -300,6 +343,22 @@ export function ClientsListPage({ search }: { search: ClientsSearch }) {
                 },
               ]}
             />
+            {target ? (
+              <>
+                <ClientStateDialog
+                  key={`state:${target.id}:${target.version}`}
+                  state={stateDialog}
+                  client={target}
+                  onCommitted={() => void query.refresh()}
+                />
+                <ClientDeleteDialog
+                  key={`delete:${target.id}:${target.version}`}
+                  state={deleteDialog}
+                  client={target}
+                  onCommitted={() => void query.refresh()}
+                />
+              </>
+            ) : null}
           </section>
         )}
       </ConsoleWorkspaceGate>

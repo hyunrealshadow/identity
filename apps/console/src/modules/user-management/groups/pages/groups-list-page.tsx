@@ -1,4 +1,10 @@
-import { TableRowActions } from '#/components/table-row-actions'
+import { TableRowActions, copyIdAction } from '#/components/table-row-actions'
+import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
+import { toast } from '#/lib/toast'
+import {
+  GroupDeleteDialog,
+  GroupStateDialog,
+} from '#/modules/user-management/groups/components/group-lifecycle-dialogs'
 import { CursorPagination } from '#/components/cursor-pagination'
 import { useCursorPagination } from '#/lib/use-cursor-pagination'
 import { useUrlFilters } from '#/lib/use-url-filters'
@@ -16,7 +22,7 @@ import { Button } from '@identity/ui/components/button'
 import { Skeleton } from '@identity/ui/components/skeleton'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { Plus, TriangleAlert } from 'lucide-react'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
 import { ErrorDetails } from '#/components/error-details'
@@ -55,21 +61,31 @@ import {
   type GroupsSearch,
 } from '#/modules/user-management/groups/lib/groups-search'
 import { useConsoleQuery } from '#/lib/graphql/use-console-query'
-import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
+import { rbacScope, type RbacScope } from '#/modules/user-management/lib/rbac-scope'
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
 import {
   UserSelectField,
   UserTextField,
 } from '#/modules/user-management/users/components/user-form-fields'
 
+type GroupRow = NonNullable<ConsoleGroupsQuery['groups']>['edges'][number]['node']
+
 function GroupsTable({
   groups,
+  scope,
+  onChanged,
   ...controls
 }: {
   groups: NonNullable<ConsoleGroupsQuery['groups']>['edges']
+  scope: RbacScope
+  onChanged: () => void
 } & ResourceTableControls) {
   const navigate = useNavigate()
   const t = useTranslator()
+  // One confirmation at a time, mounted outside the row menus.
+  const stateDialog = useOverlayState()
+  const deleteDialog = useOverlayState()
+  const [target, setTarget] = useState<GroupRow | null>(null)
   const { locale, timeZone } = useLocale()
   const items = groups.map(({ node }) => {
     const name =
@@ -79,119 +95,184 @@ function GroupsTable({
     return { id: node.id, node, name, description }
   })
   return (
-    <ResourceTable
-      id="groups"
-      label={t('groupsTableLabel')}
-      items={items}
-      {...controls}
-      columns={[
-        {
-          id: 'group',
-          label: t('groupsColumnGroup'),
-          primary: true,
-          render: (row) => {
-            const { node, name, description } = row
-            return (
-              <>
-                <div className="min-w-56">
-                  <Link
-                    to="/groups/$groupId"
-                    params={{ groupId: node.id }}
-                    className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                  >
-                    {name}
-                  </Link>
-                  {description ? (
-                    <p className="mt-1 max-w-md text-xs leading-5 text-muted-foreground">
-                      {description}
-                    </p>
-                  ) : null}
-                </div>
-              </>
-            )
+    <>
+      <ResourceTable
+        id="groups"
+        label={t('groupsTableLabel')}
+        items={items}
+        {...controls}
+        columns={[
+          {
+            id: 'group',
+            label: t('groupsColumnGroup'),
+            primary: true,
+            render: (row) => {
+              const { node, name, description } = row
+              return (
+                <>
+                  <div className="min-w-56">
+                    <Link
+                      to="/groups/$groupId"
+                      params={{ groupId: node.id }}
+                      className="font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring text-link"
+                    >
+                      {name}
+                    </Link>
+                    {description ? (
+                      <p className="mt-1 max-w-md text-xs leading-5 text-muted-foreground">
+                        {description}
+                      </p>
+                    ) : null}
+                  </div>
+                </>
+              )
+            },
           },
-        },
-        {
-          id: 'kind',
-          label: t('groupsColumnKind'),
-          render: (row) => {
-            const { node } = row
-            return (
-              <>
-                <GroupKindChip builtIn={node.builtIn} />
-              </>
-            )
+          {
+            id: 'kind',
+            label: t('groupsColumnKind'),
+            render: (row) => {
+              const { node } = row
+              return (
+                <>
+                  <GroupKindChip builtIn={node.builtIn} />
+                </>
+              )
+            },
           },
-        },
-        {
-          id: 'status',
-          label: t('groupsColumnStatus'),
-          render: (row) => {
-            const { node } = row
-            return (
-              <>
-                <GroupStatusChip enabled={node.enabled} />
-              </>
-            )
+          {
+            id: 'status',
+            label: t('groupsColumnStatus'),
+            render: (row) => {
+              const { node } = row
+              return (
+                <>
+                  <GroupStatusChip enabled={node.enabled} />
+                </>
+              )
+            },
           },
-        },
-        {
-          id: 'created',
-          label: t('groupsColumnCreated'),
-          sort: 'CREATED_AT',
-          render: (row) => {
-            const { node } = row
-            return (
-              <>
-                <span className="whitespace-nowrap text-sm">
-                  {formatDateTime(node.createdAt, locale, timeZone)}
-                </span>
-              </>
-            )
+          {
+            id: 'created',
+            label: t('groupsColumnCreated'),
+            sort: 'CREATED_AT',
+            render: (row) => {
+              const { node } = row
+              return (
+                <>
+                  <span className="whitespace-nowrap text-sm">
+                    {formatDateTime(node.createdAt, locale, timeZone)}
+                  </span>
+                </>
+              )
+            },
           },
-        },
-        {
-          id: 'updated',
-          label: t('groupsColumnUpdated'),
-          render: (row) => {
-            const { node } = row
-            return (
-              <>
-                <span className="whitespace-nowrap text-sm">
-                  {formatDateTime(node.updatedAt, locale, timeZone)}
-                </span>
-              </>
-            )
+          {
+            id: 'updated',
+            label: t('groupsColumnUpdated'),
+            render: (row) => {
+              const { node } = row
+              return (
+                <>
+                  <span className="whitespace-nowrap text-sm">
+                    {formatDateTime(node.updatedAt, locale, timeZone)}
+                  </span>
+                </>
+              )
+            },
           },
-        },
-        {
-          id: 'actions',
-          label: t('groupsColumnActions'),
-          render: (row) => {
-            const { node, name } = row
-            return (
-              <>
-                <TableRowActions
-                  subject={name}
-                  actions={[
-                    {
-                      id: 'view',
-                      label: t('groupsViewAction'),
-                      onAction: () => {
-                        void navigate({
-                          to: '/groups/$groupId',
-                          params: { groupId: node.id },
-                        })
+          {
+            id: 'actions',
+            label: t('groupsColumnActions'),
+            render: (row) => {
+              const { node, name } = row
+              return (
+                <>
+                  <TableRowActions
+                    subject={name}
+                    actions={[
+                      {
+                        id: 'view',
+                        label: t('tableActionViewDetails'),
+                        section: 'open',
+                        onAction: () => {
+                          void navigate({
+                            to: '/groups/$groupId',
+                            params: { groupId: node.id },
+                          })
+                        },
                       },
-                    },
-                  ]}
-                />
-              </>
-            )
+                      {
+                        id: 'members',
+                        label: t('tableActionMembers'),
+                        section: 'navigate',
+                        onAction: () => {
+                          void navigate({
+                            to: '/groups/$groupId/members',
+                            params: { groupId: node.id },
+                          })
+                        },
+                      },
+                      copyIdAction(node.id, t),
+                      ...(!node.builtIn && scope.groupsWrite
+                        ? [
+                            {
+                              id: 'state',
+                              label: t(node.enabled ? 'tableActionDisable' : 'tableActionEnable'),
+                              section: 'state' as const,
+                              isDisabled: !node.version,
+                              onAction: () => {
+                                setTarget(node)
+                                stateDialog.open()
+                              },
+                            },
+                          ]
+                        : []),
+                      ...(!node.builtIn && scope.groupsDelete
+                        ? [
+                            {
+                              id: 'delete',
+                              label: t('tableActionDelete'),
+                              section: 'danger' as const,
+                              isDisabled: !node.version,
+                              onAction: () => {
+                                setTarget(node)
+                                deleteDialog.open()
+                              },
+                            },
+                          ]
+                        : []),
+                    ]}
+                  />
+                </>
+              )
+            },
           },
-        },
-      ]}
-    />
+        ]}
+      />
+      {target ? (
+        <>
+          <GroupStateDialog
+            key={`state:${target.id}:${target.version}`}
+            state={stateDialog}
+            action={target.enabled ? 'disable' : 'enable'}
+            group={target}
+            onCommitted={onChanged}
+            onReload={onChanged}
+          />
+          <GroupDeleteDialog
+            key={`delete:${target.id}:${target.version}`}
+            state={deleteDialog}
+            group={target}
+            onCommitted={() => {
+              toast.success(t('groupsDeletedToast'))
+              onChanged()
+            }}
+            onReload={onChanged}
+          />
+        </>
+      ) : null}
+    </>
   )
 }
 
@@ -446,6 +527,8 @@ export function GroupsListPage({ search }: { search: GroupsSearch }) {
           filters={filters}
           emptyState={emptyState}
           groups={edges}
+          scope={scope}
+          onChanged={() => void groups.refresh()}
           order={search.order}
           onOrderChange={(order) => {
             if (order === undefined || isGroupOrder(order))

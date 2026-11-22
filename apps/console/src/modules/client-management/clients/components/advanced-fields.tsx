@@ -310,7 +310,7 @@ function ChoiceRow({
         : missingKey?.manage === 'client-credentials'
           ? Boolean(clientId) && fieldAffordance(permissions, 'mutation', 'addClientPublicKey')
           : false
-  const linkClass = 'font-medium underline underline-offset-3'
+  const linkClass = 'font-medium text-link'
   const manageLink =
     missingKey?.manage === 'client-credentials' && clientId ? (
       <Link to="/clients/$clientId/credentials" params={{ clientId }} className={linkClass}>

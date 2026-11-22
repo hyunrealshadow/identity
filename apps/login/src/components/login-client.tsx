@@ -23,8 +23,8 @@ export function LoginClient({ client, locale }: { client?: LoginClientDisplay; l
       {logo ? <img src={logo} alt={client.name} referrerPolicy="no-referrer" className="mx-auto h-12 max-w-full object-contain" /> : null}
       {policy || terms ? (
         <div className="flex flex-wrap justify-center gap-4 text-sm">
-          {policy ? <a href={policy} target="_blank" rel="noopener noreferrer" className="underline">{translate(locale, 'clientPrivacyPolicy')}</a> : null}
-          {terms ? <a href={terms} target="_blank" rel="noopener noreferrer" className="underline">{translate(locale, 'clientTermsOfService')}</a> : null}
+          {policy ? <a href={policy} target="_blank" rel="noopener noreferrer" className="text-link">{translate(locale, 'clientPrivacyPolicy')}</a> : null}
+          {terms ? <a href={terms} target="_blank" rel="noopener noreferrer" className="text-link">{translate(locale, 'clientTermsOfService')}</a> : null}
         </div>
       ) : null}
     </div>

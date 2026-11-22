@@ -20,7 +20,6 @@ import { RequestCorrelation } from '#/components/request-correlation'
 import { StepUpPanel } from '#/components/step-up-panel'
 import {
   type ConsoleRoleQuery,
-  type RoleStateInput,
   type UpdateRoleInput,
 } from '#/generated/graphql'
 import {
@@ -45,6 +44,7 @@ import {
   type RbacNotice,
 } from '#/modules/user-management/components/rbac-feedback'
 import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
+import { RoleStateDialog } from '../components/role-state-dialog'
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
 import { useRoleMutations } from '#/modules/user-management/roles/hooks/role-mutations'
 import {
@@ -104,6 +104,8 @@ export function RoleDetailPage() {
   )
   const roleQuery = useRoleDetailContext()
   const mutations = useRoleMutations()
+  // The state dialog stays mounted outside its trigger button.
+  const stateDialog = useOverlayState()
   const [draft, setDraft] = useState<LocalizedDraft | null>(null)
   const [localErrors, setLocalErrors] = useState<
     Partial<Record<LocalField, MessageKey>>
@@ -524,7 +526,22 @@ export function RoleDetailPage() {
           <div className="space-y-4">
             <div className="flex flex-wrap gap-2">
               {!builtIn && scope.rolesWrite ? (
+                <Button
+                  variant={readyRole.enabled ? 'destructive' : 'secondary'}
+                  onClick={stateDialog.open}
+                  disabled={!readyRole.version}
+                >
+                  {readyRole.enabled ? (
+                    <PowerOff className="size-4" aria-hidden="true" />
+                  ) : (
+                    <Power className="size-4" aria-hidden="true" />
+                  )}
+                  {t(readyRole.enabled ? 'rolesDisableAction' : 'rolesEnableAction')}
+                </Button>
+              ) : null}
+              {!builtIn && scope.rolesWrite ? (
                 <RoleStateDialog
+                  state={stateDialog}
                   action={readyRole.enabled ? 'disable' : 'enable'}
                   role={readyRole}
                   onCommitted={() => void reloadRole()}
@@ -535,155 +552,5 @@ export function RoleDetailPage() {
         </div>
       </div>
     </ConsoleWorkspaceGate>
-  )
-}
-
-function RoleStateDialog({
-  action,
-  role,
-  onCommitted,
-}: {
-  action: 'enable' | 'disable'
-  role: NonNullable<ConsoleRoleQuery['role']>
-  onCommitted: () => void
-}) {
-  const t = useTranslator()
-  const { locale } = useLocale()
-  const state = useOverlayState()
-  const mutations = useRoleMutations()
-  const displayName = roleDisplayName(withRoleDisplayFields(role), locale)
-  const [feedback, setFeedback] = useState<RbacFeedbackState | null>(null)
-  const [pending, setPending] = useState(false)
-  const submitting = useRef(false)
-
-  useEffect(() => {
-    if (state.isOpen) return
-    setFeedback(null)
-    setPending(false)
-  }, [state.isOpen])
-
-  async function submit() {
-    if (submitting.current) return
-    if (roleIsBuiltIn(withRoleDisplayFields(role))) return
-    submitting.current = true
-    setPending(true)
-    setFeedback(null)
-    const input: RoleStateInput = {
-      id: role.id,
-      expectedVersion: role.version,
-    }
-    try {
-      const result =
-        action === 'enable'
-          ? await mutations.enable(input)
-          : await mutations.disable(input)
-      const data = result.data as {
-        enableRole?: { roleId: string; version: string } | null
-        disableRole?: { roleId: string; version: string } | null
-      } | null
-      const payload = data?.enableRole ?? data?.disableRole ?? null
-      if (!payload) {
-        setFeedback({
-          errors: result.errors,
-          failure: result.failure ?? {
-            kind: 'invalid_response',
-            code: 'missing_role_state_payload',
-            requestId: result.requestId,
-            traceId: result.traceId,
-          },
-          stepUp: result.stepUp,
-          requestId: result.requestId,
-          traceId: result.traceId,
-          forbidden: result.forbidden,
-        })
-        return
-      }
-      state.close()
-      toast.success(
-        t(action === 'enable' ? 'rolesEnabledToast' : 'rolesDisabledToast'),
-        { description: t('roleSettingsCommitted') },
-      )
-      if (result.partial) toast.warning(t('rbacPartialMutationNote'))
-      onCommitted()
-    } catch {
-      setFeedback({
-        errors: [],
-        failure: { kind: 'network', code: 'role_state_request_failed' },
-        forbidden: false,
-      })
-    } finally {
-      submitting.current = false
-      setPending(false)
-    }
-  }
-
-  return (
-    <>
-      <Button
-        variant={action === 'disable' ? 'destructive' : 'secondary'}
-        onClick={state.open}
-        disabled={!role.version}
-      >
-        {action === 'enable' ? (
-          <Power className="size-4" aria-hidden="true" />
-        ) : (
-          <PowerOff className="size-4" aria-hidden="true" />
-        )}
-        {t(action === 'enable' ? 'rolesEnableAction' : 'rolesDisableAction')}
-      </Button>
-      <Dialog
-        open={state.isOpen}
-        onOpenChange={(open) => {
-          if (!open && pending) return
-          state.setOpen(open)
-        }}
-      >
-        <DialogContent showCloseButton={!pending} closeLabel={t('close')}>
-          <DialogHeader>
-            <DialogTitle>
-              {t(
-                action === 'enable' ? 'rolesEnableTitle' : 'rolesDisableTitle',
-              )}
-            </DialogTitle>
-          </DialogHeader>
-          <div>
-            <p className="text-sm leading-6 text-muted-foreground">
-              {t(
-                action === 'enable'
-                  ? 'rolesEnableDescription'
-                  : 'rolesDisableDescription',
-              )}
-            </p>
-            <p className="mt-3 text-sm font-medium">{displayName}</p>
-            {feedback ? (
-              <div className="mt-4">
-                <RbacMutationFeedback feedback={feedback} />
-              </div>
-            ) : null}
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              disabled={pending}
-              onClick={() => state.close()}
-            >
-              {t('cancel')}
-            </Button>
-            <Button
-              variant={action === 'disable' ? 'destructive' : 'default'}
-              disabled={!role.version}
-              loading={pending}
-              onClick={() => void submit()}
-            >
-              {t(
-                action === 'enable'
-                  ? 'rolesEnableConfirm'
-                  : 'rolesDisableConfirm',
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
   )
 }

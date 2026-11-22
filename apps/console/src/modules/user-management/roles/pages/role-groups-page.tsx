@@ -457,6 +457,7 @@ function RoleGroupsTable({
   emptyState: ReactNode
 }) {
   const navigate = useNavigate()
+  const t = useTranslator()
   const tr = useRoleGroupsTranslator()
   const { locale, timeZone } = useLocale()
   return (
@@ -504,7 +505,7 @@ function RoleGroupsTable({
                   <Link
                     to="/groups/$groupId"
                     params={{ groupId: node.id }}
-                    className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+                    className="font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring text-link"
                   >
                     {name}
                   </Link>
@@ -532,7 +533,8 @@ function RoleGroupsTable({
                   actions={[
                     {
                       id: 'view',
-                      label: tr('roleGroupsViewAction'),
+                      label: t('tableActionViewGroup'),
+                      section: 'open',
                       onAction: () => {
                         void navigate({
                           to: '/groups/$groupId',

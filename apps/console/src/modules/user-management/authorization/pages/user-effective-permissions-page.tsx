@@ -11,6 +11,7 @@ import { AsyncState } from '#/components/async-state'
 import { CopyableValue } from '#/components/copy-button'
 import { CursorPagination } from '#/components/cursor-pagination'
 import { CollectionToolbar, ResourceTable } from '#/components/resource-table'
+import { TableRowActions } from '#/components/table-row-actions'
 import {
   ConsoleUserPermissionsDocument,
   type ConsoleUserPermissionsQuery,
@@ -335,7 +336,7 @@ export function UserEffectivePermissionsPage({
                               resourceId: row.resourceId,
                               permissionId: row.id,
                             }}
-                            className="hover:underline"
+                            className="text-link"
                           >
                             {row.code}
                           </Link>
@@ -372,7 +373,7 @@ export function UserEffectivePermissionsPage({
                           <Link
                             to="/roles/$roleId"
                             params={{ roleId: source.roleId }}
-                            className="hover:underline"
+                            className="text-link"
                           >
                             {roleName(source.roleId)}
                           </Link>
@@ -390,7 +391,7 @@ export function UserEffectivePermissionsPage({
                           <Link
                             to="/groups/$groupId"
                             params={{ groupId: source.groupId }}
-                            className="hover:underline"
+                            className="text-link"
                           >
                             {groupName(source.groupId)}
                           </Link>
@@ -402,7 +403,7 @@ export function UserEffectivePermissionsPage({
                           <Link
                             to="/roles/$roleId"
                             params={{ roleId: source.roleId }}
-                            className="hover:underline"
+                            className="text-link"
                           >
                             {roleName(source.roleId)}
                           </Link>
@@ -414,6 +415,31 @@ export function UserEffectivePermissionsPage({
                   </div>
                 ),
               },
+              ...(scope.permissionRead
+                ? [
+                    {
+                      id: 'actions',
+                      label: t('tableColumnActions'),
+                      render: (row: (typeof items)[number]) => (
+                        <TableRowActions
+                          subject={row.code}
+                          actions={[
+                            {
+                              id: 'view',
+                              label: t('tableActionViewDetails'),
+                              section: 'open',
+                              onAction: () =>
+                                void navigate({
+                                  to: '/resources/$resourceId/permissions/$permissionId',
+                                  params: { resourceId: row.resourceId, permissionId: row.id },
+                                }),
+                            },
+                          ]}
+                        />
+                      ),
+                    },
+                  ]
+                : []),
             ]}
           />
         ) : null}

@@ -479,7 +479,7 @@ export function UserRolesPage({
                           <Link
                             to="/groups/$groupId"
                             params={{ groupId: edge.groupId }}
-                            className="hover:underline"
+                            className="text-link"
                           >
                             {groupName(edge.groupId)}
                           </Link>

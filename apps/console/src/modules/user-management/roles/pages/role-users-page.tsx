@@ -366,7 +366,7 @@ export function RoleUsersPage({
                       <Link
                         to="/users/$userId"
                         params={{ userId: user.id }}
-                        className="font-medium text-foreground underline-offset-4 hover:underline"
+                        className="font-medium text-foreground text-link"
                       >
                         {user.username}
                       </Link>

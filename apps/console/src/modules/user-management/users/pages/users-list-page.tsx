@@ -1,5 +1,11 @@
 import { AuthenticationContextClass } from '@identity/graphql-access'
-import { TableRowActions } from '#/components/table-row-actions'
+import { TableRowActions, copyIdAction } from '#/components/table-row-actions'
+import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
+import { useAuth } from '#/lib/auth/context'
+import {
+  UserStateDialog,
+  type UserStateAction,
+} from '#/modules/user-management/users/components/user-state-actions'
 import { CursorPagination } from '#/components/cursor-pagination'
 import { DatePickerField } from '#/components/date-picker-field'
 import { useCursorPagination } from '#/lib/use-cursor-pagination'
@@ -36,7 +42,10 @@ import {
   useUsers,
   type UserSummary,
 } from '#/modules/user-management/users/hooks/use-users'
-import { userManagementScope } from '#/modules/user-management/users/lib/user-scope'
+import {
+  isCurrentUser,
+  userManagementScope,
+} from '#/modules/user-management/users/lib/user-scope'
 import {
   USERS_PAGE_SIZE,
   hasUserFilters,
@@ -63,129 +72,181 @@ import { useWorkspace } from '#/lib/workspace'
 function UsersTable({
   users,
   canEdit,
+  canChangeState,
+  onChanged,
   ...controls
 }: {
   users: ReadonlyArray<UserSummary>
   canEdit: boolean
+  canChangeState: boolean
+  onChanged: () => Promise<boolean>
 } & ResourceTableControls) {
   const navigate = useNavigate()
   const t = useTranslator()
+  const { claims } = useAuth()
+  // One confirmation at a time, mounted outside the row menus.
+  const stateDialog = useOverlayState()
+  const [pending, setPending] = useState<{ user: UserSummary; action: UserStateAction } | null>(
+    null,
+  )
+  function confirm(user: UserSummary, action: UserStateAction) {
+    setPending({ user, action })
+    stateDialog.open()
+  }
   const { locale, timeZone } = useLocale()
   const items = users
   return (
-    <ResourceTable
-      id="users"
-      label={t('usersTableLabel')}
-      items={items}
-      {...controls}
-      columns={[
-        {
-          id: 'user',
-          label: t('usersColumnUser'),
-          primary: true,
-          sort: 'USERNAME',
-          render: (user) => {
-            return (
-              <>
-                <div className="w-56 max-w-full sm:w-64">
-                  <Link
-                    to="/users/$userId"
-                    params={{ userId: user.id }}
-                    title={user.username}
-                    className="block truncate font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                  >
-                    {user.username}
-                  </Link>
-                  <p
-                    className="mt-0.5 truncate text-xs text-muted-foreground"
-                    title={user.email}
-                  >
-                    {user.email}
-                  </p>
-                </div>
-              </>
-            )
+    <>
+      <ResourceTable
+        id="users"
+        label={t('usersTableLabel')}
+        items={items}
+        {...controls}
+        columns={[
+          {
+            id: 'user',
+            label: t('usersColumnUser'),
+            primary: true,
+            sort: 'USERNAME',
+            render: (user) => {
+              return (
+                <>
+                  <div className="w-56 max-w-full sm:w-64">
+                    <Link
+                      to="/users/$userId"
+                      params={{ userId: user.id }}
+                      title={user.username}
+                      className="block truncate font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring text-link"
+                    >
+                      {user.username}
+                    </Link>
+                    <p
+                      className="mt-0.5 truncate text-xs text-muted-foreground"
+                      title={user.email}
+                    >
+                      {user.email}
+                    </p>
+                  </div>
+                </>
+              )
+            },
           },
-        },
-        {
-          id: 'status',
-          label: t('usersColumnStatus'),
-          render: (user) => {
-            return (
-              <>
-                <UserStatusBadges user={user} />
-              </>
-            )
+          {
+            id: 'status',
+            label: t('usersColumnStatus'),
+            render: (user) => {
+              return (
+                <>
+                  <UserStatusBadges user={user} />
+                </>
+              )
+            },
           },
-        },
-        {
-          id: 'created',
-          label: t('usersColumnCreated'),
-          sort: 'CREATED_AT',
-          render: (user) => {
-            return (
-              <>
-                <span className="whitespace-nowrap text-sm">
-                  {formatDateTime(user.createdAt, locale, timeZone)}
-                </span>
-              </>
-            )
+          {
+            id: 'created',
+            label: t('usersColumnCreated'),
+            sort: 'CREATED_AT',
+            render: (user) => {
+              return (
+                <>
+                  <span className="whitespace-nowrap text-sm">
+                    {formatDateTime(user.createdAt, locale, timeZone)}
+                  </span>
+                </>
+              )
+            },
           },
-        },
-        {
-          id: 'updated',
-          label: t('usersColumnUpdated'),
-          render: (user) => {
-            return (
-              <>
-                <span className="whitespace-nowrap text-sm">
-                  {formatDateTime(user.updatedAt, locale, timeZone)}
-                </span>
-              </>
-            )
+          {
+            id: 'updated',
+            label: t('usersColumnUpdated'),
+            render: (user) => {
+              return (
+                <>
+                  <span className="whitespace-nowrap text-sm">
+                    {formatDateTime(user.updatedAt, locale, timeZone)}
+                  </span>
+                </>
+              )
+            },
           },
-        },
-        {
-          id: 'actions',
-          label: t('usersColumnActions'),
-          render: (user) => {
-            return (
-              <>
-                <TableRowActions
-                  subject={user.username}
-                  actions={[
-                    {
-                      id: 'view',
-                      label: t('usersViewDetails'),
-                      onAction: () => {
-                        void navigate({
-                          to: '/users/$userId',
-                          params: { userId: user.id },
-                        })
+          {
+            id: 'actions',
+            label: t('usersColumnActions'),
+            render: (user) => {
+              return (
+                <>
+                  <TableRowActions
+                    subject={user.username}
+                    actions={[
+                      {
+                        id: 'view',
+                        label: t('tableActionViewDetails'),
+                        section: 'open',
+                        onAction: () => {
+                          void navigate({
+                            to: '/users/$userId',
+                            params: { userId: user.id },
+                          })
+                        },
                       },
-                    },
-                    ...(canEdit
-                      ? [
-                          {
-                            id: 'edit',
-                            label: t('usersEditAction'),
-                            onAction: () => {
-                              void navigate({
-                                to: '/users/$userId/edit',
-                                params: { userId: user.id },
-                              })
+                      ...(canEdit
+                        ? [
+                            {
+                              id: 'edit',
+                              label: t('tableActionEditProfile'),
+                              section: 'navigate' as const,
+                              onAction: () => {
+                                void navigate({
+                                  to: '/users/$userId/edit',
+                                  params: { userId: user.id },
+                                })
+                              },
                             },
-                          },
-                        ]
-                      : []),
-                  ]}
-                />
-              </>
-            )
+                          ]
+                        : []),
+                      copyIdAction(user.id, t),
+                      ...(canChangeState && user.locked
+                        ? [
+                            {
+                              id: 'unlock',
+                              label: t('tableActionUnlock'),
+                              section: 'state' as const,
+                              isDisabled: !user.version,
+                              onAction: () => confirm(user, 'unlock'),
+                            },
+                          ]
+                        : []),
+                      // Disabling yourself would end this session; the detail page handles that case.
+                      ...(canChangeState && !(user.enabled && isCurrentUser(user.id, claims?.sub))
+                        ? [
+                            {
+                              id: 'state',
+                              label: t(user.enabled ? 'tableActionDisable' : 'tableActionEnable'),
+                              section: 'state' as const,
+                              isDisabled: !user.version,
+                              onAction: () => confirm(user, user.enabled ? 'disable' : 'enable'),
+                            },
+                          ]
+                        : []),
+                    ]}
+                  />
+                </>
+              )
+            },
           },
-        },
-      ]}
-    />
+        ]}
+      />
+      {pending ? (
+        <UserStateDialog
+          key={`${pending.action}:${pending.user.id}:${pending.user.version}`}
+          state={stateDialog}
+          action={pending.action}
+          user={pending.user}
+          onCommitted={() => void onChanged()}
+          onReload={onChanged}
+        />
+      ) : null}
+    </>
   )
 }
 
@@ -786,6 +847,8 @@ export function UsersListPage({ search }: { search: UsersSearch }) {
           emptyState={emptyState}
           users={edges.map((edge) => edge.node)}
           canEdit={scope.update}
+          canChangeState={scope.state}
+          onChanged={() => users.refresh().then(() => true)}
           order={search.order}
           onOrderChange={(order) => {
             if (order === undefined || isUserOrder(order))

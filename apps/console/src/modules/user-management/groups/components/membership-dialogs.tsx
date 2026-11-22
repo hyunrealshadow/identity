@@ -1,6 +1,7 @@
 import { Button } from '@identity/ui/components/button'
 import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
-import { UserMinus, UserPlus } from 'lucide-react'
+import { useNavigate } from '@tanstack/react-router'
+import { UserPlus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { TableRowActions } from '#/components/table-row-actions'
@@ -359,6 +360,7 @@ function RemoveMembershipDialog({
   onRemoved: () => void
 }) {
   const t = useTranslator()
+  const navigate = useNavigate()
   const state = useOverlayState()
   const mutation = useRelationMutation()
   const mutations = useGroupMemberMutations()
@@ -368,16 +370,22 @@ function RemoveMembershipDialog({
         subject={label}
         actions={[
           {
+            id: 'view',
+            label: t(fromUser ? 'tableActionViewGroup' : 'tableActionViewUser'),
+            section: 'open',
+            onAction: () =>
+              void (fromUser
+                ? navigate({ to: '/groups/$groupId', params: { groupId } })
+                : navigate({ to: '/users/$userId', params: { userId } })),
+          },
+          {
             id: 'remove',
-            label: t(
-              fromUser ? 'userGroupsRemoveAction' : 'groupMembersRemoveAction',
-            ),
+            label: t('tableActionRemove'),
+            section: 'danger',
             onAction: () => {
               mutation.setFeedback(null)
               state.open()
             },
-            danger: true,
-            icon: <UserMinus className="size-4" aria-hidden="true" />,
             isDisabled: !version,
           },
         ]}

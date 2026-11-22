@@ -241,7 +241,10 @@ export function UserStateActions({
   )
 }
 
-function UserStateDialog({
+/** What the state dialog needs, from either the user list or its detail. */
+export type UserStateTarget = Pick<ProjectedUser, 'id' | 'username' | 'version'>
+
+export function UserStateDialog({
   state,
   action,
   user,
@@ -250,7 +253,7 @@ function UserStateDialog({
 }: {
   state: OverlayState
   action: UserStateAction
-  user: ProjectedUser
+  user: UserStateTarget
   onCommitted: (
     action: UserStateAction,
     payload: { userId: string; version: string },

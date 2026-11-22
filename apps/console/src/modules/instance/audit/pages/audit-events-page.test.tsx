@@ -259,4 +259,15 @@ describe('AuditEventsPage', () => {
     expect(navArg.to).toBe('/audit-events')
     expect(navArg.search.q).toBe('occurredAt:[now-24h TO now] AND category:sign_in')
   })
+
+  it('keeps only "View details" in the row menu; filters live in the drawer', async () => {
+    mocks.permissions = permissions(['management.audit.read'])
+    renderWithLocale(<AuditEventsPage search={{}} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /^Actions for / }))
+    const menu = await screen.findByRole('menu')
+    expect(within(menu).getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      'View details',
+    ])
+  })
 })

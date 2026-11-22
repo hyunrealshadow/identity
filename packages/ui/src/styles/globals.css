@@ -10,6 +10,17 @@
 /* Scan all of packages/ui/src: shared modules such as data-table.tsx live at its root. */
 @source "..";
 
+/* Text that navigates or opens something: always underlined so it reads as
+   clickable, with the line strengthening on hover. */
+@utility text-link {
+  text-decoration-line: underline;
+  text-decoration-color: color-mix(in oklab, currentColor 35%, transparent);
+  text-underline-offset: 4px;
+  &:hover {
+    text-decoration-color: currentColor;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

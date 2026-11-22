@@ -6,6 +6,7 @@ import { AsyncState } from '#/components/async-state'
 import { CopyableValue } from '#/components/copy-button'
 import { CursorPagination } from '#/components/cursor-pagination'
 import { ResourceTable, type ResourceColumn } from '#/components/resource-table'
+import { TableRowActions, copyIdAction } from '#/components/table-row-actions'
 import { type ConsoleResourcePermissionsQueryVariables } from '#/generated/graphql'
 import { formatDateTime } from '#/lib/format'
 import {
@@ -270,7 +271,7 @@ export function PermissionsListPage({
                         <Link
                           to="/resources/$resourceId/permissions/$permissionId"
                           params={{ resourceId, permissionId: permission.id }}
-                          className="hover:underline"
+                          className="text-link"
                         >
                           {permission.code}
                         </Link>
@@ -338,6 +339,28 @@ export function PermissionsListPage({
                     NonNullable<typeof connection>['edges'][number]['node']
                   >[])
                 : []),
+              {
+                id: 'actions',
+                label: t('permissionsColumnActions'),
+                render: (permission) => (
+                  <TableRowActions
+                    subject={permission.code}
+                    actions={[
+                      {
+                        id: 'view',
+                        label: t('tableActionViewDetails'),
+                        section: 'open',
+                        onAction: () =>
+                          void navigate({
+                            to: '/resources/$resourceId/permissions/$permissionId',
+                            params: { resourceId, permissionId: permission.id },
+                          }),
+                      },
+                      copyIdAction(permission.id, t),
+                    ]}
+                  />
+                ),
+              },
             ]}
           />
         </section>

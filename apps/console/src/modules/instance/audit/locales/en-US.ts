@@ -19,7 +19,6 @@ const auditMessages = {
   auditColumnOutcome: 'Result',
   auditColumnSource: 'Source',
   auditColumnActions: 'Actions',
-  auditActionViewDetails: 'View details',
   auditFilterByAction: 'Filter by action',
   auditFilterByActor: 'Filter by actor',
   auditFilterByTarget: 'Filter by target',

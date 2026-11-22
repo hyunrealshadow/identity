@@ -520,7 +520,7 @@ export function UserGroupsPage({
         <Link
           to="/groups/$groupId"
           params={{ groupId: node.id }}
-          className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+          className="font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring text-link"
         >
           {name}
         </Link>

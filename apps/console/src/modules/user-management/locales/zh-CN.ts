@@ -135,7 +135,6 @@ const zhCN = {
   usersReloadUser: '重新加载用户',
   usersReloading: '正在重新加载用户…',
   usersColumnActions: '操作',
-  usersViewDetails: '查看详情',
   usersViewDetailsFor: '查看 {username} 的详情',
   usersEditFor: '编辑 {username}',
 
@@ -245,7 +244,6 @@ const zhCN = {
   rolesColumnCreated: '创建时间',
   rolesColumnUpdated: '更新时间',
   rolesColumnActions: '操作',
-  rolesViewAction: '查看详情',
   rolesViewFor: '查看 {name} 的详情',
   rolesEnabled: '已启用',
   rolesDisabled: '已停用',
@@ -414,7 +412,6 @@ const zhCN = {
   rolePermissionsStatusAssignedDisabled: '已分配 · 已停用',
   rolePermissionsStatusAdded: '待新增',
   rolePermissionsStatusRemoved: '待移除',
-  rolePermissionsRemoveAction: '移除',
   rolePermissionsRemoveFor: '从此角色移除 {code}',
   rolePermissionsUndoRemoval: '撤销移除',
   rolePermissionsUndoFor: '撤销移除 {code}',
@@ -455,7 +452,6 @@ const zhCN = {
   roleUserAssignedToast: '用户角色已分配',
   roleUserAssignedCommitted: '{count, plural, other {已创建 # 个新分配}}',
   roleUserAlreadyAssigned: '该用户已有有效分配，未重复创建',
-  roleUsersRevokeAction: '撤销',
   roleUsersRevokeFor: '从 {user} 撤销此角色',
   roleUsersRevokeTitle: '撤销此用户角色分配？',
   roleUsersRevokeDescription:
@@ -510,7 +506,6 @@ const zhCN = {
   userRolesAssignedDescription: '已刷新用户的角色分配',
   userRolesAssignedToast: '角色已分配',
   userRolesAssignedCommitted: '{count, plural, other {已创建 # 个新分配}}',
-  userRolesRevokeAction: '撤销',
   userRolesRevokeFor: '从此用户撤销 {role}',
   userRolesRevokeTitle: '撤销此角色分配？',
   userRolesRevokeDescription:
@@ -608,7 +603,6 @@ const zhCN = {
   userGroupsAddedDescription: '已刷新用户组成员关系',
   userGroupsAddedToast: '用户已加入用户组',
   userGroupsAddedCommitted: '用户已加入用户组',
-  userGroupsRemoveAction: '移除',
   userGroupsRemoveTitle: '移除此用户组成员关系？',
   userGroupsRemoveDescription:
     '将 {user} 从“{group}”移除？成员关系将撤销，通过该用户组获得的授权立即失效',
@@ -635,7 +629,6 @@ const zhCN = {
   groupsColumnCreated: '创建时间',
   groupsColumnUpdated: '更新时间',
   groupsColumnActions: '操作',
-  groupsViewAction: '查看详情',
   groupsViewFor: '查看 {name} 的详情',
   groupsEnabled: '已启用',
   groupsDisabled: '已停用',
@@ -780,7 +773,6 @@ const zhCN = {
   groupMembersAddConfirm: '添加成员',
   groupMembersAddedToast: '成员已添加',
   groupMembersAddedCommitted: '成员已添加',
-  groupMembersRemoveAction: '移除',
   groupMembersRemoveTitle: '移除此用户组成员？',
   groupMembersRemoveDescription:
     '将 {user} 从此用户组移除？成员关系将撤销，通过该用户组获得的现有授权立即失效',

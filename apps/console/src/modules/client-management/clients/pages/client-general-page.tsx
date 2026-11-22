@@ -20,11 +20,14 @@ import { formatDateTime } from '#/lib/format'
 import { useLocale, useTranslator } from '#/lib/i18n'
 import { toast } from '#/lib/toast'
 import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
-import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
 import type { RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
 import { ApplicationLinkRows } from '../components/advanced-fields'
 import { useClientDetail, type ConsoleClient } from '../components/client-detail-shell'
 import { ClientEditForm, useClientEditable } from '../components/client-edit-form'
+import {
+  ClientDeleteDialog,
+  ClientStateDialog,
+} from '../components/client-lifecycle-dialogs'
 import { useClientMutations } from '../hooks/client-mutations'
 import { mutationFeedback, useClientEditor } from '../hooks/use-client-editor'
 import { formSeed, settingsDraftFromClient, settingsInput } from '../lib/client-form'
@@ -142,7 +145,6 @@ function ClientGeneral({ client }: { client: ConsoleClient }) {
 
 function ClientLifecycle({ client }: { client: ConsoleClient }) {
   const t = useTranslator()
-  const { locale } = useLocale()
   const navigate = useNavigate()
   const { query, scope } = useClientDetail()
   const mutations = useClientMutations()
@@ -153,32 +155,6 @@ function ClientLifecycle({ client }: { client: ConsoleClient }) {
   const [feedback, setFeedback] = useState<RbacFeedbackState | null>(null)
 
   useEffect(() => setFeedback(null), [client.version])
-
-  async function toggle() {
-    setPending(true)
-    try {
-      const input = { id: client.id, expectedVersion: client.version }
-      let result: Parameters<typeof mutationFeedback>[0]
-      let changed: boolean
-      if (client.enabled) {
-        const disabled = await mutations.disable(input)
-        result = disabled
-        changed = Boolean(disabled.data?.disableClient)
-      } else {
-        const enabled = await mutations.enable(input)
-        result = enabled
-        changed = Boolean(enabled.data?.enableClient)
-      }
-      stateDialog.close()
-      if (!changed) {
-        setFeedback(mutationFeedback(result, 'missing_client_state_payload'))
-        return
-      }
-      toast.success(t(client.enabled ? 'clientsDisabledToast' : 'clientsEnabledToast'))
-    } finally {
-      setPending(false)
-    }
-  }
 
   async function setSkipConsent(skipConsent: boolean) {
     setPending(true)
@@ -201,25 +177,6 @@ function ClientLifecycle({ client }: { client: ConsoleClient }) {
         failure: { kind: 'network', code: 'client_update_request_failed' },
         forbidden: false,
       })
-    } finally {
-      setPending(false)
-    }
-  }
-
-  async function remove() {
-    setPending(true)
-    try {
-      const result = await mutations.remove({
-        id: client.id,
-        expectedVersion: client.version,
-      })
-      deleteDialog.close()
-      if (!result.data?.deleteClient) {
-        setFeedback(mutationFeedback(result, 'missing_delete_client_payload'))
-        return
-      }
-      toast.success(t('clientsDeletedToast'))
-      void navigate({ to: '/clients', replace: true })
     } finally {
       setPending(false)
     }
@@ -287,17 +244,7 @@ function ClientLifecycle({ client }: { client: ConsoleClient }) {
           }
         />
       ) : null}
-      <ConfirmationDialog
-        state={stateDialog}
-        title={t(client.enabled ? 'clientsDisableTitle' : 'clientsEnableTitle')}
-        description={t(
-          client.enabled ? 'clientsDisableDescription' : 'clientsEnableDescription',
-        )}
-        confirmLabel={t(client.enabled ? 'clientsDisable' : 'clientsEnable')}
-        destructive={client.enabled}
-        pending={pending}
-        onConfirm={() => void toggle()}
-      />
+      <ClientStateDialog state={stateDialog} client={client} />
       <ConfirmationDialog
         state={consentDialog}
         title={t('clientsSkipConsentConfirmTitle')}
@@ -307,16 +254,10 @@ function ClientLifecycle({ client }: { client: ConsoleClient }) {
         pending={pending}
         onConfirm={() => void setSkipConsent(true)}
       />
-      <ConfirmationDialog
+      <ClientDeleteDialog
         state={deleteDialog}
-        title={t('clientsDeleteTitle')}
-        description={t('clientsDeleteDescription', {
-          name: resolveLocalizedText(client.names, locale) ?? client.name,
-        })}
-        confirmLabel={t('clientsDelete')}
-        destructive
-        pending={pending}
-        onConfirm={() => void remove()}
+        client={client}
+        onCommitted={() => void navigate({ to: '/clients', replace: true })}
       />
     </SettingsGroup>
   )

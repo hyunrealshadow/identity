@@ -19,7 +19,6 @@ const auditMessages = {
   auditColumnOutcome: '结果',
   auditColumnSource: '来源',
   auditColumnActions: '操作',
-  auditActionViewDetails: '查看详情',
   auditFilterByAction: '按动作过滤',
   auditFilterByActor: '按操作者过滤',
   auditFilterByTarget: '按对象过滤',

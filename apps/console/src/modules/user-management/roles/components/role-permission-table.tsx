@@ -4,7 +4,6 @@ import { TableRowActions } from '#/components/table-row-actions'
 import { CopyableValue } from '#/components/copy-button'
 import { DataTable } from '@identity/ui/data-table'
 import { Badge } from '@identity/ui/components/badge'
-import { Undo2, X } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
@@ -227,18 +226,11 @@ export function RolePermissionTable({
                       {
                         id: 'toggle',
                         label: t(
-                          removed
-                            ? 'rolePermissionsUndoRemoval'
-                            : 'rolePermissionsRemoveAction',
+                          removed ? 'rolePermissionsUndoRemoval' : 'tableActionRemove',
                         ),
+                        section: removed ? 'state' : 'danger',
                         isDisabled: disabled,
                         onAction: () => onToggle(row.id),
-                        danger: !removed,
-                        icon: removed ? (
-                          <Undo2 className="size-4" aria-hidden="true" />
-                        ) : (
-                          <X className="size-4" aria-hidden="true" />
-                        ),
                       },
                     ]}
                   />

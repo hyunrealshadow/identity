@@ -26,7 +26,6 @@ const zhCN = {
   roleGroupsColumnStatus: '状态',
   roleGroupsColumnUpdated: '更新时间',
   roleGroupsColumnActions: '操作',
-  roleGroupsViewAction: '查看',
   roleGroupsViewFor: '查看 {name}',
   roleGroupsPreviousPage: '上一页',
   roleGroupsNextPage: '下一页',

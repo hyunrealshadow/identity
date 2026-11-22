@@ -25,8 +25,6 @@ import { RequestCorrelation } from '#/components/request-correlation'
 import { StepUpPanel } from '#/components/step-up-panel'
 import {
   type ConsoleGroupQuery,
-  type GroupStateInput,
-  type SetGroupEnabledInput,
   type UpdateGroupInput,
 } from '#/generated/graphql'
 import {
@@ -43,6 +41,10 @@ import {
 } from '#/modules/user-management/components/rbac-feedback'
 import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
 import { useGroupMutations } from '#/modules/user-management/groups/hooks/group-mutations'
+import {
+  GroupDeleteDialog,
+  GroupStateDialog,
+} from '#/modules/user-management/groups/components/group-lifecycle-dialogs'
 import {
   descriptionsChanged,
   groupEditDraftFromGroup,
@@ -87,6 +89,9 @@ export function GroupDetailPage() {
   )
   const groupQuery = useGroupDetailContext()
   const mutations = useGroupMutations()
+  // Lifecycle dialogs stay mounted outside their trigger buttons.
+  const stateDialog = useOverlayState()
+  const deleteDialog = useOverlayState()
   const [draft, setDraft] = useState<GroupTextDraft | null>(null)
   const [localErrors, setLocalErrors] = useState<
     Partial<Record<LocalField, MessageKey>>
@@ -507,7 +512,22 @@ export function GroupDetailPage() {
           <div className="space-y-4">
             <div className="flex flex-wrap gap-2">
               {!builtIn && scope.groupsWrite ? (
+                <Button
+                  variant={readyGroup.enabled ? 'destructive' : 'secondary'}
+                  onClick={stateDialog.open}
+                  disabled={!readyGroup.version}
+                >
+                  {readyGroup.enabled ? (
+                    <PowerOff className="size-4" aria-hidden="true" />
+                  ) : (
+                    <Power className="size-4" aria-hidden="true" />
+                  )}
+                  {t(readyGroup.enabled ? 'groupsDisableAction' : 'groupsEnableAction')}
+                </Button>
+              ) : null}
+              {!builtIn && scope.groupsWrite ? (
                 <GroupStateDialog
+                  state={stateDialog}
                   action={readyGroup.enabled ? 'disable' : 'enable'}
                   group={readyGroup}
                   onCommitted={() => void reloadGroup()}
@@ -515,7 +535,18 @@ export function GroupDetailPage() {
                 />
               ) : null}
               {!builtIn && scope.groupsDelete ? (
+                <Button
+                  variant="destructive"
+                  onClick={deleteDialog.open}
+                  disabled={!readyGroup.version}
+                >
+                  <Trash2 className="size-4" aria-hidden="true" />
+                  {t('groupsDeleteAction')}
+                </Button>
+              ) : null}
+              {!builtIn && scope.groupsDelete ? (
                 <GroupDeleteDialog
+                  state={deleteDialog}
                   group={readyGroup}
                   onCommitted={() => {
                     clearDraft(draftKey(readyGroup.id))
@@ -530,267 +561,5 @@ export function GroupDetailPage() {
         </div>
       </div>
     </ConsoleWorkspaceGate>
-  )
-}
-
-function GroupStateDialog({
-  action,
-  group,
-  onCommitted,
-  onReload,
-}: {
-  action: 'enable' | 'disable'
-  group: GroupNode
-  onCommitted: () => void
-  onReload: () => void
-}) {
-  const t = useTranslator()
-  const { locale } = useLocale()
-  const state = useOverlayState()
-  const mutations = useGroupMutations()
-  const displayName =
-    resolveLocalizedText(group.names, locale) ?? group.name ?? group.id
-  const [feedback, setFeedback] = useState<RbacFeedbackState | null>(null)
-  const [pending, setPending] = useState(false)
-  const submitting = useRef(false)
-
-  async function submit() {
-    if (submitting.current) return
-    submitting.current = true
-    setPending(true)
-    setFeedback(null)
-    const input: SetGroupEnabledInput = {
-      id: group.id,
-      enabled: action === 'enable',
-      expectedVersion: group.version,
-    }
-    try {
-      const result = await mutations.setEnabled(input)
-      const payload = result.data?.setGroupEnabled ?? null
-      if (!payload) {
-        setFeedback({
-          errors: result.errors,
-          failure: result.failure ?? {
-            kind: 'invalid_response',
-            code: 'missing_group_state_payload',
-            requestId: result.requestId,
-            traceId: result.traceId,
-          },
-          stepUp: result.stepUp,
-          requestId: result.requestId,
-          traceId: result.traceId,
-          forbidden: result.forbidden,
-        })
-        return
-      }
-      state.close()
-      toast.success(
-        t(action === 'enable' ? 'groupsEnabledToast' : 'groupsDisabledToast'),
-        { description: t('groupSettingsCommitted') },
-      )
-      if (result.partial) toast.warning(t('rbacPartialMutationNote'))
-      onCommitted()
-    } catch {
-      setFeedback({
-        errors: [],
-        failure: { kind: 'network', code: 'group_state_request_failed' },
-        forbidden: false,
-      })
-    } finally {
-      submitting.current = false
-      setPending(false)
-    }
-  }
-
-  return (
-    <>
-      <Button
-        variant={action === 'disable' ? 'destructive' : 'secondary'}
-        onClick={state.open}
-        disabled={!group.version}
-      >
-        {action === 'enable' ? (
-          <Power className="size-4" aria-hidden="true" />
-        ) : (
-          <PowerOff className="size-4" aria-hidden="true" />
-        )}
-        {t(action === 'enable' ? 'groupsEnableAction' : 'groupsDisableAction')}
-      </Button>
-      <Dialog
-        open={state.isOpen}
-        onOpenChange={(open) => {
-          if (!open && pending) return
-          state.setOpen(open)
-        }}
-      >
-        <DialogContent showCloseButton={!pending} closeLabel={t('close')}>
-          <DialogHeader>
-            <DialogTitle>
-              {t(
-                action === 'enable'
-                  ? 'groupsEnableTitle'
-                  : 'groupsDisableTitle',
-              )}
-            </DialogTitle>
-          </DialogHeader>
-          <div>
-            <p className="text-sm leading-6 text-muted-foreground">
-              {t(
-                action === 'enable'
-                  ? 'groupsEnableDescription'
-                  : 'groupsDisableDescription',
-              )}
-            </p>
-            <p className="mt-3 text-sm font-medium">{displayName}</p>
-            {feedback ? (
-              <div className="mt-4">
-                <RbacMutationFeedback feedback={feedback} onReload={onReload} />
-              </div>
-            ) : null}
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={pending}
-              onClick={() => state.close()}
-            >
-              {t('cancel')}
-            </Button>
-            <Button
-              type="button"
-              variant={action === 'disable' ? 'destructive' : 'default'}
-              disabled={!group.version}
-              loading={pending}
-              onClick={() => void submit()}
-            >
-              {t(
-                action === 'enable'
-                  ? 'groupsEnableConfirm'
-                  : 'groupsDisableConfirm',
-              )}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
-  )
-}
-
-function GroupDeleteDialog({
-  group,
-  onCommitted,
-  onReload,
-}: {
-  group: GroupNode
-  onCommitted: () => void
-  onReload: () => void
-}) {
-  const t = useTranslator()
-  const { locale } = useLocale()
-  const state = useOverlayState()
-  const mutations = useGroupMutations()
-  const displayName =
-    resolveLocalizedText(group.names, locale) ?? group.name ?? group.id
-  const [feedback, setFeedback] = useState<RbacFeedbackState | null>(null)
-  const [pending, setPending] = useState(false)
-  const submitting = useRef(false)
-
-  async function submit() {
-    if (submitting.current) return
-    submitting.current = true
-    setPending(true)
-    setFeedback(null)
-    const input: GroupStateInput = {
-      id: group.id,
-      expectedVersion: group.version,
-    }
-    try {
-      const result = await mutations.remove(input)
-      const payload = result.data?.deleteGroup ?? null
-      if (!payload || !payload.deleted) {
-        setFeedback({
-          errors: result.errors,
-          failure: result.failure ?? {
-            kind: 'invalid_response',
-            code: 'missing_delete_group_payload',
-            requestId: result.requestId,
-            traceId: result.traceId,
-          },
-          stepUp: result.stepUp,
-          requestId: result.requestId,
-          traceId: result.traceId,
-          forbidden: result.forbidden,
-        })
-        return
-      }
-      state.close()
-      if (result.partial) toast.warning(t('rbacPartialMutationNote'))
-      onCommitted()
-    } catch {
-      setFeedback({
-        errors: [],
-        failure: { kind: 'network', code: 'group_delete_request_failed' },
-        forbidden: false,
-      })
-    } finally {
-      submitting.current = false
-      setPending(false)
-    }
-  }
-
-  return (
-    <>
-      <Button
-        variant="destructive"
-        onClick={state.open}
-        disabled={!group.version}
-      >
-        <Trash2 className="size-4" aria-hidden="true" />
-        {t('groupsDeleteAction')}
-      </Button>
-      <Dialog
-        open={state.isOpen}
-        onOpenChange={(open) => {
-          if (!open && pending) return
-          state.setOpen(open)
-        }}
-      >
-        <DialogContent showCloseButton={!pending} closeLabel={t('close')}>
-          <DialogHeader>
-            <DialogTitle>{t('groupsDeleteTitle')}</DialogTitle>
-          </DialogHeader>
-          <div>
-            <p className="text-sm leading-6 text-muted-foreground">
-              {t('groupsDeleteDescription', { name: displayName })}
-            </p>
-            {feedback ? (
-              <div className="mt-4">
-                <RbacMutationFeedback feedback={feedback} onReload={onReload} />
-              </div>
-            ) : null}
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              disabled={pending}
-              onClick={() => state.close()}
-            >
-              {t('cancel')}
-            </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={!group.version}
-              loading={pending}
-              onClick={() => void submit()}
-            >
-              {t('groupsDeleteConfirm')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
   )
 }

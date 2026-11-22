@@ -1,4 +1,4 @@
-import { TableRowActions } from '#/components/table-row-actions'
+import { TableRowActions, copyIdAction } from '#/components/table-row-actions'
 import { CopyableValue } from '#/components/copy-button'
 import { Badge } from '@identity/ui/components/badge'
 import { Button } from '@identity/ui/components/button'
@@ -226,7 +226,7 @@ export function ResourcesListPage({ search }: { search: ResourcesSearch }) {
                     <Link
                       to="/resources/$resourceId"
                       params={{ resourceId: resource.id }}
-                      className="font-medium hover:underline"
+                      className="font-medium text-link"
                     >
                       {resource.name}
                     </Link>
@@ -274,8 +274,20 @@ export function ResourcesListPage({ search }: { search: ResourcesSearch }) {
                       subject={resource.name}
                       actions={[
                         {
+                          id: 'view',
+                          label: t('tableActionViewDetails'),
+                          section: 'open',
+                          onAction: () => {
+                            void navigate({
+                              to: '/resources/$resourceId',
+                              params: { resourceId: resource.id },
+                            })
+                          },
+                        },
+                        {
                           id: 'permissions',
-                          label: t('resourcesPermissions'),
+                          label: t('tableActionPermissions'),
+                          section: 'navigate',
                           onAction: () => {
                             void navigate({
                               to: '/resources/$resourceId/permissions',
@@ -283,6 +295,7 @@ export function ResourcesListPage({ search }: { search: ResourcesSearch }) {
                             })
                           },
                         },
+                        copyIdAction(resource.id, t),
                       ]}
                     />
                   ),

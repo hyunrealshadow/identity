@@ -23,7 +23,7 @@ import { AuditEventDetailSheet } from '../components/audit-event-detail-sheet'
 import { AuditEventSentence, AuditOutcomeBadge } from '../components/audit-event-parts'
 import { AuditQueryBar } from '../components/audit-query-bar'
 import { useAuditEventDetail, useAuditEvents } from '../hooks/use-audit-events'
-import { AUDIT_QUERY_ERROR_CODES, auditQueryValue } from '../lib/audit-catalog'
+import { AUDIT_QUERY_ERROR_CODES } from '../lib/audit-catalog'
 import { appendLuceneClause, buildAuditLuceneFields } from '../lib/audit-fields'
 import { auditActionLabel } from '../lib/audit-presentation'
 import { auditScope } from '../lib/audit-scope'
@@ -63,7 +63,7 @@ function AuditEventSummary({
   return (
     <button
       type="button"
-      className="min-w-0 cursor-pointer text-left text-sm text-muted-foreground underline-offset-4 hover:underline"
+      className="min-w-0 cursor-pointer text-left text-sm text-muted-foreground text-link"
       onClick={onOpen}
     >
       <AuditEventSentence event={event} locale={locale} />
@@ -361,42 +361,11 @@ export function AuditEventsPage({ search }: { search: AuditEventsSearch }) {
                       actions={[
                         {
                           id: 'details',
-                          label: t('auditActionViewDetails'),
+                          label: t('tableActionViewDetails'),
+                          section: 'open',
                           onAction: () =>
                             go({ ...search, event: event.id }, { replace: false }),
                         },
-                        {
-                          id: 'filter-action',
-                          label: t('auditFilterByAction'),
-                          onAction: () => appendFilter('action', auditQueryValue(event.action)),
-                        },
-                        ...(event.actor.oid
-                          ? [
-                              {
-                                id: 'filter-actor',
-                                label: t('auditFilterByActor'),
-                                onAction: () => appendFilter('actor', event.actor.oid!),
-                              },
-                            ]
-                          : []),
-                        ...(event.target
-                          ? [
-                              {
-                                id: 'filter-target',
-                                label: t('auditFilterByTarget'),
-                                onAction: () => appendFilter('target', event.target!.oid),
-                              },
-                            ]
-                          : []),
-                        ...(event.ipAddress
-                          ? [
-                              {
-                                id: 'filter-ip-address',
-                                label: t('auditFilterByIpAddress'),
-                                onAction: () => appendFilter('ipAddress', event.ipAddress!),
-                              },
-                            ]
-                          : []),
                       ]}
                     />
                   ),

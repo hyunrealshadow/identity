@@ -19,7 +19,7 @@ const buttonVariants = cva(
           "not-disabled:not-data-disabled:not-aria-disabled:hover:bg-muted not-disabled:not-data-disabled:not-aria-disabled:hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:not-disabled:not-data-disabled:not-aria-disabled:hover:bg-muted/50",
         destructive:
           "bg-destructive/10 text-destructive not-disabled:not-data-disabled:not-aria-disabled:hover:bg-destructive/20 focus-visible:border-destructive/40 focus-visible:ring-destructive/20 dark:bg-destructive/20 dark:not-disabled:not-data-disabled:not-aria-disabled:hover:bg-destructive/30 dark:focus-visible:ring-destructive/40",
-        link: "text-primary underline-offset-4 not-disabled:not-data-disabled:not-aria-disabled:hover:underline",
+        link: "text-primary text-link",
       },
       size: {
         default:

@@ -1,4 +1,6 @@
-import { TableRowActions } from '#/components/table-row-actions'
+import { TableRowActions, copyIdAction } from '#/components/table-row-actions'
+import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
+import { RoleStateDialog } from '../components/role-state-dialog'
 import { CursorPagination } from '#/components/cursor-pagination'
 import { useCursorPagination } from '#/lib/use-cursor-pagination'
 import { useUrlFilters } from '#/lib/use-url-filters'
@@ -12,7 +14,7 @@ import { Button } from '@identity/ui/components/button'
 import { Skeleton } from '@identity/ui/components/skeleton'
 import { Link, useNavigate } from '@tanstack/react-router'
 import { Plus, TriangleAlert } from 'lucide-react'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
 import { ErrorDetails } from '#/components/error-details'
@@ -44,7 +46,7 @@ import {
   withRoleDisplayFields,
 } from '#/modules/user-management/roles/lib/role-localization'
 import { useConsoleQuery } from '#/lib/graphql/use-console-query'
-import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
+import { rbacScope, type RbacScope } from '#/modules/user-management/lib/rbac-scope'
 import {
   isRoleOrder,
   rolesFilterDraft,
@@ -62,14 +64,23 @@ import {
   UserTextField,
 } from '#/modules/user-management/users/components/user-form-fields'
 
+type RoleRow = NonNullable<ConsoleRolesQuery['roles']>['edges'][number]['node']
+
 function RolesTable({
   roles,
+  scope,
+  onChanged,
   ...controls
 }: {
   roles: NonNullable<ConsoleRolesQuery['roles']>['edges']
+  scope: RbacScope
+  onChanged: () => void
 } & ResourceTableControls) {
   const navigate = useNavigate()
   const t = useTranslator()
+  // One confirmation at a time, mounted outside the row menus.
+  const stateDialog = useOverlayState()
+  const [target, setTarget] = useState<RoleRow | null>(null)
   const { locale, timeZone } = useLocale()
   const items = roles.map(({ node }) => {
     const display = withRoleDisplayFields(node)
@@ -78,111 +89,149 @@ function RolesTable({
     return { id: node.id, node, display, name, description }
   })
   return (
-    <ResourceTable
-      id="roles"
-      label={t('rolesTableLabel')}
-      items={items}
-      {...controls}
-      columns={[
-        {
-          id: 'role',
-          label: t('rolesColumnRole'),
-          primary: true,
-          sort: 'NAME',
-          render: (row) => {
-            const { node, display, name, description } = row
-            return (
-              <>
-                <div className="min-w-56">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Link
-                      to="/roles/$roleId"
-                      params={{ roleId: node.id }}
-                      className="font-medium text-foreground underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-                    >
-                      {name}
-                    </Link>
-                    <RoleBuiltInChip builtIn={roleIsBuiltIn(display)} />
+    <>
+      <ResourceTable
+        id="roles"
+        label={t('rolesTableLabel')}
+        items={items}
+        {...controls}
+        columns={[
+          {
+            id: 'role',
+            label: t('rolesColumnRole'),
+            primary: true,
+            sort: 'NAME',
+            render: (row) => {
+              const { node, display, name, description } = row
+              return (
+                <>
+                  <div className="min-w-56">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Link
+                        to="/roles/$roleId"
+                        params={{ roleId: node.id }}
+                        className="font-medium text-foreground focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring text-link"
+                      >
+                        {name}
+                      </Link>
+                      <RoleBuiltInChip builtIn={roleIsBuiltIn(display)} />
+                    </div>
+                    {description ? (
+                      <p className="mt-1 line-clamp-2 max-w-80 text-xs leading-4 text-muted-foreground">
+                        {description}
+                      </p>
+                    ) : null}
                   </div>
-                  {description ? (
-                    <p className="mt-1 line-clamp-2 max-w-80 text-xs leading-4 text-muted-foreground">
-                      {description}
-                    </p>
-                  ) : null}
-                </div>
-              </>
-            )
+                </>
+              )
+            },
           },
-        },
-        {
-          id: 'status',
-          label: t('rolesColumnStatus'),
-          render: (row) => {
-            const { node } = row
-            return (
-              <>
-                <RoleStatusChip enabled={node.enabled} />
-              </>
-            )
+          {
+            id: 'status',
+            label: t('rolesColumnStatus'),
+            render: (row) => {
+              const { node } = row
+              return (
+                <>
+                  <RoleStatusChip enabled={node.enabled} />
+                </>
+              )
+            },
           },
-        },
-        {
-          id: 'created',
-          label: t('rolesColumnCreated'),
-          sort: 'CREATED_AT',
-          render: (row) => {
-            const { node } = row
-            return (
-              <>
-                <span className="whitespace-nowrap text-sm">
-                  {formatDateTime(node.createdAt, locale, timeZone)}
-                </span>
-              </>
-            )
+          {
+            id: 'created',
+            label: t('rolesColumnCreated'),
+            sort: 'CREATED_AT',
+            render: (row) => {
+              const { node } = row
+              return (
+                <>
+                  <span className="whitespace-nowrap text-sm">
+                    {formatDateTime(node.createdAt, locale, timeZone)}
+                  </span>
+                </>
+              )
+            },
           },
-        },
-        {
-          id: 'updated',
-          label: t('rolesColumnUpdated'),
-          render: (row) => {
-            const { node } = row
-            return (
-              <>
-                <span className="whitespace-nowrap text-sm">
-                  {formatDateTime(node.updatedAt, locale, timeZone)}
-                </span>
-              </>
-            )
+          {
+            id: 'updated',
+            label: t('rolesColumnUpdated'),
+            render: (row) => {
+              const { node } = row
+              return (
+                <>
+                  <span className="whitespace-nowrap text-sm">
+                    {formatDateTime(node.updatedAt, locale, timeZone)}
+                  </span>
+                </>
+              )
+            },
           },
-        },
-        {
-          id: 'actions',
-          label: t('rolesColumnActions'),
-          render: (row) => {
-            const { node, name } = row
-            return (
-              <>
-                <TableRowActions
-                  subject={name}
-                  actions={[
-                    {
-                      id: 'view',
-                      label: t('rolesViewAction'),
-                      onAction: () => {
-                        void navigate({
-                          to: '/roles/$roleId',
-                          params: { roleId: node.id },
-                        })
+          {
+            id: 'actions',
+            label: t('rolesColumnActions'),
+            render: (row) => {
+              const { node, name } = row
+              return (
+                <>
+                  <TableRowActions
+                    subject={name}
+                    actions={[
+                      {
+                        id: 'view',
+                        label: t('tableActionViewDetails'),
+                        section: 'open',
+                        onAction: () => {
+                          void navigate({
+                            to: '/roles/$roleId',
+                            params: { roleId: node.id },
+                          })
+                        },
                       },
-                    },
-                  ]}
-                />
-              </>
-            )
+                      {
+                        id: 'permissions',
+                        label: t('tableActionPermissions'),
+                        section: 'navigate',
+                        onAction: () => {
+                          void navigate({
+                            to: '/roles/$roleId/permissions',
+                            params: { roleId: node.id },
+                          })
+                        },
+                      },
+                      copyIdAction(node.id, t),
+                      ...(!node.builtIn && scope.rolesWrite
+                        ? [
+                            {
+                              id: 'state',
+                              label: t(node.enabled ? 'tableActionDisable' : 'tableActionEnable'),
+                              section: 'state' as const,
+                              isDisabled: !node.version,
+                              onAction: () => {
+                                setTarget(node)
+                                stateDialog.open()
+                              },
+                            },
+                          ]
+                        : []),
+                    ]}
+                  />
+                </>
+              )
+            },
           },
-        },
-      ]}
-    />
+        ]}
+      />
+      {target ? (
+        <RoleStateDialog
+          key={`${target.id}:${target.version}`}
+          state={stateDialog}
+          action={target.enabled ? 'disable' : 'enable'}
+          role={target}
+          onCommitted={onChanged}
+        />
+      ) : null}
+    </>
   )
 }
 
@@ -444,6 +493,8 @@ export function RolesListPage({ search }: { search: RolesSearch }) {
           filters={filters}
           emptyState={emptyState}
           roles={edges}
+          scope={scope}
+          onChanged={() => void roles.refresh()}
           order={search.order}
           onOrderChange={(order) => {
             if (order === undefined || isRoleOrder(order))

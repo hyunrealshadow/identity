@@ -287,6 +287,7 @@ export function ClientCredentialsPage() {
             {
               id: 'rotate',
               label: t('clientsSecretRotate'),
+              section: 'state' as const,
               onAction: () => {
                 setTarget({ credential, action: 'rotate' })
                 confirmDialog.open()
@@ -298,8 +299,8 @@ export function ClientCredentialsPage() {
         ? [
             {
               id: 'revoke',
-              label: t('clientsCredentialRevoke'),
-              danger: true,
+              label: t('tableActionRevoke'),
+              section: 'danger' as const,
               onAction: () => {
                 setTarget({ credential, action: 'revoke' })
                 confirmDialog.open()

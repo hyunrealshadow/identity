@@ -117,7 +117,7 @@ export function PermissionRoleReferences({
                       <Link
                         to="/roles/$roleId"
                         params={{ roleId: node.id }}
-                        className="font-medium hover:underline"
+                        className="font-medium text-link"
                       >
                         {(resolveLocalizedText(node.names, locale) ?? node.name) ??
                           node.name ??

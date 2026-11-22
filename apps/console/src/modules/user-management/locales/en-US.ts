@@ -152,7 +152,6 @@ const enUS = {
   usersReloadUser: 'Reload user',
   usersReloading: 'Reloading user…',
   usersColumnActions: 'Actions',
-  usersViewDetails: 'View details',
   usersViewDetailsFor: 'View details for {username}',
   usersEditFor: 'Edit {username}',
 
@@ -280,7 +279,6 @@ const enUS = {
   rolesColumnCreated: 'Created',
   rolesColumnUpdated: 'Updated',
   rolesColumnActions: 'Actions',
-  rolesViewAction: 'View details',
   rolesViewFor: 'View details for {name}',
   rolesEnabled: 'Enabled',
   rolesDisabled: 'Disabled',
@@ -479,7 +477,6 @@ const enUS = {
   rolePermissionsStatusAssignedDisabled: 'Assigned · disabled',
   rolePermissionsStatusAdded: 'Pending addition',
   rolePermissionsStatusRemoved: 'Pending removal',
-  rolePermissionsRemoveAction: 'Remove',
   rolePermissionsRemoveFor: 'Remove {code} from this role',
   rolePermissionsUndoRemoval: 'Undo removal',
   rolePermissionsUndoFor: 'Undo removal of {code}',
@@ -530,7 +527,6 @@ const enUS = {
     '{count, plural, one {# new assignment created} other {# new assignments created}}.',
   roleUserAlreadyAssigned:
     'The user already had an active assignment, so none was added.',
-  roleUsersRevokeAction: 'Revoke',
   roleUsersRevokeFor: 'Revoke this role from {user}',
   roleUsersRevokeTitle: 'Revoke this user-role assignment?',
   roleUsersRevokeDescription:
@@ -591,7 +587,6 @@ const enUS = {
   userRolesAssignedToast: 'Roles assigned',
   userRolesAssignedCommitted:
     '{count, plural, one {# new assignment created} other {# new assignments created}}.',
-  userRolesRevokeAction: 'Revoke',
   userRolesRevokeFor: 'Revoke {role} from this user',
   userRolesRevokeTitle: 'Revoke this role assignment?',
   userRolesRevokeDescription:
@@ -710,7 +705,6 @@ const enUS = {
     'The group memberships were refreshed from the server.',
   userGroupsAddedToast: 'User added to group',
   userGroupsAddedCommitted: 'User added to the group.',
-  userGroupsRemoveAction: 'Remove',
   userGroupsRemoveTitle: 'Remove this group membership?',
   userGroupsRemoveDescription:
     'Remove {user} from “{group}”? The membership is revoked and authorization granted through this group stops immediately.',
@@ -739,7 +733,6 @@ const enUS = {
   groupsColumnCreated: 'Created',
   groupsColumnUpdated: 'Updated',
   groupsColumnActions: 'Actions',
-  groupsViewAction: 'View details',
   groupsViewFor: 'View details for {name}',
   groupsEnabled: 'Enabled',
   groupsDisabled: 'Disabled',
@@ -903,7 +896,6 @@ const enUS = {
   groupMembersAddConfirm: 'Add member',
   groupMembersAddedToast: 'Member added',
   groupMembersAddedCommitted: 'Member added.',
-  groupMembersRemoveAction: 'Remove',
   groupMembersRemoveTitle: 'Remove this group member?',
   groupMembersRemoveDescription:
     'Remove {user} from this group? The membership is revoked and its existing authorization through this group stops immediately.',

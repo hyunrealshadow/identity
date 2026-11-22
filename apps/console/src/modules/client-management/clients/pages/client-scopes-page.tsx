@@ -6,6 +6,7 @@ import {
 import { Button } from '@identity/ui/components/button'
 import { Switch } from '@identity/ui/components/switch'
 import { DataTable } from '@identity/ui/data-table'
+import { useNavigate } from '@tanstack/react-router'
 import { Info, Save, TriangleAlert } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
@@ -93,6 +94,7 @@ function rejectedScopeCodes(feedback: RbacFeedbackState | null): Set<string> {
 export function ClientScopesPage() {
   const t = useTranslator()
   const { locale } = useLocale()
+  const navigate = useNavigate()
   const workspace = useWorkspace()
   const rbac = useMemo(
     () => rbacScope(workspace.data?.effectivePermissions),
@@ -423,14 +425,30 @@ export function ClientScopesPage() {
                     </div>
                   </DataTable.Cell>
                   <DataTable.Cell>
-                    {editable ? (
+                    {editable || (rbac.resourcesRead && row.resourceId) ? (
                       <TableRowActions
                         subject={row.code}
                         actions={[
+                          ...(rbac.resourcesRead && row.resourceId
+                            ? [
+                                {
+                                  id: 'view',
+                                  label: t('tableActionViewResource'),
+                                  section: 'open' as const,
+                                  onAction: () =>
+                                    void navigate({
+                                      to: '/resources/$resourceId',
+                                      params: { resourceId: row.resourceId! },
+                                    }),
+                                },
+                              ]
+                            : []),
+                          ...(editable
+                            ? [
                           {
                             id: 'remove',
-                            label: t('clientsScopeRemove'),
-                            danger: true,
+                            label: t('tableActionRemove'),
+                            section: 'danger' as const,
                             onAction: () => {
                               setFeedback(null)
                               setRows((current) =>
@@ -438,6 +456,8 @@ export function ClientScopesPage() {
                               )
                             },
                           },
+                              ]
+                            : []),
                         ]}
                       />
                     ) : null}
