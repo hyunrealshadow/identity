@@ -19,6 +19,7 @@ use crate::{
         shared::{consent_redirect, login_redirect},
     },
     domain::{
+        auth::LoginStatus,
         client_authorization::ConsentState,
         openid_connect::{OAuthErrorCode, PromptValue},
     },
@@ -122,6 +123,7 @@ pub(super) async fn handle_continue(
                     auth_time,
                     acr,
                     amr,
+                    existing_session: login.status != LoginStatus::AUTHENTICATED,
                 },
             )
             .await

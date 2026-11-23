@@ -9,7 +9,10 @@ use identity_application::{
         rotation::{KEY_LIFETIME, KEY_ROTATION_AGE, KeyRotationRepository, RotationMaterial},
     },
 };
-use identity_domain::key::{JwaSigningAlgorithm, Key, KeyData, KeyOid, KeyType};
+use identity_domain::{
+    audit::{AuditAction, AuditActor, AuditRecord},
+    key::{JwaSigningAlgorithm, Key, KeyData, KeyOid, KeyType},
+};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DbErr, EntityTrait,
     QueryFilter, Set, TransactionTrait, sea_query::Expr,
@@ -20,6 +23,7 @@ use uuid::Uuid;
 use super::key::to_domain;
 use crate::crypto::key_jwk::KeyJwkGeneratorImpl;
 use crate::database::{
+    audit,
     entity::{
         key,
         key::{Column as KeyColumn, Entity as KeyEntity},
@@ -97,6 +101,13 @@ impl KeyRotationRepository for KeyRotationRepositoryImpl {
         insert_successor(&txn, &previous, material, now)
             .await
             .map_err(internal)?;
+        // Scheduled rotation is Identity's own action, recorded like a manual one.
+        audit::record(
+            &txn,
+            AuditRecord::success(AuditAction::KeyRotate, previous.oid).actor(AuditActor::system()),
+        )
+        .await
+        .map_err(internal)?;
         txn.commit().await.map_err(internal)?;
         Ok(true)
     }

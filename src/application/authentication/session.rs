@@ -129,9 +129,19 @@ impl SessionService {
     }
 
     pub async fn revoke(&self, session_oid: SessionOid) -> Result<Session, AppError> {
+        self.revoke_for_client(session_oid, None).await
+    }
+
+    /// Ends a session at the request of `client_oid`, recorded with the
+    /// revocation, such as an RP-initiated logout.
+    pub async fn revoke_for_client(
+        &self,
+        session_oid: SessionOid,
+        client_oid: Option<Uuid>,
+    ) -> Result<Session, AppError> {
         let result = self
             .session_repo
-            .revoke_by_oid(session_oid, Utc::now())
+            .revoke_by_oid(session_oid, Utc::now(), client_oid)
             .await?
             .ok_or_else(|| {
                 AppError::from_code(AuthErrorCode::SessionNotFound)
@@ -276,7 +286,7 @@ pub(crate) async fn revoke_other_sessions_with(
         .filter(|session| session.revoked_at.is_none())
         .filter(|session| session.status == SessionStatus::ACTIVE)
     {
-        match repo.revoke_by_oid(session.oid, Utc::now()).await {
+        match repo.revoke_by_oid(session.oid, Utc::now(), None).await {
             Ok(Some(_)) => outcome.revoked += 1,
             Ok(None) => outcome.failures.push(session_not_found(session.oid)),
             Err(error) => outcome.failures.push(AppError::from(error)),
@@ -393,6 +403,7 @@ mod tests {
             &self,
             oid: SessionOid,
             _revoked_at: DateTime<Utc>,
+            _client_oid: Option<Uuid>,
         ) -> Result<Option<Session>, SessionRepositoryError> {
             if self.failing_oid == Some(oid) {
                 return Err(SessionRepositoryError::RevokeFailed(Box::new(

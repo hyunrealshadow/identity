@@ -229,7 +229,7 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
     assert_eq!(semantic_count_for_target(&db, Uuid::from(direct.oid), None).await, 0);
 
     let revoked = sessions
-        .revoke_by_oid(direct.oid, Utc::now())
+        .revoke_by_oid(direct.oid, Utc::now(), None)
         .await
         .unwrap();
     assert!(revoked.is_some());
@@ -244,7 +244,7 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
     // Re-revoking the same session is a no-op for the journal.
     assert!(
         sessions
-            .revoke_by_oid(direct.oid, Utc::now())
+            .revoke_by_oid(direct.oid, Utc::now(), None)
             .await
             .unwrap()
             .is_some()
@@ -749,4 +749,192 @@ async fn credential_enrolled_during_sign_in_keeps_that_interaction() {
             .await;
         }
     }
+}
+
+#[tokio::test]
+#[ignore = "requires explicitly configured PostgreSQL test database"]
+async fn token_revocation_audits_each_token_kind_once() {
+    use identity_domain::client_authorization::ClientAuthorizationRepository;
+    use identity_infrastructure::database::repository::client_authorization::ClientAuthorizationRepositoryImpl;
+
+    common::isolated(|db| async move {
+        let user = Uuid::new_v4();
+        let client = Uuid::new_v4();
+        let access = Uuid::new_v4();
+        let refresh = Uuid::new_v4();
+        let family_access = Uuid::new_v4();
+        sql(&db, &format!(r#"
+            INSERT INTO "user" (oid,name,name_normalized,email,email_normalized) VALUES ('{user}','{user}','{user}','{user}@example.test','{user}@example.test');
+            INSERT INTO client (oid,name,protocol) VALUES ('{client}','revocation-test','openid_connect');
+            INSERT INTO client_authorization (oid,client_id,type,data,expires_at)
+              SELECT '{refresh}',id,'refresh_token','{{"user_oid":"{user}"}}',now()+interval '1 day' FROM client WHERE oid='{client}';
+            INSERT INTO client_authorization (oid,client_id,type,data,expires_at)
+              SELECT o,id,'access_token','{{"user_oid":"{user}","refresh_token_oid":"{refresh}"}}',now()+interval '1 hour'
+              FROM client,unnest(ARRAY['{access}'::uuid,'{family_access}'::uuid]) o WHERE oid='{client}';
+        "#)).await;
+        let repo = ClientAuthorizationRepositoryImpl::new(db.clone());
+
+        // A client signing out revokes its access token, then its refresh token.
+        repo.revoke_access_token_for_client(access, client, Utc::now()).await.unwrap();
+        repo.revoke_refresh_grant_for_client(refresh, client, Utc::now()).await.unwrap();
+        assert_eq!(semantic_count_for_target(&db, user, Some(AuditAction::AccessTokenRevoke)).await, 1);
+        assert_eq!(semantic_count_for_target(&db, user, Some(AuditAction::TokenRevoke)).await, 1);
+        assert_eq!(
+            scalar(&db, &format!(
+                "SELECT count(*)::bigint n FROM client_authorization WHERE oid='{family_access}' AND revoked_at IS NOT NULL"
+            )).await,
+            1,
+            "revoking the refresh grant withdraws the access tokens issued from it"
+        );
+
+        // Presenting the same tokens again changes nothing and is not a new event.
+        repo.revoke_access_token_for_client(access, client, Utc::now()).await.unwrap();
+        repo.revoke_refresh_grant_for_client(refresh, client, Utc::now()).await.unwrap();
+        assert_eq!(semantic_count_for_target(&db, user, None).await, 2);
+    })
+    .await;
+}
+
+#[tokio::test]
+#[ignore = "requires explicitly configured PostgreSQL test database"]
+async fn existing_session_sign_in_is_audited_with_its_completion() {
+    use identity_domain::client_authorization::ClientAuthorizationRepository;
+    use identity_infrastructure::database::repository::client_authorization::ClientAuthorizationRepositoryImpl;
+
+    common::isolated(|db| async move {
+        let user = Uuid::new_v4();
+        let client = Uuid::new_v4();
+        let request = Uuid::new_v4();
+        sql(&db, &format!(r#"
+            INSERT INTO "user" (oid,name,name_normalized,email,email_normalized) VALUES ('{user}','{user}','{user}','{user}@example.test','{user}@example.test');
+            INSERT INTO client (oid,name,protocol) VALUES ('{client}','sso-test','openid_connect');
+            INSERT INTO client_authorization (oid,client_id,type,data,expires_at)
+              SELECT '{request}',id,'authorization_request','{{}}'::jsonb,now()+interval '10 minutes' FROM client WHERE oid='{client}';
+        "#)).await;
+        let repo = ClientAuthorizationRepositoryImpl::new(db.clone());
+
+        assert!(repo
+            .complete_authorization_request_with_existing_session(request, Utc::now(), user, client)
+            .await
+            .unwrap());
+        let audit = latest_semantic_audit(&db, client).await.expect("sign-in to the client is audited");
+        assert_eq!(audit.action, AuditAction::SessionReuse.to_string());
+        assert_eq!(audit.target_kind.as_deref(), Some("client"));
+        assert_eq!(audit.actor_kind, "user");
+        assert_eq!(audit.actor_oid, Some(user));
+        assert_eq!(
+            scalar(&db, &format!(
+                "SELECT count(*)::bigint n FROM audit WHERE client_oid='{client}' AND action='session_reuse'"
+            )).await,
+            1
+        );
+
+        // A request completes once; a replayed completion neither succeeds nor audits.
+        assert!(!repo
+            .complete_authorization_request_with_existing_session(request, Utc::now(), user, client)
+            .await
+            .unwrap());
+        assert_eq!(semantic_count_for_target(&db, client, None).await, 1);
+    })
+    .await;
+}
+
+#[tokio::test]
+#[ignore = "requires explicitly configured PostgreSQL test database"]
+async fn scheduled_key_rotation_is_audited_as_the_system() {
+    use identity_application::key::rotation::{
+        KeyRotationMaterialGenerator, KeyRotationRepository,
+    };
+    use identity_domain::key::{KeyData, SymmetricKeyAlgorithm, SymmetricKeyData};
+    use identity_infrastructure::{
+        crypto::key_rotation::KeyRotationMaterialGeneratorImpl,
+        database::repository::key_rotation::KeyRotationRepositoryImpl,
+    };
+
+    common::isolated(|db| async move {
+        let key = Uuid::new_v4();
+        let data = serde_json::to_string(&KeyData::Symmetric(SymmetricKeyData {
+            key: "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=".into(),
+            algorithm: SymmetricKeyAlgorithm::XChaCha20Poly1305,
+        }))
+        .unwrap();
+        sql(
+            &db,
+            &format!(
+                "INSERT INTO key(oid,type,data,expires_at,created_at) \
+             VALUES('{key}','symmetric','{data}',now()+interval '30 days',now()-interval '61 days')"
+            ),
+        )
+        .await;
+        let repo = KeyRotationRepositoryImpl::new(db.clone());
+        let now = Utc::now();
+        let due = repo.list_due(now).await.unwrap();
+        let previous = due
+            .iter()
+            .find(|candidate| Uuid::from(candidate.oid) == key)
+            .unwrap();
+        let material = KeyRotationMaterialGeneratorImpl.generate(previous).unwrap();
+
+        assert!(
+            repo.rotate_if_due(previous.oid, material, now)
+                .await
+                .unwrap()
+        );
+        let audit = latest_semantic_audit(&db, key)
+            .await
+            .expect("rotation is audited");
+        assert_eq!(audit.action, AuditAction::KeyRotate.to_string());
+        assert_eq!(audit.actor_kind, "system");
+    })
+    .await;
+}
+
+#[tokio::test]
+#[ignore = "requires explicitly configured PostgreSQL test database"]
+async fn logout_and_client_authentication_failure_name_their_client() {
+    use identity_domain::{
+        auth::repository::SessionRepository, openid_connect::OpenIdConnectCredentialRepository,
+    };
+    use identity_infrastructure::database::repository::openid_connect_credential::OpenIdConnectCredentialRepositoryImpl;
+
+    common::isolated(|db| async move {
+        let user = Uuid::new_v4();
+        let client = Uuid::new_v4();
+        let session = Uuid::new_v4();
+        sql(&db, &format!(r#"
+            INSERT INTO "user" (oid,name,name_normalized,email,email_normalized) VALUES ('{user}','{user}','{user}','{user}@example.test','{user}@example.test');
+            INSERT INTO client (oid,name,protocol) VALUES ('{client}','logout-test','openid_connect');
+            INSERT INTO session (oid,user_id,status,amr,last_active_at,authenticated_at,expires_at)
+              SELECT '{session}',id,'active','["pwd"]',now(),now(),now()+interval '7 days' FROM "user" WHERE oid='{user}';
+        "#)).await;
+
+        // An RP-initiated logout records the client that asked for it.
+        SessionRepositoryImpl::new(db.clone())
+            .revoke_by_oid(SessionOid(session), Utc::now(), Some(client))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            scalar(&db, &format!(
+                "SELECT count(*)::bigint n FROM audit WHERE action='session_revoke' \
+                 AND target_oid='{session}' AND client_oid='{client}' AND actor_oid='{user}'"
+            )).await,
+            1
+        );
+
+        // A rejected client credential is a failed, anonymous attempt on that client.
+        OpenIdConnectCredentialRepositoryImpl::new(db.clone())
+            .record_authentication_failure(client)
+            .await
+            .unwrap();
+        assert_eq!(
+            scalar(&db, &format!(
+                "SELECT count(*)::bigint n FROM audit WHERE action='client_authenticate' \
+                 AND outcome='failure' AND failure_reason='invalid_credential' \
+                 AND actor_kind='anonymous' AND target_oid='{client}' AND client_oid='{client}'"
+            )).await,
+            1
+        );
+    })
+    .await;
 }

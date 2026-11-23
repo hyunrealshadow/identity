@@ -279,6 +279,7 @@ impl SessionRepository for TestSessionRepo {
         &self,
         _oid: SessionOid,
         _revoked_at: DateTime<Utc>,
+        _client_oid: Option<Uuid>,
     ) -> Result<Option<Session>, SessionRepositoryError> {
         Ok(None)
     }

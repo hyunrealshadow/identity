@@ -296,9 +296,17 @@ audit_actions! {
     AccountLock => SignIn, User;
     SessionReauthenticate => SignIn, Session;
     SessionRevoke => SignIn, Session;
+    // A client was signed in to with a session established earlier, without
+    // authenticating again.
+    SessionReuse => SignIn, Client;
+    // A client failed to prove its identity with the credential it presented.
+    ClientAuthenticate => SignIn, Client;
     ConsentGrant => Authorization, Client;
     ConsentDeny => Authorization, Client;
+    // A refresh token's grant was revoked, with the access tokens issued from it.
     TokenRevoke => Authorization, User;
+    // A single access token was revoked; its grant stays usable.
+    AccessTokenRevoke => Authorization, User;
     TokenReplay => Authorization, User;
     DeviceApprove => Authorization, DeviceAuthorization;
     DeviceDeny => Authorization, DeviceAuthorization;

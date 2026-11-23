@@ -2,6 +2,7 @@ use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use chrono::Utc;
 use identity_domain::{
+    audit::{AuditAction, AuditActor, AuditRecord},
     rbac::{GroupMembershipOid, OWNER_PRESET},
     user::normalization::{normalize_email, normalize_username},
 };
@@ -27,7 +28,7 @@ use crate::{
         user::CredentialType,
     },
     database::{
-        owner_bootstrap,
+        audit, owner_bootstrap,
         query::advisory_transaction_lock,
         seed::{console, console::ConsoleClientSeedConfig, login, rbac},
     },
@@ -198,6 +199,14 @@ impl InstallRepository for InstallRepositoryImpl {
         authorization_lifecycle::renew_user_version_in_txn(&txn, created_user.id)
             .await
             .map_err(AppError::internal)?;
+        // Installation is Identity's own action; the owner is recorded as
+        // created before being added to the owner group.
+        audit::record(
+            &txn,
+            AuditRecord::success(AuditAction::UserCreate, user_oid).actor(AuditActor::system()),
+        )
+        .await
+        .map_err(AppError::internal)?;
         owner_bootstrap::record_owner_membership_audit(
             &txn,
             identity_domain::user::UserOid(created_user.oid),
@@ -211,10 +220,13 @@ impl InstallRepository for InstallRepositoryImpl {
             data.issuer.as_ref(),
             self.console.as_ref(),
         )?;
-        if let Some(config) = console_config {
+        let console_client_oid = if let Some(config) = console_config {
             console::provision_console_client_in_transaction(&txn, &config, data.console_client_id)
                 .await?;
-        }
+            Some(data.console_client_id)
+        } else {
+            None
+        };
 
         let created_client = client::ActiveModel {
             oid: Set(client_oid),
@@ -372,8 +384,9 @@ impl InstallRepository for InstallRepositoryImpl {
             algorithm: SymmetricKeyAlgorithm::XChaCha20Poly1305,
         }))
         .map_err(AppError::internal)?;
+        let symmetric_key_oid = Uuid::new_v4();
         key::ActiveModel {
-            oid: Set(Uuid::new_v4()),
+            oid: Set(symmetric_key_oid),
             r#type: Set(KeyType::Symmetric.to_string()),
             data: Set(sym_key_json),
             expires_at: Set((now + KEY_LIFETIME).into()),
@@ -386,6 +399,24 @@ impl InstallRepository for InstallRepositoryImpl {
         .map_err(AppError::internal)?;
 
         write_settings(&txn, data.settings).await?;
+
+        // Record the remaining objects installation created, in its transaction.
+        let created = [
+            (AuditAction::ClientCreate, Some(client_oid)),
+            (AuditAction::ClientCreate, console_client_oid),
+            (AuditAction::KeyCreate, Some(key_oid)),
+            (AuditAction::KeyCreate, Some(symmetric_key_oid)),
+        ];
+        for (action, oid) in created {
+            if let Some(oid) = oid {
+                audit::record(
+                    &txn,
+                    AuditRecord::success(action, oid).actor(AuditActor::system()),
+                )
+                .await
+                .map_err(AppError::internal)?;
+            }
+        }
 
         txn.commit().await.map_err(AppError::internal)?;
 

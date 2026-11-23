@@ -43,6 +43,7 @@ mock! {
             &self,
             oid: SessionOid,
             revoked_at: DateTime<Utc>,
+            client_oid: Option<Uuid>,
         ) -> Result<Option<Session>, SessionRepositoryError>;
         async fn list_by_user_oid(
             &self,

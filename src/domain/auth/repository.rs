@@ -193,10 +193,13 @@ pub trait SessionRepository: Send + Sync {
 
     /// Atomically revokes the session and all authorization artifacts derived
     /// from it (authorization codes, access tokens, and refresh tokens).
+    /// Ends a session. `client_oid` names the client that verifiably asked
+    /// for it, such as through RP-initiated logout.
     async fn revoke_by_oid(
         &self,
         oid: SessionOid,
         revoked_at: DateTime<Utc>,
+        client_oid: Option<Uuid>,
     ) -> Result<Option<Session>, SessionRepositoryError>;
 }
 

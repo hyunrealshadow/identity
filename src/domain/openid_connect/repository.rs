@@ -153,6 +153,13 @@ pub trait OpenIdConnectCredentialRepository: Send + Sync {
         type_: OpenIdConnectCredentialType,
     ) -> Result<Vec<OpenIdConnectCredential>, OpenIdConnectCredentialRepositoryError>;
 
+    /// Audits a rejected client secret or assertion presented for an existing
+    /// client. Nothing about the presented credential is recorded.
+    async fn record_authentication_failure(
+        &self,
+        client_oid: ClientOid,
+    ) -> Result<(), OpenIdConnectCredentialRepositoryError>;
+
     async fn find_first_encryption_key(
         &self,
         client_oid: ClientOid,

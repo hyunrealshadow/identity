@@ -202,6 +202,9 @@ fn build_service_with_credential(
     credential_repo
         .expect_find_active_by_client_oid_and_type()
         .returning(move |_, _| Ok(vec![credential.clone()]));
+    credential_repo
+        .expect_record_authentication_failure()
+        .returning(|_| Ok(()));
 
     let client_repo: Arc<dyn OpenIdConnectClientRepository> =
         Arc::new(DeviceClientRepository { client });

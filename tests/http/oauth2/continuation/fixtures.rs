@@ -642,7 +642,13 @@ pub(super) async fn continue_state(fixture: ContinueFixture) -> (AppState, Strin
                     last_insert_id: 0,
                     rows_affected: 1,
                 },
-                // mark_authorization_request_completed
+                // The selected session predates this request, so completion
+                // also audits the sign-in to the client in its transaction.
+                MockExecResult {
+                    last_insert_id: 0,
+                    rows_affected: 1,
+                },
+                // session_reuse audit insert
                 MockExecResult {
                     last_insert_id: 0,
                     rows_affected: 1,

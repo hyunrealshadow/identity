@@ -121,6 +121,17 @@ async fn installation_persists_same_origin_console_path_and_bootstraps_both_work
             .await.unwrap().unwrap();
         assert_eq!(client.try_get::<Value>("", "logout").unwrap(), json!(["https://identity.example.test/console/logout"]));
         assert!(client.try_get::<Value>("", "redirects").unwrap().to_string().contains("/console/callback"));
+        // Installation records every object it created as the system's action.
+        let audit = db.query_one_raw(Statement::from_string(DbBackend::Postgres,
+            "SELECT count(*) FILTER (WHERE action='user_create') AS users, \
+                    count(*) FILTER (WHERE action='client_create') AS clients, \
+                    count(*) FILTER (WHERE action='key_create') AS keys, \
+                    count(*) FILTER (WHERE actor_kind<>'system') AS others FROM audit".to_owned()))
+            .await.unwrap().unwrap();
+        assert_eq!(audit.try_get::<i64>("", "users").unwrap(), 1);
+        assert_eq!(audit.try_get::<i64>("", "clients").unwrap(), 2, "account and Console clients");
+        assert_eq!(audit.try_get::<i64>("", "keys").unwrap(), 2, "signing and encryption keys");
+        assert_eq!(audit.try_get::<i64>("", "others").unwrap(), 0);
         let count = db.query_one_raw(Statement::from_string(DbBackend::Postgres,
             "SELECT count(*) AS total FROM client".to_owned())).await.unwrap().unwrap();
         let before = count.try_get::<i64>("", "total").unwrap();

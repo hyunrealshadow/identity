@@ -162,6 +162,7 @@ impl FromStr for SessionStatus {
 pub enum LoginFailureReason {
     InvalidCredential,
     InvalidOtp,
+    InvalidRecoveryCode,
 }
 
 impl LoginFailureReason {
@@ -170,6 +171,7 @@ impl LoginFailureReason {
         match self {
             Self::InvalidCredential => "invalid_credential",
             Self::InvalidOtp => "invalid_otp",
+            Self::InvalidRecoveryCode => "invalid_recovery_code",
         }
     }
 }

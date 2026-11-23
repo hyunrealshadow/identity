@@ -208,6 +208,12 @@ is single use, short lived, bound to the client and redirect URI, and records th
 session that completed the interaction. Tokens issued from it carry that
 session's `sid` claim.
 
+When an existing session satisfies the request without any credential being
+presented during the interaction, completing the request writes a
+`session_reuse` audit record naming the user and the client in the same
+transaction. A request in which the user did sign in already has its `sign_in`
+or `session_reauthenticate` record, so it is not audited twice.
+
 At the token endpoint the authorization-code exchange rechecks the session before
 issuing tokens. A revoked or expired session fails the exchange, and the code
 cannot be redeemed twice.
@@ -283,6 +289,11 @@ rules.
 - Ending a session makes pending code exchanges fail and stops that session's
   refresh tokens. Access tokens already issued remain valid until they expire,
   which is why the revocation endpoint exists for a specific token.
+- Revoking a refresh token ends its grant, including the access tokens issued
+  from it, and writes a `token_revoke` audit record; revoking a single access
+  token writes `access_token_revoke`. A client that revokes both at sign-out
+  therefore leaves two records. Presenting an already revoked token again
+  changes nothing and is not audited.
 - Password changes revoke the user's other sessions, so they cannot refresh or
   finish a pending flow.
 

@@ -23,7 +23,7 @@ use url::Url;
 use uuid::Uuid;
 
 use crate::{
-    application::error::{AppError, codes::token::TokenErrorCode},
+    application::error::{AppError, code::AppErrorCode, codes::token::TokenErrorCode},
     domain::{
         key::JwsAlgorithm,
         openid_connect::{
@@ -164,6 +164,37 @@ impl ClientAuthenticator {
     }
 
     pub async fn authenticate_client(
+        &self,
+        client_id: &str,
+        client_secret: Option<&str>,
+        client_secret_basic: bool,
+        client_assertion_type: Option<ClientAssertionType>,
+        client_assertion: Option<&str>,
+    ) -> Result<Uuid, AppError> {
+        let result = self
+            .authenticate_client_credentials(
+                client_id,
+                client_secret,
+                client_secret_basic,
+                client_assertion_type,
+                client_assertion,
+            )
+            .await;
+        if let Err(error) = &result
+            && rejects_presented_credential(error)
+            && let Ok(client_oid) =
+                identity_domain::openid_connect::identifier::parse_client_id(client_id)
+        {
+            // A rejected credential can only be reached for an existing client.
+            self.credential_repo
+                .record_authentication_failure(client_oid)
+                .await
+                .map_err(AppError::map_source(TokenErrorCode::CredentialLookupFailed))?;
+        }
+        result
+    }
+
+    async fn authenticate_client_credentials(
         &self,
         client_id: &str,
         client_secret: Option<&str>,
@@ -583,4 +614,21 @@ async fn fetch_and_verify_jwks_uri(
     }
 
     Ok(None)
+}
+
+/// Whether authentication failed because the client's presented secret or
+/// assertion was rejected, rather than a malformed or unsupported request.
+fn rejects_presented_credential(error: &AppError) -> bool {
+    [
+        TokenErrorCode::ClientCredentialsInvalid,
+        TokenErrorCode::AssertionIssMissing,
+        TokenErrorCode::AssertionSubMissing,
+        TokenErrorCode::AssertionIssSubMismatch,
+        TokenErrorCode::AssertionAudMismatch,
+        TokenErrorCode::AssertionExpired,
+        TokenErrorCode::AssertionNotYetValid,
+        TokenErrorCode::AssertionVerifyFailed,
+    ]
+    .into_iter()
+    .any(|code| error.code() == code.code())
 }

@@ -76,6 +76,13 @@ mock! {
             oid: Uuid,
             completed_at: DateTime<Utc>,
         ) -> Result<bool, ClientAuthorizationRepositoryError>;
+        async fn complete_authorization_request_with_existing_session(
+            &self,
+            oid: Uuid,
+            completed_at: DateTime<Utc>,
+            user_oid: Uuid,
+            client_oid: ClientOid,
+        ) -> Result<bool, ClientAuthorizationRepositoryError>;
         async fn revoke_access_tokens_for_authorization_code(
             &self,
             authorization_code_oid: Uuid,

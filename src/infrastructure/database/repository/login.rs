@@ -400,6 +400,9 @@ impl LoginRepository for LoginRepositoryImpl {
             .map_err(|e| LoginRepositoryError::IncrementFailedAttempts(Box::new(e)))?;
         let reason = match failure_reason {
             Some(LoginFailureReason::InvalidOtp) => AuditFailureReason::InvalidOtp,
+            Some(LoginFailureReason::InvalidRecoveryCode) => {
+                AuditFailureReason::InvalidRecoveryCode
+            }
             Some(LoginFailureReason::InvalidCredential) | None => {
                 AuditFailureReason::InvalidCredential
             }

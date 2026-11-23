@@ -1,6 +1,6 @@
 use http::{HeaderMap, HeaderValue, StatusCode, header::HeaderName};
 use identity_application::openid_connect::logout::{
-    FrontChannelLogoutNotification, LogoutOutcome, RpInitiatedLogoutRequest,
+    FrontChannelLogoutNotification, LogoutOutcome, RpInitiatedLogout, RpInitiatedLogoutRequest,
 };
 use identity_domain::auth::SessionOid;
 use identity_infrastructure::{AppState, web::tera};
@@ -261,14 +261,21 @@ async fn execute_logout(depot: &mut Depot) -> WebResult<()> {
         session_entries,
         session_to_revoke,
     } = take(depot)?;
-    let outcome = ctx
+    let RpInitiatedLogout {
+        outcome,
+        client_oid,
+    } = ctx
         .services()
         .oidc_logout()
         .rp_initiated_logout(request)
         .await?;
 
     let set_cookie = if let Some((session_oid, _)) = session_to_revoke {
-        let _ = ctx.services().session().revoke(session_oid).await;
+        let _ = ctx
+            .services()
+            .session()
+            .revoke_for_client(session_oid, client_oid)
+            .await;
         Some(session_cookie_without(&session_entries, session_oid))
     } else {
         None

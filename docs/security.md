@@ -111,7 +111,7 @@ Identity keeps one append-only `audit` journal with four categories:
 |---|---|
 | `management` | Users, clients, roles, groups, scopes, API resources, keys, and instance settings |
 | `account` | A person's own profile, identifiers, password, authenticator app, recovery codes, and passkeys |
-| `sign_in` | Sign-in results, account lockout, reauthentication, and ended sessions |
+| `sign_in` | Sign-in results, sign-ins to a client with an existing session, rejected client credentials, account lockout, reauthentication, and ended sessions |
 | `authorization` | Consent, device approvals, authorization revocation, and token revocation or replay |
 
 Each record names a public action (such as `role_update` or `sign_in`), its
@@ -136,6 +136,15 @@ entered identifier; its IP address and User-Agent still show where repeated
 attempts come from. Login state
 transitions, activity touches, polling timestamps, and replay counters do not
 produce records.
+
+A client secret or assertion rejected at any client-authenticated endpoint
+(token, PAR, revocation, introspection, device authorization) is a failed
+`client_authenticate` record with an anonymous actor and the client as its
+target; an unknown `client_id` or a malformed request is not. Ending a session
+through RP-initiated logout names the client when a verified `id_token_hint` or
+an accepted registered post-logout redirect URI identifies it. Work Identity
+does on its own, such as installation and scheduled key rotation, is recorded
+with the `system` actor.
 
 Repositories write each record in the same transaction as the change it
 describes, in a single statement, so a failed audit insert rolls the change back

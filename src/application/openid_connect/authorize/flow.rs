@@ -9,8 +9,8 @@ use crate::{
 use chrono::{DateTime, Utc};
 use identity_domain::{
     auth::{
-        AMR_MFA, AMR_OTP, AMR_PASSWORD, AuthenticationContextClass, SessionOid, SessionStatus,
-        reported_acr,
+        AMR_MFA, AMR_OTP, AMR_PASSWORD, AuthenticationContextClass, LoginStatus, SessionOid,
+        SessionStatus, reported_acr,
     },
     openid_connect::AuthorizationRequestData,
     user::UserOid,
@@ -31,6 +31,9 @@ pub struct AuthorizationApproval {
     pub auth_time: Option<i64>,
     pub acr: Option<AuthenticationContextClass>,
     pub amr: Vec<String>,
+    /// The session was established before this request and the user did not
+    /// authenticate during its interaction, so no sign-in was audited.
+    pub existing_session: bool,
 }
 
 impl AuthorizeService {
@@ -91,6 +94,7 @@ impl AuthorizeService {
                 auth_time,
                 acr,
                 amr,
+                existing_session: false,
             },
         )
         .await
@@ -220,12 +224,13 @@ impl AuthorizeService {
             auth_time,
             acr,
             amr,
+            existing_session,
         } = approval;
         let stored = self
             .load_stored_authorization_request(authorization_request_id)
             .await?;
         let request = stored.request;
-        let _client_oid = Uuid::parse_str(&request.client_id).map_err(AppError::map_source(
+        let client_oid = Uuid::parse_str(&request.client_id).map_err(AppError::map_source(
             AuthorizeErrorCode::StoredClientIdInvalid,
         ))?;
 
@@ -307,8 +312,24 @@ impl AuthorizeService {
             .await?
         };
 
-        self.mark_authorization_request_completed(authorization_request_id)
-            .await?;
+        if existing_session {
+            let completed = self
+                .client_authorization_repo
+                .complete_authorization_request_with_existing_session(
+                    authorization_request_id,
+                    Utc::now(),
+                    user_oid,
+                    client_oid,
+                )
+                .await
+                .map_err(AppError::map_source(AuthorizeErrorCode::StoreRequestFailed))?;
+            if !completed {
+                return Err(Self::interaction_conflict());
+            }
+        } else {
+            self.mark_authorization_request_completed(authorization_request_id)
+                .await?;
+        }
 
         Ok(redirect)
     }
@@ -361,6 +382,7 @@ impl AuthorizeService {
                 auth_time,
                 acr: login.acr,
                 amr,
+                existing_session: login.status != LoginStatus::AUTHENTICATED,
             },
         )
         .await

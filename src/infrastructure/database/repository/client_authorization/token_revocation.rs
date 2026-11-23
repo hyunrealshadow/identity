@@ -345,7 +345,7 @@ pub(super) async fn revoke_access_token_for_client(
         audit::record(
             &transaction,
             token_record(
-                AuditRecord::success(AuditAction::TokenRevoke, None),
+                AuditRecord::success(AuditAction::AccessTokenRevoke, None),
                 grant_parties(&transaction, access_oid)
                     .await
                     .map_err(query_error(
@@ -401,7 +401,7 @@ pub(super) async fn revoke_refresh_grant_for_client(
         .map_err(query_error(
             "client_authorization.revoke_refresh_grant_for_client",
         ))?;
-    transaction
+    let mut revoked = transaction
         .execute(&query::revoke_refresh_family(
             root_oid,
             client_oid,
@@ -412,9 +412,10 @@ pub(super) async fn revoke_refresh_grant_for_client(
         .await
         .map_err(query_error(
             "client_authorization.revoke_refresh_grant_for_client",
-        ))?;
+        ))?
+        .rows_affected();
     if !device_authorization_oid.is_empty() {
-        transaction
+        revoked += transaction
             .execute(&query::revoke_token_for_client(
                 Expr::col(ClientAuthorizationColumn::Oid)
                     .cast_as("text")
@@ -426,20 +427,25 @@ pub(super) async fn revoke_refresh_grant_for_client(
             .await
             .map_err(query_error(
                 "client_authorization.revoke_refresh_grant_for_client",
-            ))?;
+            ))?
+            .rows_affected();
     }
-    audit::record(
-        &transaction,
-        token_record(
-            AuditRecord::success(AuditAction::TokenRevoke, None),
-            grant_user(&data),
-            Some(client_oid),
-        ),
-    )
-    .await
-    .map_err(query_error(
-        "client_authorization.revoke_refresh_grant_for_client",
-    ))?;
+    // Revocation is idempotent; presenting an already revoked refresh token
+    // again changes nothing and is not a new event.
+    if revoked > 0 {
+        audit::record(
+            &transaction,
+            token_record(
+                AuditRecord::success(AuditAction::TokenRevoke, None),
+                grant_user(&data),
+                Some(client_oid),
+            ),
+        )
+        .await
+        .map_err(query_error(
+            "client_authorization.revoke_refresh_grant_for_client",
+        ))?;
+    }
     transaction.commit().await.map_err(query_error(
         "client_authorization.revoke_refresh_grant_for_client",
     ))?;

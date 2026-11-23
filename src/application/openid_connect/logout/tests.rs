@@ -416,7 +416,7 @@ async fn validates_registered_post_logout_redirect_uri_and_preserves_state() {
     let (service, signing) =
         service_with_client_and_signing(client_oid, Some("https://rp.example.com/logout/callback"));
 
-    let outcome = service
+    let logout = service
         .rp_initiated_logout(RpInitiatedLogoutRequest {
             id_token_hint: Some(signed_id_token_hint_for_test(
                 &signing,
@@ -433,6 +433,7 @@ async fn validates_registered_post_logout_redirect_uri_and_preserves_state() {
         })
         .await
         .unwrap();
+    let outcome = logout.outcome;
 
     let LogoutOutcome::Redirect { redirect_uri } = outcome else {
         panic!("expected redirect outcome");
@@ -441,6 +442,7 @@ async fn validates_registered_post_logout_redirect_uri_and_preserves_state() {
         redirect_uri.as_str(),
         "https://rp.example.com/logout/callback?state=state-123"
     );
+    assert_eq!(logout.client_oid, Some(client_oid));
 }
 
 #[tokio::test]
@@ -475,7 +477,7 @@ async fn returns_logged_out_page_when_no_redirect_is_requested() {
     let client_oid = Uuid::new_v4();
     let service = service_with_client(client_oid, None);
 
-    let outcome = service
+    let logout = service
         .rp_initiated_logout(RpInitiatedLogoutRequest {
             id_token_hint: None,
             client_id: None,
@@ -488,6 +490,7 @@ async fn returns_logged_out_page_when_no_redirect_is_requested() {
         })
         .await
         .unwrap();
+    let outcome = logout.outcome;
 
     assert_eq!(outcome, LogoutOutcome::LoggedOut);
 }
@@ -503,7 +506,7 @@ async fn returns_frontchannel_logout_notifications_for_session_clients() {
         None,
     )]);
 
-    let outcome = service
+    let logout = service
         .rp_initiated_logout(RpInitiatedLogoutRequest {
             id_token_hint: None,
             client_id: None,
@@ -516,6 +519,7 @@ async fn returns_frontchannel_logout_notifications_for_session_clients() {
         })
         .await
         .unwrap();
+    let outcome = logout.outcome;
 
     let LogoutOutcome::FrontChannel {
         notifications,
@@ -551,7 +555,7 @@ async fn frontchannel_logout_preserves_post_logout_redirect_uri() {
         None,
     )]);
 
-    let outcome = service
+    let logout = service
         .rp_initiated_logout(RpInitiatedLogoutRequest {
             id_token_hint: Some(signed_id_token_hint_for_test(
                 &signing,
@@ -568,6 +572,7 @@ async fn frontchannel_logout_preserves_post_logout_redirect_uri() {
         })
         .await
         .unwrap();
+    let outcome = logout.outcome;
 
     let LogoutOutcome::FrontChannel {
         notifications,

@@ -488,6 +488,23 @@ FOR SHARE OF s
         request_interaction::mark_authorization_request_completed(&self.db, oid, completed_at).await
     }
 
+    async fn complete_authorization_request_with_existing_session(
+        &self,
+        oid: Uuid,
+        completed_at: DateTime<Utc>,
+        user_oid: Uuid,
+        client_oid: ClientOid,
+    ) -> Result<bool, ClientAuthorizationRepositoryError> {
+        request_interaction::complete_authorization_request_with_existing_session(
+            &self.db,
+            oid,
+            completed_at,
+            user_oid,
+            client_oid,
+        )
+        .await
+    }
+
     async fn record_authorization_request_consent(
         &self,
         oid: Uuid,

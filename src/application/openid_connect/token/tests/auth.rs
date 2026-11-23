@@ -545,3 +545,49 @@ async fn public_flow_switch_blocks_none_but_preserves_confidential_authenticatio
         assert_eq!(secret_auth.is_ok(), mixed);
     }
 }
+
+#[tokio::test]
+async fn rejected_client_secret_is_audited_for_that_client_only() {
+    let client_id = "Q2xpZW50OgAAAAAAAAAAAAAAAAAAAAA";
+    let client_oid =
+        identity_domain::openid_connect::identifier::parse_client_id(client_id).unwrap();
+    let credentials = vec![secret_credential("secret-123")];
+    let mut credential_repo =
+        crate::openid_connect::tests::fixtures::mocks::MockOpenIdConnectCredentialRepository::new();
+    credential_repo
+        .expect_find_active_by_client_oid_and_type()
+        .returning(move |_, _| Ok(credentials.clone()));
+    credential_repo
+        .expect_record_authentication_failure()
+        .withf(move |oid| *oid == client_oid)
+        .times(1)
+        .returning(|_| Ok(()));
+    let authenticator = ClientAuthenticator::new(ClientAuthenticatorDependencies {
+        client_repo: Arc::new(InMemoryClientRepository),
+        credential_repo: Arc::new(credential_repo),
+        provider_service: provider_service(),
+    });
+
+    let wrong = authenticator
+        .authenticate_client(client_id, Some("wrong"), true, None, None)
+        .await
+        .unwrap_err();
+    assert_eq!(
+        wrong.code(),
+        TokenErrorCode::ClientCredentialsInvalid.code()
+    );
+    // A secret sent by an unregistered transport is a request error, not a
+    // rejected credential.
+    assert!(
+        authenticator
+            .authenticate_client(client_id, Some("secret-123"), false, None, None)
+            .await
+            .is_err()
+    );
+    assert!(
+        authenticator
+            .authenticate_client(client_id, Some("secret-123"), true, None, None)
+            .await
+            .is_ok()
+    );
+}

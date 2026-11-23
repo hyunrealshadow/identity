@@ -1,6 +1,7 @@
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use identity_domain::{
+    audit::{AuditAction, AuditActor, AuditFailureReason, AuditRecord},
     client::model::ClientOid,
     key::PublicJwk,
     openid_connect::{
@@ -13,6 +14,7 @@ use serde::Deserialize;
 use serde_json::{Value, from_value, json};
 use url::Url;
 
+use crate::database::audit;
 use crate::database::entity::{
     client::{Column as ClientColumn, Entity as ClientEntity},
     client_openid_connect_credential,
@@ -183,6 +185,25 @@ impl OpenIdConnectCredentialRepositoryImpl {
 
 #[async_trait]
 impl OpenIdConnectCredentialRepository for OpenIdConnectCredentialRepositoryImpl {
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "record_client_authentication_failure"))]
+    async fn record_authentication_failure(
+        &self,
+        client_oid: ClientOid,
+    ) -> Result<(), OpenIdConnectCredentialRepositoryError> {
+        audit::record_standalone(
+            &self.db,
+            AuditRecord::failure(
+                AuditAction::ClientAuthenticate,
+                AuditFailureReason::InvalidCredential,
+                client_oid,
+            )
+            .actor(AuditActor::anonymous())
+            .client(client_oid),
+        )
+        .await
+        .map_err(|error| OpenIdConnectCredentialRepositoryError::QueryFailed(Box::new(error)))
+    }
+
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "find_active_by_client_oid_and_type"))]
     async fn find_active_by_client_oid_and_type(
         &self,

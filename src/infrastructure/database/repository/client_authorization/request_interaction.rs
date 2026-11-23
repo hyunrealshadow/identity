@@ -1,4 +1,5 @@
 use super::{mapping::parse_stored_authorization_request, query_error};
+use crate::database::audit;
 use crate::database::entity::{
     client_authorization,
     client_authorization::{
@@ -7,13 +8,16 @@ use crate::database::entity::{
 };
 use chrono::{DateTime, Utc};
 use identity_domain::{
+    audit::{AuditAction, AuditActor, AuditRecord},
     auth::SessionOid,
+    client::model::ClientOid,
     client_authorization::{
         ClientAuthorizationRepositoryError, ClientAuthorizationType, SelectionSource,
     },
 };
 use sea_orm::{
-    ColumnTrait, Condition, DatabaseConnection, EntityTrait, QueryFilter, sea_query::SimpleExpr,
+    ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter,
+    TransactionTrait, sea_query::SimpleExpr,
 };
 use serde_json::to_value;
 use uuid::Uuid;
@@ -102,12 +106,12 @@ pub(super) async fn update_authorization_request_selection(
     Ok(result.rows_affected == 1)
 }
 
-#[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "mark_authorization_request_completed"))]
-pub(super) async fn mark_authorization_request_completed(
-    db: &DatabaseConnection,
+/// Marks a live, pending authorization request completed.
+async fn complete_request<C: ConnectionTrait>(
+    conn: &C,
     oid: Uuid,
     completed_at: DateTime<Utc>,
-) -> Result<bool, ClientAuthorizationRepositoryError> {
+) -> Result<bool, DbErr> {
     let now = Utc::now();
     let result = ClientAuthorizationEntity::update_many()
         .col_expr(
@@ -129,13 +133,51 @@ pub(super) async fn mark_authorization_request_completed(
                 .add(ClientAuthorizationColumn::RevokedAt.is_null())
                 .add(ClientAuthorizationColumn::ExpiresAt.gt(now)),
         )
-        .exec(db)
+        .exec(conn)
+        .await?;
+    Ok(result.rows_affected == 1)
+}
+
+#[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "mark_authorization_request_completed"))]
+pub(super) async fn mark_authorization_request_completed(
+    db: &DatabaseConnection,
+    oid: Uuid,
+    completed_at: DateTime<Utc>,
+) -> Result<bool, ClientAuthorizationRepositoryError> {
+    complete_request(db, oid, completed_at)
         .await
         .map_err(query_error(
             "client_authorization.mark_authorization_request_completed",
-        ))?;
+        ))
+}
 
-    Ok(result.rows_affected == 1)
+#[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "complete_authorization_request_with_existing_session"))]
+pub(super) async fn complete_authorization_request_with_existing_session(
+    db: &DatabaseConnection,
+    oid: Uuid,
+    completed_at: DateTime<Utc>,
+    user_oid: Uuid,
+    client_oid: ClientOid,
+) -> Result<bool, ClientAuthorizationRepositoryError> {
+    const OPERATION: &str =
+        "client_authorization.complete_authorization_request_with_existing_session";
+    let transaction = db.begin().await.map_err(query_error(OPERATION))?;
+    if !complete_request(&transaction, oid, completed_at)
+        .await
+        .map_err(query_error(OPERATION))?
+    {
+        return Ok(false);
+    }
+    audit::record(
+        &transaction,
+        AuditRecord::success(AuditAction::SessionReuse, client_oid)
+            .default_actor(AuditActor::user(user_oid))
+            .client(client_oid),
+    )
+    .await
+    .map_err(query_error(OPERATION))?;
+    transaction.commit().await.map_err(query_error(OPERATION))?;
+    Ok(true)
 }
 
 #[cfg(test)]

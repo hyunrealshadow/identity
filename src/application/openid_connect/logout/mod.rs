@@ -2,7 +2,7 @@ mod service;
 pub use service::{
     BackChannelLogoutDelivery, BackChannelLogoutNotification, BackChannelLogoutSender,
     FrontChannelLogoutNotification, LogoutOutcome, LogoutService, LogoutServiceDependencies,
-    RpInitiatedLogoutRequest,
+    RpInitiatedLogout, RpInitiatedLogoutRequest,
 };
 
 #[cfg(test)]

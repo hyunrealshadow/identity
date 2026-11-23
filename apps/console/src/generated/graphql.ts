@@ -43,6 +43,7 @@ export type AssignUserRolesInput = {
 
 /** A stable public audit action, named object first, then verb. */
 export type AuditAction =
+  | 'ACCESS_TOKEN_REVOKE'
   | 'ACCOUNT_CREDENTIAL_REPLACE'
   | 'ACCOUNT_IDENTIFIER_UPDATE'
   | 'ACCOUNT_LOCK'
@@ -54,6 +55,7 @@ export type AuditAction =
   | 'ACCOUNT_RECOVERY_CODE_REGENERATE'
   | 'ACCOUNT_TOTP_DISABLE'
   | 'ACCOUNT_TOTP_ENABLE'
+  | 'CLIENT_AUTHENTICATE'
   | 'CLIENT_CREATE'
   | 'CLIENT_CREDENTIAL_REVOKE'
   | 'CLIENT_DELETE'
@@ -98,6 +100,7 @@ export type AuditAction =
   | 'SCOPE_ENABLE'
   | 'SCOPE_UPDATE'
   | 'SESSION_REAUTHENTICATE'
+  | 'SESSION_REUSE'
   | 'SESSION_REVOKE'
   | 'SETTING_AUTHENTICATION_UPDATE'
   | 'SETTING_PROTOCOL_UPDATE'

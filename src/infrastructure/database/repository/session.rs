@@ -463,6 +463,7 @@ impl SessionRepository for SessionRepositoryImpl {
         &self,
         oid: SessionOid,
         revoked_at: DateTime<Utc>,
+        client_oid: Option<Uuid>,
     ) -> Result<Option<Session>, SessionRepositoryError> {
         let transaction = self
             .db
@@ -530,8 +531,11 @@ impl SessionRepository for SessionRepositoryImpl {
         if !already_revoked {
             audit::record(
                 &transaction,
-                AuditRecord::success(AuditAction::SessionRevoke, Uuid::from(oid))
-                    .default_actor(AuditActor::user(u_model.oid)),
+                AuditRecord {
+                    client_oid,
+                    ..AuditRecord::success(AuditAction::SessionRevoke, Uuid::from(oid))
+                        .default_actor(AuditActor::user(u_model.oid))
+                },
             )
             .await
             .map_err(|error| SessionRepositoryError::RevokeFailed(Box::new(error)))?;

@@ -57,7 +57,7 @@ impl LoginService {
         let Some(matched) = matched else {
             let login_attempts = self
                 .login_repo
-                .increment_failed_attempts(login.oid, Some(LoginFailureReason::InvalidOtp))
+                .increment_failed_attempts(login.oid, Some(LoginFailureReason::InvalidRecoveryCode))
                 .await?;
             let user_attempts = self
                 .user_repo

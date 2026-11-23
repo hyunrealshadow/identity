@@ -330,7 +330,8 @@ function DetailBody({ event, t }: { event: AuditEventDetail; t: Translate }) {
             />
           </Field>
         ) : null}
-        {event.clientId ? (
+        {/* A client already named as the actor or the object is not repeated. */}
+        {event.clientId && event.clientId !== event.actor.id && event.clientId !== target?.id ? (
           <Field label={t('auditDetailClient')} centered>
             {event.client === undefined ? (
               // Still loading with the detail query.

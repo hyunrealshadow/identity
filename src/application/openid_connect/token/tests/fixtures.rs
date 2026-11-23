@@ -246,6 +246,8 @@ pub(super) fn cred_repo_with(
     let mut mock = MockOpenIdConnectCredentialRepository::new();
     mock.expect_find_active_by_client_oid_and_type()
         .returning(move |_, _| Ok(credentials.clone()));
+    mock.expect_record_authentication_failure()
+        .returning(|_| Ok(()));
     mock
 }
 

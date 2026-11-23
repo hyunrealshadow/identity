@@ -14,5 +14,7 @@ mock! {
     impl OpenIdConnectCredentialRepository for OpenIdConnectCredentialRepository {
         async fn find_active_by_client_oid_and_type(&self, client_oid: ClientOid, type_: OpenIdConnectCredentialType)
             -> Result<Vec<OpenIdConnectCredential>, OpenIdConnectCredentialRepositoryError>;
+        async fn record_authentication_failure(&self, client_oid: ClientOid)
+            -> Result<(), OpenIdConnectCredentialRepositoryError>;
     }
 }

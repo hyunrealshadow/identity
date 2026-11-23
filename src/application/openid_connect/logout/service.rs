@@ -1,6 +1,6 @@
 use std::{sync::Arc, time::SystemTime};
 
-use identity_domain::auth::SessionOid;
+use identity_domain::{auth::SessionOid, openid_connect::identifier};
 use josekit::{
     JoseError,
     jws::{
@@ -81,6 +81,15 @@ pub enum LogoutOutcome {
     LoggedOut,
 }
 
+/// The response to an RP-initiated logout and the client that verifiably
+/// started it: the audience of a verified `id_token_hint`, or the client whose
+/// registered post-logout redirect URI was accepted.
+#[derive(Debug)]
+pub struct RpInitiatedLogout {
+    pub outcome: LogoutOutcome,
+    pub client_oid: Option<Uuid>,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct IdTokenHintClaims {
     audience: Vec<String>,
@@ -147,12 +156,12 @@ impl LogoutService {
     pub async fn rp_initiated_logout(
         &self,
         request: RpInitiatedLogoutRequest,
-    ) -> Result<LogoutOutcome, AppError> {
+    ) -> Result<RpInitiatedLogout, AppError> {
         let session_oid = request.session_oid;
         let result = self.rp_initiated_logout_inner(request).await;
         let mut event = BusinessEvent::audit("logout.local.result");
         match &result {
-            Ok(outcome) => {
+            Ok(RpInitiatedLogout { outcome, .. }) => {
                 event = event.outcome("success").attribute(
                     "logout_kind",
                     EventValue::Text(
@@ -189,20 +198,27 @@ impl LogoutService {
     async fn rp_initiated_logout_inner(
         &self,
         request: RpInitiatedLogoutRequest,
-    ) -> Result<LogoutOutcome, AppError> {
+    ) -> Result<RpInitiatedLogout, AppError> {
         let id_token_hint = match request.id_token_hint.as_deref() {
             Some(raw) => Some(self.verify_id_token_hint(raw).await?),
             None => None,
         };
+        // A verified hint names its client; an unverified `client_id` does not.
+        let hinted_client = audience_client_id(id_token_hint.as_ref())
+            .and_then(|client_id| identifier::parse_client_id(&client_id).ok());
 
         let Some(raw_redirect_uri) = request.post_logout_redirect_uri.as_deref() else {
-            return self
+            let outcome = self
                 .outcome_with_frontchannel_notifications(
                     request.session_oid,
                     request.protected_session_id.as_deref(),
                     None,
                 )
-                .await;
+                .await?;
+            return Ok(RpInitiatedLogout {
+                outcome,
+                client_oid: hinted_client,
+            });
         };
 
         let redirect_uri = Url::parse(raw_redirect_uri).map_err(AppError::map_source(
@@ -217,8 +233,7 @@ impl LogoutService {
 
         let client_id = client_id
             .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::IdTokenHintRequired))?;
-        let client_oid = identity_domain::openid_connect::identifier::parse_client_id(&client_id)
-            .map_err(AppError::map_source(
+        let client_oid = identifier::parse_client_id(&client_id).map_err(AppError::map_source(
             OpenIdConnectErrorCode::LogoutClientInvalid,
         ))?;
 
@@ -253,12 +268,17 @@ impl LogoutService {
             redirect_uri.query_pairs_mut().append_pair("state", state);
         }
 
-        self.outcome_with_frontchannel_notifications(
-            request.session_oid,
-            request.protected_session_id.as_deref(),
-            Some(redirect_uri),
-        )
-        .await
+        let outcome = self
+            .outcome_with_frontchannel_notifications(
+                request.session_oid,
+                request.protected_session_id.as_deref(),
+                Some(redirect_uri),
+            )
+            .await?;
+        Ok(RpInitiatedLogout {
+            outcome,
+            client_oid: Some(client_oid),
+        })
     }
 
     async fn outcome_with_frontchannel_notifications(
