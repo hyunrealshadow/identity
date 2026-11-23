@@ -3,7 +3,7 @@ import { Button } from '@identity/ui/components/button'
 import { Input } from '@identity/ui/components/input'
 import { Link } from '@tanstack/react-router'
 import { ChevronRight, Send } from 'lucide-react'
-import { useId, useState, type ReactNode } from 'react'
+import { useId, useState } from 'react'
 
 import {
   SettingsGroup,
@@ -474,37 +474,32 @@ function EmailTemplatesGroup({ email }: { email: EmailSettings }) {
     >
       {email.templates.map((template) => {
         const labels = emailTemplateLabels[template.kind]
-        const customized = template.locales.filter((locale) => locale.customized)
-        let status: ReactNode = (
-          <span className="text-xs text-muted-foreground">{t('settingsEmailTemplateBuiltIn')}</span>
-        )
-        if (customized.length) {
-          status = (
-            <Badge variant="secondary">
-              {t('settingsEmailTemplateCustomizedCount', { count: customized.length })}
-            </Badge>
-          )
-        }
+        const customized = template.locales.filter((locale) => locale.customized).length
         return (
-          <SettingsRow
+          // The whole row opens the editor, so it is one link rather than a
+          // linked title beside an inert chevron.
+          <Link
             key={template.kind}
-            label={
-              <Link
-                to="/settings/email/templates/$kind"
-                params={{ kind: emailTemplateSlug(template.kind) }}
-                className="text-link"
-              >
-                {t(labels.title)}
-              </Link>
-            }
-            description={t(labels.description)}
-            action={
-              <div className="flex items-center gap-3">
-                {status}
-                <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
+            to="/settings/email/templates/$kind"
+            params={{ kind: emailTemplateSlug(template.kind) }}
+            className="group flex items-center gap-3 px-5 py-4 transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+          >
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium">{t(labels.title)}</div>
+              <div className="mt-0.5 text-xs leading-5 text-muted-foreground">
+                {t(labels.description)}
               </div>
-            }
-          />
+            </div>
+            <Badge variant={customized ? 'secondary' : 'outline'}>
+              {customized
+                ? t('settingsEmailTemplateCustomizedCount', { count: customized })
+                : t('settingsEmailTemplateBuiltIn')}
+            </Badge>
+            <ChevronRight
+              className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+              aria-hidden="true"
+            />
+          </Link>
         )
       })}
     </SettingsGroup>
