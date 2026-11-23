@@ -2,6 +2,7 @@ mod app;
 mod installation;
 mod openid_connect;
 mod password;
+mod sign_in;
 
 pub use app::{
     AppSettings, ConsoleClientIdSetting, ConsoleDomainSetting, DomainSetting, LoginClientIdSetting,
@@ -13,3 +14,4 @@ pub use openid_connect::{
     PushedAuthorizationSettings,
 };
 pub use password::{BreachedPasswordCheckEnabledSetting, PasswordHashSetting};
+pub use sign_in::IdentifierEnumerationAllowedSetting;

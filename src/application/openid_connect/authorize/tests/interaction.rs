@@ -58,6 +58,7 @@ fn login(status: LoginStatus) -> Login {
         status,
         failed_attempts: 0,
         acr: None,
+        submitted_identifier: None,
         requested_acr_values: Vec::new(),
         created_at: Utc::now(),
         expires_at: Utc::now() + Duration::minutes(5),

@@ -321,6 +321,26 @@ pub(super) struct TestLoginRepo {
     pub(super) state: Arc<Mutex<TestLoginRepoState>>,
 }
 
+impl TestLoginRepo {
+    fn bind(
+        &self,
+        login_oid: Uuid,
+        user_oid: Option<Uuid>,
+        submitted_identifier: Option<String>,
+    ) -> Result<Login, LoginRepositoryError> {
+        let mut state = self.state.lock().unwrap();
+        let login = state
+            .logins
+            .iter_mut()
+            .find(|login| login.oid == login_oid && login.status == LoginStatus::CREATED)
+            .ok_or(LoginRepositoryError::LoginNotFound)?;
+        login.user_oid = user_oid;
+        login.submitted_identifier = submitted_identifier;
+        login.status = LoginStatus::IDENTIFIER_VERIFIED;
+        Ok(login.clone())
+    }
+}
+
 #[async_trait]
 impl LoginRepository for TestLoginRepo {
     async fn find_by_oid(&self, oid: Uuid) -> Result<Option<Login>, LoginRepositoryError> {
@@ -339,10 +359,19 @@ impl LoginRepository for TestLoginRepo {
 
     async fn bind_user(
         &self,
-        _login_oid: Uuid,
-        _user_oid: Uuid,
+        login_oid: Uuid,
+        user_oid: Uuid,
     ) -> Result<Login, LoginRepositoryError> {
-        Err(LoginRepositoryError::LoginNotFound)
+        self.bind(login_oid, Some(user_oid), None)
+    }
+
+    async fn bind_concealed_identifier(
+        &self,
+        login_oid: Uuid,
+        identifier: &str,
+        user_oid: Option<Uuid>,
+    ) -> Result<Login, LoginRepositoryError> {
+        self.bind(login_oid, user_oid, Some(identifier.to_owned()))
     }
 
     async fn update_status(
@@ -377,6 +406,7 @@ impl LoginRepository for TestLoginRepo {
         }
         login.status = LoginStatus::CREATED;
         login.user_oid = None;
+        login.submitted_identifier = None;
         login.session_oid = None;
         login.acr = None;
         login.failed_attempts = 0;

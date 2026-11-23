@@ -32,6 +32,14 @@ operation. Explicitly setting it to `false` skips only that external check;
 local password validation and hashing still apply. See the
 [deployment guide](../deploy/README.md#password-security-checks) for configuration.
 
+### Account enumeration
+
+The setting `auth.login.identifier_enumeration_allowed` controls whether sign-in
+may reveal that an entered email or username has no account. Turning it off
+sends every identifier to the password step and reports a single
+account-or-password error; see
+[concealing whether an account exists](authentication-flows.md#concealing-whether-an-account-exists).
+
 ## Multi-factor authentication
 
 Accounts support TOTP authenticator apps, Passkey/WebAuthn, and single-use recovery

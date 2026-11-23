@@ -53,6 +53,10 @@ const messages = {
   settingsRegistrationSection: '客户端注册',
   settingsDynamicRegistration: '动态客户端注册',
   settingsDynamicRegistrationHint: '任何能访问注册端点的人都可以创建客户端',
+  settingsSignInSection: '登录',
+  settingsIdentifierEnumeration: '提示账号是否存在',
+  settingsIdentifierEnumerationHint:
+    '关闭后，任意邮箱或用户名都会进入密码步骤，登录失败时不区分账号还是密码错误，密码验证前也不提供通行密钥',
   settingsPasswordPolicySection: '密码策略',
   settingsBreachedPasswordCheck: '拒绝已泄露的密码',
   settingsBreachedPasswordCheckHint: '检查新密码是否出现在已知泄露中，密码本身不会被发送',

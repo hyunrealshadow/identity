@@ -300,6 +300,7 @@ async fn restart_login_flow_creates_fresh_login_for_same_authorization() {
         created_at: Utc::now() - Duration::minutes(6),
         expires_at: Utc::now() - Duration::minutes(1),
         acr: None,
+        submitted_identifier: None,
         requested_acr_values: vec![AuthenticationContextClass::MultiFactor],
     }));
     let old_login_id = service.encrypt_login_id(old_login_oid).await.unwrap();
@@ -342,6 +343,7 @@ async fn switch_login_account_resets_the_same_login_for_same_authorization() {
         created_at: Utc::now(),
         expires_at: original_expires_at,
         acr: Some(AuthenticationContextClass::SingleFactor),
+        submitted_identifier: None,
         requested_acr_values: vec![AuthenticationContextClass::MultiFactor],
     }));
     let old_login_id = service.encrypt_login_id(old_login_oid).await.unwrap();
@@ -417,6 +419,7 @@ async fn switch_login_account_rejects_forced_reauthentication() {
         created_at: Utc::now(),
         expires_at: Utc::now() + Duration::minutes(5),
         acr: None,
+        submitted_identifier: None,
         requested_acr_values: Vec::new(),
     }));
     let login_id = service.encrypt_login_id(login_oid).await.unwrap();
@@ -474,6 +477,7 @@ async fn restart_login_flow_preserves_reauthentication_subject_and_session() {
         created_at: Utc::now() - Duration::minutes(6),
         expires_at: Utc::now() - Duration::minutes(1),
         acr: None,
+        submitted_identifier: None,
         requested_acr_values: vec![AuthenticationContextClass::MultiFactor],
     }));
     let old_login_id = service.encrypt_login_id(old_login_oid).await.unwrap();
@@ -518,6 +522,7 @@ async fn restart_login_flow_rejects_a_login_that_is_still_in_progress() {
         created_at: Utc::now(),
         expires_at: Utc::now() + Duration::minutes(5),
         acr: None,
+        submitted_identifier: None,
         requested_acr_values: Vec::new(),
     }));
     let old_login_id = service.encrypt_login_id(old_login_oid).await.unwrap();

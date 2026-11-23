@@ -109,6 +109,7 @@ export function protocolInput(
 
 export interface AuthenticationDraft {
   breachedPasswordCheckEnabled: boolean
+  identifierEnumerationAllowed: boolean
   timeCost: string
   memoryCostKib: string
   parallelism: string
@@ -119,6 +120,7 @@ export type HashingField = 'timeCost' | 'memoryCostKib' | 'parallelism'
 export function authenticationDraft(settings: AuthenticationSettings): AuthenticationDraft {
   return {
     breachedPasswordCheckEnabled: settings.breachedPasswordCheckEnabled,
+    identifierEnumerationAllowed: settings.identifierEnumerationAllowed,
     timeCost: String(settings.passwordHashing.timeCost),
     memoryCostKib: String(settings.passwordHashing.memoryCostKib),
     parallelism: String(settings.passwordHashing.parallelism),
@@ -151,6 +153,7 @@ export function authenticationInput(
   return {
     input: {
       breachedPasswordCheckEnabled: draft.breachedPasswordCheckEnabled,
+      identifierEnumerationAllowed: draft.identifierEnumerationAllowed,
       passwordHashing: {
         timeCost: values.timeCost!,
         memoryCostKib: values.memoryCostKib!,

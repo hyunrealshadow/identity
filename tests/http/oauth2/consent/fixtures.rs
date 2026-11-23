@@ -292,6 +292,7 @@ async fn consent_test_state_for(
         client_authorization_id: authorization_model.id,
         session_id: Some(active_session.id),
         user_id: None,
+        submitted_identifier: None,
         status: LoginStatus::CREATED.to_string(),
         failure_reason: None,
         failed_attempts: 0,

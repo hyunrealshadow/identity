@@ -32,6 +32,7 @@ pub enum Login {
     ClientAuthorizationId,
     SessionId,
     UserId,
+    SubmittedIdentifier,
     Status,
     FailureReason,
     FailedAttempts,
@@ -56,6 +57,9 @@ impl MigrationTrait for Migration {
                     .col(big_integer(Login::ClientAuthorizationId))
                     .col(big_integer_null(Login::SessionId))
                     .col(big_integer_null(Login::UserId))
+                    // The identifier as entered, kept only while the instance
+                    // conceals whether accounts exist.
+                    .col(string_null(Login::SubmittedIdentifier))
                     .col(string(Login::Status))
                     .col(string_null(Login::FailureReason))
                     .col(integer(Login::FailedAttempts).default(0))

@@ -24,6 +24,9 @@ pub struct Model {
     pub session_id: Option<i64>,
     #[sea_orm(indexed)]
     pub user_id: Option<i64>,
+    /// The identifier as entered, kept only while the instance conceals
+    /// whether accounts exist.
+    pub submitted_identifier: Option<String>,
     #[sea_orm(indexed)]
     pub status: String,
     pub failure_reason: Option<String>,

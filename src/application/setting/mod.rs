@@ -11,7 +11,8 @@ pub use definition::{SettingDefinition, SettingSection, SettingValidationError, 
 pub use definitions::PushedAuthorizationSettings;
 pub use definitions::{
     AppSettings, BreachedPasswordCheckEnabledSetting, ConsoleClientIdSetting, ConsoleDomainSetting,
-    DeviceAuthorizationSettings, DomainSetting, DynamicRegistrationSettings, InstallationSettings,
-    LoginClientIdSetting, LoginDomainSetting, OpenIdConnectSettings, PasswordHashSetting,
+    DeviceAuthorizationSettings, DomainSetting, DynamicRegistrationSettings,
+    IdentifierEnumerationAllowedSetting, InstallationSettings, LoginClientIdSetting,
+    LoginDomainSetting, OpenIdConnectSettings, PasswordHashSetting,
 };
 pub use error::SettingError;

@@ -15,7 +15,7 @@ use identity_application::{
     },
     rbac::{RbacManagementAuthority, cursor::RbacPageDirection},
     setting::{
-        SettingChanges,
+        IdentifierEnumerationAllowedSetting, SettingChanges,
         management::{
             InstanceSettingRepository, InstanceSettingRepositoryError, InstanceSettingSection,
             UpdateInstanceSettingsTransaction,
@@ -121,6 +121,58 @@ async fn postgres_instance_settings_are_versioned_audited_and_human_only() {
             InstanceSettingRepositoryError::VersionConflict { current_version } if current_version == next
         ));
         assert_eq!(audit_count(&db, AuditAction::SettingProtocolUpdate, section.audit_target_oid()).await, 1);
+    })
+    .await;
+}
+
+#[tokio::test]
+#[ignore = "requires explicitly configured PostgreSQL test database"]
+async fn postgres_identifier_enumeration_setting_is_versioned_and_audited() {
+    isolated(|db| async move {
+        seed::run_all(&db).await.unwrap();
+        owner(&db).await;
+        let repo = InstanceSettingRepositoryImpl::new(db.clone());
+        let section = InstanceSettingSection::Authentication;
+        let before = repo.load().await.unwrap();
+        assert!(before.identifier_enumeration_allowed);
+
+        let owner = administrator(&db, &[ManagementScope::SettingsWrite]).await;
+        let after = repo
+            .update(UpdateInstanceSettingsTransaction {
+                authority: owner,
+                section,
+                expected_version: section.version(&before),
+                build: Box::new(|_| {
+                    Ok(SettingChanges::default()
+                        .set::<IdentifierEnumerationAllowedSetting>(&false)?)
+                }),
+            })
+            .await
+            .unwrap();
+        assert!(!after.identifier_enumeration_allowed);
+        assert_eq!(repo.load().await.unwrap(), after);
+        assert_ne!(section.version(&after), section.version(&before));
+        assert_eq!(
+            InstanceSettingSection::Protocol.version(&after),
+            InstanceSettingSection::Protocol.version(&before)
+        );
+
+        let changes: serde_json::Value = db
+            .query_one_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                "SELECT changes FROM audit WHERE action=$1 AND target_oid=$2",
+                [
+                    AuditAction::SettingAuthenticationUpdate.to_string().into(),
+                    section.audit_target_oid().into(),
+                ],
+            ))
+            .await
+            .unwrap()
+            .expect("authentication settings audit")
+            .try_get("", "changes")
+            .unwrap();
+        let text = changes.to_string();
+        assert!(text.contains("identifier_enumeration_allowed"), "{text}");
     })
     .await;
 }

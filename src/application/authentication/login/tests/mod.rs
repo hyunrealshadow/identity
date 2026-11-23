@@ -170,6 +170,7 @@ fn test_login(user_oid: Uuid, failed_attempts: i32) -> Login {
         created_at: Utc::now(),
         expires_at: Utc::now() + Duration::minutes(5),
         acr: None,
+        submitted_identifier: None,
         requested_acr_values: Vec::new(),
     }
 }
@@ -276,6 +277,7 @@ fn sign_in_credentials(mfa: bool) -> Vec<UserCredential> {
 }
 
 mod attempts;
+mod concealment;
 mod enrollment;
 mod passkey;
 mod password_change;

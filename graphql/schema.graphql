@@ -487,6 +487,13 @@ type AuthenticationSettings {
 	"""
 	breachedPasswordCheckEnabled: Boolean!
 	"""
+	Whether sign-in may reveal that an entered email or username has no
+	account. When false, every identifier continues to the password step
+	and a failure does not say whether the account or the password was
+	wrong.
+	"""
+	identifierEnumerationAllowed: Boolean!
+	"""
 	Argon2id cost for newly stored password hashes.
 	"""
 	passwordHashing: PasswordHashing!
@@ -2407,6 +2414,7 @@ input UnlockUserInput {
 
 input UpdateAuthenticationSettingsInput {
 	breachedPasswordCheckEnabled: Boolean!
+	identifierEnumerationAllowed: Boolean!
 	passwordHashing: PasswordHashingInput!
 	expectedVersion: UUID!
 	clientMutationId: String

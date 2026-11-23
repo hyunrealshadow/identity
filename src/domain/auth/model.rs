@@ -99,6 +99,11 @@ pub struct Login {
     /// step) so that subsequent challenge steps do not need to re-resolve the
     /// identifier string into a user.
     pub user_oid: Option<Uuid>,
+    /// The identifier as entered at the identifier step, kept only when the
+    /// instance conceals whether accounts exist. Until the first factor
+    /// succeeds, the interaction presents this instead of the account, and
+    /// `user_oid` may be `None` because no account matched.
+    pub submitted_identifier: Option<String>,
     pub status: LoginStatus,
     pub failed_attempts: i32,
     pub created_at: DateTime<Utc>,
@@ -124,5 +129,14 @@ impl Login {
     #[must_use]
     pub fn preferred_acr(&self) -> Option<AuthenticationContextClass> {
         self.requested_acr_values.first().copied()
+    }
+
+    /// The identifier this interaction presents while it conceals whether an
+    /// account exists: from the identifier step until the password succeeds.
+    #[must_use]
+    pub fn concealed_identifier(&self) -> Option<&str> {
+        (self.status == LoginStatus::IDENTIFIER_VERIFIED)
+            .then_some(self.submitted_identifier.as_deref())
+            .flatten()
     }
 }

@@ -33,3 +33,4 @@ E11023 = This password is too easy to guess. Choose a different password.
 E11024 = The password is too similar to your username or email address.
 E11025 = This password has appeared in a data breach. Choose a different password.
 E11026 = Password security checks are temporarily unavailable. Please try again later.
+E11027 = The account or password is incorrect. Try again.

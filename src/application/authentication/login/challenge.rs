@@ -173,7 +173,14 @@ impl LoginService {
         // Look up the login record (carries user_oid — no extra identifier needed).
         let login = self.prepare_challenge(login_oid).await?;
 
-        if login.user_oid.is_none() {
+        // While the interaction conceals whether an account exists, only the
+        // password is offered, with or without a matched account; any other
+        // method is refused alike so the refusal reveals nothing.
+        let concealed = login.concealed_identifier().is_some();
+        if concealed && credential_type != CredentialType::Password {
+            return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
+        }
+        if login.user_oid.is_none() && !concealed {
             return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
         }
 
@@ -211,6 +218,9 @@ impl LoginService {
 fn authentication_outcome(error: &AppError) -> (&'static str, &'static str) {
     match error.code() {
         code if code == AuthErrorCode::InvalidCredential.code() => {
+            ("rejected", "invalid_credential")
+        }
+        code if code == AuthErrorCode::InvalidAccountOrPassword.code() => {
             ("rejected", "invalid_credential")
         }
         code if code == AuthErrorCode::InvalidOtp.code() => ("rejected", "invalid_credential"),

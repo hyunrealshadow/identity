@@ -260,6 +260,7 @@ pub(super) async fn continue_state(fixture: ContinueFixture) -> (AppState, Strin
             _ => None,
         },
         user_id: None,
+        submitted_identifier: None,
         status: fixture.login_status.to_owned(),
         failure_reason: None,
         failed_attempts: 0,

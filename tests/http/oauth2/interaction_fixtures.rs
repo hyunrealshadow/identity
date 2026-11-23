@@ -162,6 +162,7 @@ pub(super) async fn authorize_first_hop_state() -> (AppState, Uuid) {
         client_authorization_id: inserted_authorization_model.id,
         session_id: None,
         user_id: None,
+        submitted_identifier: None,
         status: LoginStatus::CREATED.to_string(),
         failure_reason: None,
         failed_attempts: 0,

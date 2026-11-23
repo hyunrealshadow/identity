@@ -12,8 +12,8 @@ use async_trait::async_trait;
 use identity_application::{
     rbac::RbacManagementRepositoryError,
     setting::{
-        AppSettings, BreachedPasswordCheckEnabledSetting, InstallationSettings,
-        OpenIdConnectSettings, PasswordHashSetting,
+        AppSettings, BreachedPasswordCheckEnabledSetting, IdentifierEnumerationAllowedSetting,
+        InstallationSettings, OpenIdConnectSettings, PasswordHashSetting,
         management::{
             InstanceSettingRepository, InstanceSettingRepositoryError, InstanceSettingSection,
             InstanceSettingsState, UpdateInstanceSettingsTransaction,
@@ -76,6 +76,7 @@ async fn load_state<C: ConnectionTrait>(
         openid_connect: snapshot.section::<OpenIdConnectSettings>(),
         password_hash: snapshot.get::<PasswordHashSetting>(),
         breached_password_check_enabled: snapshot.get::<BreachedPasswordCheckEnabledSetting>(),
+        identifier_enumeration_allowed: snapshot.get::<IdentifierEnumerationAllowedSetting>(),
     })
 }
 
@@ -123,11 +124,8 @@ impl InstanceSettingRepository for InstanceSettingRepositoryImpl {
             ),
             InstanceSettingSection::Authentication => audited.diff(
                 AuditField::Settings,
-                &(
-                    &current.password_hash,
-                    current.breached_password_check_enabled,
-                ),
-                &(&next.password_hash, next.breached_password_check_enabled),
+                &current.authentication_values(),
+                &next.authentication_values(),
             ),
         };
         append_semantic_audit(

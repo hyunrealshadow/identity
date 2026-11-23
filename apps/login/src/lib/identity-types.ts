@@ -91,6 +91,8 @@ export interface LoginStatusResponse {
   id: string
   status: string
   user?: UserDisplayInfo
+  /** The identifier as entered, shown instead of `user` while the instance conceals whether an account exists. */
+  identifier?: string
   preferred_credential_type?: string
   credential_types: Array<string>
   prompt: string
@@ -116,7 +118,8 @@ export interface IdentifierResponse {
   status: string
   preferred_credential_type?: string
   credential_types: Array<string>
-  user: UserDisplayInfo
+  user?: UserDisplayInfo
+  identifier?: string
 }
 
 export interface SelectAccountResponse {

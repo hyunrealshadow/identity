@@ -31,6 +31,9 @@ pub enum AuthErrorCode {
     PasswordTooSimilar,
     PasswordBreached,
     PasswordCheckUnavailable,
+    /// A failed password while the interaction conceals whether the account
+    /// exists: it does not say which of the two was wrong.
+    InvalidAccountOrPassword,
 }
 
 impl AppErrorCode for AuthErrorCode {
@@ -38,6 +41,7 @@ impl AppErrorCode for AuthErrorCode {
         match self {
             AuthErrorCode::UserNotFound | AuthErrorCode::SessionNotFound => ErrorKind::NotFound,
             AuthErrorCode::InvalidCredential
+            | AuthErrorCode::InvalidAccountOrPassword
             | AuthErrorCode::InvalidOtp
             | AuthErrorCode::SessionExpired
             | AuthErrorCode::SessionRevoked => ErrorKind::Unauthorized,
@@ -96,6 +100,7 @@ impl AppErrorCode for AuthErrorCode {
             AuthErrorCode::PasswordTooSimilar => 11024,
             AuthErrorCode::PasswordBreached => 11025,
             AuthErrorCode::PasswordCheckUnavailable => 11026,
+            AuthErrorCode::InvalidAccountOrPassword => 11027,
         }
     }
 }

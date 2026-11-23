@@ -63,7 +63,7 @@ Created ─▶ IdentifierVerified ─▶ MfaRequired ─▶ Authenticated
 | Status | Meaning | What may follow |
 | --- | --- | --- |
 | `Created` | Interaction opened, no identifier accepted yet | Identifier submission |
-| `IdentifierVerified` | User identified, password not yet accepted | Password, passkey |
+| `IdentifierVerified` | User identified (or, while account existence is concealed, any identifier entered), password not yet accepted | Password, passkey |
 | `MfaRequired` | Password accepted, a second factor is still required | OTP, recovery code, passkey |
 | `MfaEnrollmentRequired` | The verified factors fall short of the requested class and the user has no credential that meets it | `aal2`: authenticator enrollment, then a completed session. `phr`: passkey registration, then a passkey challenge (an existing passkey may also be used) |
 | `Authenticated` | Session established and bound to the interaction | Continue to consent or the protocol |
@@ -91,6 +91,25 @@ Rules that keep the stages honest:
   `invalid_state`. They do not reveal whether an identifier exists.
 - **Interactions expire.** Each interaction has its own lifetime; an expired
   interaction cannot be revived by resubmitting a form.
+
+### Concealing whether an account exists
+
+The authentication setting `auth.login.identifier_enumeration_allowed`
+(Console: *Reveal whether an account exists*) defaults to `true`, where an
+unknown, locked, or disabled account is rejected at the identifier step. When it
+is `false`:
+
+- Every identifier reaches `IdentifierVerified` and continues to the password
+  step. The interaction keeps the identifier as entered and shows only that, not
+  the account's name or picture, and offers only the password.
+- A wrong password, an unknown account, and an account without a password all
+  fail with the same error (code `11027`) after comparable
+  hashing work. Reaching the lockout threshold is not reported either.
+- A locked or disabled account is disclosed only after its correct password.
+- Passkeys, authenticator codes, and recovery codes are refused before the
+  password succeeds, so a passkey-only account cannot sign in from the
+  identifier step. Selecting an existing browser session is unaffected.
+- Identifier-stage rejections are still written to the audit log.
 
 ## Credential stages
 

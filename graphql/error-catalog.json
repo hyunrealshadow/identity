@@ -310,6 +310,14 @@
     "module": "auth"
   },
   {
+    "code": 11027,
+    "kind": "unauthorized",
+    "fluentKey": "E11027",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "auth"
+  },
+  {
     "code": 15000,
     "kind": "validation",
     "fluentKey": "E15000",

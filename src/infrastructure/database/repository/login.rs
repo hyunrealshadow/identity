@@ -85,6 +85,7 @@ fn to_domain(
         client_authorization_oid,
         session_oid,
         user_oid,
+        submitted_identifier: m.submitted_identifier,
         status,
         failed_attempts: m.failed_attempts,
         created_at: DateTime::<Utc>::from(m.created_at),
@@ -102,6 +103,85 @@ pub struct LoginRepositoryImpl {
 impl LoginRepositoryImpl {
     pub fn new(db: DatabaseConnection) -> Self {
         Self { db }
+    }
+
+    /// Move a newly-created login to `identifier_verified`, binding the
+    /// matched account (if any) and the identifier kept for presentation.
+    async fn bind_identity(
+        &self,
+        login_oid: Uuid,
+        user_oid: Option<Uuid>,
+        submitted_identifier: Option<&str>,
+    ) -> Result<Login, LoginRepositoryError> {
+        let txn = self
+            .db
+            .begin()
+            .await
+            .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
+        let user_id = match user_oid {
+            Some(user_oid) => {
+                shared::lock_user_credentials(&txn, user_oid.into())
+                    .await
+                    .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
+                let user = UserEntity::find()
+                    .filter(UserColumn::Oid.eq(user_oid))
+                    .one(&txn)
+                    .await
+                    .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
+                    .ok_or(LoginRepositoryError::UserNotFound)?;
+                Some(user.id)
+            }
+            None => None,
+        };
+
+        let now = Utc::now();
+        let model = LoginEntity::update_many()
+            .col_expr(LoginColumn::UserId, Expr::value(user_id))
+            .col_expr(
+                LoginColumn::SubmittedIdentifier,
+                Expr::value(submitted_identifier.map(str::to_owned)),
+            )
+            .col_expr(
+                LoginColumn::Status,
+                Expr::value(LoginStatus::IDENTIFIER_VERIFIED.as_str()),
+            )
+            .col_expr(
+                LoginColumn::UpdatedAt,
+                Expr::value(Some(now.fixed_offset())),
+            )
+            .filter(LoginColumn::Oid.eq(login_oid))
+            .filter(LoginColumn::Status.eq(LoginStatus::CREATED.as_str()))
+            .filter(LoginColumn::UserId.is_null())
+            .exec_with_returning(&txn)
+            .await
+            .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?
+            .into_iter()
+            .next()
+            .ok_or(LoginRepositoryError::LoginNotFound)?;
+
+        let client_model = ClientEntity::find_by_id(model.client_id)
+            .one(&txn)
+            .await
+            .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
+            .ok_or(LoginRepositoryError::UserNotFound)?;
+
+        let client_authorization_model =
+            ClientAuthorizationEntity::find_by_id(model.client_authorization_id)
+                .one(&txn)
+                .await
+                .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
+                .ok_or(LoginRepositoryError::LoginNotFound)?;
+
+        txn.commit()
+            .await
+            .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
+        to_domain(
+            model,
+            client_model.oid,
+            client_authorization_model.oid,
+            None,
+            user_oid,
+        )
     }
 }
 
@@ -216,65 +296,18 @@ impl LoginRepository for LoginRepositoryImpl {
         login_oid: Uuid,
         user_oid: Uuid,
     ) -> Result<Login, LoginRepositoryError> {
-        let txn = self
-            .db
-            .begin()
-            .await
-            .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
-        shared::lock_user_credentials(&txn, user_oid.into())
-            .await
-            .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
-        let user = UserEntity::find()
-            .filter(UserColumn::Oid.eq(user_oid))
-            .one(&txn)
-            .await
-            .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
-            .ok_or(LoginRepositoryError::UserNotFound)?;
+        self.bind_identity(login_oid, Some(user_oid), None).await
+    }
 
-        let now = Utc::now();
-        let model = LoginEntity::update_many()
-            .col_expr(LoginColumn::UserId, Expr::value(Some(user.id)))
-            .col_expr(
-                LoginColumn::Status,
-                Expr::value(LoginStatus::IDENTIFIER_VERIFIED.as_str()),
-            )
-            .col_expr(
-                LoginColumn::UpdatedAt,
-                Expr::value(Some(now.fixed_offset())),
-            )
-            .filter(LoginColumn::Oid.eq(login_oid))
-            .filter(LoginColumn::Status.eq(LoginStatus::CREATED.as_str()))
-            .filter(LoginColumn::UserId.is_null())
-            .exec_with_returning(&txn)
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "bind_concealed_identifier"))]
+    async fn bind_concealed_identifier(
+        &self,
+        login_oid: Uuid,
+        identifier: &str,
+        user_oid: Option<Uuid>,
+    ) -> Result<Login, LoginRepositoryError> {
+        self.bind_identity(login_oid, user_oid, Some(identifier))
             .await
-            .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?
-            .into_iter()
-            .next()
-            .ok_or(LoginRepositoryError::LoginNotFound)?;
-
-        let client_model = ClientEntity::find_by_id(model.client_id)
-            .one(&txn)
-            .await
-            .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
-            .ok_or(LoginRepositoryError::UserNotFound)?;
-
-        let client_authorization_model =
-            ClientAuthorizationEntity::find_by_id(model.client_authorization_id)
-                .one(&txn)
-                .await
-                .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
-                .ok_or(LoginRepositoryError::LoginNotFound)?;
-
-        txn.commit()
-            .await
-            .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
-        to_domain(
-            model,
-            client_model.oid,
-            client_authorization_model.oid,
-            None,
-            Some(user_oid),
-        )
     }
 
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "update_status"))]
@@ -435,6 +468,10 @@ impl LoginRepository for LoginRepositoryImpl {
                 Expr::value(LoginStatus::CREATED.as_str()),
             )
             .col_expr(LoginColumn::UserId, Expr::value(Option::<i64>::None))
+            .col_expr(
+                LoginColumn::SubmittedIdentifier,
+                Expr::value(Option::<String>::None),
+            )
             .col_expr(LoginColumn::SessionId, Expr::value(Option::<i64>::None))
             .col_expr(LoginColumn::Acr, Expr::value(Option::<String>::None))
             .col_expr(

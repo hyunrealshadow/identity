@@ -8,7 +8,7 @@ use crate::{
     authentication::{password::PasswordHasher, totp::TotpVerifier},
     error::{AppError, codes::auth::AuthErrorCode},
     observability::{EventSink, NoopEventSink},
-    setting::SettingsSource,
+    setting::{IdentifierEnumerationAllowedSetting, SettingsSource},
     user::{
         UserOid,
         model::{CredentialType, User},
@@ -72,7 +72,10 @@ pub struct SessionContext {
 /// Result of a successful identifier step.
 pub struct IdentifierResult {
     pub login: Login,
-    pub user: User,
+    /// The matched account. `None` while the interaction conceals whether an
+    /// account exists (see [`Login::concealed_identifier`]): then nothing of
+    /// the account may be shown before the password succeeds.
+    pub user: Option<User>,
     pub credential_types: Vec<CredentialType>,
     pub preferred_credential_type: Option<CredentialType>,
 }
@@ -275,6 +278,14 @@ impl LoginService {
             return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
         }
 
+        if !self
+            .settings
+            .snapshot()
+            .get::<IdentifierEnumerationAllowedSetting>()
+        {
+            return self.identify_concealed(login_oid, identifier).await;
+        }
+
         // Look up user by normalized email or username.
         let user = match self.user_repo.find_by_identifier(identifier).await {
             Ok(user) => user,
@@ -334,10 +345,56 @@ impl LoginService {
             ),
             credential_types: challenge_credential_types(&login, &credential_types),
             login,
-            user,
+            user: Some(user),
+        })
+    }
+
+    /// The identifier step when accounts may not be enumerated: every
+    /// identifier continues to the password, whether or not it matched an
+    /// account that can sign in. Rejections are still audited here; the
+    /// account state is disclosed only after a correct password.
+    async fn identify_concealed(
+        &self,
+        login_oid: Uuid,
+        identifier: &str,
+    ) -> Result<IdentifierResult, AppError> {
+        let user = match self.user_repo.find_by_identifier(identifier).await {
+            Ok(user) => Some(user),
+            Err(UserRepositoryError::UserNotFound) => None,
+            Err(error) => return Err(error.into()),
+        };
+        let rejection = match &user {
+            None => Some(AuditFailureReason::UnknownAccount),
+            Some(user) if !user.enabled => Some(AuditFailureReason::AccountDisabled),
+            Some(user)
+                if user.locked && user.locked_until.is_none_or(|until| Utc::now() < until) =>
+            {
+                Some(AuditFailureReason::AccountLocked)
+            }
+            Some(_) => None,
+        };
+        let user_oid = user.as_ref().map(|user| Uuid::from(user.oid));
+        if let Some(reason) = rejection {
+            self.login_repo
+                .record_identification_failure(login_oid, user_oid, reason)
+                .await?;
+        }
+        let login = self
+            .login_repo
+            .bind_concealed_identifier(login_oid, identifier, user_oid)
+            .await?;
+        Ok(IdentifierResult {
+            preferred_credential_type: Some(CredentialType::Password),
+            credential_types: CONCEALED_CREDENTIAL_TYPES.to_vec(),
+            login,
+            user: None,
         })
     }
 }
+
+/// The only method offered while an interaction conceals whether an account
+/// exists. Offering the account's own methods would reveal it.
+pub const CONCEALED_CREDENTIAL_TYPES: &[CredentialType] = &[CredentialType::Password];
 
 /// Whether the login requires a multi-factor class.
 fn requires_second_factor(login: &Login) -> bool {
@@ -442,6 +499,10 @@ pub fn preferred_credential_type(
 fn validate_passkey_login(login: &Login) -> Result<(), AppError> {
     if login.expires_at <= Utc::now() {
         return Err(AppError::from_code(AuthErrorCode::LoginExpired));
+    }
+    // Passkey options would list the account's credentials.
+    if login.concealed_identifier().is_some() {
+        return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
     }
     // A `phr` enrollment may still be completed with an existing passkey.
     let enrolling_passkey =

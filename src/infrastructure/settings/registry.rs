@@ -1,7 +1,7 @@
 use identity_application::setting::{
     BreachedPasswordCheckEnabledSetting, ConsoleClientIdSetting, ConsoleDomainSetting,
-    DomainSetting, InstallationSettings, LoginClientIdSetting, LoginDomainSetting,
-    OpenIdConnectSettings, PasswordHashSetting, SettingRegistry,
+    DomainSetting, IdentifierEnumerationAllowedSetting, InstallationSettings, LoginClientIdSetting,
+    LoginDomainSetting, OpenIdConnectSettings, PasswordHashSetting, SettingRegistry,
 };
 
 /// Settings persisted by this application, shared by the runtime loader and
@@ -10,6 +10,7 @@ pub(crate) fn setting_registry() -> SettingRegistry {
     SettingRegistry::default()
         .register::<PasswordHashSetting>()
         .register::<BreachedPasswordCheckEnabledSetting>()
+        .register::<IdentifierEnumerationAllowedSetting>()
         .register::<DomainSetting>()
         .register::<LoginDomainSetting>()
         .register::<ConsoleDomainSetting>()

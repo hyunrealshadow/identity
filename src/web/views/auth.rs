@@ -124,8 +124,13 @@ pub struct IdentifierResponse {
     /// Credential types available for this user, e.g. `["password"]`.
     pub credential_types: Vec<CredentialType>,
     pub preferred_credential_type: Option<CredentialType>,
-    /// User display info.
-    pub user: UserDisplayInfo,
+    /// User display info. Absent while the interaction conceals whether an
+    /// account exists; `identifier` is presented instead.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<UserDisplayInfo>,
+    /// The identifier as entered, while account existence is concealed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub identifier: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -145,6 +150,10 @@ pub struct LoginStatusResponse {
     pub status: LoginStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub user: Option<UserDisplayInfo>,
+    /// The identifier as entered, presented instead of `user` while the
+    /// interaction conceals whether an account exists.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub identifier: Option<String>,
     /// Credential types available to the bound user. Empty before an account
     /// has been selected.
     pub credential_types: Vec<CredentialType>,

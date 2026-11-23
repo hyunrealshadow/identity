@@ -144,6 +144,21 @@ function AuthenticationSettingsForm({ settings }: { settings: AuthenticationSett
           void save()
         }}
       >
+        <SettingsGroup title={t('settingsSignInSection')}>
+          <SettingsRow
+            label={t('settingsIdentifierEnumeration')}
+            description={t('settingsIdentifierEnumerationHint')}
+            action={
+              <SettingsSwitch
+                label={t('settingsIdentifierEnumeration')}
+                isSelected={draft.identifierEnumerationAllowed}
+                onChange={(value) => change('identifierEnumerationAllowed', value)}
+                isDisabled={disabled}
+              />
+            }
+          />
+        </SettingsGroup>
+
         <SettingsGroup title={t('settingsPasswordPolicySection')}>
           <SettingsRow
             label={t('settingsBreachedPasswordCheck')}

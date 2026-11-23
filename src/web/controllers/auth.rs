@@ -126,7 +126,13 @@ async fn login_status(
         .await?;
     let login = ctx.services().login().prepare_challenge(login_oid).await?;
 
+    let concealed_identifier = login.concealed_identifier().map(str::to_owned);
     let (user, credential_types, mfa_preference) = match login.user_oid {
+        _ if concealed_identifier.is_some() => (
+            None,
+            login::CONCEALED_CREDENTIAL_TYPES.to_vec(),
+            Default::default(),
+        ),
         Some(user_oid) => {
             let user_oid = UserOid::from(user_oid);
             let credential_types = ctx.services().login().credential_types(user_oid).await?;
@@ -234,6 +240,7 @@ async fn login_status(
             id,
             status: login.status,
             user,
+            identifier: concealed_identifier,
             credential_types,
             preferred_credential_type,
             prompt: {
@@ -391,11 +398,12 @@ async fn identifier(depot: &mut Depot, req: &mut Request, res: &mut Response) ->
         status: LoginStatus::IdentifierVerified,
         credential_types: result.credential_types,
         preferred_credential_type: result.preferred_credential_type,
-        user: UserDisplayInfo {
-            email: result.user.email.clone(),
-            name: result.user.name.clone(),
-            picture: result.user.picture.clone(),
-        },
+        identifier: result.login.concealed_identifier().map(str::to_owned),
+        user: result.user.map(|user| UserDisplayInfo {
+            email: user.email,
+            name: user.name,
+            picture: user.picture,
+        }),
     };
 
     render_json(res, StatusCode::OK, resp);
@@ -796,7 +804,10 @@ fn identifier_form_error(error: AppError) -> AppError {
 
 fn challenge_form_error(error: AppError) -> AppError {
     let code = error.code();
-    if code == AuthErrorCode::InvalidCredential.code() || code == AuthErrorCode::InvalidOtp.code() {
+    if code == AuthErrorCode::InvalidCredential.code()
+        || code == AuthErrorCode::InvalidAccountOrPassword.code()
+        || code == AuthErrorCode::InvalidOtp.code()
+    {
         error.with_field("credential")
     } else {
         error

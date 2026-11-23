@@ -711,6 +711,11 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "Boolean",
           "policies": []
         },
+        "identifierEnumerationAllowed": {
+          "name": "identifierEnumerationAllowed",
+          "returnType": "Boolean",
+          "policies": []
+        },
         "passwordHashing": {
           "name": "passwordHashing",
           "returnType": "PasswordHashing",

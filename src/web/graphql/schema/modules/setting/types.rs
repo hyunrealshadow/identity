@@ -154,6 +154,14 @@ impl AuthenticationSettings {
         self.view.breached_password_check_enabled
     }
 
+    /// Whether sign-in may reveal that an entered email or username has no
+    /// account. When false, every identifier continues to the password step
+    /// and a failure does not say whether the account or the password was
+    /// wrong.
+    async fn identifier_enumeration_allowed(&self) -> bool {
+        self.view.identifier_enumeration_allowed
+    }
+
     /// Argon2id cost for newly stored password hashes.
     async fn password_hashing(&self) -> PasswordHashing {
         let hashing = &self.view.password_hashing;
@@ -226,6 +234,7 @@ pub(crate) struct PasswordHashingInput {
 #[derive(Clone, InputObject)]
 pub(crate) struct UpdateAuthenticationSettingsInput {
     pub breached_password_check_enabled: bool,
+    pub identifier_enumeration_allowed: bool,
     pub password_hashing: PasswordHashingInput,
     pub expected_version: Uuid,
     #[graphql(validator(chars_max_length = 255))]

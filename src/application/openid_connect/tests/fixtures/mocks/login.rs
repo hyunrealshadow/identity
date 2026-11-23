@@ -104,6 +104,15 @@ impl LoginRepository for MockLoginRepository {
         Ok(login)
     }
 
+    async fn bind_concealed_identifier(
+        &self,
+        _login_oid: Uuid,
+        _identifier: &str,
+        _user_oid: Option<Uuid>,
+    ) -> Result<Login, LoginRepositoryError> {
+        Err(LoginRepositoryError::LoginNotFound)
+    }
+
     async fn update_status(
         &self,
         login_oid: Uuid,
@@ -193,6 +202,7 @@ pub fn mock_login_repo() -> MockLoginRepository {
             created_at: Utc::now(),
             expires_at: Utc::now() + Duration::minutes(5),
             acr: None,
+            submitted_identifier: None,
             requested_acr_values: Vec::new(),
         })),
         create_pending_error: Mutex::new(None),
@@ -208,6 +218,7 @@ pub fn mock_login_repo() -> MockLoginRepository {
             created_at: Utc::now(),
             expires_at: Utc::now() + Duration::minutes(5),
             acr: None,
+            submitted_identifier: None,
             requested_acr_values: Vec::new(),
         })),
         bind_user_error: Mutex::new(None),

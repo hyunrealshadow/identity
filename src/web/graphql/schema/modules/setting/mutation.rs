@@ -89,6 +89,7 @@ impl SettingMutation {
                     &authority,
                     UpdateAuthenticationSettingsCommand {
                         breached_password_check_enabled: input.breached_password_check_enabled,
+                        identifier_enumeration_allowed: input.identifier_enumeration_allowed,
                         password_hashing: PasswordHashingView {
                             time_cost: hashing.time_cost,
                             memory_cost_kib: hashing.memory_cost_kib,

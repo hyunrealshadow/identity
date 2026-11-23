@@ -199,6 +199,7 @@ function ChallengePage() {
   const canSwitchAccount = !data.status?.requires_reauthentication
   const visibleError = search.error ?? data.error
   const user = data.status?.user
+  const identifier = data.status?.identifier
   const restartRequired =
     search.restart === 'required' ||
     search.restart === 'unavailable' ||
@@ -246,6 +247,11 @@ function ChallengePage() {
             <p className="truncate text-sm font-semibold">{user.name}</p>
             <p className="truncate text-xs text-muted-foreground">{user.email}</p>
           </div>
+        </div>
+      ) : identifier ? (
+        <div className="mb-6 flex items-center gap-3 rounded-xl border bg-muted/50 p-3">
+          <AccountAvatar name={identifier} />
+          <p className="min-w-0 flex-1 truncate text-sm font-semibold">{identifier}</p>
         </div>
       ) : null}
 

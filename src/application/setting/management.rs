@@ -22,8 +22,9 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use super::{
-    AppSettings, BreachedPasswordCheckEnabledSetting, InstallationSettings, OpenIdConnectSettings,
-    PasswordHashSetting, SettingChanges, runtime::RefreshableSetting,
+    AppSettings, BreachedPasswordCheckEnabledSetting, IdentifierEnumerationAllowedSetting,
+    InstallationSettings, OpenIdConnectSettings, PasswordHashSetting, SettingChanges,
+    runtime::RefreshableSetting,
 };
 use crate::{
     authentication::password::HashOptions,
@@ -105,10 +106,7 @@ impl InstanceSettingSection {
     pub fn version(self, state: &InstanceSettingsState) -> Uuid {
         match self {
             Self::Protocol => content_version(self, &state.openid_connect),
-            Self::Authentication => content_version(
-                self,
-                &(&state.password_hash, state.breached_password_check_enabled),
-            ),
+            Self::Authentication => content_version(self, &state.authentication_values()),
         }
     }
 }
@@ -128,6 +126,26 @@ pub struct InstanceSettingsState {
     pub openid_connect: OpenIdConnectSettings,
     pub password_hash: HashOptions,
     pub breached_password_check_enabled: bool,
+    pub identifier_enumeration_allowed: bool,
+}
+
+/// The stored values of the authentication section, as versioned and audited.
+#[derive(Debug, PartialEq, Serialize)]
+pub struct AuthenticationSectionValues<'a> {
+    pub password_hash: &'a HashOptions,
+    pub breached_password_check_enabled: bool,
+    pub identifier_enumeration_allowed: bool,
+}
+
+impl InstanceSettingsState {
+    #[must_use]
+    pub fn authentication_values(&self) -> AuthenticationSectionValues<'_> {
+        AuthenticationSectionValues {
+            password_hash: &self.password_hash,
+            breached_password_check_enabled: self.breached_password_check_enabled,
+            identifier_enumeration_allowed: self.identifier_enumeration_allowed,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -159,6 +177,7 @@ pub struct PasswordHashingView {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AuthenticationSettingsView {
     pub breached_password_check_enabled: bool,
+    pub identifier_enumeration_allowed: bool,
     pub password_hashing: PasswordHashingView,
     pub version: Uuid,
 }
@@ -200,6 +219,7 @@ impl From<&InstanceSettingsState> for InstanceSettingsView {
             },
             authentication: AuthenticationSettingsView {
                 breached_password_check_enabled: state.breached_password_check_enabled,
+                identifier_enumeration_allowed: state.identifier_enumeration_allowed,
                 password_hashing: PasswordHashingView {
                     time_cost: argon2.time_cost,
                     memory_cost_kib: argon2.memory_cost,
@@ -226,6 +246,7 @@ pub struct UpdateProtocolSettingsCommand {
 #[derive(Debug, Clone)]
 pub struct UpdateAuthenticationSettingsCommand {
     pub breached_password_check_enabled: bool,
+    pub identifier_enumeration_allowed: bool,
     pub password_hashing: PasswordHashingView,
     pub expected_version: Uuid,
     pub client_mutation_id: Option<String>,
@@ -380,10 +401,12 @@ impl InstanceSettingService {
                 parallelism: hashing.parallelism,
             });
             let breached = command.breached_password_check_enabled;
+            let enumeration = command.identifier_enumeration_allowed;
             let build = move |_: &InstanceSettingsState| {
                 Ok(SettingChanges::default()
                     .set::<PasswordHashSetting>(&options)?
-                    .set::<BreachedPasswordCheckEnabledSetting>(&breached)?)
+                    .set::<BreachedPasswordCheckEnabledSetting>(&breached)?
+                    .set::<IdentifierEnumerationAllowedSetting>(&enumeration)?)
             };
             self.write(
                 authority,
@@ -488,6 +511,7 @@ mod tests {
             openid_connect: OpenIdConnectSettings::default(),
             password_hash: PasswordHashSetting::default_value(),
             breached_password_check_enabled: true,
+            identifier_enumeration_allowed: true,
         }
     }
 
@@ -500,6 +524,8 @@ mod tests {
         protocol_changed.openid_connect.dynamic_registration.enabled = true;
         let mut authentication_changed = before.clone();
         authentication_changed.breached_password_check_enabled = false;
+        let mut enumeration_changed = before.clone();
+        enumeration_changed.identifier_enumeration_allowed = false;
 
         let protocol = InstanceSettingSection::Protocol;
         let authentication = InstanceSettingSection::Authentication;
@@ -514,6 +540,10 @@ mod tests {
         assert_ne!(
             authentication.version(&before),
             authentication.version(&authentication_changed)
+        );
+        assert_ne!(
+            authentication.version(&before),
+            authentication.version(&enumeration_changed)
         );
         assert_eq!(protocol.version(&before), protocol.version(&state()));
     }

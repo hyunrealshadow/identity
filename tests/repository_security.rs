@@ -938,3 +938,84 @@ async fn logout_and_client_authentication_failure_name_their_client() {
     })
     .await;
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured PostgreSQL test database"]
+async fn concealed_identifier_binding_persists_without_an_account_and_resets() {
+    common::isolated(|db| async move {
+        let client = Uuid::new_v4();
+        let relation = Uuid::new_v4();
+        let user = Uuid::new_v4();
+        sql(&db, &format!(r#"
+            INSERT INTO "user" (oid,name,name_normalized,email,email_normalized) VALUES ('{user}','{user}','{user}','{user}@example.test','{user}@example.test');
+            INSERT INTO client (oid,name,protocol) VALUES ('{client}','concealment-test','openid_connect');
+            INSERT INTO client_authorization (oid,client_id,type,data,expires_at)
+              SELECT '{relation}',id,'device_authorization','{{}}',now()+interval '1 day' FROM client WHERE oid='{client}';
+        "#)).await;
+        let logins = LoginRepositoryImpl::new(db.clone());
+
+        // No account matched: the interaction still advances and keeps only
+        // the identifier as entered.
+        let unknown = logins.create_pending(client, relation, &[]).await.unwrap();
+        let bound = logins
+            .bind_concealed_identifier(unknown.oid, "nobody@example.test", None)
+            .await
+            .unwrap();
+        assert_eq!(bound.status, LoginStatus::IDENTIFIER_VERIFIED);
+        assert_eq!(bound.user_oid, None);
+        let stored = logins.find_by_oid(unknown.oid).await.unwrap().unwrap();
+        assert_eq!(stored.concealed_identifier(), Some("nobody@example.test"));
+        assert_eq!(stored.user_oid, None);
+        // A second binding of the same interaction is refused.
+        assert!(
+            logins
+                .bind_concealed_identifier(unknown.oid, "other@example.test", None)
+                .await
+                .is_err()
+        );
+
+        // A failed password without an account is an anonymous sign-in
+        // failure with no target.
+        let anonymous_before = scalar(
+            &db,
+            "SELECT count(*)::bigint n FROM audit WHERE action='sign_in' AND target_oid IS NULL",
+        )
+        .await;
+        logins
+            .increment_failed_attempts(unknown.oid, Some(LoginFailureReason::InvalidCredential))
+            .await
+            .unwrap();
+        assert_eq!(
+            scalar(
+                &db,
+                "SELECT count(*)::bigint n FROM audit WHERE action='sign_in' AND target_oid IS NULL",
+            )
+            .await,
+            anonymous_before + 1
+        );
+
+        // Switching accounts forgets the entered identifier.
+        logins.reset_identity(unknown.oid).await.unwrap();
+        let reset = logins.find_by_oid(unknown.oid).await.unwrap().unwrap();
+        assert_eq!(reset.status, LoginStatus::CREATED);
+        assert_eq!(reset.submitted_identifier, None);
+
+        // A matched account is bound alongside the identifier.
+        let known = logins.create_pending(client, relation, &[]).await.unwrap();
+        logins
+            .bind_concealed_identifier(known.oid, "typed-name", Some(user))
+            .await
+            .unwrap();
+        let stored = logins.find_by_oid(known.oid).await.unwrap().unwrap();
+        assert_eq!(stored.user_oid, Some(user));
+        assert_eq!(stored.concealed_identifier(), Some("typed-name"));
+        // Once past the identifier step, the account is no longer concealed.
+        logins
+            .update_status(known.oid, LoginStatus::MFA_REQUIRED, None, None)
+            .await
+            .unwrap();
+        let advanced = logins.find_by_oid(known.oid).await.unwrap().unwrap();
+        assert_eq!(advanced.concealed_identifier(), None);
+    })
+    .await;
+}

@@ -226,6 +226,16 @@ pub trait LoginRepository: Send + Sync {
         user_oid: Uuid,
     ) -> Result<Login, LoginRepositoryError>;
 
+    /// Move a newly-created login to `identifier_verified` without revealing
+    /// whether the entered identifier matched an account: `user_oid` is the
+    /// matching account, if any, and `identifier` is kept for presentation.
+    async fn bind_concealed_identifier(
+        &self,
+        login_oid: Uuid,
+        identifier: &str,
+        user_oid: Option<Uuid>,
+    ) -> Result<Login, LoginRepositoryError>;
+
     /// Bind the session selected for this login interaction.
     async fn bind_session(
         &self,

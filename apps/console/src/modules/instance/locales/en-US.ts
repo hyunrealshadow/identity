@@ -53,6 +53,10 @@ const messages = {
   settingsRegistrationSection: 'Client registration',
   settingsDynamicRegistration: 'Dynamic client registration',
   settingsDynamicRegistrationHint: 'Anyone who can reach the registration endpoint can create a client',
+  settingsSignInSection: 'Sign-in',
+  settingsIdentifierEnumeration: 'Reveal whether an account exists',
+  settingsIdentifierEnumerationHint:
+    'When off, any email or username continues to the password step, a failed sign-in does not say whether the account or the password was wrong, and passkeys are not offered before the password',
   settingsPasswordPolicySection: 'Password policy',
   settingsBreachedPasswordCheck: 'Reject breached passwords',
   settingsBreachedPasswordCheckHint: 'New passwords are checked against known breaches without sending the password',
