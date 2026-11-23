@@ -112,9 +112,9 @@ is `false`:
   identifier step. Selecting an existing browser session is unaffected.
 - Identifier-stage rejections are still written to the audit log.
 - Requesting a sign-in email answers the same whether or not anything is
-  sent: the resend interval and send limit are kept on the interaction, the
-  email is composed and sent in the background, and a code for an unknown
-  account fails like a wrong one.
+  sent: the resend interval and send limit are kept on the interaction's
+  authentication challenge, the email is composed and sent in the background,
+  and a code for an unknown account fails like a wrong one.
 
 ### Email sign-in
 

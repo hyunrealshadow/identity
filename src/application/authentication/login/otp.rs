@@ -1,6 +1,6 @@
 use super::{
-    ChallengeOutcome, LoginService, SessionContext, can_challenge_second_factor,
-    failed_attempt_lock_until, first_factor_amr,
+    ChallengeOutcome, LoginService, SessionContext, can_challenge_second_factor, combine_amr,
+    failed_attempt_lock_until,
 };
 use crate::{
     error::{AppError, codes::auth::AuthErrorCode},
@@ -105,14 +105,9 @@ impl LoginService {
 
         self.user_repo.reset_failed_attempts(user.oid).await?;
         // A bound session from forced reauthentication is upgraded in place.
-        let first_factor = first_factor_amr(&login);
-        self.complete_second_factor(
-            login,
-            user.oid.into(),
-            ctx,
-            &[first_factor, AMR_OTP.to_owned(), AMR_MFA.to_owned()],
-        )
-        .await
+        let amr = combine_amr(&login, &[AMR_OTP, AMR_MFA], true);
+        self.complete_second_factor(login, user.oid.into(), ctx, &amr)
+            .await
     }
 
     pub(super) async fn fail_login_for_too_many_otp_attempts(&self, login_oid: Uuid) {

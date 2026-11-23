@@ -214,14 +214,11 @@ async fn login_status(
     } else {
         None
     };
-    let email_code_resend_available_at = login
-        .email_code_sent_at
-        .filter(|_| login.status == LoginStatus::IDENTIFIER_VERIFIED)
-        .map(|sent_at| {
-            sent_at
-                + chrono::Duration::from_std(identity_domain::auth::EMAIL_CODE_RESEND_INTERVAL)
-                    .unwrap_or_else(|_| chrono::Duration::seconds(60))
-        });
+    let email_code_resend_available_at = ctx
+        .services()
+        .login()
+        .email_code_resend_available_at(&login)
+        .await?;
     let preferred_credential_type =
         login::preferred_credential_type(&login, &credential_types, mfa_preference);
     let credential_types = login::challenge_credential_types(&login, &credential_types);

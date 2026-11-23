@@ -1,7 +1,11 @@
 //! Persistence port shared by Passkey and future SMS/email OTP use cases.
 use crate::error::AppError;
 use async_trait::async_trait;
-use identity_domain::auth::challenge::{AuthenticationChallenge, ChallengeContext};
+use identity_domain::auth::challenge::{
+    AuthenticationChallenge, ChallengeBinding, ChallengeContext, ChallengeMethod, ChallengePurpose,
+    DeliveryChallengeAdmission, DeliveryChallengeContext, DeliveryChallengeRequest,
+    DeliveryChallengeStatus,
+};
 use uuid::Uuid;
 
 #[async_trait]
@@ -12,6 +16,23 @@ pub trait ChallengeRepository: Send + Sync {
         context: ChallengeContext,
         challenge: AuthenticationChallenge,
     ) -> Result<(), AppError>;
+
+    /// Atomically enforce resend interval and send limits on an outbound
+    /// delivery challenge and store its new verifier when provided.
+    async fn admit_delivery(
+        &self,
+        context: DeliveryChallengeContext,
+        request: DeliveryChallengeRequest,
+    ) -> Result<DeliveryChallengeAdmission, AppError>;
+
+    /// Return the latest outbound delivery status for an active interaction
+    /// without checking or revealing whether an account matched.
+    async fn delivery_status(
+        &self,
+        binding: ChallengeBinding,
+        method: ChallengeMethod,
+        purpose: ChallengePurpose,
+    ) -> Result<Option<DeliveryChallengeStatus>, AppError>;
 
     /// Atomically remove and return one unexpired challenge matching the entire
     /// context. Used by Passkey before verification, including failed assertions.

@@ -15,7 +15,11 @@ use crate::{
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use identity_domain::auth::challenge::{AuthenticationChallenge, ChallengeContext};
+use identity_domain::auth::challenge::{
+    AuthenticationChallenge, ChallengeBinding, ChallengeContext, ChallengeMethod, ChallengePurpose,
+    DeliveryChallengeAdmission, DeliveryChallengeContext, DeliveryChallengeRequest,
+    DeliveryChallengeStatus,
+};
 use serde_json::{Value, json};
 use std::{
     collections::HashMap,
@@ -106,6 +110,21 @@ impl ChallengeRepository for MemoryRepo {
             (context, challenge.state, challenge.expires_at),
         );
         Ok(())
+    }
+    async fn admit_delivery(
+        &self,
+        _context: DeliveryChallengeContext,
+        _request: DeliveryChallengeRequest,
+    ) -> Result<DeliveryChallengeAdmission, AppError> {
+        Ok(DeliveryChallengeAdmission::InvalidState)
+    }
+    async fn delivery_status(
+        &self,
+        _binding: ChallengeBinding,
+        _method: ChallengeMethod,
+        _purpose: ChallengePurpose,
+    ) -> Result<Option<DeliveryChallengeStatus>, AppError> {
+        Ok(None)
     }
     async fn take(
         &self,

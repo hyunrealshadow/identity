@@ -36,11 +36,12 @@ pub struct Model {
     /// Requested classes in order of preference, as a JSON string array.
     #[sea_orm(default_expr = "Expr::cust(\"'[]'::jsonb\")")]
     pub requested_acr_values: Json,
-    /// The first factor when it was not the password.
-    pub first_factor_amr: Option<String>,
-    pub email_code_sent_at: Option<DateTimeWithTimeZone>,
-    #[sea_orm(default_value = 0)]
-    pub email_code_send_count: i32,
+    /// Authentication methods satisfied so far in this login interaction.
+    #[sea_orm(
+        column_type = "JsonBinary",
+        default_expr = "Expr::cust(\"'[]'::jsonb\")"
+    )]
+    pub amr: Json,
     #[sea_orm(default_expr = "Expr::current_timestamp()")]
     pub created_at: DateTimeWithTimeZone,
     #[sea_orm(indexed)]

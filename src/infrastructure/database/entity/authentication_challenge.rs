@@ -15,7 +15,7 @@ pub struct Model {
     #[sea_orm(default_expr = "Expr::cust(\"gen_random_uuid()\")")]
     pub oid: Uuid,
     #[sea_orm(indexed)]
-    pub user_id: i64,
+    pub user_id: Option<i64>,
     #[sea_orm(indexed)]
     pub login_id: Option<i64>,
     #[sea_orm(indexed)]

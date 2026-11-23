@@ -2,11 +2,11 @@
 //! verified email address, accepted instead of the password as the first
 //! factor. A second factor the account has enrolled is still required.
 //!
-//! The send admission (resend interval and send limit) is kept on the login
-//! itself, so it behaves the same whether or not the identifier matched an
-//! account. While the interaction conceals whether an account exists, the
-//! email is composed and sent in the background and every outcome looks
-//! alike.
+//! The send admission (resend interval, send limit, and verifier state) is
+//! kept on the outbound authentication challenge itself, so it behaves the
+//! same whether or not the identifier matched an account. While the interaction
+//! conceals whether an account exists, the email is composed and sent in the
+//! background and every outcome looks alike.
 
 use std::sync::Arc;
 
@@ -18,10 +18,10 @@ use identity_domain::{
         MAX_EMAIL_CODE_SENDS, MAX_FAILED_ATTEMPTS, MAX_OTP_ATTEMPTS,
         challenge::{
             AuthenticationChallenge, ChallengeBinding, ChallengeContext, ChallengeMethod,
-            ChallengePurpose,
+            ChallengePurpose, DeliveryChallengeAdmission, DeliveryChallengeContext,
+            DeliveryChallengeRequest, DeliveryChallengeState,
         },
         model::Login,
-        repository::EmailCodeAdmission,
     },
     user::User,
 };
@@ -79,10 +79,10 @@ pub struct EmailCodeSent {
     pub resend_available_at: DateTime<Utc>,
 }
 
-/// Verifier state kept in the authentication challenge. Never sent to a
-/// browser or written to logs.
+/// Verifier state kept inside [`DeliveryChallengeState::verifier`].
+/// Never sent to a browser or written to logs.
 #[derive(Serialize, Deserialize)]
-struct EmailChallengeState {
+struct EmailChallengeVerifier {
     /// The code, protected for [`EMAIL_CODE_PURPOSE`].
     code: String,
     /// SHA-256 of the link token, base64url.
@@ -133,6 +133,29 @@ impl LoginService {
         self.email.is_some() && email_sign_in_available(&self.settings.snapshot())
     }
 
+    /// When another sign-in email may be requested for `login`, if one was
+    /// sent while waiting for the first factor.
+    pub async fn email_code_resend_available_at(
+        &self,
+        login: &Login,
+    ) -> Result<Option<DateTime<Utc>>, AppError> {
+        if login.status != LoginStatus::IDENTIFIER_VERIFIED {
+            return Ok(None);
+        }
+        let Some(dependencies) = self.email.as_ref() else {
+            return Ok(None);
+        };
+        let status = dependencies
+            .challenges
+            .delivery_status(
+                ChallengeBinding::Login(login.oid),
+                ChallengeMethod::EmailOtp,
+                ChallengePurpose::Authentication,
+            )
+            .await?;
+        Ok(status.map(|status| status.sent_at + interval()))
+    }
+
     /// Email a sign-in code and link for a login waiting for its first factor.
     #[tracing::instrument(skip_all, name = "authentication.email_code.send")]
     pub async fn send_email_code(
@@ -180,37 +203,75 @@ impl LoginService {
             return Err(unsupported());
         }
 
+        let (generated, verifier) = if recipient.is_some() {
+            let code = {
+                let mut rng = rand::rng();
+                (0..EMAIL_CODE_DIGITS)
+                    .map(|_| char::from(b'0' + rng.random_range(0..10u8)))
+                    .collect::<String>()
+            };
+            let token = {
+                let mut bytes = [0u8; 32];
+                rand::rng().fill(&mut bytes);
+                URL_SAFE_NO_PAD.encode(bytes)
+            };
+            let protected_code = dependencies
+                .protector
+                .protect(EMAIL_CODE_PURPOSE, code.as_bytes())
+                .await
+                .map_err(AppError::from)?;
+            let verifier = serde_json::to_value(EmailChallengeVerifier {
+                code: protected_code,
+                link: link_digest(&token),
+            })
+            .map_err(AppError::internal)?;
+            (Some((code, token)), Some(verifier))
+        } else {
+            (None, None)
+        };
+
         let expires_at = now + ttl();
-        match self
-            .login_repo
-            .admit_email_code(
-                login.oid,
-                now,
-                EMAIL_CODE_RESEND_INTERVAL,
-                MAX_EMAIL_CODE_SENDS,
-                expires_at,
+        let sent = match dependencies
+            .challenges
+            .admit_delivery(
+                DeliveryChallengeContext {
+                    user_oid: login.user_oid,
+                    binding: ChallengeBinding::Login(login.oid),
+                    method: ChallengeMethod::EmailOtp,
+                    purpose: ChallengePurpose::Authentication,
+                },
+                DeliveryChallengeRequest {
+                    now,
+                    resend_interval: EMAIL_CODE_RESEND_INTERVAL,
+                    max_sends: MAX_EMAIL_CODE_SENDS,
+                    code_expires_at: expires_at,
+                    required_login_status: Some(LoginStatus::IDENTIFIER_VERIFIED),
+                    verifier,
+                },
             )
             .await?
         {
-            EmailCodeAdmission::Admitted => {}
-            EmailCodeAdmission::TooSoon { available_at } => {
+            DeliveryChallengeAdmission::Admitted {
+                resend_available_at,
+                ..
+            } => EmailCodeSent {
+                expires_at,
+                resend_available_at,
+            },
+            DeliveryChallengeAdmission::TooSoon { available_at } => {
                 let seconds = (available_at - now).num_seconds().max(1);
                 return Err(AppError::from_code(AuthErrorCode::EmailCodeResendTooSoon)
                     .with_param("seconds", seconds.to_string()));
             }
-            EmailCodeAdmission::LimitReached => {
+            DeliveryChallengeAdmission::LimitReached => {
                 return Err(AppError::from_code(AuthErrorCode::TooManyAttempts));
             }
-            EmailCodeAdmission::InvalidState => {
+            DeliveryChallengeAdmission::InvalidState => {
                 return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
             }
-        }
-        let sent = EmailCodeSent {
-            expires_at,
-            resend_available_at: now + interval(),
         };
 
-        let Some(user) = recipient else {
+        let Some((user, (code, token))) = recipient.zip(generated) else {
             return Ok(sent);
         };
         let snapshot = self.settings.snapshot();
@@ -218,12 +279,12 @@ impl LoginService {
             dependencies,
             delivery: snapshot.section::<EmailDeliverySettings>(),
             templates: snapshot.get::<EmailTemplatesSetting>(),
-            login_oid: login.oid,
             user,
             locales: request.locales,
             application_name: request.application_name,
             link_prefix: request.link_prefix,
-            expires_at,
+            code,
+            token,
         };
         if concealed {
             // The response must not wait on whether anything is sent.
@@ -350,10 +411,21 @@ async fn matches(
     challenge: &AuthenticationChallenge,
     credential: &str,
 ) -> bool {
-    if challenge.expires_at <= Utc::now() {
+    let now = Utc::now();
+    if challenge.expires_at <= now {
         return false;
     }
-    let Ok(state) = serde_json::from_value::<EmailChallengeState>(challenge.state.clone()) else {
+    let Ok(state) = serde_json::from_value::<DeliveryChallengeState>(challenge.state.clone())
+    else {
+        return false;
+    };
+    if state.code_expires_at <= now {
+        return false;
+    }
+    let Some(verifier) = state
+        .verifier
+        .and_then(|value| serde_json::from_value::<EmailChallengeVerifier>(value).ok())
+    else {
         return false;
     };
     let is_code =
@@ -361,7 +433,7 @@ async fn matches(
     if is_code {
         let Ok(code) = dependencies
             .protector
-            .unprotect(EMAIL_CODE_PURPOSE, &state.code)
+            .unprotect(EMAIL_CODE_PURPOSE, &verifier.code)
             .await
         else {
             return false;
@@ -371,61 +443,25 @@ async fn matches(
     bool::from(
         link_digest(credential)
             .as_bytes()
-            .ct_eq(state.link.as_bytes()),
+            .ct_eq(verifier.link.as_bytes()),
     )
 }
 
-/// Composes, records and sends one sign-in email.
+/// Composes and sends one sign-in email.
 struct DeliveryJob {
     dependencies: LoginEmailDependencies,
     delivery: EmailDeliverySettings,
     templates: crate::email::EmailTemplates,
-    login_oid: Uuid,
     user: User,
     locales: Vec<String>,
     application_name: Option<String>,
     link_prefix: String,
-    expires_at: DateTime<Utc>,
+    code: String,
+    token: String,
 }
 
 impl DeliveryJob {
     async fn run(self) -> Result<(), AppError> {
-        let code = {
-            let mut rng = rand::rng();
-            (0..EMAIL_CODE_DIGITS)
-                .map(|_| char::from(b'0' + rng.random_range(0..10u8)))
-                .collect::<String>()
-        };
-        let token = {
-            let mut bytes = [0u8; 32];
-            rand::rng().fill(&mut bytes);
-            URL_SAFE_NO_PAD.encode(bytes)
-        };
-        let protected_code = self
-            .dependencies
-            .protector
-            .protect(EMAIL_CODE_PURPOSE, code.as_bytes())
-            .await
-            .map_err(AppError::from)?;
-        let state = serde_json::to_value(EmailChallengeState {
-            code: protected_code,
-            link: link_digest(&token),
-        })
-        .map_err(AppError::internal)?;
-        // The newest challenge is the one a code is checked against, so a
-        // resend replaces the earlier code.
-        self.dependencies
-            .challenges
-            .store(
-                challenge_context(self.user.oid.into(), self.login_oid),
-                AuthenticationChallenge {
-                    id: Uuid::new_v4(),
-                    state,
-                    expires_at: self.expires_at,
-                },
-            )
-            .await?;
-
         let candidates: Vec<&str> = self
             .user
             .locale
@@ -442,8 +478,8 @@ impl DeliveryJob {
             .unwrap_or("en")
             .to_owned();
         let context = json!({
-            "code": code,
-            "link": format!("{}{token}", self.link_prefix),
+            "code": self.code,
+            "link": format!("{}{}", self.link_prefix, self.token),
             "expires_in_minutes": ttl().num_minutes(),
             "user": { "name": self.user.name, "email": self.user.email },
             "application": self.application_name.as_ref().map(|name| json!({ "name": name })),

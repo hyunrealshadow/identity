@@ -1,6 +1,6 @@
 use super::{
-    ChallengeOutcome, LoginService, SessionContext, can_challenge_second_factor,
-    failed_attempt_lock_until, first_factor_amr,
+    ChallengeOutcome, LoginService, SessionContext, can_challenge_second_factor, combine_amr,
+    failed_attempt_lock_until,
 };
 use crate::{
     authentication::mfa::recovery_code_hash,
@@ -81,17 +81,8 @@ impl LoginService {
             return Err(AppError::from_code(AuthErrorCode::InvalidOtp));
         }
         self.user_repo.reset_failed_attempts(user_oid).await?;
-        let first_factor = first_factor_amr(&login);
-        self.complete_second_factor(
-            login,
-            Uuid::from(user_oid),
-            ctx,
-            &[
-                first_factor,
-                AMR_RECOVERY_CODE.to_owned(),
-                AMR_MFA.to_owned(),
-            ],
-        )
-        .await
+        let amr = combine_amr(&login, &[AMR_RECOVERY_CODE, AMR_MFA], true);
+        self.complete_second_factor(login, Uuid::from(user_oid), ctx, &amr)
+            .await
     }
 }

@@ -475,12 +475,22 @@ pub fn challenge_credential_types(
         .collect()
 }
 
-/// The AMR of the first factor this login established.
-fn first_factor_amr(login: &Login) -> String {
-    login
-        .first_factor_amr
-        .clone()
-        .unwrap_or_else(|| identity_domain::auth::AMR_PASSWORD.to_owned())
+/// Combine the authentication methods already satisfied on `login` with
+/// `additional`, preserving order without duplicates. When completing a
+/// second-factor flow whose first factor was not recorded on `login`, fall
+/// back to `pwd`.
+fn combine_amr(login: &Login, additional: &[&str], expect_first_factor: bool) -> Vec<String> {
+    let mut amr = if login.amr.is_empty() && expect_first_factor {
+        vec![identity_domain::auth::AMR_PASSWORD.to_owned()]
+    } else {
+        login.amr.clone()
+    };
+    for method in additional {
+        if !amr.iter().any(|existing| existing == method) {
+            amr.push((*method).to_owned());
+        }
+    }
+    amr
 }
 
 fn failed_attempt_lock_until() -> DateTime<Utc> {

@@ -4,7 +4,11 @@ use std::collections::HashMap;
 use identity_domain::{
     auth::{
         AMR_EMAIL, MAX_EMAIL_CODE_SENDS,
-        challenge::{AuthenticationChallenge, ChallengeContext},
+        challenge::{
+            AuthenticationChallenge, ChallengeBinding, ChallengeContext, ChallengeMethod,
+            ChallengePurpose, DeliveryChallengeAdmission, DeliveryChallengeContext,
+            DeliveryChallengeRequest, DeliveryChallengeState, DeliveryChallengeStatus,
+        },
     },
     data_protection::DataProtectionError,
 };
@@ -27,10 +31,29 @@ use crate::{
     },
 };
 
-#[derive(Default)]
+struct StoredMemoryChallenge {
+    user_oid: Option<Uuid>,
+    binding: ChallengeBinding,
+    method: ChallengeMethod,
+    purpose: ChallengePurpose,
+    state: Value,
+    expires_at: DateTime<Utc>,
+}
+
 struct MemoryChallenges {
-    stored: Mutex<HashMap<Uuid, (ChallengeContext, AuthenticationChallenge)>>,
+    logins: Arc<Mutex<TestLoginRepoState>>,
+    stored: Mutex<HashMap<Uuid, StoredMemoryChallenge>>,
     order: Mutex<Vec<Uuid>>,
+}
+
+impl MemoryChallenges {
+    fn new(logins: Arc<Mutex<TestLoginRepoState>>) -> Self {
+        Self {
+            logins,
+            stored: Mutex::new(HashMap::new()),
+            order: Mutex::new(Vec::new()),
+        }
+    }
 }
 
 #[async_trait]
@@ -41,11 +64,149 @@ impl ChallengeRepository for MemoryChallenges {
         challenge: AuthenticationChallenge,
     ) -> Result<(), AppError> {
         self.order.lock().unwrap().push(challenge.id);
-        self.stored
-            .lock()
-            .unwrap()
-            .insert(challenge.id, (context, challenge));
+        self.stored.lock().unwrap().insert(
+            challenge.id,
+            StoredMemoryChallenge {
+                user_oid: Some(context.user_oid),
+                binding: context.binding,
+                method: context.method,
+                purpose: context.purpose,
+                state: challenge.state,
+                expires_at: challenge.expires_at,
+            },
+        );
         Ok(())
+    }
+
+    async fn admit_delivery(
+        &self,
+        context: DeliveryChallengeContext,
+        request: DeliveryChallengeRequest,
+    ) -> Result<DeliveryChallengeAdmission, AppError> {
+        let ChallengeBinding::Login(login_oid) = context.binding else {
+            return Ok(DeliveryChallengeAdmission::InvalidState);
+        };
+        let mut logins = self.logins.lock().unwrap();
+        let Some(login) = logins
+            .logins
+            .iter_mut()
+            .find(|login| login.oid == login_oid)
+        else {
+            return Ok(DeliveryChallengeAdmission::InvalidState);
+        };
+        let status_ok = match request.required_login_status {
+            Some(required) => login.status == required,
+            None => matches!(
+                login.status,
+                LoginStatus::IDENTIFIER_VERIFIED
+                    | LoginStatus::MFA_REQUIRED
+                    | LoginStatus::MFA_ENROLLMENT_REQUIRED
+            ),
+        };
+        if !status_ok || login.user_oid != context.user_oid || login.expires_at <= request.now {
+            return Ok(DeliveryChallengeAdmission::InvalidState);
+        }
+
+        let mut stored = self.stored.lock().unwrap();
+        let mut order = self.order.lock().unwrap();
+        let existing_id = order.iter().rev().copied().find(|id| {
+            stored.get(id).is_some_and(|item| {
+                item.binding == context.binding
+                    && item.method == context.method
+                    && item.purpose == context.purpose
+            })
+        });
+        let interval =
+            Duration::from_std(request.resend_interval).unwrap_or_else(|_| Duration::seconds(60));
+        let prev_count = if let Some(id) = existing_id {
+            let item = stored.get(&id).unwrap();
+            let state: DeliveryChallengeState = serde_json::from_value(item.state.clone()).unwrap();
+            if state.send_count >= request.max_sends {
+                return Ok(DeliveryChallengeAdmission::LimitReached);
+            }
+            let available_at = state.sent_at + interval;
+            if available_at > request.now {
+                return Ok(DeliveryChallengeAdmission::TooSoon { available_at });
+            }
+            state.send_count
+        } else {
+            0
+        };
+
+        let send_count = prev_count + 1;
+        login.expires_at = login.expires_at.max(request.code_expires_at);
+        let row_expires_at = login.expires_at;
+        drop(logins);
+
+        if let Some(old_id) = existing_id {
+            stored.remove(&old_id);
+        }
+        let new_id = Uuid::new_v4();
+        let state = serde_json::to_value(DeliveryChallengeState {
+            sent_at: request.now,
+            send_count,
+            code_expires_at: request.code_expires_at,
+            verifier: request.verifier,
+        })
+        .unwrap();
+        order.push(new_id);
+        stored.insert(
+            new_id,
+            StoredMemoryChallenge {
+                user_oid: context.user_oid,
+                binding: context.binding,
+                method: context.method,
+                purpose: context.purpose,
+                state,
+                expires_at: row_expires_at,
+            },
+        );
+        Ok(DeliveryChallengeAdmission::Admitted {
+            sent_at: request.now,
+            send_count,
+            resend_available_at: request.now + interval,
+        })
+    }
+
+    async fn delivery_status(
+        &self,
+        binding: ChallengeBinding,
+        method: ChallengeMethod,
+        purpose: ChallengePurpose,
+    ) -> Result<Option<DeliveryChallengeStatus>, AppError> {
+        let ChallengeBinding::Login(login_oid) = binding else {
+            return Ok(None);
+        };
+        let active = self.logins.lock().unwrap().logins.iter().any(|login| {
+            login.oid == login_oid
+                && matches!(
+                    login.status,
+                    LoginStatus::IDENTIFIER_VERIFIED
+                        | LoginStatus::MFA_REQUIRED
+                        | LoginStatus::MFA_ENROLLMENT_REQUIRED
+                )
+                && login.expires_at > Utc::now()
+        });
+        if !active {
+            return Ok(None);
+        }
+        let stored = self.stored.lock().unwrap();
+        let order = self.order.lock().unwrap();
+        let Some(item) = order.iter().rev().find_map(|id| {
+            stored.get(id).filter(|item| {
+                item.binding == binding
+                    && item.method == method
+                    && item.purpose == purpose
+                    && item.expires_at > Utc::now()
+            })
+        }) else {
+            return Ok(None);
+        };
+        let state: DeliveryChallengeState = serde_json::from_value(item.state.clone()).unwrap();
+        Ok(Some(DeliveryChallengeStatus {
+            sent_at: state.sent_at,
+            send_count: state.send_count,
+        }))
     }
 
     async fn take(
@@ -54,11 +215,21 @@ impl ChallengeRepository for MemoryChallenges {
         id: Uuid,
     ) -> Result<Option<AuthenticationChallenge>, AppError> {
         let mut stored = self.stored.lock().unwrap();
-        match stored.get(&id) {
-            Some((stored_context, _)) if *stored_context == context => {
-                Ok(stored.remove(&id).map(|(_, challenge)| challenge))
-            }
-            _ => Ok(None),
+        let matches = stored.get(&id).is_some_and(|item| {
+            item.user_oid == Some(context.user_oid)
+                && item.binding == context.binding
+                && item.method == context.method
+                && item.purpose == context.purpose
+                && item.expires_at > Utc::now()
+        });
+        if matches {
+            Ok(stored.remove(&id).map(|item| AuthenticationChallenge {
+                id,
+                state: item.state,
+                expires_at: item.expires_at,
+            }))
+        } else {
+            Ok(None)
         }
     }
 
@@ -67,14 +238,19 @@ impl ChallengeRepository for MemoryChallenges {
         context: ChallengeContext,
     ) -> Result<Option<AuthenticationChallenge>, AppError> {
         let stored = self.stored.lock().unwrap();
-        Ok(self
-            .order
-            .lock()
-            .unwrap()
-            .iter()
-            .rev()
-            .find_map(|id| stored.get(id).filter(|(c, _)| *c == context))
-            .map(|(_, challenge)| challenge.clone()))
+        Ok(self.order.lock().unwrap().iter().rev().find_map(|id| {
+            let item = stored.get(id)?;
+            (item.user_oid == Some(context.user_oid)
+                && item.binding == context.binding
+                && item.method == context.method
+                && item.purpose == context.purpose
+                && item.expires_at > Utc::now())
+            .then(|| AuthenticationChallenge {
+                id: *id,
+                state: item.state.clone(),
+                expires_at: item.expires_at,
+            })
+        }))
     }
 }
 
@@ -137,6 +313,7 @@ const LINK_PREFIX: &str = "https://login.example.com/login/email?login_id=x&toke
 struct EmailFlow {
     service: LoginService,
     login_repo: Arc<TestLoginRepo>,
+    challenges: Arc<MemoryChallenges>,
     sender: Arc<RecordingSender>,
     login_oid: Uuid,
 }
@@ -164,10 +341,11 @@ fn email_flow(user: User, mfa: bool, login: Login) -> EmailFlow {
             ..Default::default()
         })),
     });
+    let challenges = Arc::new(MemoryChallenges::new(Arc::clone(&login_repo.state)));
     let (service, _) = otp_service(Arc::clone(&login_repo), user);
     let sender = Arc::new(RecordingSender::default());
     let mut service = service.with_email(LoginEmailDependencies {
-        challenges: Arc::new(MemoryChallenges::default()),
+        challenges: Arc::clone(&challenges) as Arc<dyn ChallengeRepository>,
         sender: Arc::clone(&sender) as Arc<dyn EmailSender>,
         renderer: Arc::new(ContextRenderer),
         protector: Arc::new(PlainProtector),
@@ -178,6 +356,7 @@ fn email_flow(user: User, mfa: bool, login: Login) -> EmailFlow {
     EmailFlow {
         service,
         login_repo,
+        challenges,
         sender,
         login_oid,
     }
@@ -223,7 +402,15 @@ impl EmailFlow {
 
     /// Allow the next send without waiting for the resend interval.
     fn forget_last_send(&self) {
-        self.login_repo.state.lock().unwrap().logins[0].email_code_sent_at = None;
+        let mut stored = self.challenges.stored.lock().unwrap();
+        for item in stored.values_mut() {
+            if let Ok(mut state) =
+                serde_json::from_value::<DeliveryChallengeState>(item.state.clone())
+            {
+                state.sent_at -= Duration::minutes(2);
+                item.state = serde_json::to_value(state).unwrap();
+            }
+        }
     }
 }
 
@@ -231,6 +418,13 @@ impl EmailFlow {
 async fn an_emailed_code_signs_in_as_the_first_factor() {
     let user = test_user();
     let flow = email_flow(user.clone(), false, identified(&user));
+    assert_eq!(
+        flow.service
+            .email_code_resend_available_at(&flow.login())
+            .await
+            .unwrap(),
+        None
+    );
 
     let sent = flow.send().await.expect("the email is sent");
     let message = flow.last_message();
@@ -239,6 +433,13 @@ async fn an_emailed_code_signs_in_as_the_first_factor() {
     assert!(
         flow.login().expires_at >= sent.expires_at,
         "the login lasts as long as the code"
+    );
+    assert_eq!(
+        flow.service
+            .email_code_resend_available_at(&flow.login())
+            .await
+            .unwrap(),
+        Some(sent.resend_available_at)
     );
 
     match flow
@@ -249,7 +450,7 @@ async fn an_emailed_code_signs_in_as_the_first_factor() {
         ChallengeOutcome::Authenticated { .. } => {}
         other => panic!("expected authentication, got {other:?}"),
     }
-    assert_eq!(flow.login().first_factor_amr.as_deref(), Some(AMR_EMAIL));
+    assert_eq!(flow.login().amr, vec![AMR_EMAIL.to_owned()]);
 }
 
 #[tokio::test]
@@ -380,9 +581,17 @@ async fn a_concealed_unknown_identifier_is_answered_like_a_real_account() {
         vec![CredentialType::Password, CredentialType::EmailOtp]
     );
 
-    flow.send()
+    let sent = flow
+        .send()
         .await
         .expect("the answer does not reveal the missing account");
+    assert_eq!(
+        flow.service
+            .email_code_resend_available_at(&flow.login())
+            .await
+            .unwrap(),
+        Some(sent.resend_available_at)
+    );
     assert!(flow.sender.sent.lock().unwrap().is_empty());
     assert_error_code(
         flow.send().await.unwrap_err(),
@@ -390,6 +599,31 @@ async fn a_concealed_unknown_identifier_is_answered_like_a_real_account() {
     );
     assert_error_code(
         flow.verify("123456").await.unwrap_err(),
+        AuthErrorCode::InvalidOtp,
+    );
+}
+
+#[tokio::test]
+async fn an_expired_email_code_is_rejected_even_while_the_login_is_alive() {
+    let user = test_user();
+    let mut login = identified(&user);
+    login.expires_at = Utc::now() + Duration::minutes(30);
+    let flow = email_flow(user, false, login);
+    flow.send().await.unwrap();
+    let code = flow.last_message().subject;
+
+    {
+        let mut stored = flow.challenges.stored.lock().unwrap();
+        for item in stored.values_mut() {
+            let mut state: DeliveryChallengeState =
+                serde_json::from_value(item.state.clone()).unwrap();
+            state.code_expires_at = Utc::now() - Duration::seconds(1);
+            item.state = serde_json::to_value(state).unwrap();
+        }
+    }
+
+    assert_error_code(
+        flow.verify(&code).await.unwrap_err(),
         AuthErrorCode::InvalidOtp,
     );
 }

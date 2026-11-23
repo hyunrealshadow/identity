@@ -6,12 +6,11 @@ use identity_domain::auth::{
     SessionStatus,
     challenge::ChallengeBinding,
     model::Login,
-    repository::{EmailCodeAdmission, LoginRepository, LoginRepositoryError},
+    repository::{LoginRepository, LoginRepositoryError},
 };
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DbErr, EntityTrait,
-    ExprTrait, QueryFilter, QuerySelect, Set, TransactionTrait,
-    sea_query::{Expr, Func},
+    ExprTrait, QueryFilter, QuerySelect, Set, TransactionTrait, sea_query::Expr,
 };
 use uuid::Uuid;
 
@@ -94,9 +93,7 @@ fn to_domain(
         acr: decode_acr(m.acr)?,
         requested_acr_values: serde_json::from_value(m.requested_acr_values)
             .map_err(|_| LoginRepositoryError::InvalidStoredAcr)?,
-        first_factor_amr: m.first_factor_amr,
-        email_code_sent_at: m.email_code_sent_at.map(DateTime::<Utc>::from),
-        email_code_send_count: m.email_code_send_count,
+        amr: serde_json::from_value(m.amr).unwrap_or_default(),
     })
 }
 
@@ -274,6 +271,7 @@ impl LoginRepository for LoginRepositoryImpl {
             status: Set(LoginStatus::CREATED.to_string()),
             failed_attempts: Set(0),
             requested_acr_values: Set(serde_json::json!(requested_acr_values)),
+            amr: Set(serde_json::json!([])),
             created_at: Set(now.into()),
             expires_at: Set((now + expiry_duration).into()),
             ..Default::default()
@@ -478,10 +476,7 @@ impl LoginRepository for LoginRepositoryImpl {
             )
             .col_expr(LoginColumn::SessionId, Expr::value(Option::<i64>::None))
             .col_expr(LoginColumn::Acr, Expr::value(Option::<String>::None))
-            .col_expr(
-                LoginColumn::FirstFactorAmr,
-                Expr::value(Option::<String>::None),
-            )
+            .col_expr(LoginColumn::Amr, Expr::value(serde_json::json!([])))
             .col_expr(
                 LoginColumn::FailureReason,
                 Expr::value(Option::<String>::None),
@@ -568,86 +563,14 @@ impl LoginRepository for LoginRepositoryImpl {
         Ok(())
     }
 
-    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "admit_email_code"))]
-    async fn admit_email_code(
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "record_amr"))]
+    async fn record_amr(
         &self,
         login_oid: Uuid,
-        now: DateTime<Utc>,
-        interval: std::time::Duration,
-        max_sends: i32,
-        expires_at: DateTime<Utc>,
-    ) -> Result<EmailCodeAdmission, LoginRepositoryError> {
-        let interval = Duration::from_std(interval).unwrap_or_else(|_| Duration::seconds(60));
-        let earliest = (now - interval).fixed_offset();
-        let extended = expires_at.fixed_offset();
-        // One conditional update admits the send and records it, so
-        // concurrent requests cannot exceed the interval or the limit.
-        let admitted = LoginEntity::update_many()
-            .col_expr(
-                LoginColumn::EmailCodeSentAt,
-                Expr::value(Some(now.fixed_offset())),
-            )
-            .col_expr(
-                LoginColumn::EmailCodeSendCount,
-                Expr::col(LoginColumn::EmailCodeSendCount).add(1),
-            )
-            .col_expr(
-                LoginColumn::ExpiresAt,
-                Expr::from(Func::greatest([
-                    Expr::col(LoginColumn::ExpiresAt),
-                    Expr::value(extended),
-                ])),
-            )
-            .col_expr(
-                LoginColumn::UpdatedAt,
-                Expr::value(Some(now.fixed_offset())),
-            )
-            .filter(LoginColumn::Oid.eq(login_oid))
-            .filter(LoginColumn::Status.eq(LoginStatus::IDENTIFIER_VERIFIED.as_str()))
-            .filter(LoginColumn::ExpiresAt.gt(now.fixed_offset()))
-            .filter(LoginColumn::EmailCodeSendCount.lt(max_sends))
-            .filter(
-                LoginColumn::EmailCodeSentAt
-                    .is_null()
-                    .or(LoginColumn::EmailCodeSentAt.lte(earliest)),
-            )
-            .exec(&self.db)
-            .await
-            .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
-        if admitted.rows_affected == 1 {
-            return Ok(EmailCodeAdmission::Admitted);
-        }
-        let login = LoginEntity::find()
-            .filter(LoginColumn::Oid.eq(login_oid))
-            .one(&self.db)
-            .await
-            .map_err(|e| LoginRepositoryError::QueryFailed(Box::new(e)))?
-            .ok_or(LoginRepositoryError::LoginNotFound)?;
-        if login.status != LoginStatus::IDENTIFIER_VERIFIED.as_str()
-            || DateTime::<Utc>::from(login.expires_at) <= now
-        {
-            return Ok(EmailCodeAdmission::InvalidState);
-        }
-        if login.email_code_send_count >= max_sends {
-            return Ok(EmailCodeAdmission::LimitReached);
-        }
-        let available_at = login
-            .email_code_sent_at
-            .map_or(now, |sent| DateTime::<Utc>::from(sent) + interval);
-        Ok(EmailCodeAdmission::TooSoon { available_at })
-    }
-
-    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "record_first_factor"))]
-    async fn record_first_factor(
-        &self,
-        login_oid: Uuid,
-        amr: &str,
+        amr: &[String],
     ) -> Result<(), LoginRepositoryError> {
         LoginEntity::update_many()
-            .col_expr(
-                LoginColumn::FirstFactorAmr,
-                Expr::value(Some(amr.to_owned())),
-            )
+            .col_expr(LoginColumn::Amr, Expr::value(serde_json::json!(amr)))
             .col_expr(
                 LoginColumn::UpdatedAt,
                 Expr::value(Some(Utc::now().fixed_offset())),

@@ -1,5 +1,5 @@
 use super::{
-    ChallengeOutcome, LoginService, SessionContext, failed_attempt_lock_until, first_factor_amr,
+    ChallengeOutcome, LoginService, SessionContext, combine_amr, failed_attempt_lock_until,
     validate_passkey_login,
 };
 use crate::{
@@ -75,7 +75,11 @@ impl LoginService {
         // its own; a preceding password is recorded but adds no class.
         let mut amr = vec![AMR_PASSKEY.to_owned(), AMR_MFA.to_owned()];
         if login.status == LoginStatus::MFA_REQUIRED {
-            amr.push(first_factor_amr(&login));
+            for method in combine_amr(&login, &[], true) {
+                if !amr.contains(&method) {
+                    amr.push(method);
+                }
+            }
         }
         self.complete_authentication(
             login,

@@ -2,7 +2,11 @@ use std::collections::HashMap;
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use identity_domain::{
-    auth::challenge::{AuthenticationChallenge, ChallengeContext},
+    auth::challenge::{
+        AuthenticationChallenge, ChallengeBinding, ChallengeContext, ChallengeMethod,
+        ChallengePurpose, DeliveryChallengeAdmission, DeliveryChallengeContext,
+        DeliveryChallengeRequest, DeliveryChallengeStatus,
+    },
     data_protection::DataProtectionError,
 };
 
@@ -102,6 +106,23 @@ impl ChallengeRepository for MemoryChallenges {
             (context, challenge.state, challenge.expires_at, *sequence),
         );
         Ok(())
+    }
+
+    async fn admit_delivery(
+        &self,
+        _context: DeliveryChallengeContext,
+        _request: DeliveryChallengeRequest,
+    ) -> Result<DeliveryChallengeAdmission, AppError> {
+        Ok(DeliveryChallengeAdmission::InvalidState)
+    }
+
+    async fn delivery_status(
+        &self,
+        _binding: ChallengeBinding,
+        _method: ChallengeMethod,
+        _purpose: ChallengePurpose,
+    ) -> Result<Option<DeliveryChallengeStatus>, AppError> {
+        Ok(None)
     }
 
     async fn take(

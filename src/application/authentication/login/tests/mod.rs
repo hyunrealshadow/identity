@@ -9,9 +9,8 @@ use identity_domain::{
         LoginStatus, MAX_FAILED_ATTEMPTS, MAX_OTP_ATTEMPTS, SessionStatus,
         model::{ActiveSession, Login, Session, SessionOid},
         repository::{
-            CreateSessionInput, EmailCodeAdmission, LoginRepository, LoginRepositoryError,
-            SessionPage, SessionPageDirection, SessionRepository, SessionRepositoryError,
-            SessionSortKey,
+            CreateSessionInput, LoginRepository, LoginRepositoryError, SessionPage,
+            SessionPageDirection, SessionRepository, SessionRepositoryError, SessionSortKey,
         },
     },
     user::{
@@ -173,9 +172,7 @@ fn test_login(user_oid: Uuid, failed_attempts: i32) -> Login {
         acr: None,
         submitted_identifier: None,
         requested_acr_values: Vec::new(),
-        first_factor_amr: None,
-        email_code_sent_at: None,
-        email_code_send_count: 0,
+        amr: Vec::new(),
     }
 }
 

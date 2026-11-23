@@ -1023,26 +1023,58 @@ async fn concealed_identifier_binding_persists_without_an_account_and_resets() {
 #[tokio::test]
 #[ignore = "requires explicitly configured PostgreSQL test database"]
 async fn email_code_admission_is_atomic_and_independent_of_the_account() {
+    use identity_application::auth::challenge::ChallengeRepository;
     use identity_domain::auth::{
-        EMAIL_CODE_RESEND_INTERVAL, MAX_EMAIL_CODE_SENDS, repository::EmailCodeAdmission,
+        AMR_EMAIL, EMAIL_CODE_RESEND_INTERVAL, MAX_EMAIL_CODE_SENDS,
+        challenge::{
+            ChallengeBinding, ChallengeContext, ChallengeMethod, ChallengePurpose,
+            DeliveryChallengeAdmission, DeliveryChallengeContext, DeliveryChallengeRequest,
+        },
     };
+    use identity_infrastructure::database::repository::challenge::ChallengeRepositoryImpl;
+
     common::isolated(|db| async move {
         let client = Uuid::new_v4();
         let relation = Uuid::new_v4();
-        sql(&db, &format!(r#"
+        sql(
+            &db,
+            &format!(
+                r#"
             INSERT INTO client (oid,name,protocol) VALUES ('{client}','email-code-test','openid_connect');
             INSERT INTO client_authorization (oid,client_id,type,data,expires_at)
               SELECT '{relation}',id,'device_authorization','{{}}',now()+interval '1 day' FROM client WHERE oid='{client}';
-        "#)).await;
+        "#
+            ),
+        )
+        .await;
         let logins = Arc::new(LoginRepositoryImpl::new(db.clone()));
+        let challenges = Arc::new(ChallengeRepositoryImpl::new(db.clone()));
         let login = logins.create_pending(client, relation, &[]).await.unwrap();
+        let context = DeliveryChallengeContext {
+            user_oid: None,
+            binding: ChallengeBinding::Login(login.oid),
+            method: ChallengeMethod::EmailOtp,
+            purpose: ChallengePurpose::Authentication,
+        };
+        let make_request =
+            |now: chrono::DateTime<Utc>, code_expires_at: chrono::DateTime<Utc>| {
+            DeliveryChallengeRequest {
+                now,
+                resend_interval: EMAIL_CODE_RESEND_INTERVAL,
+                max_sends: MAX_EMAIL_CODE_SENDS,
+                code_expires_at,
+                required_login_status: Some(LoginStatus::IDENTIFIER_VERIFIED),
+                verifier: None,
+            }
+        };
+
         // Not yet waiting for a first factor.
         assert_eq!(
-            logins
-                .admit_email_code(login.oid, Utc::now(), EMAIL_CODE_RESEND_INTERVAL, MAX_EMAIL_CODE_SENDS, Utc::now())
+            challenges
+                .admit_delivery(context, make_request(Utc::now(), Utc::now()))
                 .await
                 .unwrap(),
-            EmailCodeAdmission::InvalidState
+            DeliveryChallengeAdmission::InvalidState
         );
         // No account matched; admission behaves the same.
         logins
@@ -1053,58 +1085,106 @@ async fn email_code_admission_is_atomic_and_independent_of_the_account() {
         let now = Utc::now();
         let extended = now + ChronoDuration::minutes(10);
         let attempts = (0..8).map(|_| {
-            let logins = Arc::clone(&logins);
-            tokio::spawn(async move {
-                logins
-                    .admit_email_code(login.oid, now, EMAIL_CODE_RESEND_INTERVAL, MAX_EMAIL_CODE_SENDS, extended)
-                    .await
-                    .unwrap()
-            })
+            let challenges = Arc::clone(&challenges);
+            let request = make_request(now, extended);
+            tokio::spawn(async move { challenges.admit_delivery(context, request).await.unwrap() })
         });
         let mut admitted = 0;
         for attempt in attempts {
             match attempt.await.unwrap() {
-                EmailCodeAdmission::Admitted => admitted += 1,
-                EmailCodeAdmission::TooSoon { available_at } => {
+                DeliveryChallengeAdmission::Admitted { send_count, .. } => {
+                    assert_eq!(send_count, 1);
+                    admitted += 1;
+                }
+                DeliveryChallengeAdmission::TooSoon { available_at } => {
                     assert!(available_at > now);
                 }
                 other => panic!("unexpected admission {other:?}"),
             }
         }
         assert_eq!(admitted, 1, "concurrent sends admit exactly one");
+        let status = challenges
+            .delivery_status(
+                ChallengeBinding::Login(login.oid),
+                ChallengeMethod::EmailOtp,
+                ChallengePurpose::Authentication,
+            )
+            .await
+            .unwrap()
+            .expect("delivery status recorded for concealed login");
+        assert_eq!(status.send_count, 1);
         let stored = logins.find_by_oid(login.oid).await.unwrap().unwrap();
-        assert_eq!(stored.email_code_send_count, 1);
         assert!(stored.expires_at >= extended - ChronoDuration::seconds(1));
+
+        // A user-less challenge cannot be retrieved or consumed via user-bound queries.
+        let user_bound = ChallengeContext {
+            user_oid: Uuid::new_v4(),
+            binding: ChallengeBinding::Login(login.oid),
+            method: ChallengeMethod::EmailOtp,
+            purpose: ChallengePurpose::Authentication,
+        };
+        assert!(challenges.latest(user_bound).await.unwrap().is_none());
 
         // After the interval, sends continue until the limit.
         let mut later = now;
-        for _ in 1..MAX_EMAIL_CODE_SENDS {
+        for expected_count in 2..=MAX_EMAIL_CODE_SENDS {
             later += ChronoDuration::minutes(2);
-            assert_eq!(
-                logins
-                    .admit_email_code(login.oid, later, EMAIL_CODE_RESEND_INTERVAL, MAX_EMAIL_CODE_SENDS, later + ChronoDuration::minutes(10))
-                    .await
-                    .unwrap(),
-                EmailCodeAdmission::Admitted
-            );
+            match challenges
+                .admit_delivery(
+                    context,
+                    make_request(later, later + ChronoDuration::minutes(10)),
+                )
+                .await
+                .unwrap()
+            {
+                DeliveryChallengeAdmission::Admitted { send_count, .. } => {
+                    assert_eq!(send_count, expected_count);
+                }
+                other => panic!("expected admission, got {other:?}"),
+            }
         }
         later += ChronoDuration::minutes(2);
         assert_eq!(
-            logins
-                .admit_email_code(login.oid, later, EMAIL_CODE_RESEND_INTERVAL, MAX_EMAIL_CODE_SENDS, later + ChronoDuration::minutes(10))
+            challenges
+                .admit_delivery(
+                    context,
+                    make_request(later, later + ChronoDuration::minutes(10)),
+                )
                 .await
                 .unwrap(),
-            EmailCodeAdmission::LimitReached
+            DeliveryChallengeAdmission::LimitReached
         );
 
-        // The first factor is kept, and forgotten when switching accounts.
-        logins.record_first_factor(login.oid, "urn:identity:amr:email").await.unwrap();
+        // Satisfied AMR is kept on the login and cleared along with challenges on identity reset.
+        logins
+            .record_amr(login.oid, &[AMR_EMAIL.to_owned()])
+            .await
+            .unwrap();
         assert_eq!(
-            logins.find_by_oid(login.oid).await.unwrap().unwrap().first_factor_amr.as_deref(),
-            Some("urn:identity:amr:email")
+            logins.find_by_oid(login.oid).await.unwrap().unwrap().amr,
+            vec![AMR_EMAIL.to_owned()]
         );
         logins.reset_identity(login.oid).await.unwrap();
-        assert_eq!(logins.find_by_oid(login.oid).await.unwrap().unwrap().first_factor_amr, None);
+        assert!(
+            logins
+                .find_by_oid(login.oid)
+                .await
+                .unwrap()
+                .unwrap()
+                .amr
+                .is_empty()
+        );
+        assert!(
+            challenges
+                .delivery_status(
+                    ChallengeBinding::Login(login.oid),
+                    ChallengeMethod::EmailOtp,
+                    ChallengePurpose::Authentication,
+                )
+                .await
+                .unwrap()
+                .is_none()
+        );
     })
     .await;
 }

@@ -1,5 +1,5 @@
 use super::{
-    ChallengeOutcome, LoginService, SessionContext, failed_attempt_lock_until,
+    ChallengeOutcome, LoginService, SessionContext, combine_amr, failed_attempt_lock_until,
     requires_second_factor,
 };
 use crate::{
@@ -249,14 +249,14 @@ impl LoginService {
     /// enrollment, or complete authentication at the single-factor class.
     pub(super) async fn first_factor_verified(
         &self,
-        login: Login,
+        mut login: Login,
         user: &User,
         amr: &str,
         ctx: SessionContext,
     ) -> Result<ChallengeOutcome, AppError> {
-        if amr != AMR_PASSWORD {
-            self.login_repo.record_first_factor(login.oid, amr).await?;
-        }
+        let recorded_amr = combine_amr(&login, &[amr], false);
+        self.login_repo.record_amr(login.oid, &recorded_amr).await?;
+        login.amr = recorded_amr;
         // Check if the user has an OTP credential.
         let otp_credentials = self
             .credential_repo
@@ -284,12 +284,13 @@ impl LoginService {
             Ok(ChallengeOutcome::MfaEnrollmentRequired { login })
         } else if otp_credentials.is_empty() && !has_passkeys {
             self.user_repo.reset_failed_attempts(user.oid).await?;
+            let amr = login.amr.clone();
             self.complete_authentication(
                 login,
                 user.oid.into(),
                 ctx,
                 AuthenticationContextClass::SingleFactor,
-                &[amr.to_owned()],
+                &amr,
             )
             .await
         } else {

@@ -176,21 +176,10 @@ impl LoginRepository for MockLoginRepository {
         Ok(())
     }
 
-    async fn admit_email_code(
+    async fn record_amr(
         &self,
         _login_oid: Uuid,
-        _now: chrono::DateTime<chrono::Utc>,
-        _interval: std::time::Duration,
-        _max_sends: i32,
-        _expires_at: chrono::DateTime<chrono::Utc>,
-    ) -> Result<identity_domain::auth::repository::EmailCodeAdmission, LoginRepositoryError> {
-        Ok(identity_domain::auth::repository::EmailCodeAdmission::Admitted)
-    }
-
-    async fn record_first_factor(
-        &self,
-        _login_oid: Uuid,
-        _amr: &str,
+        _amr: &[String],
     ) -> Result<(), LoginRepositoryError> {
         Ok(())
     }
@@ -223,9 +212,7 @@ pub fn mock_login_repo() -> MockLoginRepository {
             acr: None,
             submitted_identifier: None,
             requested_acr_values: Vec::new(),
-            first_factor_amr: None,
-            email_code_sent_at: None,
-            email_code_send_count: 0,
+            amr: Vec::new(),
         })),
         create_pending_error: Mutex::new(None),
         create_pending_calls: Mutex::new(Vec::new()),
@@ -242,9 +229,7 @@ pub fn mock_login_repo() -> MockLoginRepository {
             acr: None,
             submitted_identifier: None,
             requested_acr_values: Vec::new(),
-            first_factor_amr: None,
-            email_code_sent_at: None,
-            email_code_send_count: 0,
+            amr: Vec::new(),
         })),
         bind_user_error: Mutex::new(None),
         bind_session_calls: Mutex::new(Vec::new()),

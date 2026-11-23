@@ -5,9 +5,7 @@ use sea_orm_migration::{
         Alias, ColumnDef, ConditionalStatement, DbErr, DeriveIden, DeriveMigrationName, Expr,
         ExprTrait, ForeignKey, ForeignKeyAction, Func, Index, MigrationTrait, SchemaManager, Table,
     },
-    schema::{
-        big_integer, big_integer_null, json_binary, pk_auto, timestamp_with_time_zone, uuid_uniq,
-    },
+    schema::{big_integer_null, json_binary, pk_auto, timestamp_with_time_zone, uuid_uniq},
     sea_orm::sea_query::{Check, extension::postgres::PgExpr},
 };
 
@@ -46,7 +44,7 @@ impl MigrationTrait for Migration {
                         uuid_uniq(AuthenticationChallenge::Oid)
                             .default(Func::cust(Alias::new("gen_random_uuid"))),
                     )
-                    .col(big_integer(AuthenticationChallenge::UserId))
+                    .col(big_integer_null(AuthenticationChallenge::UserId))
                     .col(big_integer_null(AuthenticationChallenge::LoginId))
                     .col(big_integer_null(AuthenticationChallenge::SessionId))
                     .col(
