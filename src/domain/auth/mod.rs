@@ -190,6 +190,9 @@ pub const AMR_PASSWORD: &str = "pwd";
 pub const AMR_OTP: &str = "otp";
 pub const AMR_MFA: &str = "mfa";
 pub const AMR_PASSKEY: &str = "passkey";
+/// A one-time code or sign-in link delivered to the account's verified email
+/// address. RFC 8176 registers no email value.
+pub const AMR_EMAIL: &str = "urn:identity:amr:email";
 /// Private value because RFC 8176 does not register a recovery-code AMR.
 pub const AMR_RECOVERY_CODE: &str = "urn:identity:amr:recovery-code";
 
@@ -204,6 +207,16 @@ pub const MAX_OTP_ATTEMPTS: i32 = MAX_FAILED_ATTEMPTS;
 /// Duration for which an account remains locked after exceeding the failure
 /// threshold.
 pub const LOCK_DURATION: Duration = Duration::from_secs(15 * 60);
+
+/// How long an emailed sign-in code and link stay valid. Sending one extends
+/// the login to at least this long from the moment it is sent.
+pub const EMAIL_CODE_TTL: Duration = Duration::from_secs(10 * 60);
+
+/// Minimum time between two sign-in emails for one login.
+pub const EMAIL_CODE_RESEND_INTERVAL: Duration = Duration::from_secs(60);
+
+/// Sign-in emails one login may send in total.
+pub const MAX_EMAIL_CODE_SENDS: i32 = 5;
 
 /// Duration after which a login flow expires (from `created_at`).
 pub const LOGIN_EXPIRY: Duration = Duration::from_secs(5 * 60);

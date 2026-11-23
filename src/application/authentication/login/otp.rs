@@ -1,14 +1,14 @@
 use super::{
     ChallengeOutcome, LoginService, SessionContext, can_challenge_second_factor,
-    failed_attempt_lock_until,
+    failed_attempt_lock_until, first_factor_amr,
 };
 use crate::{
     error::{AppError, codes::auth::AuthErrorCode},
     user::model::{CredentialData, CredentialType, OtpCredentialData},
 };
 use identity_domain::auth::{
-    AMR_MFA, AMR_OTP, AMR_PASSWORD, LoginFailureReason, LoginStatus, MAX_FAILED_ATTEMPTS,
-    MAX_OTP_ATTEMPTS, model::Login,
+    AMR_MFA, AMR_OTP, LoginFailureReason, LoginStatus, MAX_FAILED_ATTEMPTS, MAX_OTP_ATTEMPTS,
+    model::Login,
 };
 use tracing::error;
 use uuid::Uuid;
@@ -105,15 +105,12 @@ impl LoginService {
 
         self.user_repo.reset_failed_attempts(user.oid).await?;
         // A bound session from forced reauthentication is upgraded in place.
+        let first_factor = first_factor_amr(&login);
         self.complete_second_factor(
             login,
             user.oid.into(),
             ctx,
-            &[
-                AMR_PASSWORD.to_owned(),
-                AMR_OTP.to_owned(),
-                AMR_MFA.to_owned(),
-            ],
+            &[first_factor, AMR_OTP.to_owned(), AMR_MFA.to_owned()],
         )
         .await
     }

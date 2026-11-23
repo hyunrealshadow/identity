@@ -38,6 +38,9 @@ pub enum Login {
     FailedAttempts,
     Acr,
     RequestedAcrValues,
+    FirstFactorAmr,
+    EmailCodeSentAt,
+    EmailCodeSendCount,
     CreatedAt,
     ExpiresAt,
     UpdatedAt,
@@ -70,6 +73,12 @@ impl MigrationTrait for Migration {
                         json_binary(Login::RequestedAcrValues)
                             .default(Expr::val("[]").cast_as(Alias::new("jsonb"))),
                     )
+                    // The first factor when it was not the password.
+                    .col(string_null(Login::FirstFactorAmr))
+                    // Sign-in email admission, kept whether or not an
+                    // account matched.
+                    .col(timestamp_with_time_zone_null(Login::EmailCodeSentAt))
+                    .col(integer(Login::EmailCodeSendCount).default(0))
                     .col(timestamp_with_time_zone(Login::ExpiresAt))
                     .col(
                         timestamp_with_time_zone(Login::CreatedAt)

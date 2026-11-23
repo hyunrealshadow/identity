@@ -28,6 +28,16 @@ pub enum CredentialType {
     Otp,
     RecoveryCode,
     Passkey,
+    /// A code or link emailed for one sign-in. Never stored as a credential.
+    EmailOtp,
+}
+
+impl CredentialType {
+    /// Whether the method can follow a first factor.
+    #[must_use]
+    pub const fn is_second_factor(self) -> bool {
+        matches!(self, Self::Otp | Self::RecoveryCode | Self::Passkey)
+    }
 }
 
 #[derive(Debug, Clone)]

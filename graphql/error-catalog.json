@@ -318,6 +318,24 @@
     "module": "auth"
   },
   {
+    "code": 11028,
+    "kind": "rate_limit",
+    "fluentKey": "E11028",
+    "requiredParams": [
+      "seconds"
+    ],
+    "optionalParams": [],
+    "module": "auth"
+  },
+  {
+    "code": 11029,
+    "kind": "internal",
+    "fluentKey": "E11029",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "auth"
+  },
+  {
     "code": 15000,
     "kind": "validation",
     "fluentKey": "E15000",
@@ -3412,6 +3430,78 @@
     "fluentKey": "E29008",
     "requiredParams": [
       "algorithm"
+    ],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29009,
+    "kind": "conflict",
+    "fluentKey": "E29009",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29010,
+    "kind": "validation",
+    "fluentKey": "E29010",
+    "requiredParams": [
+      "detail"
+    ],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29011,
+    "kind": "internal",
+    "fluentKey": "E29011",
+    "requiredParams": [
+      "detail"
+    ],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29012,
+    "kind": "validation",
+    "fluentKey": "E29012",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29013,
+    "kind": "validation",
+    "fluentKey": "E29013",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29014,
+    "kind": "validation",
+    "fluentKey": "E29014",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29015,
+    "kind": "validation",
+    "fluentKey": "E29015",
+    "requiredParams": [
+      "locale"
+    ],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29016,
+    "kind": "validation",
+    "fluentKey": "E29016",
+    "requiredParams": [
+      "max"
     ],
     "optionalParams": [],
     "module": "instance"

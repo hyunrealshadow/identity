@@ -160,6 +160,8 @@ pub(crate) enum AuditAction {
     KeyRevoke,
     SettingProtocolUpdate,
     SettingAuthenticationUpdate,
+    SettingEmailUpdate,
+    SettingEmailTemplateUpdate,
     AccountProfileUpdate,
     AccountIdentifierUpdate,
     AccountPasswordChange,

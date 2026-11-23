@@ -302,6 +302,9 @@ async fn restart_login_flow_creates_fresh_login_for_same_authorization() {
         acr: None,
         submitted_identifier: None,
         requested_acr_values: vec![AuthenticationContextClass::MultiFactor],
+        first_factor_amr: None,
+        email_code_sent_at: None,
+        email_code_send_count: 0,
     }));
     let old_login_id = service.encrypt_login_id(old_login_oid).await.unwrap();
 
@@ -345,6 +348,9 @@ async fn switch_login_account_resets_the_same_login_for_same_authorization() {
         acr: Some(AuthenticationContextClass::SingleFactor),
         submitted_identifier: None,
         requested_acr_values: vec![AuthenticationContextClass::MultiFactor],
+        first_factor_amr: None,
+        email_code_sent_at: None,
+        email_code_send_count: 0,
     }));
     let old_login_id = service.encrypt_login_id(old_login_oid).await.unwrap();
 
@@ -421,6 +427,9 @@ async fn switch_login_account_rejects_forced_reauthentication() {
         acr: None,
         submitted_identifier: None,
         requested_acr_values: Vec::new(),
+        first_factor_amr: None,
+        email_code_sent_at: None,
+        email_code_send_count: 0,
     }));
     let login_id = service.encrypt_login_id(login_oid).await.unwrap();
 
@@ -479,6 +488,9 @@ async fn restart_login_flow_preserves_reauthentication_subject_and_session() {
         acr: None,
         submitted_identifier: None,
         requested_acr_values: vec![AuthenticationContextClass::MultiFactor],
+        first_factor_amr: None,
+        email_code_sent_at: None,
+        email_code_send_count: 0,
     }));
     let old_login_id = service.encrypt_login_id(old_login_oid).await.unwrap();
 
@@ -524,6 +536,9 @@ async fn restart_login_flow_rejects_a_login_that_is_still_in_progress() {
         acr: None,
         submitted_identifier: None,
         requested_acr_values: Vec::new(),
+        first_factor_amr: None,
+        email_code_sent_at: None,
+        email_code_send_count: 0,
     }));
     let old_login_id = service.encrypt_login_id(old_login_oid).await.unwrap();
 

@@ -205,6 +205,20 @@ pub trait SessionRepository: Send + Sync {
 
 // ─── LoginRepository ─────────────────────────────────────────────────────────
 
+/// Whether a login may send another sign-in email now.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum EmailCodeAdmission {
+    Admitted,
+    /// The previous email was sent too recently.
+    TooSoon {
+        available_at: DateTime<Utc>,
+    },
+    /// The login has sent as many emails as it may.
+    LimitReached,
+    /// The login is not waiting for a first factor.
+    InvalidState,
+}
+
 #[async_trait]
 pub trait LoginRepository: Send + Sync {
     /// Find a login by its OID.
@@ -269,6 +283,26 @@ pub trait LoginRepository: Send + Sync {
 
     /// Reset login `failed_attempts` to zero.
     async fn reset_failed_attempts(&self, login_oid: Uuid) -> Result<(), LoginRepositoryError>;
+
+    /// Atomically admit one more sign-in email for an `identifier_verified`
+    /// login: at most `max_sends` in total, at least `interval` apart. An
+    /// admitted send records `now` and extends the login to `expires_at` when
+    /// that is later. Admission does not depend on whether an account matched.
+    async fn admit_email_code(
+        &self,
+        login_oid: Uuid,
+        now: DateTime<Utc>,
+        interval: std::time::Duration,
+        max_sends: i32,
+        expires_at: DateTime<Utc>,
+    ) -> Result<EmailCodeAdmission, LoginRepositoryError>;
+
+    /// Record the AMR of a first factor other than the password.
+    async fn record_first_factor(
+        &self,
+        login_oid: Uuid,
+        amr: &str,
+    ) -> Result<(), LoginRepositoryError>;
 
     /// Audit a sign-in rejected at identifier entry: no account matched
     /// (`user_oid` is `None`), or the account cannot sign in.

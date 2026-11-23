@@ -60,6 +60,7 @@ pub fn public_error_inventory() -> Vec<PublicErrorDefinition> {
                     11006 => &["credential_type"],
                     11009 => &["session_id"],
                     11019 => &["limit"],
+                    11028 => &["seconds"],
                     28002 => &["max"],
                     28005 => &["scope"],
                     28110 => &["max"],

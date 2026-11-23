@@ -39,6 +39,7 @@ type SettingsPath =
   | '/settings'
   | '/settings/protocol'
   | '/settings/authentication'
+  | '/settings/email'
   | '/settings/signing-keys'
   | '/settings/encryption-keys'
 
@@ -51,6 +52,7 @@ const tabs: ReadonlyArray<{
   { to: '/settings', label: 'settingsTabGeneral', read: 'settings' },
   { to: '/settings/protocol', label: 'settingsTabProtocol', read: 'settings' },
   { to: '/settings/authentication', label: 'settingsTabAuthentication', read: 'settings' },
+  { to: '/settings/email', label: 'settingsTabEmail', read: 'settings' },
   { to: '/settings/signing-keys', label: 'settingsTabSigningKeys', read: 'keys' },
   { to: '/settings/encryption-keys', label: 'settingsTabEncryptionKeys', read: 'keys' },
 ]
@@ -58,7 +60,9 @@ const tabs: ReadonlyArray<{
 function activeTab(pathname: string): SettingsPath {
   const path = pathname.replace(/\/+$/u, '')
   return (
-    tabs.find((tab) => tab.to !== '/settings' && path.endsWith(tab.to))?.to ?? '/settings'
+    tabs.find(
+      (tab) => tab.to !== '/settings' && (path.endsWith(tab.to) || path.includes(`${tab.to}/`)),
+    )?.to ?? '/settings'
   )
 }
 

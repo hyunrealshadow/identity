@@ -1,14 +1,23 @@
 use async_graphql::{Context, Object, Result};
 use identity_application::{
     authorization::ManagementTarget,
-    setting::management::{
-        PasswordHashingView, UpdateAuthenticationSettingsCommand, UpdateProtocolSettingsCommand,
+    setting::{
+        email::{SendTestEmailCommand, UpdateEmailDeliveryCommand, UpdateEmailTemplateCommand},
+        management::{
+            PasswordHashingView, UpdateAuthenticationSettingsCommand, UpdateProtocolSettingsCommand,
+        },
     },
 };
 use identity_domain::authorization::ManagementScope;
 
-use super::types::{
-    InstanceSettingsPayload, UpdateAuthenticationSettingsInput, UpdateProtocolSettingsInput,
+use super::{
+    email::{
+        SendTestEmailInput, SendTestEmailPayload, UpdateEmailDeliverySettingsInput,
+        UpdateEmailTemplateInput,
+    },
+    types::{
+        InstanceSettingsPayload, UpdateAuthenticationSettingsInput, UpdateProtocolSettingsInput,
+    },
 };
 use crate::graphql::schema::{
     access::access, authorization::request_context, error::app_error,
@@ -90,6 +99,7 @@ impl SettingMutation {
                     UpdateAuthenticationSettingsCommand {
                         breached_password_check_enabled: input.breached_password_check_enabled,
                         identifier_enumeration_allowed: input.identifier_enumeration_allowed,
+                        email_sign_in_enabled: input.email_sign_in_enabled,
                         password_hashing: PasswordHashingView {
                             time_cost: hashing.time_cost,
                             memory_cost_kib: hashing.memory_cost_kib,
@@ -104,5 +114,112 @@ impl SettingMutation {
         .await
         .map_err(|error| app_error(ctx, error))?;
         Ok(InstanceSettingsPayload::new(result, client_mutation_id))
+    }
+
+    /// Replace how email is sent. Secrets left out keep their stored value
+    /// while the authentication method stays the same.
+    #[graphql(
+        guard = "ManagementGuard::new(ManagementScope::SettingsWrite, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::SettingsWrite))
+    )]
+    async fn update_email_delivery_settings(
+        &self,
+        ctx: &Context<'_>,
+        input: UpdateEmailDeliverySettingsInput,
+    ) -> Result<InstanceSettingsPayload> {
+        let request = request_context(ctx)?;
+        let client_mutation_id = input.client_mutation_id.clone();
+        let result = async {
+            let authority = request_authority(request).await?;
+            request
+                .state
+                .services()
+                .instance_setting()
+                .update_email_delivery(
+                    &authority,
+                    UpdateEmailDeliveryCommand {
+                        enabled: input.enabled,
+                        host: input.host,
+                        port: i64::from(input.port),
+                        security: input.security.into(),
+                        sender_address: input.sender_address,
+                        sender_name: input.sender_name,
+                        authentication: input.authentication.into(),
+                        expected_version: input.expected_version,
+                        client_mutation_id: input.client_mutation_id,
+                    },
+                )
+                .await
+        }
+        .await
+        .map_err(|error| app_error(ctx, error))?;
+        Ok(InstanceSettingsPayload::new(result, client_mutation_id))
+    }
+
+    /// Replace one email template in the given locales; every other locale
+    /// uses its built-in template. Each template is rendered with sample
+    /// values before it is saved.
+    #[graphql(
+        guard = "ManagementGuard::new(ManagementScope::SettingsWrite, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::SettingsWrite))
+    )]
+    async fn update_email_template(
+        &self,
+        ctx: &Context<'_>,
+        input: UpdateEmailTemplateInput,
+    ) -> Result<InstanceSettingsPayload> {
+        let request = request_context(ctx)?;
+        let client_mutation_id = input.client_mutation_id.clone();
+        let result = async {
+            let authority = request_authority(request).await?;
+            request
+                .state
+                .services()
+                .instance_setting()
+                .update_email_template(
+                    &authority,
+                    UpdateEmailTemplateCommand {
+                        kind: input.kind.into(),
+                        locales: input
+                            .locales
+                            .into_iter()
+                            .map(|locale| (locale.locale, locale.content.into()))
+                            .collect(),
+                        expected_version: input.expected_version,
+                        client_mutation_id: input.client_mutation_id,
+                    },
+                )
+                .await
+        }
+        .await
+        .map_err(|error| app_error(ctx, error))?;
+        Ok(InstanceSettingsPayload::new(result, client_mutation_id))
+    }
+
+    /// Send a short message with the stored delivery settings.
+    #[graphql(
+        guard = "ManagementGuard::new(ManagementScope::SettingsWrite, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::SettingsWrite))
+    )]
+    async fn send_test_email(
+        &self,
+        ctx: &Context<'_>,
+        input: SendTestEmailInput,
+    ) -> Result<SendTestEmailPayload> {
+        let request = request_context(ctx)?;
+        request
+            .state
+            .services()
+            .instance_setting()
+            .send_test_email(SendTestEmailCommand {
+                recipient: input.recipient,
+                locale: input.locale,
+            })
+            .await
+            .map_err(|error| app_error(ctx, error))?;
+        Ok(SendTestEmailPayload {
+            sent: true,
+            client_mutation_id: input.client_mutation_id,
+        })
     }
 }

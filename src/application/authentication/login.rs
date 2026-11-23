@@ -31,6 +31,7 @@ use identity_domain::{
 use std::sync::Arc;
 use uuid::Uuid;
 mod challenge;
+mod email;
 mod enrollment;
 mod otp;
 mod passkey;
@@ -42,6 +43,10 @@ mod session;
 #[cfg(test)]
 mod tests;
 
+pub use email::{
+    EmailCodeRequest, EmailCodeSent, LoginEmailDependencies, can_receive_email_code,
+    email_sign_in_available,
+};
 pub use enrollment::{LoginMfaEnrollmentDependencies, LoginPasskeyEnrollment, LoginTotpEnrollment};
 
 // ─── Input/Output Types ──────────────────────────────────────────────────────
@@ -107,6 +112,7 @@ pub struct LoginService {
     events: Arc<dyn EventSink>,
     passkeys: Option<Arc<PasskeyService>>,
     mfa_enrollment: Option<LoginMfaEnrollmentDependencies>,
+    email: Option<LoginEmailDependencies>,
     breach_checker: Arc<dyn BreachedPasswordChecker>,
 }
 
@@ -137,6 +143,7 @@ impl LoginService {
             breach_checker: Arc::new(UnavailableBreachChecker),
             passkeys: None,
             mfa_enrollment: None,
+            email: None,
             events: Arc::new(NoopEventSink),
         }
     }
@@ -152,6 +159,13 @@ impl LoginService {
     #[must_use]
     pub fn with_mfa_enrollment(mut self, dependencies: LoginMfaEnrollmentDependencies) -> Self {
         self.mfa_enrollment = Some(dependencies);
+        self
+    }
+
+    /// Offer email sign-in when the instance turns it on.
+    #[must_use]
+    pub fn with_email(mut self, dependencies: LoginEmailDependencies) -> Self {
+        self.email = Some(dependencies);
         self
     }
 
@@ -200,9 +214,7 @@ impl LoginService {
             // An existing session establishes the first factor. Without any
             // second factor, a multi-factor request asks for the password so
             // a missing factor can be enrolled after it.
-            credentials
-                .iter()
-                .any(|kind| *kind != CredentialType::Password)
+            credentials.iter().any(|kind| kind.is_second_factor())
         };
         if has_second_factor {
             self.login_repo
@@ -243,6 +255,15 @@ impl LoginService {
             && !passkeys.list(user_oid).await?.is_empty()
         {
             credential_types.push(CredentialType::Passkey);
+        }
+        if self.email_sign_in_available()
+            && self
+                .user_repo
+                .find_by_oid(user_oid)
+                .await?
+                .is_some_and(|user| can_receive_email_code(&user))
+        {
+            credential_types.push(CredentialType::EmailOtp);
         }
         Ok(credential_types)
     }
@@ -385,16 +406,26 @@ impl LoginService {
             .await?;
         Ok(IdentifierResult {
             preferred_credential_type: Some(CredentialType::Password),
-            credential_types: CONCEALED_CREDENTIAL_TYPES.to_vec(),
+            credential_types: self.concealed_credential_types(),
             login,
             user: None,
         })
     }
 }
 
-/// The only method offered while an interaction conceals whether an account
-/// exists. Offering the account's own methods would reveal it.
-pub const CONCEALED_CREDENTIAL_TYPES: &[CredentialType] = &[CredentialType::Password];
+impl LoginService {
+    /// The methods offered while an interaction conceals whether an account
+    /// exists: the same for every identifier, since offering the account's
+    /// own methods would reveal it.
+    #[must_use]
+    pub fn concealed_credential_types(&self) -> Vec<CredentialType> {
+        let mut types = vec![CredentialType::Password];
+        if self.email_sign_in_available() {
+            types.push(CredentialType::EmailOtp);
+        }
+        types
+    }
+}
 
 /// Whether the login requires a multi-factor class.
 fn requires_second_factor(login: &Login) -> bool {
@@ -434,13 +465,22 @@ pub fn challenge_credential_types(
         .iter()
         .copied()
         .filter(|kind| match login.status {
-            LoginStatus::IDENTIFIER_VERIFIED => {
-                matches!(kind, CredentialType::Password | CredentialType::Passkey)
-            }
-            LoginStatus::MFA_REQUIRED => *kind != CredentialType::Password,
+            LoginStatus::IDENTIFIER_VERIFIED => matches!(
+                kind,
+                CredentialType::Password | CredentialType::Passkey | CredentialType::EmailOtp
+            ),
+            LoginStatus::MFA_REQUIRED => kind.is_second_factor(),
             _ => false,
         })
         .collect()
+}
+
+/// The AMR of the first factor this login established.
+fn first_factor_amr(login: &Login) -> String {
+    login
+        .first_factor_amr
+        .clone()
+        .unwrap_or_else(|| identity_domain::auth::AMR_PASSWORD.to_owned())
 }
 
 fn failed_attempt_lock_until() -> DateTime<Utc> {
@@ -493,7 +533,9 @@ pub fn preferred_credential_type(
     if has(CredentialType::Password) {
         return Some(CredentialType::Password);
     }
-    has(CredentialType::Passkey).then_some(CredentialType::Passkey)
+    has(CredentialType::Passkey)
+        .then_some(CredentialType::Passkey)
+        .or_else(|| has(CredentialType::EmailOtp).then_some(CredentialType::EmailOtp))
 }
 
 fn validate_passkey_login(login: &Login) -> Result<(), AppError> {

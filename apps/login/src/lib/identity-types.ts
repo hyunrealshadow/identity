@@ -102,7 +102,16 @@ export interface LoginStatusResponse {
   /** Credential to add while `status` is `mfa_enrollment_required`. */
   enrollment_method?: 'otp' | 'passkey'
   ui_locales?: Array<string>
+  /** When another sign-in email may be requested, once one was sent for this login. */
+  email_code_resend_available_at?: string
   continue_uri?: string
+}
+
+/** From `/api/auth/login/email-code`; the same whether or not an account matched. */
+export interface EmailCodeResponse {
+  status: 'sent'
+  expires_at: string
+  resend_available_at: string
 }
 
 export interface RestartLoginResponse {

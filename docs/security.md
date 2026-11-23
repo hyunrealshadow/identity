@@ -40,6 +40,26 @@ sends every identifier to the password step and reports a single
 account-or-password error; see
 [concealing whether an account exists](authentication-flows.md#concealing-whether-an-account-exists).
 
+### Email delivery
+
+Email is sent through the SMTP server in the `email.delivery` settings
+(Console: *Settings › Email*), with STARTTLS, implicit TLS, or no transport
+security, and either a username and password or OAuth 2.0 `XOAUTH2`. For
+XOAUTH2 the instance obtains access tokens from the configured token endpoint
+with a refresh token or client credentials and caches them until shortly before
+they expire. The SMTP password, OAuth client secret and refresh token are
+stored data-protected, are never returned by the API, and appear in the audit
+log only as a fingerprint; leaving one empty when saving keeps the stored
+value. An operator can send a test message with the saved settings.
+
+Email templates are localized per message kind and locale (`email.templates`).
+Each locale uses its built-in template until an operator replaces it. Templates
+use Tera syntax; each is rendered with a fresh engine that holds only that
+template and no custom functions, values are escaped in the HTML body, and a
+template is rendered with sample values before it is saved. The Console shows
+the rendered draft in a sandboxed frame that cannot run scripts. Audit records
+keep each locale's subject and a digest of its bodies.
+
 ## Multi-factor authentication
 
 Accounts support TOTP authenticator apps, Passkey/WebAuthn, and single-use recovery

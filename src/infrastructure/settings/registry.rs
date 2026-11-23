@@ -1,6 +1,7 @@
 use identity_application::setting::{
     BreachedPasswordCheckEnabledSetting, ConsoleClientIdSetting, ConsoleDomainSetting,
-    DomainSetting, IdentifierEnumerationAllowedSetting, InstallationSettings, LoginClientIdSetting,
+    DomainSetting, EmailDeliverySettings, EmailSignInEnabledSetting, EmailTemplatesSetting,
+    IdentifierEnumerationAllowedSetting, InstallationSettings, LoginClientIdSetting,
     LoginDomainSetting, OpenIdConnectSettings, PasswordHashSetting, SettingRegistry,
 };
 
@@ -11,6 +12,8 @@ pub(crate) fn setting_registry() -> SettingRegistry {
         .register::<PasswordHashSetting>()
         .register::<BreachedPasswordCheckEnabledSetting>()
         .register::<IdentifierEnumerationAllowedSetting>()
+        .register::<EmailSignInEnabledSetting>()
+        .register::<EmailTemplatesSetting>()
         .register::<DomainSetting>()
         .register::<LoginDomainSetting>()
         .register::<ConsoleDomainSetting>()
@@ -18,4 +21,5 @@ pub(crate) fn setting_registry() -> SettingRegistry {
         .register::<ConsoleClientIdSetting>()
         .register_section::<InstallationSettings>()
         .register_section::<OpenIdConnectSettings>()
+        .register_section::<EmailDeliverySettings>()
 }

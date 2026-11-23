@@ -115,6 +115,13 @@ pub struct Login {
     /// Classes the request accepts, in order of preference (`acr_values`, or
     /// the client's `default_acr_values`). Empty when nothing was requested.
     pub requested_acr_values: Vec<AuthenticationContextClass>,
+    /// The AMR of the first factor once it succeeds, when it was not the
+    /// password, so a second factor completes with the methods actually used.
+    pub first_factor_amr: Option<String>,
+    /// When the latest sign-in email was sent for this login.
+    pub email_code_sent_at: Option<DateTime<Utc>>,
+    /// Sign-in emails sent for this login, whether or not an account matched.
+    pub email_code_send_count: i32,
 }
 
 impl Login {

@@ -56,6 +56,8 @@ const fn credential_audit_field(credential_type: CredentialType) -> AuditField {
         CredentialType::Otp => AuditField::Totp,
         CredentialType::RecoveryCode => AuditField::RecoveryCodes,
         CredentialType::Passkey => AuditField::Passkey,
+        // Emailed codes are never stored as credentials.
+        CredentialType::EmailOtp => AuditField::Email,
     }
 }
 
@@ -73,6 +75,10 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         user_oid: UserOid,
         credential_type: CredentialType,
     ) -> Result<Vec<UserCredential>, UserCredentialRepositoryError> {
+        // Emailed codes are never stored as credentials.
+        if credential_type == CredentialType::EmailOtp {
+            return Ok(Vec::new());
+        }
         let rows = UserEntity::find()
             .filter(UserColumn::Oid.eq(Uuid::from(user_oid)))
             .inner_join(UserCredentialEntity)
@@ -105,7 +111,7 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
                     CredentialType::Passkey => from_value(m.data).map(CredentialData::Passkey),
                     CredentialType::Password => from_value(m.data).map(CredentialData::Password),
                     CredentialType::Otp => from_value(m.data).map(CredentialData::Otp),
-                    CredentialType::RecoveryCode => {
+                    CredentialType::RecoveryCode | CredentialType::EmailOtp => {
                         from_value(m.data).map(CredentialData::RecoveryCode)
                     }
                 };

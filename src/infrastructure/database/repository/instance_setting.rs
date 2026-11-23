@@ -12,8 +12,10 @@ use async_trait::async_trait;
 use identity_application::{
     rbac::RbacManagementRepositoryError,
     setting::{
-        AppSettings, BreachedPasswordCheckEnabledSetting, IdentifierEnumerationAllowedSetting,
+        AppSettings, BreachedPasswordCheckEnabledSetting, EmailDeliverySettings,
+        EmailSignInEnabledSetting, EmailTemplatesSetting, IdentifierEnumerationAllowedSetting,
         InstallationSettings, OpenIdConnectSettings, PasswordHashSetting,
+        email::{email_delivery_audit_values, email_template_audit_values},
         management::{
             InstanceSettingRepository, InstanceSettingRepositoryError, InstanceSettingSection,
             InstanceSettingsState, UpdateInstanceSettingsTransaction,
@@ -77,6 +79,9 @@ async fn load_state<C: ConnectionTrait>(
         password_hash: snapshot.get::<PasswordHashSetting>(),
         breached_password_check_enabled: snapshot.get::<BreachedPasswordCheckEnabledSetting>(),
         identifier_enumeration_allowed: snapshot.get::<IdentifierEnumerationAllowedSetting>(),
+        email_sign_in_enabled: snapshot.get::<EmailSignInEnabledSetting>(),
+        email_delivery: snapshot.section::<EmailDeliverySettings>(),
+        email_templates: snapshot.get::<EmailTemplatesSetting>(),
     })
 }
 
@@ -126,6 +131,16 @@ impl InstanceSettingRepository for InstanceSettingRepositoryImpl {
                 AuditField::Settings,
                 &current.authentication_values(),
                 &next.authentication_values(),
+            ),
+            InstanceSettingSection::Email => audited.diff(
+                AuditField::Settings,
+                &email_delivery_audit_values(&current.email_delivery),
+                &email_delivery_audit_values(&next.email_delivery),
+            ),
+            InstanceSettingSection::EmailTemplate(kind) => audited.diff(
+                AuditField::Settings,
+                &email_template_audit_values(current.email_templates.get(&kind)),
+                &email_template_audit_values(next.email_templates.get(&kind)),
             ),
         };
         append_semantic_audit(

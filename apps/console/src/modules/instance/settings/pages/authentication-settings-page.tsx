@@ -1,3 +1,4 @@
+import { Link } from '@tanstack/react-router'
 import { useId, useState } from 'react'
 
 import {
@@ -32,7 +33,7 @@ export function AuthenticationSettingsPage() {
   if (!settings) {
     return (
       <div className="space-y-6" aria-busy="true">
-        <SettingsGroupSkeleton rows={['switch']} />
+        <SettingsGroupSkeleton rows={['switch', 'switch']} />
         <SettingsGroupSkeleton rows={['control', 'control', 'control']} description />
       </div>
     )
@@ -47,7 +48,8 @@ export function AuthenticationSettingsPage() {
 
 function AuthenticationSettingsForm({ settings }: { settings: AuthenticationSettings }) {
   const t = useTranslator()
-  const { scope, query } = useInstanceSettings()
+  const { scope, query, settings: instance } = useInstanceSettings()
+  const deliveryConfigured = instance?.email.delivery.configured ?? false
   const mutations = useSettingMutations()
   const errorPrefix = useId()
   const [draft, setDraft] = useState<AuthenticationDraft>(() => authenticationDraft(settings))
@@ -157,6 +159,37 @@ function AuthenticationSettingsForm({ settings }: { settings: AuthenticationSett
               />
             }
           />
+          <SettingsRow
+            label={t('settingsEmailSignIn')}
+            description={t('settingsEmailSignInHint')}
+            action={
+              <SettingsSwitch
+                label={t('settingsEmailSignIn')}
+                isSelected={draft.emailSignInEnabled}
+                onChange={(value) => change('emailSignInEnabled', value)}
+                isDisabled={disabled || (!deliveryConfigured && !draft.emailSignInEnabled)}
+              />
+            }
+          >
+            {!deliveryConfigured ? (
+              <p className="text-xs leading-5 text-muted-foreground">
+                {t(
+                  draft.emailSignInEnabled
+                    ? 'settingsEmailSignInDeliveryOff'
+                    : 'settingsEmailSignInNeedsDelivery',
+                )}{' '}
+                <Link to="/settings/email" className="text-link">
+                  {t('settingsEmailSignInConfigureDelivery')}
+                </Link>
+              </p>
+            ) : null}
+            {serverErrors.emailSignInEnabled ? (
+              <SettingsFieldError
+                id={`${errorPrefix}-emailSignInEnabled`}
+                message={serverErrors.emailSignInEnabled}
+              />
+            ) : null}
+          </SettingsRow>
         </SettingsGroup>
 
         <SettingsGroup title={t('settingsPasswordPolicySection')}>

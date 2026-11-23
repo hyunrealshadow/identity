@@ -41,6 +41,7 @@ import { Route as AppclientManagementClientsClientIdEndpointsRouteImport } from 
 import { Route as AppclientManagementClientsClientIdIntegrationRouteImport } from './routes/_app/(client-management)/clients/$clientId/integration'
 import { Route as AppclientManagementClientsClientIdScopesRouteImport } from './routes/_app/(client-management)/clients/$clientId/scopes'
 import { Route as AppclientManagementResourcesResourceIdIndexRouteImport } from './routes/_app/(client-management)/resources/$resourceId/index'
+import { Route as AppinstanceSettingsEmailIndexRouteImport } from './routes/_app/(instance)/settings/email/index'
 import { Route as AppuserManagementGroupsGroupIdIndexRouteImport } from './routes/_app/(user-management)/groups/$groupId/index'
 import { Route as AppuserManagementGroupsGroupIdMembersRouteImport } from './routes/_app/(user-management)/groups/$groupId/members'
 import { Route as AppuserManagementGroupsGroupIdRolesRouteImport } from './routes/_app/(user-management)/groups/$groupId/roles'
@@ -56,6 +57,7 @@ import { Route as AppuserManagementUsersUserIdRolesRouteImport } from './routes/
 import { Route as AppclientManagementResourcesResourceIdPermissionsIndexRouteImport } from './routes/_app/(client-management)/resources/$resourceId/permissions/index'
 import { Route as AppclientManagementResourcesResourceIdPermissionsPermissionIdRouteImport } from './routes/_app/(client-management)/resources/$resourceId/permissions/$permissionId'
 import { Route as AppclientManagementResourcesResourceIdPermissionsNewRouteImport } from './routes/_app/(client-management)/resources/$resourceId/permissions/new'
+import { Route as AppinstanceSettingsEmailTemplatesKindRouteImport } from './routes/_app/(instance)/settings/email/templates/$kind'
 
 const AppRouteRoute = AppRouteRouteImport.update({
   id: '/_app',
@@ -244,6 +246,12 @@ const AppclientManagementResourcesResourceIdIndexRoute =
     path: '/',
     getParentRoute: () => AppclientManagementResourcesResourceIdRouteRoute,
   } as any)
+const AppinstanceSettingsEmailIndexRoute =
+  AppinstanceSettingsEmailIndexRouteImport.update({
+    id: '/email/',
+    path: '/email/',
+    getParentRoute: () => AppinstanceSettingsRouteRoute,
+  } as any)
 const AppuserManagementGroupsGroupIdIndexRoute =
   AppuserManagementGroupsGroupIdIndexRouteImport.update({
     id: '/',
@@ -336,6 +344,12 @@ const AppclientManagementResourcesResourceIdPermissionsNewRoute =
     path: '/permissions/new',
     getParentRoute: () => AppclientManagementResourcesResourceIdRouteRoute,
   } as any)
+const AppinstanceSettingsEmailTemplatesKindRoute =
+  AppinstanceSettingsEmailTemplatesKindRouteImport.update({
+    id: '/email/templates/$kind',
+    path: '/email/templates/$kind',
+    getParentRoute: () => AppinstanceSettingsRouteRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AppdashboardIndexRoute
@@ -378,11 +392,13 @@ export interface FileRoutesByFullPath {
   '/users/$userId/roles': typeof AppuserManagementUsersUserIdRolesRoute
   '/clients/$clientId/': typeof AppclientManagementClientsClientIdIndexRoute
   '/resources/$resourceId/': typeof AppclientManagementResourcesResourceIdIndexRoute
+  '/settings/email/': typeof AppinstanceSettingsEmailIndexRoute
   '/groups/$groupId/': typeof AppuserManagementGroupsGroupIdIndexRoute
   '/roles/$roleId/': typeof AppuserManagementRolesRoleIdIndexRoute
   '/users/$userId/': typeof AppuserManagementUsersUserIdIndexRoute
   '/resources/$resourceId/permissions/$permissionId': typeof AppclientManagementResourcesResourceIdPermissionsPermissionIdRoute
   '/resources/$resourceId/permissions/new': typeof AppclientManagementResourcesResourceIdPermissionsNewRoute
+  '/settings/email/templates/$kind': typeof AppinstanceSettingsEmailTemplatesKindRoute
   '/resources/$resourceId/permissions/': typeof AppclientManagementResourcesResourceIdPermissionsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -420,11 +436,13 @@ export interface FileRoutesByTo {
   '/users/$userId/roles': typeof AppuserManagementUsersUserIdRolesRoute
   '/clients/$clientId': typeof AppclientManagementClientsClientIdIndexRoute
   '/resources/$resourceId': typeof AppclientManagementResourcesResourceIdIndexRoute
+  '/settings/email': typeof AppinstanceSettingsEmailIndexRoute
   '/groups/$groupId': typeof AppuserManagementGroupsGroupIdIndexRoute
   '/roles/$roleId': typeof AppuserManagementRolesRoleIdIndexRoute
   '/users/$userId': typeof AppuserManagementUsersUserIdIndexRoute
   '/resources/$resourceId/permissions/$permissionId': typeof AppclientManagementResourcesResourceIdPermissionsPermissionIdRoute
   '/resources/$resourceId/permissions/new': typeof AppclientManagementResourcesResourceIdPermissionsNewRoute
+  '/settings/email/templates/$kind': typeof AppinstanceSettingsEmailTemplatesKindRoute
   '/resources/$resourceId/permissions': typeof AppclientManagementResourcesResourceIdPermissionsIndexRoute
 }
 export interface FileRoutesById {
@@ -470,11 +488,13 @@ export interface FileRoutesById {
   '/_app/(user-management)/users/$userId/roles': typeof AppuserManagementUsersUserIdRolesRoute
   '/_app/(client-management)/clients/$clientId/': typeof AppclientManagementClientsClientIdIndexRoute
   '/_app/(client-management)/resources/$resourceId/': typeof AppclientManagementResourcesResourceIdIndexRoute
+  '/_app/(instance)/settings/email/': typeof AppinstanceSettingsEmailIndexRoute
   '/_app/(user-management)/groups/$groupId/': typeof AppuserManagementGroupsGroupIdIndexRoute
   '/_app/(user-management)/roles/$roleId/': typeof AppuserManagementRolesRoleIdIndexRoute
   '/_app/(user-management)/users/$userId/': typeof AppuserManagementUsersUserIdIndexRoute
   '/_app/(client-management)/resources/$resourceId/permissions/$permissionId': typeof AppclientManagementResourcesResourceIdPermissionsPermissionIdRoute
   '/_app/(client-management)/resources/$resourceId/permissions/new': typeof AppclientManagementResourcesResourceIdPermissionsNewRoute
+  '/_app/(instance)/settings/email/templates/$kind': typeof AppinstanceSettingsEmailTemplatesKindRoute
   '/_app/(client-management)/resources/$resourceId/permissions/': typeof AppclientManagementResourcesResourceIdPermissionsIndexRoute
 }
 export interface FileRouteTypes {
@@ -520,11 +540,13 @@ export interface FileRouteTypes {
     | '/users/$userId/roles'
     | '/clients/$clientId/'
     | '/resources/$resourceId/'
+    | '/settings/email/'
     | '/groups/$groupId/'
     | '/roles/$roleId/'
     | '/users/$userId/'
     | '/resources/$resourceId/permissions/$permissionId'
     | '/resources/$resourceId/permissions/new'
+    | '/settings/email/templates/$kind'
     | '/resources/$resourceId/permissions/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -562,11 +584,13 @@ export interface FileRouteTypes {
     | '/users/$userId/roles'
     | '/clients/$clientId'
     | '/resources/$resourceId'
+    | '/settings/email'
     | '/groups/$groupId'
     | '/roles/$roleId'
     | '/users/$userId'
     | '/resources/$resourceId/permissions/$permissionId'
     | '/resources/$resourceId/permissions/new'
+    | '/settings/email/templates/$kind'
     | '/resources/$resourceId/permissions'
   id:
     | '__root__'
@@ -611,11 +635,13 @@ export interface FileRouteTypes {
     | '/_app/(user-management)/users/$userId/roles'
     | '/_app/(client-management)/clients/$clientId/'
     | '/_app/(client-management)/resources/$resourceId/'
+    | '/_app/(instance)/settings/email/'
     | '/_app/(user-management)/groups/$groupId/'
     | '/_app/(user-management)/roles/$roleId/'
     | '/_app/(user-management)/users/$userId/'
     | '/_app/(client-management)/resources/$resourceId/permissions/$permissionId'
     | '/_app/(client-management)/resources/$resourceId/permissions/new'
+    | '/_app/(instance)/settings/email/templates/$kind'
     | '/_app/(client-management)/resources/$resourceId/permissions/'
   fileRoutesById: FileRoutesById
 }
@@ -851,6 +877,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppclientManagementResourcesResourceIdIndexRouteImport
       parentRoute: typeof AppclientManagementResourcesResourceIdRouteRoute
     }
+    '/_app/(instance)/settings/email/': {
+      id: '/_app/(instance)/settings/email/'
+      path: '/email'
+      fullPath: '/settings/email/'
+      preLoaderRoute: typeof AppinstanceSettingsEmailIndexRouteImport
+      parentRoute: typeof AppinstanceSettingsRouteRoute
+    }
     '/_app/(user-management)/groups/$groupId/': {
       id: '/_app/(user-management)/groups/$groupId/'
       path: '/'
@@ -956,6 +989,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppclientManagementResourcesResourceIdPermissionsNewRouteImport
       parentRoute: typeof AppclientManagementResourcesResourceIdRouteRoute
     }
+    '/_app/(instance)/settings/email/templates/$kind': {
+      id: '/_app/(instance)/settings/email/templates/$kind'
+      path: '/email/templates/$kind'
+      fullPath: '/settings/email/templates/$kind'
+      preLoaderRoute: typeof AppinstanceSettingsEmailTemplatesKindRouteImport
+      parentRoute: typeof AppinstanceSettingsRouteRoute
+    }
   }
 }
 
@@ -965,6 +1005,8 @@ interface AppinstanceSettingsRouteRouteChildren {
   AppinstanceSettingsProtocolRoute: typeof AppinstanceSettingsProtocolRoute
   AppinstanceSettingsSigningKeysRoute: typeof AppinstanceSettingsSigningKeysRoute
   AppinstanceSettingsIndexRoute: typeof AppinstanceSettingsIndexRoute
+  AppinstanceSettingsEmailIndexRoute: typeof AppinstanceSettingsEmailIndexRoute
+  AppinstanceSettingsEmailTemplatesKindRoute: typeof AppinstanceSettingsEmailTemplatesKindRoute
 }
 
 const AppinstanceSettingsRouteRouteChildren: AppinstanceSettingsRouteRouteChildren =
@@ -976,6 +1018,9 @@ const AppinstanceSettingsRouteRouteChildren: AppinstanceSettingsRouteRouteChildr
     AppinstanceSettingsProtocolRoute: AppinstanceSettingsProtocolRoute,
     AppinstanceSettingsSigningKeysRoute: AppinstanceSettingsSigningKeysRoute,
     AppinstanceSettingsIndexRoute: AppinstanceSettingsIndexRoute,
+    AppinstanceSettingsEmailIndexRoute: AppinstanceSettingsEmailIndexRoute,
+    AppinstanceSettingsEmailTemplatesKindRoute:
+      AppinstanceSettingsEmailTemplatesKindRoute,
   }
 
 const AppinstanceSettingsRouteRouteWithChildren =

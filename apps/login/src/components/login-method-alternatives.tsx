@@ -7,6 +7,7 @@ import { loginChallengeDestination, type LoginCredentialType } from '#/lib/login
 const methods = [
   { type: 'passkey', label: 'usePasskey' },
   { type: 'password', label: 'usePassword' },
+  { type: 'email_otp', label: 'useEmailCode' },
   { type: 'otp', label: 'useAuthenticatorCode' },
   { type: 'recovery_code', label: 'useRecoveryCode' },
 ] as const
@@ -23,7 +24,7 @@ export function LoginMethodAlternatives({ currentMethod, status, loginId, uiLoca
   const secondFactor = status.status === 'mfa_required'
   const alternatives = methods.filter(({ type }) => {
     if (type === currentMethod || !status.credential_types.includes(type)) return false
-    if (type === 'password') return status.status === 'identifier_verified'
+    if (type === 'password' || type === 'email_otp') return status.status === 'identifier_verified'
     if (type === 'otp' || type === 'recovery_code') return secondFactor
     return true
   })

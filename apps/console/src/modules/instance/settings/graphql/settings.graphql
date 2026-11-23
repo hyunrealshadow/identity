@@ -29,6 +29,7 @@ fragment ConsoleInstanceSettingsFields on InstanceSettings {
   authentication {
     breachedPasswordCheckEnabled
     identifierEnumerationAllowed
+    emailSignInEnabled
     passwordHashing {
       timeCost
       timeCostRange {
@@ -47,6 +48,48 @@ fragment ConsoleInstanceSettingsFields on InstanceSettings {
       }
     }
     version
+  }
+  email {
+    delivery {
+      enabled
+      host
+      port
+      portRange {
+        min
+        max
+      }
+      security
+      senderAddress
+      senderName
+      authentication {
+        method
+        username
+        passwordSet
+        tokenEndpoint
+        clientId
+        clientSecretSet
+        grant
+        refreshTokenSet
+        scope
+      }
+      configured
+      version
+    }
+    templates {
+      kind
+      variables
+      version
+      locales {
+        locale
+        customized
+        subject
+        html
+        text
+        defaultSubject
+        defaultHtml
+        defaultText
+      }
+    }
   }
 }
 
@@ -71,5 +114,38 @@ mutation ConsoleUpdateAuthenticationSettings($input: UpdateAuthenticationSetting
     settings {
       ...ConsoleInstanceSettingsFields
     }
+  }
+}
+
+mutation ConsoleUpdateEmailDeliverySettings($input: UpdateEmailDeliverySettingsInput!) {
+  updateEmailDeliverySettings(input: $input) {
+    clientMutationId
+    settings {
+      ...ConsoleInstanceSettingsFields
+    }
+  }
+}
+
+mutation ConsoleUpdateEmailTemplate($input: UpdateEmailTemplateInput!) {
+  updateEmailTemplate(input: $input) {
+    clientMutationId
+    settings {
+      ...ConsoleInstanceSettingsFields
+    }
+  }
+}
+
+mutation ConsoleSendTestEmail($input: SendTestEmailInput!) {
+  sendTestEmail(input: $input) {
+    sent
+    clientMutationId
+  }
+}
+
+query ConsoleEmailTemplatePreview($input: EmailTemplatePreviewInput!) {
+  emailTemplatePreview(input: $input) {
+    subject
+    html
+    text
   }
 }

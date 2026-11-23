@@ -14,3 +14,18 @@ impl SettingDefinition for IdentifierEnumerationAllowedSetting {
         true
     }
 }
+
+/// Whether an account with a verified email address may sign in with a
+/// one-time code or link sent to it, instead of its password. Offered only
+/// while email delivery is configured.
+pub struct EmailSignInEnabledSetting;
+
+impl SettingDefinition for EmailSignInEnabledSetting {
+    type Value = bool;
+
+    const KEY: &'static str = "auth.login.email_sign_in_enabled";
+
+    fn default_value() -> Self::Value {
+        false
+    }
+}

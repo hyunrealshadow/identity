@@ -1,0 +1,11 @@
+{{ user.name }}，你好：
+
+请使用以下验证码{% if application %}登录 {{ application.name }}{% else %}登录{% endif %}：
+
+    {{ code }}
+
+也可以在浏览器中打开此链接：
+{{ link }}
+
+验证码和链接将在 {{ expires_in_minutes }} 分钟后失效，且只能使用一次。
+如果这不是你本人的操作，请忽略此邮件。不要将验证码告诉任何人。

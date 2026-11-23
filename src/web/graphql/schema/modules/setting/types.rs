@@ -40,6 +40,11 @@ impl InstanceSettings {
     async fn authentication(&self) -> AuthenticationSettings {
         AuthenticationSettings::from(&self.view.authentication)
     }
+
+    /// Email delivery and the templates of the email this instance sends.
+    async fn email(&self) -> super::email::EmailSettings {
+        super::email::EmailSettings::from(&self.view.email)
+    }
 }
 
 #[derive(SimpleObject)]
@@ -162,6 +167,13 @@ impl AuthenticationSettings {
         self.view.identifier_enumeration_allowed
     }
 
+    /// Whether an account with a verified email address may sign in with a
+    /// code or link sent to it. Offered only while email delivery is
+    /// configured.
+    async fn email_sign_in_enabled(&self) -> bool {
+        self.view.email_sign_in_enabled
+    }
+
     /// Argon2id cost for newly stored password hashes.
     async fn password_hashing(&self) -> PasswordHashing {
         let hashing = &self.view.password_hashing;
@@ -235,6 +247,7 @@ pub(crate) struct PasswordHashingInput {
 pub(crate) struct UpdateAuthenticationSettingsInput {
     pub breached_password_check_enabled: bool,
     pub identifier_enumeration_allowed: bool,
+    pub email_sign_in_enabled: bool,
     pub password_hashing: PasswordHashingInput,
     pub expected_version: Uuid,
     #[graphql(validator(chars_max_length = 255))]

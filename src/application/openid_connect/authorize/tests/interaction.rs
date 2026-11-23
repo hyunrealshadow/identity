@@ -60,6 +60,9 @@ fn login(status: LoginStatus) -> Login {
         acr: None,
         submitted_identifier: None,
         requested_acr_values: Vec::new(),
+        first_factor_amr: None,
+        email_code_sent_at: None,
+        email_code_send_count: 0,
         created_at: Utc::now(),
         expires_at: Utc::now() + Duration::minutes(5),
     }

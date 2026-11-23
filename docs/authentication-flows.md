@@ -63,8 +63,8 @@ Created ─▶ IdentifierVerified ─▶ MfaRequired ─▶ Authenticated
 | Status | Meaning | What may follow |
 | --- | --- | --- |
 | `Created` | Interaction opened, no identifier accepted yet | Identifier submission |
-| `IdentifierVerified` | User identified (or, while account existence is concealed, any identifier entered), password not yet accepted | Password, passkey |
-| `MfaRequired` | Password accepted, a second factor is still required | OTP, recovery code, passkey |
+| `IdentifierVerified` | User identified (or, while account existence is concealed, any identifier entered), first factor not yet accepted | Password, passkey, email code or link |
+| `MfaRequired` | First factor accepted, a second factor is still required | OTP, recovery code, passkey |
 | `MfaEnrollmentRequired` | The verified factors fall short of the requested class and the user has no credential that meets it | `aal2`: authenticator enrollment, then a completed session. `phr`: passkey registration, then a passkey challenge (an existing passkey may also be used) |
 | `Authenticated` | Session established and bound to the interaction | Continue to consent or the protocol |
 | `Expired` | Interaction lifetime elapsed | Restart only |
@@ -101,7 +101,8 @@ is `false`:
 
 - Every identifier reaches `IdentifierVerified` and continues to the password
   step. The interaction keeps the identifier as entered and shows only that, not
-  the account's name or picture, and offers only the password.
+  the account's name or picture, and offers only the password (and email
+  sign-in when it is on, for every identifier alike).
 - A wrong password, an unknown account, and an account without a password all
   fail with the same error (code `11027`) after comparable
   hashing work. Reaching the lockout threshold is not reported either.
@@ -110,6 +111,37 @@ is `false`:
   password succeeds, so a passkey-only account cannot sign in from the
   identifier step. Selecting an existing browser session is unaffected.
 - Identifier-stage rejections are still written to the audit log.
+- Requesting a sign-in email answers the same whether or not anything is
+  sent: the resend interval and send limit are kept on the interaction, the
+  email is composed and sent in the background, and a code for an unknown
+  account fails like a wrong one.
+
+### Email sign-in
+
+The authentication setting `auth.login.email_sign_in_enabled` (Console:
+*Email sign-in*, default `false`) lets an account with a **verified** email
+address use a one-time code or link sent to it instead of its password. It can
+be turned on only while email delivery is configured, and is not offered while
+delivery is off.
+
+- It is a first factor: offered only at `IdentifierVerified`, never in
+  `MfaRequired`. An account with an authenticator app or passkey still
+  completes that second factor, and a request for `aal2` still enrolls one.
+  The session records `urn:identity:amr:email` (RFC 8176 registers no email
+  value), and a following second factor keeps it in place of `pwd`.
+- One email carries a 6-digit code and a single-use link to
+  `{login_domain}/login/email?login_id=…&token=…`. Both expire after 10 minutes
+  and sending extends the interaction to at least that long. Opening the link
+  only shows a confirmation; the sign-in happens when the user continues, so a
+  mail scanner that fetches the link cannot use it.
+- A resend replaces the previous code. Sends are at least 60 seconds apart and
+  at most five per interaction; the code allows five wrong attempts per
+  interaction, which also count towards the account lockout.
+- The code is stored only data-protected and the link only as a SHA-256
+  digest, in the interaction's authentication challenge, which the successful
+  verification consumes.
+- The message uses the account's locale, then the request's `ui_locales`, then
+  the Login page language, and the email template of that locale.
 
 ## Credential stages
 
@@ -118,6 +150,7 @@ is `false`:
 | Password | 12–1024 characters, checked against the configured policy and breach check. Five failed attempts lock the account; an administrator unlock is required when the lock is permanent. |
 | Passkey | WebAuthn registration and assertion; the relying party ID is the host of `app.login_domain` and the origin must match exactly, including the port. Challenges live five minutes, are consumed atomically, and are invalidated by a stage change, identity reset, or session revocation. Requires JavaScript. |
 | Authenticator app (TOTP) | Time-based one-time code. Enrollment starts and confirms inside the interaction, and the algorithm used for new enrollments can be changed afterwards from account security. |
+| Email code or link | First factor only, for a verified address while email sign-in is on; see [email sign-in](#email-sign-in). Works without JavaScript. |
 | Recovery code | One-time code from the enrolled set. Reported as `urn:identity:amr:recovery-code` rather than as `otp`, so a recovery sign-in is distinguishable from a normal TOTP sign-in. |
 | Client credentials | No user interaction. The client authenticates itself and receives only its own authority. |
 

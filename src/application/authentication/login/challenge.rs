@@ -57,6 +57,7 @@ impl LoginService {
             CredentialType::Otp => "otp",
             CredentialType::RecoveryCode => "recovery_code",
             CredentialType::Passkey => "passkey",
+            CredentialType::EmailOtp => "email_otp",
         };
         match result {
             Ok(ChallengeOutcome::Authenticated { login, session }) => {
@@ -174,10 +175,11 @@ impl LoginService {
         let login = self.prepare_challenge(login_oid).await?;
 
         // While the interaction conceals whether an account exists, only the
-        // password is offered, with or without a matched account; any other
-        // method is refused alike so the refusal reveals nothing.
+        // password and email sign-in are offered, with or without a matched
+        // account; any other method is refused alike so the refusal reveals
+        // nothing.
         let concealed = login.concealed_identifier().is_some();
-        if concealed && credential_type != CredentialType::Password {
+        if concealed && !self.concealed_credential_types().contains(&credential_type) {
             return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
         }
         if login.user_oid.is_none() && !concealed {
@@ -208,6 +210,7 @@ impl LoginService {
             CredentialType::RecoveryCode => {
                 self.challenge_recovery_code(login, credential, ctx).await
             }
+            CredentialType::EmailOtp => self.challenge_email_otp(login, credential, ctx).await,
         }
     }
 }

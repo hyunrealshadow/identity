@@ -1,0 +1,1 @@
+{{ code }} 是你{% if application %}登录 {{ application.name }} {% endif %}的验证码

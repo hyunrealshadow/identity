@@ -1,6 +1,6 @@
 use super::{
     ChallengeOutcome, LoginService, SessionContext, can_challenge_second_factor,
-    failed_attempt_lock_until,
+    failed_attempt_lock_until, first_factor_amr,
 };
 use crate::{
     authentication::mfa::recovery_code_hash,
@@ -8,8 +8,8 @@ use crate::{
     user::model::{CredentialData, CredentialType, RecoveryCodeCredentialData},
 };
 use identity_domain::auth::{
-    AMR_MFA, AMR_PASSWORD, AMR_RECOVERY_CODE, LoginFailureReason, MAX_FAILED_ATTEMPTS,
-    MAX_OTP_ATTEMPTS, model::Login,
+    AMR_MFA, AMR_RECOVERY_CODE, LoginFailureReason, MAX_FAILED_ATTEMPTS, MAX_OTP_ATTEMPTS,
+    model::Login,
 };
 use subtle::ConstantTimeEq;
 use uuid::Uuid;
@@ -81,12 +81,13 @@ impl LoginService {
             return Err(AppError::from_code(AuthErrorCode::InvalidOtp));
         }
         self.user_repo.reset_failed_attempts(user_oid).await?;
+        let first_factor = first_factor_amr(&login);
         self.complete_second_factor(
             login,
             Uuid::from(user_oid),
             ctx,
             &[
-                AMR_PASSWORD.to_owned(),
+                first_factor,
                 AMR_RECOVERY_CODE.to_owned(),
                 AMR_MFA.to_owned(),
             ],

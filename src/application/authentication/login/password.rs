@@ -241,6 +241,22 @@ impl LoginService {
             }
         }
 
+        self.first_factor_verified(login, user, AMR_PASSWORD, ctx)
+            .await
+    }
+
+    /// Continue after a first factor succeeds: require a second factor, its
+    /// enrollment, or complete authentication at the single-factor class.
+    pub(super) async fn first_factor_verified(
+        &self,
+        login: Login,
+        user: &User,
+        amr: &str,
+        ctx: SessionContext,
+    ) -> Result<ChallengeOutcome, AppError> {
+        if amr != AMR_PASSWORD {
+            self.login_repo.record_first_factor(login.oid, amr).await?;
+        }
         // Check if the user has an OTP credential.
         let otp_credentials = self
             .credential_repo
@@ -273,7 +289,7 @@ impl LoginService {
                 user.oid.into(),
                 ctx,
                 AuthenticationContextClass::SingleFactor,
-                &[AMR_PASSWORD.to_owned()],
+                &[amr.to_owned()],
             )
             .await
         } else {

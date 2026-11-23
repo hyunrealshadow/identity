@@ -3,6 +3,7 @@ const loginMethods = {
   passkey: 'passkey',
   otp: 'otp',
   'recovery-code': 'recovery_code',
+  email: 'email_otp',
 } as const
 
 export type LoginCredentialType = (typeof loginMethods)[keyof typeof loginMethods]

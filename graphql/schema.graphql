@@ -211,6 +211,8 @@ enum AuditAction {
 	KEY_REVOKE
 	SETTING_PROTOCOL_UPDATE
 	SETTING_AUTHENTICATION_UPDATE
+	SETTING_EMAIL_UPDATE
+	SETTING_EMAIL_TEMPLATE_UPDATE
 	ACCOUNT_PROFILE_UPDATE
 	ACCOUNT_IDENTIFIER_UPDATE
 	ACCOUNT_PASSWORD_CHANGE
@@ -493,6 +495,12 @@ type AuthenticationSettings {
 	wrong.
 	"""
 	identifierEnumerationAllowed: Boolean!
+	"""
+	Whether an account with a verified email address may sign in with a
+	code or link sent to it. Offered only while email delivery is
+	configured.
+	"""
+	emailSignInEnabled: Boolean!
 	"""
 	Argon2id cost for newly stored password hashes.
 	"""
@@ -1166,6 +1174,148 @@ type EffectivePermissions {
 	authentication: AuthenticationContext!
 }
 
+"""
+SMTP authentication. Secrets are reported only as stored or not.
+"""
+type EmailAuthentication {
+	method: EmailAuthenticationMethod!
+	username: String
+	passwordSet: Boolean!
+	tokenEndpoint: String
+	clientId: String
+	clientSecretSet: Boolean!
+	grant: Xoauth2Grant
+	refreshTokenSet: Boolean!
+	scope: String
+}
+
+"""
+SMTP authentication to store. Leave a secret out to keep the stored one
+while the method stays the same.
+"""
+input EmailAuthenticationInput {
+	method: EmailAuthenticationMethod!
+	username: String
+	password: String
+	tokenEndpoint: String
+	clientId: String
+	clientSecret: String
+	grant: Xoauth2Grant
+	refreshToken: String
+	scope: String
+}
+
+enum EmailAuthenticationMethod {
+	"""
+	An unauthenticated relay.
+	"""
+	NONE
+	"""
+	A username and password.
+	"""
+	PASSWORD
+	"""
+	An OAuth 2.0 access token (`AUTH XOAUTH2`).
+	"""
+	XOAUTH2
+}
+
+type EmailDeliverySettings {
+	enabled: Boolean!
+	host: String!
+	port: Int!
+	portRange: IntRange!
+	security: SmtpSecurity!
+	"""
+	The `From` address of every message.
+	"""
+	senderAddress: String!
+	senderName: String
+	authentication: EmailAuthentication!
+	"""
+	Enabled with a server and a sender address, so email can be sent.
+	"""
+	configured: Boolean!
+	"""
+	UUID optimistic-lock version of this section.
+	"""
+	version: UUID!
+}
+
+type EmailSettings {
+	"""
+	The SMTP server email is sent through.
+	"""
+	delivery: EmailDeliverySettings!
+	"""
+	Every kind of email, with its template in each supported locale.
+	"""
+	templates: [EmailTemplate!]!
+}
+
+type EmailTemplate {
+	kind: EmailTemplateKind!
+	"""
+	Variables the template receives, as dotted paths.
+	"""
+	variables: [String!]!
+	locales: [EmailTemplateLocale!]!
+	"""
+	UUID optimistic-lock version of this template, across its locales.
+	"""
+	version: UUID!
+}
+
+input EmailTemplateContentInput {
+	subject: String!
+	html: String!
+	text: String!
+}
+
+enum EmailTemplateKind {
+	"""
+	The one-time code and sign-in link of email sign-in.
+	"""
+	SIGN_IN_CODE
+}
+
+type EmailTemplateLocale {
+	locale: String!
+	"""
+	Whether this locale replaces the built-in template.
+	"""
+	customized: Boolean!
+	"""
+	The subject sent for this locale, as Tera source.
+	"""
+	subject: String!
+	html: String!
+	text: String!
+	defaultSubject: String!
+	defaultHtml: String!
+	defaultText: String!
+}
+
+input EmailTemplateLocaleInput {
+	locale: String!
+	content: EmailTemplateContentInput!
+}
+
+"""
+A template rendered with sample values.
+"""
+type EmailTemplatePreview {
+	subject: String!
+	html: String!
+	text: String!
+}
+
+input EmailTemplatePreviewInput {
+	kind: EmailTemplateKind!
+	locale: String!
+	content: EmailTemplateContentInput!
+}
+
 type GeneralSettings {
 	issuer: String
 	loginUrl: String
@@ -1445,6 +1595,10 @@ type InstanceSettings {
 	general: GeneralSettings!
 	protocol: ProtocolSettings!
 	authentication: AuthenticationSettings!
+	"""
+	Email delivery and the templates of the email this instance sends.
+	"""
+	email: EmailSettings!
 }
 
 type InstanceSettingsPayload {
@@ -1700,6 +1854,21 @@ type MutationRoot {
 	"""
 	updateAuthenticationSettings(input: UpdateAuthenticationSettingsInput!): InstanceSettingsPayload! @access(policy: {scopes: ["management.setting.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
 	"""
+	Replace how email is sent. Secrets left out keep their stored value
+	while the authentication method stays the same.
+	"""
+	updateEmailDeliverySettings(input: UpdateEmailDeliverySettingsInput!): InstanceSettingsPayload! @access(policy: {scopes: ["management.setting.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	"""
+	Replace one email template in the given locales; every other locale
+	uses its built-in template. Each template is rendered with sample
+	values before it is saved.
+	"""
+	updateEmailTemplate(input: UpdateEmailTemplateInput!): InstanceSettingsPayload! @access(policy: {scopes: ["management.setting.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	"""
+	Send a short message with the stored delivery settings.
+	"""
+	sendTestEmail(input: SendTestEmailInput!): SendTestEmailPayload! @access(policy: {scopes: ["management.setting.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	"""
 	Add a signing key with another algorithm. It becomes the newest active
 	signing key; existing keys keep serving clients that ask for their
 	algorithm.
@@ -1884,6 +2053,10 @@ type QueryRoot {
 	Instance-wide settings as currently stored.
 	"""
 	instanceSettings: InstanceSettings @access(policy: {scopes: ["management.setting.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
+	Render a draft email template with sample values, without saving it.
+	"""
+	emailTemplatePreview(input: EmailTemplatePreviewInput!): EmailTemplatePreview @access(policy: {scopes: ["management.setting.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	"""
 	JWA algorithms a signing key can be added with, and the key each one
 	generates.
@@ -2276,6 +2449,23 @@ input ScopeStateInput {
 	clientMutationId: String
 }
 
+input SendTestEmailInput {
+	recipient: String!
+	"""
+	Language of the message.
+	"""
+	locale: String!
+	clientMutationId: String
+}
+
+type SendTestEmailPayload {
+	"""
+	The mail server accepted the message.
+	"""
+	sent: Boolean!
+	clientMutationId: String
+}
+
 type Session implements Node {
 	id: ID!
 	status: String!
@@ -2382,6 +2572,21 @@ type SigningKeyAlgorithm {
 	keyName: String!
 }
 
+enum SmtpSecurity {
+	"""
+	TLS from the first byte, usually on port 465.
+	"""
+	TLS
+	"""
+	A plain connection that must upgrade with STARTTLS, usually on port 587.
+	"""
+	START_TLS
+	"""
+	No transport security; only for a relay on a trusted network.
+	"""
+	NONE
+}
+
 enum TotpAlgorithm {
 	SHA1
 	SHA256
@@ -2415,6 +2620,7 @@ input UnlockUserInput {
 input UpdateAuthenticationSettingsInput {
 	breachedPasswordCheckEnabled: Boolean!
 	identifierEnumerationAllowed: Boolean!
+	emailSignInEnabled: Boolean!
 	passwordHashing: PasswordHashingInput!
 	expectedVersion: UUID!
 	clientMutationId: String
@@ -2436,8 +2642,30 @@ input UpdateClientInput {
 	clientMutationId: String
 }
 
+input UpdateEmailDeliverySettingsInput {
+	enabled: Boolean!
+	host: String!
+	port: Int!
+	security: SmtpSecurity!
+	senderAddress: String!
+	senderName: String
+	authentication: EmailAuthenticationInput!
+	expectedVersion: UUID!
+	clientMutationId: String
+}
+
 input UpdateEmailInput {
 	email: String!
+	clientMutationId: String
+}
+
+"""
+Replace one template. Locales left out use the built-in template.
+"""
+input UpdateEmailTemplateInput {
+	kind: EmailTemplateKind!
+	locales: [EmailTemplateLocaleInput!]!
+	expectedVersion: UUID!
 	clientMutationId: String
 }
 
@@ -2751,6 +2979,17 @@ type UserStatePayload {
 	version: UUID!
 	user: User
 	clientMutationId: String
+}
+
+enum Xoauth2Grant {
+	"""
+	Exchange a refresh token issued to the mailbox user.
+	"""
+	REFRESH_TOKEN
+	"""
+	Authenticate as the OAuth client itself.
+	"""
+	CLIENT_CREDENTIALS
 }
 
 """

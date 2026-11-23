@@ -1019,3 +1019,92 @@ async fn concealed_identifier_binding_persists_without_an_account_and_resets() {
     })
     .await;
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured PostgreSQL test database"]
+async fn email_code_admission_is_atomic_and_independent_of_the_account() {
+    use identity_domain::auth::{
+        EMAIL_CODE_RESEND_INTERVAL, MAX_EMAIL_CODE_SENDS, repository::EmailCodeAdmission,
+    };
+    common::isolated(|db| async move {
+        let client = Uuid::new_v4();
+        let relation = Uuid::new_v4();
+        sql(&db, &format!(r#"
+            INSERT INTO client (oid,name,protocol) VALUES ('{client}','email-code-test','openid_connect');
+            INSERT INTO client_authorization (oid,client_id,type,data,expires_at)
+              SELECT '{relation}',id,'device_authorization','{{}}',now()+interval '1 day' FROM client WHERE oid='{client}';
+        "#)).await;
+        let logins = Arc::new(LoginRepositoryImpl::new(db.clone()));
+        let login = logins.create_pending(client, relation, &[]).await.unwrap();
+        // Not yet waiting for a first factor.
+        assert_eq!(
+            logins
+                .admit_email_code(login.oid, Utc::now(), EMAIL_CODE_RESEND_INTERVAL, MAX_EMAIL_CODE_SENDS, Utc::now())
+                .await
+                .unwrap(),
+            EmailCodeAdmission::InvalidState
+        );
+        // No account matched; admission behaves the same.
+        logins
+            .bind_concealed_identifier(login.oid, "nobody@example.test", None)
+            .await
+            .unwrap();
+
+        let now = Utc::now();
+        let extended = now + ChronoDuration::minutes(10);
+        let attempts = (0..8).map(|_| {
+            let logins = Arc::clone(&logins);
+            tokio::spawn(async move {
+                logins
+                    .admit_email_code(login.oid, now, EMAIL_CODE_RESEND_INTERVAL, MAX_EMAIL_CODE_SENDS, extended)
+                    .await
+                    .unwrap()
+            })
+        });
+        let mut admitted = 0;
+        for attempt in attempts {
+            match attempt.await.unwrap() {
+                EmailCodeAdmission::Admitted => admitted += 1,
+                EmailCodeAdmission::TooSoon { available_at } => {
+                    assert!(available_at > now);
+                }
+                other => panic!("unexpected admission {other:?}"),
+            }
+        }
+        assert_eq!(admitted, 1, "concurrent sends admit exactly one");
+        let stored = logins.find_by_oid(login.oid).await.unwrap().unwrap();
+        assert_eq!(stored.email_code_send_count, 1);
+        assert!(stored.expires_at >= extended - ChronoDuration::seconds(1));
+
+        // After the interval, sends continue until the limit.
+        let mut later = now;
+        for _ in 1..MAX_EMAIL_CODE_SENDS {
+            later += ChronoDuration::minutes(2);
+            assert_eq!(
+                logins
+                    .admit_email_code(login.oid, later, EMAIL_CODE_RESEND_INTERVAL, MAX_EMAIL_CODE_SENDS, later + ChronoDuration::minutes(10))
+                    .await
+                    .unwrap(),
+                EmailCodeAdmission::Admitted
+            );
+        }
+        later += ChronoDuration::minutes(2);
+        assert_eq!(
+            logins
+                .admit_email_code(login.oid, later, EMAIL_CODE_RESEND_INTERVAL, MAX_EMAIL_CODE_SENDS, later + ChronoDuration::minutes(10))
+                .await
+                .unwrap(),
+            EmailCodeAdmission::LimitReached
+        );
+
+        // The first factor is kept, and forgotten when switching accounts.
+        logins.record_first_factor(login.oid, "urn:identity:amr:email").await.unwrap();
+        assert_eq!(
+            logins.find_by_oid(login.oid).await.unwrap().unwrap().first_factor_amr.as_deref(),
+            Some("urn:identity:amr:email")
+        );
+        logins.reset_identity(login.oid).await.unwrap();
+        assert_eq!(logins.find_by_oid(login.oid).await.unwrap().unwrap().first_factor_amr, None);
+    })
+    .await;
+}

@@ -4,7 +4,7 @@ use identity_application::{
     audit::AuditQueryService,
     authentication::{
         account::AccountService,
-        login::{LoginMfaEnrollmentDependencies, LoginService},
+        login::{LoginEmailDependencies, LoginMfaEnrollmentDependencies, LoginService},
         mfa::MfaService,
         passkey::PasskeyService,
         session::SessionService,
@@ -34,7 +34,7 @@ use identity_application::{
         user_info::UserInfoService,
     },
     rbac::{GroupManagementService, RbacManagementService},
-    setting::management::InstanceSettingService,
+    setting::{email::EmailManagementDependencies, management::InstanceSettingService},
     user::management::UserManagementService,
 };
 use identity_domain::{
@@ -184,6 +184,10 @@ impl AppServices {
         let oidc_credential_repo = Arc::new(OpenIdConnectCredentialRepositoryImpl::new(db.clone()));
         let user_credential_repo = Arc::new(UserCredentialRepositoryImpl::new(db.clone()));
         let totp = Arc::new(TotpVerifierImpl);
+        let email_sender: Arc<dyn identity_application::email::EmailSender> =
+            Arc::new(crate::email::SmtpEmailSender::new(data_protector.clone())?);
+        let email_renderer: Arc<dyn identity_application::email::EmailTemplateRenderer> =
+            Arc::new(crate::email::TeraEmailTemplateRenderer);
 
         let events = sink();
         let authorization = Arc::new(AuthorizationRepositoryImpl::new(db.clone()));
@@ -260,6 +264,12 @@ impl AppServices {
                 mfa: Arc::clone(&mfa),
                 challenges: Arc::new(ChallengeRepositoryImpl::new(db.clone())),
             })
+            .with_email(LoginEmailDependencies {
+                challenges: Arc::new(ChallengeRepositoryImpl::new(db.clone())),
+                sender: Arc::clone(&email_sender),
+                renderer: Arc::clone(&email_renderer),
+                protector: data_protector.clone(),
+            })
             .with_events(Arc::clone(&events)),
             session: SessionService::new(Arc::new(SessionRepositoryImpl::new(db.clone())))
                 .with_events(Arc::clone(&events)),
@@ -291,6 +301,11 @@ impl AppServices {
                 Arc::new(InstanceSettingRepositoryImpl::new(db.clone())),
                 settings.store(),
             )
+            .with_email(EmailManagementDependencies {
+                protector: data_protector.clone(),
+                renderer: Arc::clone(&email_renderer),
+                sender: Arc::clone(&email_sender),
+            })
             .with_events(Arc::clone(&events)),
             install: InstallService {
                 breach_checker: breach_checker.clone(),

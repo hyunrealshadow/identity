@@ -15,7 +15,8 @@ use identity_application::{
     },
     rbac::{RbacManagementAuthority, cursor::RbacPageDirection},
     setting::{
-        IdentifierEnumerationAllowedSetting, SettingChanges,
+        EmailDeliverySettings, IdentifierEnumerationAllowedSetting, ProtectedSecret,
+        SettingChanges, SmtpAuthentication,
         management::{
             InstanceSettingRepository, InstanceSettingRepositoryError, InstanceSettingSection,
             UpdateInstanceSettingsTransaction,
@@ -173,6 +174,102 @@ async fn postgres_identifier_enumeration_setting_is_versioned_and_audited() {
             .unwrap();
         let text = changes.to_string();
         assert!(text.contains("identifier_enumeration_allowed"), "{text}");
+    })
+    .await;
+}
+
+#[tokio::test]
+#[ignore = "requires explicitly configured PostgreSQL test database"]
+async fn postgres_email_delivery_is_versioned_and_audited_without_secrets() {
+    isolated(|db| async move {
+        seed::run_all(&db).await.unwrap();
+        owner(&db).await;
+        let repo = InstanceSettingRepositoryImpl::new(db.clone());
+        let section = InstanceSettingSection::Email;
+        let before = repo.load().await.unwrap();
+        assert!(!before.email_delivery.is_configured());
+
+        let owner = administrator(&db, &[ManagementScope::SettingsWrite]).await;
+        let after = repo
+            .update(UpdateInstanceSettingsTransaction {
+                authority: owner.clone(),
+                section,
+                expected_version: section.version(&before),
+                build: Box::new(|_| {
+                    Ok(
+                        SettingChanges::default().set_section(&EmailDeliverySettings {
+                            enabled: true,
+                            host: "smtp.example.test".to_owned(),
+                            sender_address: "identity@example.test".to_owned(),
+                            authentication: SmtpAuthentication::Password {
+                                username: "mailer".to_owned(),
+                                password: ProtectedSecret::from_protected(
+                                    "protected-secret-token".to_owned(),
+                                ),
+                            },
+                            ..EmailDeliverySettings::default()
+                        })?,
+                    )
+                }),
+            })
+            .await
+            .unwrap();
+        assert!(after.email_delivery.is_configured());
+        assert_eq!(repo.load().await.unwrap(), after);
+        assert_ne!(section.version(&after), section.version(&before));
+        for other in [
+            InstanceSettingSection::Authentication,
+            InstanceSettingSection::Protocol,
+        ] {
+            assert_eq!(other.version(&after), other.version(&before));
+        }
+
+        let changes: serde_json::Value = db
+            .query_one_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                "SELECT changes FROM audit WHERE action=$1 AND target_oid=$2",
+                [
+                    AuditAction::SettingEmailUpdate.to_string().into(),
+                    section.audit_target_oid().into(),
+                ],
+            ))
+            .await
+            .unwrap()
+            .expect("email settings audit")
+            .try_get("", "changes")
+            .unwrap();
+        let text = changes.to_string();
+        assert!(text.contains("smtp.example.test"), "{text}");
+        assert!(!text.contains("protected-secret-token"), "{text}");
+
+        // A stale editor loses without writing or auditing.
+        let stale = repo
+            .update(UpdateInstanceSettingsTransaction {
+                authority: owner,
+                section,
+                expected_version: section.version(&before),
+                build: Box::new(|state| {
+                    let mut next = state.email_delivery.clone();
+                    next.enabled = false;
+                    Ok(SettingChanges::default().set_section(&next)?)
+                }),
+            })
+            .await
+            .unwrap_err();
+        assert!(matches!(
+            stale,
+            InstanceSettingRepositoryError::VersionConflict { .. }
+        ));
+        assert!(repo.load().await.unwrap().email_delivery.enabled);
+        assert_eq!(
+            audit_count(
+                &db,
+                AuditAction::SettingEmailUpdate,
+                section.audit_target_oid()
+            )
+            .await,
+            1
+        );
     })
     .await;
 }

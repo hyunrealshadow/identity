@@ -34,3 +34,5 @@ E11024 = The password is too similar to your username or email address.
 E11025 = This password has appeared in a data breach. Choose a different password.
 E11026 = Password security checks are temporarily unavailable. Please try again later.
 E11027 = The account or password is incorrect. Try again.
+E11028 = A sign-in email was sent recently. You can request another in { $seconds } seconds.
+E11029 = The sign-in email could not be sent. Try again later or use another method.

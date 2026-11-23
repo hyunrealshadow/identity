@@ -6,7 +6,12 @@ import {
   isTerminalLoginError,
   LocalizedError,
 } from './identity.server'
-import type { ChallengeResponse, RestartLoginResponse, SwitchLoginResponse } from './identity-types'
+import type {
+  ChallengeResponse,
+  EmailCodeResponse,
+  RestartLoginResponse,
+  SwitchLoginResponse,
+} from './identity-types'
 import { formErrorResponse, formValidationErrorResponse, navigationResponse } from './responses.server'
 import { translate, type Locale } from './i18n'
 import { formLocale } from './i18n.server'
@@ -49,6 +54,10 @@ export async function submitLoginMethod(request: Request, method: string) {
 
   if (intent === 'switch') {
     return switchLoginResponse(request, { pathname, loginId, csrfToken, locale, uiLocales })
+  }
+
+  if (intent === 'send' && credentialType === 'email_otp') {
+    return sendEmailCodeResponse(request, { pathname, loginId, csrfToken, locale, uiLocales })
   }
 
   if (!loginId || !credential) {
@@ -138,6 +147,41 @@ export async function submitLoginMethod(request: Request, method: string) {
       values,
       undefined,
       loginChallengeDestination(loginId, credentialType, uiLocales),
+    )
+  }
+}
+
+/** Email a sign-in code and link, then show the code entry. */
+async function sendEmailCodeResponse(
+  request: Request,
+  { pathname, loginId, csrfToken, locale, uiLocales }: LoginFormContext,
+) {
+  const destination = loginChallengeDestination(loginId, 'email_otp', uiLocales)
+  try {
+    await identityJson<EmailCodeResponse>('/api/auth/login/email-code', {
+      method: 'POST',
+      csrfToken,
+      body: { id: loginId, locales: [locale] },
+    })
+    return navigationResponse(request, destination)
+  } catch (error) {
+    if (isTerminalLoginError(error)) {
+      return formErrorResponse(
+        request,
+        pathname,
+        translate(locale, 'challengeExpiredDescription'),
+        { login_id: loginId, ui_locales: uiLocales },
+        undefined,
+        loginChallengeDestination(loginId, 'email_otp', uiLocales, 'required'),
+      )
+    }
+    return formErrorResponse(
+      request,
+      pathname,
+      errorMessage(error, locale),
+      { login_id: loginId, ui_locales: uiLocales },
+      undefined,
+      destination,
     )
   }
 }

@@ -35,3 +35,13 @@ it('does not treat a reauthentication flag as the MFA phase', () => {
   expect(screen.getByRole('link', { name: 'Use password' })).toBeTruthy()
   expect(screen.queryByRole('link', { name: 'Use a recovery code' })).toBeNull()
 })
+
+it('offers email sign-in only before the first factor succeeds', () => {
+  const withEmail = { ...status, credential_types: [...status.credential_types, 'email_otp'] }
+  render(<LoginMethodAlternatives currentMethod="password" status={{ ...withEmail, status: 'identifier_verified' }} loginId="login" locale="en-US" />)
+  const link = screen.getByRole('link', { name: 'Email me a sign-in code' })
+  expect(link.getAttribute('href')).toBe('/login/email?login_id=login')
+  cleanup()
+  render(<LoginMethodAlternatives currentMethod="otp" status={withEmail} loginId="login" locale="en-US" />)
+  expect(screen.queryByRole('link', { name: 'Email me a sign-in code' })).toBeNull()
+})

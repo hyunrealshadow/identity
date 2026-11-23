@@ -557,6 +557,64 @@ async fn graphql_http_denies_client_management_without_management_authority() {
 }
 
 #[tokio::test]
+async fn graphql_http_denies_email_settings_without_management_authority() {
+    let version = Uuid::new_v4();
+    for (field, operation) in [
+        (
+            "emailTemplatePreview",
+            r#"query { emailTemplatePreview(input: { kind: SIGN_IN_CODE, locale: "en-US",
+                content: { subject: "{{ code }}", html: "<p>{{ code }}</p>", text: "{{ code }}" } })
+                { subject } }"#
+                .to_owned(),
+        ),
+        (
+            "updateEmailDeliverySettings",
+            format!(
+                r#"mutation {{ updateEmailDeliverySettings(input: {{ enabled: true,
+                    host: "smtp.example.com", port: 587, security: START_TLS,
+                    senderAddress: "identity@example.com",
+                    authentication: {{ method: PASSWORD, username: "mailer", password: "secret" }},
+                    expectedVersion: "{version}" }}) {{ clientMutationId }} }}"#
+            ),
+        ),
+        (
+            "updateEmailTemplate",
+            format!(
+                r#"mutation {{ updateEmailTemplate(input: {{ kind: SIGN_IN_CODE, locales: [],
+                    expectedVersion: "{version}" }}) {{ clientMutationId }} }}"#
+            ),
+        ),
+        (
+            "sendTestEmail",
+            r#"mutation { sendTestEmail(input: { recipient: "a@example.com", locale: "en-US" }) { sent } }"#
+                .to_owned(),
+        ),
+    ] {
+        let fixture = fixture(FixtureOptions {
+            tail: FixtureTail::ManagementDenial,
+            ..FixtureOptions::default()
+        })
+        .await;
+        let mut response = graphql_post(&fixture, &operation).await;
+        assert_eq!(response.status_code, Some(StatusCode::OK));
+        let body: Value = response.take_json().await.unwrap();
+        assert!(
+            body["data"].is_null() || body["data"][field].is_null(),
+            "{field} was not denied"
+        );
+        let errors = body["errors"].as_array().unwrap();
+        assert!(!errors.is_empty(), "{field} returned no error");
+        assert!(
+            !errors.iter().any(|error| error["message"]
+                .as_str()
+                .unwrap_or_default()
+                .contains("Unknown")),
+            "{field} is not part of the schema: {errors:?}"
+        );
+    }
+}
+
+#[tokio::test]
 async fn graphql_http_account_access_queries_require_only_user_read() {
     let resource_id = GlobalId::<ResourceGlobalId>::new(Uuid::new_v4()).encode();
     for query in [

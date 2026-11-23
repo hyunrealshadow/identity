@@ -8,6 +8,7 @@ pub mod authorization;
 pub mod client;
 pub mod console;
 pub mod data_protection;
+pub mod email;
 pub mod error;
 pub mod install;
 pub mod instance_overview;

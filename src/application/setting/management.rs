@@ -22,13 +22,16 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use super::{
-    AppSettings, BreachedPasswordCheckEnabledSetting, IdentifierEnumerationAllowedSetting,
-    InstallationSettings, OpenIdConnectSettings, PasswordHashSetting, SettingChanges,
+    AppSettings, BreachedPasswordCheckEnabledSetting, EmailDeliverySettings,
+    EmailSignInEnabledSetting, IdentifierEnumerationAllowedSetting, InstallationSettings,
+    OpenIdConnectSettings, PasswordHashSetting, SettingChanges,
+    email::{EmailManagementDependencies, EmailSettingsView},
     runtime::RefreshableSetting,
 };
 use crate::{
     authentication::password::HashOptions,
     authorization::ManagementAuthorizationError,
+    email::{EmailTemplateKind, EmailTemplates},
     error::{
         AppError,
         codes::{authorization::AuthorizationErrorCode, instance::InstanceErrorCode},
@@ -52,7 +55,7 @@ impl SettingRange {
         Self { min, max }
     }
 
-    fn check(self, value: i64, field: &'static str) -> Result<(), AppError> {
+    pub(crate) fn check(self, value: i64, field: &'static str) -> Result<(), AppError> {
         if (self.min..=self.max).contains(&value) {
             return Ok(());
         }
@@ -76,6 +79,10 @@ pub const ARGON2_PARALLELISM_RANGE: SettingRange = SettingRange::new(1, 16);
 pub enum InstanceSettingSection {
     Protocol,
     Authentication,
+    /// How email is delivered.
+    Email,
+    /// Every locale of one email template.
+    EmailTemplate(EmailTemplateKind),
 }
 
 impl InstanceSettingSection {
@@ -84,6 +91,8 @@ impl InstanceSettingSection {
         match self {
             Self::Protocol => "protocol",
             Self::Authentication => "authentication",
+            Self::Email => "email",
+            Self::EmailTemplate(EmailTemplateKind::SignInCode) => "email_template.sign_in_code",
         }
     }
 
@@ -92,6 +101,8 @@ impl InstanceSettingSection {
         match self {
             Self::Protocol => AuditAction::SettingProtocolUpdate,
             Self::Authentication => AuditAction::SettingAuthenticationUpdate,
+            Self::Email => AuditAction::SettingEmailUpdate,
+            Self::EmailTemplate(_) => AuditAction::SettingEmailTemplateUpdate,
         }
     }
 
@@ -107,6 +118,8 @@ impl InstanceSettingSection {
         match self {
             Self::Protocol => content_version(self, &state.openid_connect),
             Self::Authentication => content_version(self, &state.authentication_values()),
+            Self::Email => content_version(self, &state.email_delivery),
+            Self::EmailTemplate(kind) => content_version(self, &state.email_templates.get(&kind)),
         }
     }
 }
@@ -127,6 +140,9 @@ pub struct InstanceSettingsState {
     pub password_hash: HashOptions,
     pub breached_password_check_enabled: bool,
     pub identifier_enumeration_allowed: bool,
+    pub email_sign_in_enabled: bool,
+    pub email_delivery: EmailDeliverySettings,
+    pub email_templates: EmailTemplates,
 }
 
 /// The stored values of the authentication section, as versioned and audited.
@@ -135,6 +151,7 @@ pub struct AuthenticationSectionValues<'a> {
     pub password_hash: &'a HashOptions,
     pub breached_password_check_enabled: bool,
     pub identifier_enumeration_allowed: bool,
+    pub email_sign_in_enabled: bool,
 }
 
 impl InstanceSettingsState {
@@ -144,6 +161,7 @@ impl InstanceSettingsState {
             password_hash: &self.password_hash,
             breached_password_check_enabled: self.breached_password_check_enabled,
             identifier_enumeration_allowed: self.identifier_enumeration_allowed,
+            email_sign_in_enabled: self.email_sign_in_enabled,
         }
     }
 }
@@ -178,6 +196,7 @@ pub struct PasswordHashingView {
 pub struct AuthenticationSettingsView {
     pub breached_password_check_enabled: bool,
     pub identifier_enumeration_allowed: bool,
+    pub email_sign_in_enabled: bool,
     pub password_hashing: PasswordHashingView,
     pub version: Uuid,
 }
@@ -187,6 +206,7 @@ pub struct InstanceSettingsView {
     pub general: GeneralSettingsView,
     pub protocol: ProtocolSettingsView,
     pub authentication: AuthenticationSettingsView,
+    pub email: EmailSettingsView,
 }
 
 impl From<&InstanceSettingsState> for InstanceSettingsView {
@@ -220,6 +240,7 @@ impl From<&InstanceSettingsState> for InstanceSettingsView {
             authentication: AuthenticationSettingsView {
                 breached_password_check_enabled: state.breached_password_check_enabled,
                 identifier_enumeration_allowed: state.identifier_enumeration_allowed,
+                email_sign_in_enabled: state.email_sign_in_enabled,
                 password_hashing: PasswordHashingView {
                     time_cost: argon2.time_cost,
                     memory_cost_kib: argon2.memory_cost,
@@ -227,6 +248,7 @@ impl From<&InstanceSettingsState> for InstanceSettingsView {
                 },
                 version: InstanceSettingSection::Authentication.version(state),
             },
+            email: EmailSettingsView::from(state),
         }
     }
 }
@@ -247,6 +269,7 @@ pub struct UpdateProtocolSettingsCommand {
 pub struct UpdateAuthenticationSettingsCommand {
     pub breached_password_check_enabled: bool,
     pub identifier_enumeration_allowed: bool,
+    pub email_sign_in_enabled: bool,
     pub password_hashing: PasswordHashingView,
     pub expected_version: Uuid,
     pub client_mutation_id: Option<String>,
@@ -296,9 +319,10 @@ pub trait InstanceSettingRepository: Send + Sync {
 }
 
 pub struct InstanceSettingService {
-    repository: Arc<dyn InstanceSettingRepository>,
+    pub(super) repository: Arc<dyn InstanceSettingRepository>,
     runtime: Arc<dyn RefreshableSetting>,
-    events: Arc<dyn EventSink>,
+    pub(super) events: Arc<dyn EventSink>,
+    pub(super) email: Option<EmailManagementDependencies>,
 }
 
 impl InstanceSettingService {
@@ -311,7 +335,15 @@ impl InstanceSettingService {
             repository,
             runtime,
             events: Arc::new(NoopEventSink),
+            email: None,
         }
+    }
+
+    /// Allow editing email delivery and templates and sending test email.
+    #[must_use]
+    pub fn with_email(mut self, dependencies: EmailManagementDependencies) -> Self {
+        self.email = Some(dependencies);
+        self
     }
 
     #[must_use]
@@ -402,11 +434,25 @@ impl InstanceSettingService {
             });
             let breached = command.breached_password_check_enabled;
             let enumeration = command.identifier_enumeration_allowed;
-            let build = move |_: &InstanceSettingsState| {
+            let email_sign_in = command.email_sign_in_enabled;
+            let build = move |state: &InstanceSettingsState| {
+                // Turning email sign-in on needs a way to send it. Once on,
+                // it stays saved if delivery is later turned off; it is then
+                // simply not offered.
+                if email_sign_in
+                    && !state.email_sign_in_enabled
+                    && !state.email_delivery.is_configured()
+                {
+                    return Err(
+                        AppError::from_code(InstanceErrorCode::EmailDeliveryNotConfigured)
+                            .with_field("emailSignInEnabled"),
+                    );
+                }
                 Ok(SettingChanges::default()
                     .set::<PasswordHashSetting>(&options)?
                     .set::<BreachedPasswordCheckEnabledSetting>(&breached)?
-                    .set::<IdentifierEnumerationAllowedSetting>(&enumeration)?)
+                    .set::<IdentifierEnumerationAllowedSetting>(&enumeration)?
+                    .set::<EmailSignInEnabledSetting>(&email_sign_in)?)
             };
             self.write(
                 authority,
@@ -421,7 +467,7 @@ impl InstanceSettingService {
         result
     }
 
-    async fn write(
+    pub(super) async fn write(
         &self,
         authority: &RbacManagementAuthority,
         section: InstanceSettingSection,
@@ -446,7 +492,7 @@ impl InstanceSettingService {
         Ok(InstanceSettingsView::from(&state))
     }
 
-    fn emit(
+    pub(super) fn emit(
         &self,
         section: InstanceSettingSection,
         result: &Result<InstanceSettingsView, AppError>,
@@ -478,7 +524,7 @@ pub(crate) fn validate_client_mutation_id(value: Option<&str>) -> Result<(), App
     Ok(())
 }
 
-fn map_repository_error(error: InstanceSettingRepositoryError) -> AppError {
+pub(super) fn map_repository_error(error: InstanceSettingRepositoryError) -> AppError {
     use InstanceSettingRepositoryError as Error;
     match error {
         error @ Error::Storage(_) => {
@@ -512,6 +558,9 @@ mod tests {
             password_hash: PasswordHashSetting::default_value(),
             breached_password_check_enabled: true,
             identifier_enumeration_allowed: true,
+            email_sign_in_enabled: false,
+            email_delivery: EmailDeliverySettings::default(),
+            email_templates: EmailTemplates::new(),
         }
     }
 

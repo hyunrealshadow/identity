@@ -33,6 +33,7 @@ idna = { workspace = true }
 ipnet = { workspace = true }
 include_dir = { version = "0.7.4" }
 josekit = { workspace = true }
+lettre = { workspace = true }
 migration = { workspace = true }
 opentelemetry = { workspace = true }
 opentelemetry-appender-tracing = { workspace = true }

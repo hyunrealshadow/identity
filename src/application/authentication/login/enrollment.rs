@@ -11,7 +11,7 @@
 //! passkey on this device and then authenticates with it. The pending enrollment is bound to the
 //! login record so a reload or a rejected code resumes the same secret.
 
-use super::{ChallengeOutcome, LoginService, SessionContext, enrollment_method};
+use super::{ChallengeOutcome, LoginService, SessionContext, enrollment_method, first_factor_amr};
 use crate::{
     authentication::{
         challenge::ChallengeRepository,
@@ -23,7 +23,7 @@ use crate::{
 };
 use chrono::{DateTime, Utc};
 use identity_domain::auth::{
-    AMR_MFA, AMR_OTP, AMR_PASSWORD, AuthenticationContextClass, LoginFailureReason, LoginStatus,
+    AMR_MFA, AMR_OTP, AuthenticationContextClass, LoginFailureReason, LoginStatus,
     MAX_OTP_ATTEMPTS,
     challenge::{
         AuthenticationChallenge, ChallengeBinding, ChallengeContext, ChallengeMethod,
@@ -184,16 +184,13 @@ impl LoginService {
 
         // The authenticator is now enrolled. If completing the session fails,
         // the next attempt is routed to an ordinary OTP challenge.
+        let first_factor = first_factor_amr(&login);
         self.complete_authentication(
             login,
             user.oid.into(),
             ctx,
             AuthenticationContextClass::MultiFactor,
-            &[
-                AMR_PASSWORD.to_owned(),
-                AMR_OTP.to_owned(),
-                AMR_MFA.to_owned(),
-            ],
+            &[first_factor, AMR_OTP.to_owned(), AMR_MFA.to_owned()],
         )
         .await
     }

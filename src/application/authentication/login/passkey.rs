@@ -1,5 +1,5 @@
 use super::{
-    ChallengeOutcome, LoginService, SessionContext, failed_attempt_lock_until,
+    ChallengeOutcome, LoginService, SessionContext, failed_attempt_lock_until, first_factor_amr,
     validate_passkey_login,
 };
 use crate::{
@@ -7,8 +7,8 @@ use crate::{
     error::{AppError, codes::auth::AuthErrorCode},
 };
 use identity_domain::auth::{
-    AMR_MFA, AMR_PASSKEY, AMR_PASSWORD, AuthenticationContextClass, LoginFailureReason,
-    LoginStatus, MAX_FAILED_ATTEMPTS, model::Login,
+    AMR_MFA, AMR_PASSKEY, AuthenticationContextClass, LoginFailureReason, LoginStatus,
+    MAX_FAILED_ATTEMPTS, model::Login,
 };
 use uuid::Uuid;
 
@@ -75,7 +75,7 @@ impl LoginService {
         // its own; a preceding password is recorded but adds no class.
         let mut amr = vec![AMR_PASSKEY.to_owned(), AMR_MFA.to_owned()];
         if login.status == LoginStatus::MFA_REQUIRED {
-            amr.push(AMR_PASSWORD.to_owned());
+            amr.push(first_factor_amr(&login));
         }
         self.complete_authentication(
             login,

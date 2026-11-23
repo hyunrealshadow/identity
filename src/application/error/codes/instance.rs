@@ -19,12 +19,28 @@ pub enum InstanceErrorCode {
     LastActiveKey = 29006,
     KeyAlreadyRevoked = 29007,
     UnsupportedKeyAlgorithm = 29008,
+    EmailDeliveryNotConfigured = 29009,
+    InvalidEmailTemplate = 29010,
+    TestEmailFailed = 29011,
+    EmailSettingRequired = 29012,
+    InvalidEmailAddress = 29013,
+    InvalidEmailTokenEndpoint = 29014,
+    UnsupportedEmailLocale = 29015,
+    EmailTemplateTooLong = 29016,
 }
 
 impl InstanceErrorCode {
     pub const fn kind(self) -> ErrorKind {
         match self {
             Self::KeyNotFound => ErrorKind::NotFound,
+            Self::EmailDeliveryNotConfigured => ErrorKind::Conflict,
+            Self::TestEmailFailed => ErrorKind::Internal,
+            Self::InvalidEmailTemplate
+            | Self::EmailSettingRequired
+            | Self::InvalidEmailAddress
+            | Self::InvalidEmailTokenEndpoint
+            | Self::UnsupportedEmailLocale
+            | Self::EmailTemplateTooLong => ErrorKind::Validation,
             Self::VersionConflict
             | Self::KeyNotCurrent
             | Self::LastActiveKey
@@ -86,6 +102,44 @@ pub const INSTANCE_ERROR_INVENTORY: &[InstanceErrorCodeDefinition] = &[
         InstanceErrorCode::UnsupportedKeyAlgorithm,
         "E29008",
         &["algorithm"],
+        &[],
+    ),
+    entry(
+        InstanceErrorCode::EmailDeliveryNotConfigured,
+        "E29009",
+        &[],
+        &[],
+    ),
+    entry(
+        InstanceErrorCode::InvalidEmailTemplate,
+        "E29010",
+        &["detail"],
+        &[],
+    ),
+    entry(
+        InstanceErrorCode::TestEmailFailed,
+        "E29011",
+        &["detail"],
+        &[],
+    ),
+    entry(InstanceErrorCode::EmailSettingRequired, "E29012", &[], &[]),
+    entry(InstanceErrorCode::InvalidEmailAddress, "E29013", &[], &[]),
+    entry(
+        InstanceErrorCode::InvalidEmailTokenEndpoint,
+        "E29014",
+        &[],
+        &[],
+    ),
+    entry(
+        InstanceErrorCode::UnsupportedEmailLocale,
+        "E29015",
+        &["locale"],
+        &[],
+    ),
+    entry(
+        InstanceErrorCode::EmailTemplateTooLong,
+        "E29016",
+        &["max"],
         &[],
     ),
 ];

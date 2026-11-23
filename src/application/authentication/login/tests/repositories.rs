@@ -451,6 +451,52 @@ impl LoginRepository for TestLoginRepo {
         Ok(())
     }
 
+    async fn admit_email_code(
+        &self,
+        login_oid: Uuid,
+        now: DateTime<Utc>,
+        interval: std::time::Duration,
+        max_sends: i32,
+        expires_at: DateTime<Utc>,
+    ) -> Result<EmailCodeAdmission, LoginRepositoryError> {
+        let mut state = self.state.lock().unwrap();
+        let login = state
+            .logins
+            .iter_mut()
+            .find(|login| login.oid == login_oid)
+            .ok_or(LoginRepositoryError::LoginNotFound)?;
+        if login.status != LoginStatus::IDENTIFIER_VERIFIED || login.expires_at <= now {
+            return Ok(EmailCodeAdmission::InvalidState);
+        }
+        if login.email_code_send_count >= max_sends {
+            return Ok(EmailCodeAdmission::LimitReached);
+        }
+        let interval = Duration::from_std(interval).unwrap();
+        if let Some(sent_at) = login.email_code_sent_at
+            && sent_at + interval > now
+        {
+            return Ok(EmailCodeAdmission::TooSoon {
+                available_at: sent_at + interval,
+            });
+        }
+        login.email_code_sent_at = Some(now);
+        login.email_code_send_count += 1;
+        login.expires_at = login.expires_at.max(expires_at);
+        Ok(EmailCodeAdmission::Admitted)
+    }
+
+    async fn record_first_factor(
+        &self,
+        login_oid: Uuid,
+        amr: &str,
+    ) -> Result<(), LoginRepositoryError> {
+        let mut state = self.state.lock().unwrap();
+        if let Some(login) = state.logins.iter_mut().find(|login| login.oid == login_oid) {
+            login.first_factor_amr = Some(amr.to_owned());
+        }
+        Ok(())
+    }
+
     async fn record_identification_failure(
         &self,
         login_oid: Uuid,

@@ -711,6 +711,11 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "Boolean",
           "policies": []
         },
+        "emailSignInEnabled": {
+          "name": "emailSignInEnabled",
+          "returnType": "Boolean",
+          "policies": []
+        },
         "identifierEnumerationAllowed": {
           "name": "identifierEnumerationAllowed",
           "returnType": "Boolean",
@@ -1764,6 +1769,228 @@ export const schemaMetadata: SchemaMetadata = {
         }
       }
     },
+    "EmailAuthentication": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "clientId": {
+          "name": "clientId",
+          "returnType": "String",
+          "policies": []
+        },
+        "clientSecretSet": {
+          "name": "clientSecretSet",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "grant": {
+          "name": "grant",
+          "returnType": "Xoauth2Grant",
+          "policies": []
+        },
+        "method": {
+          "name": "method",
+          "returnType": "EmailAuthenticationMethod",
+          "policies": []
+        },
+        "passwordSet": {
+          "name": "passwordSet",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "refreshTokenSet": {
+          "name": "refreshTokenSet",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "scope": {
+          "name": "scope",
+          "returnType": "String",
+          "policies": []
+        },
+        "tokenEndpoint": {
+          "name": "tokenEndpoint",
+          "returnType": "String",
+          "policies": []
+        },
+        "username": {
+          "name": "username",
+          "returnType": "String",
+          "policies": []
+        }
+      }
+    },
+    "EmailDeliverySettings": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "authentication": {
+          "name": "authentication",
+          "returnType": "EmailAuthentication",
+          "policies": []
+        },
+        "configured": {
+          "name": "configured",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "enabled": {
+          "name": "enabled",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "host": {
+          "name": "host",
+          "returnType": "String",
+          "policies": []
+        },
+        "port": {
+          "name": "port",
+          "returnType": "Int",
+          "policies": []
+        },
+        "portRange": {
+          "name": "portRange",
+          "returnType": "IntRange",
+          "policies": []
+        },
+        "security": {
+          "name": "security",
+          "returnType": "SmtpSecurity",
+          "policies": []
+        },
+        "senderAddress": {
+          "name": "senderAddress",
+          "returnType": "String",
+          "policies": []
+        },
+        "senderName": {
+          "name": "senderName",
+          "returnType": "String",
+          "policies": []
+        },
+        "version": {
+          "name": "version",
+          "returnType": "UUID",
+          "policies": []
+        }
+      }
+    },
+    "EmailSettings": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "delivery": {
+          "name": "delivery",
+          "returnType": "EmailDeliverySettings",
+          "policies": []
+        },
+        "templates": {
+          "name": "templates",
+          "returnType": "EmailTemplate",
+          "policies": []
+        }
+      }
+    },
+    "EmailTemplate": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "kind": {
+          "name": "kind",
+          "returnType": "EmailTemplateKind",
+          "policies": []
+        },
+        "locales": {
+          "name": "locales",
+          "returnType": "EmailTemplateLocale",
+          "policies": []
+        },
+        "variables": {
+          "name": "variables",
+          "returnType": "String",
+          "policies": []
+        },
+        "version": {
+          "name": "version",
+          "returnType": "UUID",
+          "policies": []
+        }
+      }
+    },
+    "EmailTemplateLocale": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "customized": {
+          "name": "customized",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "defaultHtml": {
+          "name": "defaultHtml",
+          "returnType": "String",
+          "policies": []
+        },
+        "defaultSubject": {
+          "name": "defaultSubject",
+          "returnType": "String",
+          "policies": []
+        },
+        "defaultText": {
+          "name": "defaultText",
+          "returnType": "String",
+          "policies": []
+        },
+        "html": {
+          "name": "html",
+          "returnType": "String",
+          "policies": []
+        },
+        "locale": {
+          "name": "locale",
+          "returnType": "String",
+          "policies": []
+        },
+        "subject": {
+          "name": "subject",
+          "returnType": "String",
+          "policies": []
+        },
+        "text": {
+          "name": "text",
+          "returnType": "String",
+          "policies": []
+        }
+      }
+    },
+    "EmailTemplatePreview": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "html": {
+          "name": "html",
+          "returnType": "String",
+          "policies": []
+        },
+        "subject": {
+          "name": "subject",
+          "returnType": "String",
+          "policies": []
+        },
+        "text": {
+          "name": "text",
+          "returnType": "String",
+          "policies": []
+        }
+      }
+    },
     "GeneralSettings": {
       "kind": "OBJECT",
       "interfaces": [],
@@ -2448,6 +2675,11 @@ export const schemaMetadata: SchemaMetadata = {
         "authentication": {
           "name": "authentication",
           "returnType": "AuthenticationSettings",
+          "policies": []
+        },
+        "email": {
+          "name": "email",
+          "returnType": "EmailSettings",
           "policies": []
         },
         "general": {
@@ -3446,6 +3678,21 @@ export const schemaMetadata: SchemaMetadata = {
             }
           ]
         },
+        "sendTestEmail": {
+          "name": "sendTestEmail",
+          "returnType": "SendTestEmailPayload",
+          "policies": [
+            {
+              "scopes": [
+                "management.setting.write"
+              ],
+              "authentication": "RECENT_AAL2",
+              "userOnly": true,
+              "runtime": true,
+              "maxAge": 300
+            }
+          ]
+        },
         "setClientScopes": {
           "name": "setClientScopes",
           "returnType": "ClientScopeSetPayload",
@@ -3579,6 +3826,36 @@ export const schemaMetadata: SchemaMetadata = {
               "authentication": "RECENT",
               "userOnly": true,
               "runtime": false,
+              "maxAge": 300
+            }
+          ]
+        },
+        "updateEmailDeliverySettings": {
+          "name": "updateEmailDeliverySettings",
+          "returnType": "InstanceSettingsPayload",
+          "policies": [
+            {
+              "scopes": [
+                "management.setting.write"
+              ],
+              "authentication": "RECENT_AAL2",
+              "userOnly": true,
+              "runtime": true,
+              "maxAge": 300
+            }
+          ]
+        },
+        "updateEmailTemplate": {
+          "name": "updateEmailTemplate",
+          "returnType": "InstanceSettingsPayload",
+          "policies": [
+            {
+              "scopes": [
+                "management.setting.write"
+              ],
+              "authentication": "RECENT_AAL2",
+              "userOnly": true,
+              "runtime": true,
               "maxAge": 300
             }
           ]
@@ -4030,6 +4307,20 @@ export const schemaMetadata: SchemaMetadata = {
               "authentication": "SESSION",
               "userOnly": false,
               "runtime": false
+            }
+          ]
+        },
+        "emailTemplatePreview": {
+          "name": "emailTemplatePreview",
+          "returnType": "EmailTemplatePreview",
+          "policies": [
+            {
+              "scopes": [
+                "management.setting.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
             }
           ]
         },
@@ -5030,6 +5321,23 @@ export const schemaMetadata: SchemaMetadata = {
         "version": {
           "name": "version",
           "returnType": "UUID",
+          "policies": []
+        }
+      }
+    },
+    "SendTestEmailPayload": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "clientMutationId": {
+          "name": "clientMutationId",
+          "returnType": "String",
+          "policies": []
+        },
+        "sent": {
+          "name": "sent",
+          "returnType": "Boolean",
           "policies": []
         }
       }

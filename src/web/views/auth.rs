@@ -181,6 +181,10 @@ pub struct LoginStatusResponse {
     pub enrollment_method: Option<CredentialType>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ui_locales: Option<Vec<String>>,
+    /// When another sign-in email may be requested, once one has been sent
+    /// for this login.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email_code_resend_available_at: Option<DateTime<Utc>>,
     /// Absolute OP `/oauth2/continue?login_id=X` URI, present only when authenticated.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub continue_uri: Option<String>,
@@ -226,6 +230,25 @@ pub struct UserDisplayInfo {
 }
 
 // ─── Challenge Step ──────────────────────────────────────────────────────────
+
+/// `POST /api/auth/login/email-code` request.
+#[derive(Debug, Deserialize)]
+pub struct EmailCodeRequest {
+    /// Encrypted login.oid from the identifier step.
+    pub id: String,
+    /// Locales of the page that asked, most preferred first.
+    #[serde(default)]
+    pub locales: Vec<String>,
+}
+
+/// `POST /api/auth/login/email-code` response. The same whether or not the
+/// identifier matched an account that can receive email.
+#[derive(Debug, Serialize)]
+pub struct EmailCodeResponse {
+    pub status: &'static str,
+    pub expires_at: DateTime<Utc>,
+    pub resend_available_at: DateTime<Utc>,
+}
 
 /// `POST /api/auth/login/challenge` request.
 #[derive(Debug, Deserialize)]

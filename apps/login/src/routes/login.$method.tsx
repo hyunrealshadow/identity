@@ -1,8 +1,8 @@
 import { Field, FieldError, FieldLabel } from '@identity/ui/components/field'
 import { createFileRoute, notFound, redirect } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
-import { ArrowLeft, CircleAlert } from 'lucide-react'
-import { useState } from 'react'
+import { ArrowLeft, CircleAlert, MailCheck } from 'lucide-react'
+import { useEffect, useState } from 'react'
 
 import { LoginMethodAlternatives } from '#/components/login-method-alternatives'
 import { PasskeyLogin } from '#/components/passkey-login'
@@ -33,6 +33,8 @@ import { loginCredentialType, loginMethodPath, loginChallengeDestination } from 
 
 interface ChallengeSearch {
   login_id?: string
+  /** The token of an emailed sign-in link. */
+  token?: string
   error?: string
   restart?: string
   ui_locales?: string
@@ -158,6 +160,7 @@ const loadChallengePage = createServerFn({ method: 'GET' })
 export const Route = createFileRoute('/login/$method')({
   validateSearch: (search): ChallengeSearch => ({
     login_id: optionalString(search.login_id),
+    token: optionalString(search.token),
     error: optionalString(search.error),
     restart: optionalString(search.restart),
     ui_locales: optionalString(search.ui_locales),
@@ -195,6 +198,11 @@ function ChallengePage() {
   const isPasskey = credentialType === 'passkey'
   const isOtp = credentialType === 'otp'
   const isRecoveryCode = credentialType === 'recovery_code'
+  const isEmail = credentialType === 'email_otp'
+  const emailLinkToken = isEmail ? search.token : undefined
+  const emailResendAt = data.status?.email_code_resend_available_at
+  const emailSent = isEmail && Boolean(emailResendAt)
+  const emailResendWait = useSecondsUntil(emailResendAt)
   const t = (key: Parameters<typeof translate>[1]) => translate(data.locale, key)
   const canSwitchAccount = !data.status?.requires_reauthentication
   const visibleError = search.error ?? data.error
@@ -221,6 +229,10 @@ function ChallengePage() {
           ? t('usePasskey')
           : isRecoveryCode
           ? t('recoveryCodeTitle')
+          : emailLinkToken
+          ? t('emailLinkTitle')
+          : isEmail
+          ? t('emailCodeTitle')
           : isOtp
             ? t('otpTitle')
             : t('passwordTitle')
@@ -234,6 +246,10 @@ function ChallengePage() {
           ? t('passkeySignInDescription')
           : isRecoveryCode
           ? t('recoveryCodeDescription')
+          : emailLinkToken
+          ? t('emailLinkDescription')
+          : isEmail
+          ? t(emailSent ? 'emailCodeSentDescription' : 'emailCodeDescription')
           : isOtp
           ? t('otpDescription')
           : t('passwordDescription')
@@ -271,6 +287,31 @@ function ChallengePage() {
           <input type="hidden" name="ui_locales" value={data.uiLocales} />
           <SubmitButton fullWidth>{t('restartSignIn')}</SubmitButton>
         </ProgressiveForm>
+      ) : !restartRequired && emailLinkToken ? (
+        <ProgressiveForm
+          action={pathname}
+          className="progressive-form"
+          enhancementErrorMessage={t('enhancedNavigationError')}
+        >
+          <input type="hidden" name="login_id" value={loginId} />
+          <input type="hidden" name="csrf_token" value={data.csrfToken} />
+          <input type="hidden" name="ui_locales" value={data.uiLocales} />
+          <input type="hidden" name="credential" value={emailLinkToken} />
+          <SubmitButton fullWidth autoFocus>{t('emailLinkContinue')}</SubmitButton>
+        </ProgressiveForm>
+      ) : !restartRequired && isEmail && !emailSent ? (
+        <ProgressiveForm
+          action={pathname}
+          className="progressive-form"
+          enhancementErrorMessage={t('enhancedNavigationError')}
+        >
+          <input type="hidden" name="login_id" value={loginId} />
+          <input type="hidden" name="csrf_token" value={data.csrfToken} />
+          <input type="hidden" name="ui_locales" value={data.uiLocales} />
+          <SubmitButton fullWidth name="intent" value="send" autoFocus>
+            {t('emailCodeSend')}
+          </SubmitButton>
+        </ProgressiveForm>
       ) : !restartRequired && !isPasskey ? (
         <ProgressiveForm
           action={pathname}
@@ -286,9 +327,16 @@ function ChallengePage() {
         />
         <input type="hidden" name="ui_locales" value={data.uiLocales} />
 
-        {isOtp ? (
+        {isEmail ? (
+          <p className="flex items-start gap-2 rounded-lg bg-muted/60 px-3 py-2.5 text-sm text-muted-foreground" role="status">
+            <MailCheck className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+            {t('emailCodeSentNotice')}
+          </p>
+        ) : null}
+
+        {isOtp || isEmail ? (
           <Field data-invalid={credentialError ? true : undefined}>
-            <FieldLabel htmlFor="login-otp">{t('otp')}</FieldLabel>
+            <FieldLabel htmlFor="login-otp">{isEmail ? t('emailCode') : t('otp')}</FieldLabel>
             <TotpInput
               id="login-otp"
               name="totp"
@@ -339,8 +387,31 @@ function ChallengePage() {
         )}
 
         <SubmitButton fullWidth>
-          {isOtp || isRecoveryCode ? t('verify') : t('login')}
+          {isOtp || isRecoveryCode || isEmail ? t('verify') : t('login')}
         </SubmitButton>
+        </ProgressiveForm>
+      ) : null}
+
+      {!restartRequired && emailSent && !emailLinkToken ? (
+        <ProgressiveForm
+          action={pathname}
+          className="mt-4"
+          enhancementErrorMessage={t('enhancedNavigationError')}
+        >
+          <input type="hidden" name="login_id" value={loginId} />
+          <input type="hidden" name="csrf_token" value={data.csrfToken} />
+          <input type="hidden" name="ui_locales" value={data.uiLocales} />
+          <SubmitButton
+            name="intent"
+            value="send"
+            variant="outline"
+            fullWidth
+            disabled={emailResendWait > 0}
+          >
+            {emailResendWait > 0
+              ? translate(data.locale, 'emailCodeResendIn', { seconds: emailResendWait })
+              : t('emailCodeResend')}
+          </SubmitButton>
         </ProgressiveForm>
       ) : null}
 
@@ -374,4 +445,27 @@ function ChallengePage() {
       ) : null}
     </AuthShell>
   )
+}
+
+/**
+ * Whole seconds until `at`, counting down while the page is open. Rendered on
+ * the server too, so the resend button starts disabled without JavaScript.
+ */
+function useSecondsUntil(at: string | undefined) {
+  const deadline = at ? Date.parse(at) : Number.NaN
+  const remaining = () =>
+    Number.isNaN(deadline) ? 0 : Math.max(0, Math.ceil((deadline - Date.now()) / 1000))
+  const [seconds, setSeconds] = useState(remaining)
+  useEffect(() => {
+    setSeconds(remaining())
+    if (Number.isNaN(deadline)) return
+    const timer = window.setInterval(() => {
+      const next = remaining()
+      setSeconds(next)
+      if (next <= 0) window.clearInterval(timer)
+    }, 1000)
+    return () => window.clearInterval(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deadline])
+  return seconds
 }

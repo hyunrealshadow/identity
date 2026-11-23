@@ -4,10 +4,12 @@
 //! 1. `GET  /api/auth/sessions/active`  – list active accounts from `X-Sessions`
 //! 2. `POST /api/auth/login/select`     – select an existing session
 //! 3. `POST /api/auth/login/identifier` – validate identifier, create login
-//! 4. `POST /api/auth/login/challenge`  – verify credential, create session
-//! 5. `POST /api/auth/login/mfa-enrollment[/confirm]` – enroll a missing
+//! 4. `POST /api/auth/login/email-code` – email a sign-in code and link
+//!    (optional first factor)
+//! 5. `POST /api/auth/login/challenge`  – verify credential, create session
+//! 6. `POST /api/auth/login/mfa-enrollment[/confirm]` – enroll a missing
 //!    second factor when the request requires `aal2`
-//! 6. `POST /api/auth/login/passkey-enrollment[/confirm]` – register a passkey
+//! 7. `POST /api/auth/login/passkey-enrollment[/confirm]` – register a passkey
 //!    when the request requires `phr`
 
 use http::{HeaderMap, StatusCode};
@@ -37,11 +39,12 @@ use crate::{
     middleware::resolved_client_ip,
     views::auth::{
         AccountItem, ActiveAccountsResponse, ChallengeRequest, ChallengeResponse,
-        IdentifierRequest, IdentifierResponse, LoginClientDisplay, LoginStatusResponse,
-        MfaEnrollmentAlgorithmRequest, MfaEnrollmentConfirmRequest, MfaEnrollmentRequest,
-        MfaEnrollmentResponse, PasskeyEnrollmentConfirmRequest, PasskeyEnrollmentResponse,
-        RestartLoginRequest, RestartLoginResponse, SelectAccountRequest, SelectAccountResponse,
-        SessionInfo, SwitchLoginRequest, SwitchLoginResponse, UserDisplayInfo,
+        EmailCodeRequest as EmailCodeRequestBody, EmailCodeResponse, IdentifierRequest,
+        IdentifierResponse, LoginClientDisplay, LoginStatusResponse, MfaEnrollmentAlgorithmRequest,
+        MfaEnrollmentConfirmRequest, MfaEnrollmentRequest, MfaEnrollmentResponse,
+        PasskeyEnrollmentConfirmRequest, PasskeyEnrollmentResponse, RestartLoginRequest,
+        RestartLoginResponse, SelectAccountRequest, SelectAccountResponse, SessionInfo,
+        SwitchLoginRequest, SwitchLoginResponse, UserDisplayInfo,
     },
 };
 
@@ -55,6 +58,7 @@ pub fn routes() -> Router {
         .push(Router::with_path("api/auth/login/select").post(select_account))
         .push(Router::with_path("api/auth/login/identifier").post(identifier))
         .push(Router::with_path("api/auth/login/challenge").post(challenge))
+        .push(Router::with_path("api/auth/login/email-code").post(email_code))
         .push(Router::with_path("api/auth/login/passkey/options").post(passkey_options))
         .push(Router::with_path("api/auth/login/restart").post(restart_login))
         .push(Router::with_path("api/auth/login/switch").post(switch_login))
@@ -130,7 +134,7 @@ async fn login_status(
     let (user, credential_types, mfa_preference) = match login.user_oid {
         _ if concealed_identifier.is_some() => (
             None,
-            login::CONCEALED_CREDENTIAL_TYPES.to_vec(),
+            ctx.services().login().concealed_credential_types(),
             Default::default(),
         ),
         Some(user_oid) => {
@@ -210,6 +214,14 @@ async fn login_status(
     } else {
         None
     };
+    let email_code_resend_available_at = login
+        .email_code_sent_at
+        .filter(|_| login.status == LoginStatus::IDENTIFIER_VERIFIED)
+        .map(|sent_at| {
+            sent_at
+                + chrono::Duration::from_std(identity_domain::auth::EMAIL_CODE_RESEND_INTERVAL)
+                    .unwrap_or_else(|_| chrono::Duration::seconds(60))
+        });
     let preferred_credential_type =
         login::preferred_credential_type(&login, &credential_types, mfa_preference);
     let credential_types = login::challenge_credential_types(&login, &credential_types);
@@ -253,6 +265,7 @@ async fn login_status(
             challenge_uri,
             enrollment_method,
             ui_locales,
+            email_code_resend_available_at,
             continue_uri,
         },
     );
@@ -466,6 +479,98 @@ async fn passkey_options(
     let options = ctx.services().login().passkey_options(login_oid).await?;
     render_json(res, StatusCode::OK, options);
     Ok(())
+}
+
+/// `POST /api/auth/login/email-code`
+///
+/// Email a one-time code and a sign-in link for a login waiting for its
+/// first factor. While the login conceals whether an account exists, the
+/// answer is the same whether or not anything was sent.
+#[handler]
+async fn email_code(depot: &mut Depot, req: &mut Request, res: &mut Response) -> JsonWebResult<()> {
+    let ctx = app_state(depot)?;
+    let body: EmailCodeRequestBody = parse_json(req).await?;
+    let login_oid = ctx
+        .services()
+        .oidc_authorize()
+        .decrypt_login_id(&body.id)
+        .await?;
+    let (application_name, ui_locales) = match ctx
+        .services()
+        .oidc_authorize()
+        .load_continue_context_by_login(&body.id)
+        .await
+    {
+        Ok(context) => (
+            Some(context.client.client().name.clone()),
+            context.stored.request.ui_locales,
+        ),
+        Err(_) => (None, None),
+    };
+    let link_prefix = email_link_prefix(&ctx, &body.id, ui_locales.as_deref())?;
+    let mut locales = ui_locales.unwrap_or_default();
+    locales.extend(body.locales);
+    let sent = ctx
+        .services()
+        .login()
+        .send_email_code(login::EmailCodeRequest {
+            login_oid,
+            locales,
+            application_name,
+            link_prefix,
+        })
+        .await?;
+    render_json(
+        res,
+        StatusCode::OK,
+        EmailCodeResponse {
+            status: "sent",
+            expires_at: sent.expires_at,
+            resend_available_at: sent.resend_available_at,
+        },
+    );
+    Ok(())
+}
+
+/// The login application's email sign-in page for `login_id`, ending where
+/// the link token is appended.
+fn email_link_prefix(
+    ctx: &crate::boot::AppState,
+    login_id: &str,
+    ui_locales: Option<&[String]>,
+) -> Result<String, AppError> {
+    use crate::application::setting::SettingsSource as _;
+    let login_domain = ctx
+        .settings()
+        .store()
+        .snapshot()
+        .section::<crate::application::setting::AppSettings>()
+        .login_domain
+        .filter(|value| !value.trim().is_empty())
+        .ok_or_else(|| {
+            AppError::from_code(
+                crate::application::error::codes::authorize_http::AuthorizeHttpErrorCode::LoginDomainNotConfigured,
+            )
+            .with_param("route", "login/email")
+        })?;
+    let mut url = url::Url::parse(login_domain.trim())
+        .and_then(|base| base.join("login/email"))
+        .map_err(|error| {
+            AppError::from_code(
+                crate::application::error::codes::authorize_http::AuthorizeHttpErrorCode::LoginDomainNotConfigured,
+            )
+            .with_param("route", "login/email")
+            .with_source(error)
+        })?;
+    {
+        let mut query = url.query_pairs_mut();
+        query.append_pair("login_id", login_id);
+        if let Some(ui_locales) = ui_locales.filter(|values| !values.is_empty()) {
+            query.append_pair("ui_locales", &ui_locales.join(" "));
+        }
+    }
+    // The token is base64url, so it needs no further encoding.
+    Ok(format!("{url}&token="))
 }
 
 #[handler]
