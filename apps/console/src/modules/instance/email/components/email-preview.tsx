@@ -35,15 +35,15 @@ export function EmailPreview({
   enabled,
 }: {
   kind: EmailTemplateKind
-  locale: string
+  /** The language previewed; `null` previews the default content. */
+  locale: string | null
   content: EmailTemplateContentDraft
   enabled: boolean
 }) {
   const t = useTranslator()
   const request = useGraphQL()
-  const [view, setView] = useState<'html' | 'text'>('html')
   const [state, setState] = useState<PreviewState>({ status: 'loading' })
-  const { subject, html, text } = content
+  const { subject, html } = content
 
   useEffect(() => {
     if (!enabled) return
@@ -52,7 +52,7 @@ export function EmailPreview({
     const timer = window.setTimeout(() => {
       void request<ConsoleEmailTemplatePreviewQuery, ConsoleEmailTemplatePreviewQueryVariables>(
         ConsoleEmailTemplatePreviewDocument,
-        { input: { kind, locale, content: { subject, html, text } } },
+        { input: { kind, locale, content: { subject, html } } },
         'ConsoleEmailTemplatePreview',
         { signal: controller.signal },
       )
@@ -84,7 +84,7 @@ export function EmailPreview({
       window.clearTimeout(timer)
       controller.abort()
     }
-  }, [enabled, kind, locale, subject, html, text, request, t])
+  }, [enabled, kind, locale, subject, html, request, t])
 
   const rendered = state.rendered
   const partLabel =
@@ -92,7 +92,6 @@ export function EmailPreview({
       ? {
           subject: t('settingsEmailTemplateSubject'),
           html: t('settingsEmailTemplateHtml'),
-          text: t('settingsEmailTemplateText'),
         }[state.part]
       : undefined
 
@@ -104,23 +103,6 @@ export function EmailPreview({
           {enabled && state.status === 'loading' && rendered ? (
             <Spinner className="size-3.5 text-muted-foreground" aria-label={t('settingsEmailPreviewUpdating')} />
           ) : null}
-        </div>
-        <div role="tablist" aria-label={t('settingsEmailPreviewFormat')} className="flex rounded-lg bg-muted p-0.5">
-          {(['html', 'text'] as const).map((option) => (
-            <button
-              key={option}
-              type="button"
-              role="tab"
-              aria-selected={view === option}
-              onClick={() => setView(option)}
-              className={
-                'rounded-md px-2.5 py-1 text-xs font-medium ' +
-                (view === option ? 'bg-background shadow-xs' : 'text-muted-foreground')
-              }
-            >
-              {option === 'html' ? t('settingsEmailPreviewHtml') : t('settingsEmailPreviewText')}
-            </button>
-          ))}
         </div>
       </div>
       <div className="console-card overflow-hidden rounded-xl border border-border bg-card">
@@ -146,19 +128,13 @@ export function EmailPreview({
               )}
             </div>
             {rendered ? (
-              view === 'html' ? (
-                <iframe
-                  title={t('settingsEmailPreviewHtml')}
-                  srcDoc={rendered.html}
-                  sandbox=""
-                  referrerPolicy="no-referrer"
-                  className="block h-[32rem] w-full bg-white"
-                />
-              ) : (
-                <pre className="h-[32rem] overflow-auto whitespace-pre-wrap break-words px-5 py-4 font-mono text-xs leading-5">
-                  {rendered.text}
-                </pre>
-              )
+              <iframe
+                title={t('settingsEmailPreviewHtml')}
+                srcDoc={rendered.html}
+                sandbox=""
+                referrerPolicy="no-referrer"
+                className="block h-[32rem] w-full bg-white"
+              />
             ) : (
               <Skeleton className="h-[32rem] w-full rounded-none" />
             )}

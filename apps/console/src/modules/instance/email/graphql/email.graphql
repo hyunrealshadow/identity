@@ -1,0 +1,34 @@
+# Email delivery and templates are sections of the instance settings, so
+# writes return the shared settings fragment.
+
+mutation ConsoleUpdateEmailDeliverySettings($input: UpdateEmailDeliverySettingsInput!) {
+  updateEmailDeliverySettings(input: $input) {
+    clientMutationId
+    settings {
+      ...ConsoleInstanceSettingsFields
+    }
+  }
+}
+
+mutation ConsoleUpdateEmailTemplate($input: UpdateEmailTemplateInput!) {
+  updateEmailTemplate(input: $input) {
+    clientMutationId
+    settings {
+      ...ConsoleInstanceSettingsFields
+    }
+  }
+}
+
+mutation ConsoleSendTestEmail($input: SendTestEmailInput!) {
+  sendTestEmail(input: $input) {
+    sent
+    clientMutationId
+  }
+}
+
+query ConsoleEmailTemplatePreview($input: EmailTemplatePreviewInput!) {
+  emailTemplatePreview(input: $input) {
+    subject
+    html
+  }
+}

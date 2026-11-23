@@ -78,17 +78,28 @@ fragment ConsoleInstanceSettingsFields on InstanceSettings {
     templates {
       kind
       variables
+      customized
       version
-      locales {
-        locale
-        customized
-        subject
-        html
-        text
-        defaultSubject
-        defaultHtml
-        defaultText
+      content {
+        ...ConsoleLocalizedEmailTemplateFields
       }
+      builtIn {
+        ...ConsoleLocalizedEmailTemplateFields
+      }
+    }
+  }
+}
+
+fragment ConsoleLocalizedEmailTemplateFields on LocalizedEmailTemplate {
+  default {
+    subject
+    html
+  }
+  translations {
+    locale
+    content {
+      subject
+      html
     }
   }
 }
@@ -114,38 +125,5 @@ mutation ConsoleUpdateAuthenticationSettings($input: UpdateAuthenticationSetting
     settings {
       ...ConsoleInstanceSettingsFields
     }
-  }
-}
-
-mutation ConsoleUpdateEmailDeliverySettings($input: UpdateEmailDeliverySettingsInput!) {
-  updateEmailDeliverySettings(input: $input) {
-    clientMutationId
-    settings {
-      ...ConsoleInstanceSettingsFields
-    }
-  }
-}
-
-mutation ConsoleUpdateEmailTemplate($input: UpdateEmailTemplateInput!) {
-  updateEmailTemplate(input: $input) {
-    clientMutationId
-    settings {
-      ...ConsoleInstanceSettingsFields
-    }
-  }
-}
-
-mutation ConsoleSendTestEmail($input: SendTestEmailInput!) {
-  sendTestEmail(input: $input) {
-    sent
-    clientMutationId
-  }
-}
-
-query ConsoleEmailTemplatePreview($input: EmailTemplatePreviewInput!) {
-  emailTemplatePreview(input: $input) {
-    subject
-    html
-    text
   }
 }

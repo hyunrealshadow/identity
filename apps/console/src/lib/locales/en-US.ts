@@ -65,6 +65,7 @@ const shared = {
   navPermissions: 'Permissions',
   navRoleAssignments: 'Role assignments',
   navEffectivePermissions: 'Effective permissions',
+  navEmail: 'Email',
   navSettings: 'Settings',
   navAudit: 'Audit',
   navAuditLog: 'Audit log',

@@ -38,8 +38,7 @@ use crate::{
     authentication::challenge::ChallengeRepository,
     data_protection::DataProtector,
     email::{
-        EmailMessage, EmailSender, EmailTemplateKind, EmailTemplateRenderer, select_locale,
-        template::effective_template,
+        EmailMessage, EmailSender, EmailTemplateKind, EmailTemplateRenderer, effective_template,
     },
     error::{AppError, codes::auth::AuthErrorCode},
     observability::{BusinessEvent, EventValue},
@@ -427,15 +426,21 @@ impl DeliveryJob {
             )
             .await?;
 
-        let locale = select_locale(
-            self.user
-                .locale
-                .as_deref()
-                .into_iter()
-                .chain(self.locales.iter().map(String::as_str)),
-        );
-        let (template, _) =
-            effective_template(&self.templates, EmailTemplateKind::SignInCode, locale);
+        let candidates: Vec<&str> = self
+            .user
+            .locale
+            .as_deref()
+            .into_iter()
+            .chain(self.locales.iter().map(String::as_str))
+            .collect();
+        let (template, _) = effective_template(&self.templates, EmailTemplateKind::SignInCode);
+        let (content, translation) = template.localize(candidates.iter().copied());
+        // The language of the content: the translation's, or for the default
+        // content the reader's first preference.
+        let locale = translation
+            .or_else(|| candidates.first().copied())
+            .unwrap_or("en")
+            .to_owned();
         let context = json!({
             "code": code,
             "link": format!("{}{token}", self.link_prefix),
@@ -447,7 +452,7 @@ impl DeliveryJob {
         let rendered = self
             .dependencies
             .renderer
-            .render(&template, &context)
+            .render(content, &context)
             .map_err(|error| {
                 AppError::from_code(AuthErrorCode::EmailDeliveryFailed).with_source(error)
             })?;
@@ -460,7 +465,6 @@ impl DeliveryJob {
                     to_name: Some(self.user.name.clone()),
                     subject: rendered.subject,
                     html: rendered.html,
-                    text: rendered.text,
                 },
             )
             .await

@@ -1,8 +1,6 @@
-import { Badge } from '@identity/ui/components/badge'
 import { Button } from '@identity/ui/components/button'
 import { Input } from '@identity/ui/components/input'
-import { Link } from '@tanstack/react-router'
-import { ChevronRight, Send } from 'lucide-react'
+import { Send } from 'lucide-react'
 import { useId, useState } from 'react'
 
 import {
@@ -18,25 +16,27 @@ import { useLocale, useTranslator, type MessageKey } from '#/lib/i18n'
 import { toast } from '#/lib/toast'
 import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
 import type { RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
-import { SettingsFieldError, SettingsFormFooter } from '../components/settings-form-footer'
-import { useInstanceSettings, useSettingsBlocker } from '../components/settings-shell'
-import { useSettingMutations } from '../hooks/setting-mutations'
+import { SettingsFieldError, SettingsFormFooter } from '../../settings/components/settings-form-footer'
+import {
+  useInstanceSettings,
+  useSettingsBlocker,
+  useSettingsDraft,
+} from '../../settings/components/instance-settings-context'
+import { useEmailMutations } from '../hooks/email-mutations'
+import { useEmailScope } from '../lib/email-scope'
 import {
   SMTP_DEFAULT_PORTS,
   emailDeliveryDraft,
   emailDeliveryInput,
-  emailTemplateLabels,
-  emailTemplateSlug,
   storedSecret,
   type EmailDelivery,
   type EmailDeliveryDraft,
   type EmailDeliveryField,
-  type EmailSettings,
 } from '../lib/email-form'
-import { mutationFeedback, networkFeedback } from '../lib/feedback'
-import type { FieldError } from '../lib/settings-form'
+import { mutationFeedback, networkFeedback } from '../../settings/lib/feedback'
+import type { FieldError } from '../../settings/lib/settings-form'
 
-export function EmailSettingsPage() {
+export function EmailDeliveryPage() {
   const { settings } = useInstanceSettings()
   const blocked = useSettingsBlocker()
   if (blocked) return blocked
@@ -46,7 +46,6 @@ export function EmailSettingsPage() {
         <SettingsGroupSkeleton rows={['switch', 'control', 'control', 'control']} />
         <SettingsGroupSkeleton rows={['control', 'control']} />
         <SettingsGroupSkeleton rows={['control']} description />
-        <SettingsGroupSkeleton rows={['value']} />
       </div>
     )
   }
@@ -54,7 +53,6 @@ export function EmailSettingsPage() {
     <div className="space-y-6">
       <EmailDeliveryForm key={settings.email.delivery.version} delivery={settings.email.delivery} />
       <TestEmailGroup delivery={settings.email.delivery} />
-      <EmailTemplatesGroup email={settings.email} />
     </div>
   )
 }
@@ -103,16 +101,21 @@ function TextControl({
 
 function EmailDeliveryForm({ delivery }: { delivery: EmailDelivery }) {
   const t = useTranslator()
-  const { scope, query } = useInstanceSettings()
-  const mutations = useSettingMutations()
+  const { query } = useInstanceSettings()
+  const scope = useEmailScope()
+  const mutations = useEmailMutations()
   const errorPrefix = useId()
   const initial = emailDeliveryDraft(delivery)
-  const [draft, setDraft] = useState<EmailDeliveryDraft>(initial)
+  const [draft, setDraft, resetDraft] = useSettingsDraft<EmailDeliveryDraft>(
+    'email',
+    delivery.version,
+    () => emailDeliveryDraft(delivery),
+  )
   const [errors, setErrors] = useState<Partial<Record<EmailDeliveryField, FieldError>>>({})
   const [serverErrors, setServerErrors] = useState<Record<string, string>>({})
   const [feedback, setFeedback] = useState<RbacFeedbackState | null>(null)
   const [pending, setPending] = useState(false)
-  const editable = scope.emailWrite
+  const editable = scope.deliveryWrite
   const disabled = pending || !editable
   const dirty = JSON.stringify(draft) !== JSON.stringify(initial)
 
@@ -140,7 +143,7 @@ function EmailDeliveryForm({ delivery }: { delivery: EmailDelivery }) {
     setPending(true)
     setFeedback(null)
     try {
-      const result = await mutations.updateEmailDelivery(prepared.input)
+      const result = await mutations.updateDelivery(prepared.input)
       if (!result.data?.updateEmailDeliverySettings) {
         setServerErrors(serverFieldErrors(fieldErrorMap(result.errors)))
         setFeedback(mutationFeedback(result, 'missing_update_email_delivery_payload'))
@@ -356,7 +359,7 @@ function EmailDeliveryForm({ delivery }: { delivery: EmailDelivery }) {
             dirty={dirty}
             pending={pending}
             onDiscard={() => {
-              setDraft(initial)
+              resetDraft()
               setErrors({})
               setServerErrors({})
               setFeedback(null)
@@ -381,8 +384,8 @@ function serverFieldErrors(fields: Record<string, string>): Record<string, strin
 function TestEmailGroup({ delivery }: { delivery: EmailDelivery }) {
   const t = useTranslator()
   const { locale } = useLocale()
-  const { scope } = useInstanceSettings()
-  const mutations = useSettingMutations()
+  const scope = useEmailScope()
+  const mutations = useEmailMutations()
   const errorId = useId()
   const [recipient, setRecipient] = useState('')
   const [error, setError] = useState<string>()
@@ -462,46 +465,5 @@ function TestEmailGroup({ delivery }: { delivery: EmailDelivery }) {
         </form>
       </SettingsGroup>
     </div>
-  )
-}
-
-function EmailTemplatesGroup({ email }: { email: EmailSettings }) {
-  const t = useTranslator()
-  return (
-    <SettingsGroup
-      title={t('settingsEmailTemplatesSection')}
-      description={t('settingsEmailTemplatesSectionHint')}
-    >
-      {email.templates.map((template) => {
-        const labels = emailTemplateLabels[template.kind]
-        const customized = template.locales.filter((locale) => locale.customized).length
-        return (
-          // The whole row opens the editor, so it is one link rather than a
-          // linked title beside an inert chevron.
-          <Link
-            key={template.kind}
-            to="/settings/email/templates/$kind"
-            params={{ kind: emailTemplateSlug(template.kind) }}
-            className="group flex items-center gap-3 px-5 py-4 transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
-          >
-            <div className="min-w-0 flex-1">
-              <div className="text-sm font-medium">{t(labels.title)}</div>
-              <div className="mt-0.5 text-xs leading-5 text-muted-foreground">
-                {t(labels.description)}
-              </div>
-            </div>
-            <Badge variant={customized ? 'secondary' : 'outline'}>
-              {customized
-                ? t('settingsEmailTemplateCustomizedCount', { count: customized })
-                : t('settingsEmailTemplateBuiltIn')}
-            </Badge>
-            <ChevronRight
-              className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
-              aria-hidden="true"
-            />
-          </Link>
-        )
-      })}
-    </SettingsGroup>
   )
 }

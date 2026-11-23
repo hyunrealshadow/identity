@@ -13,7 +13,11 @@ import { toast } from '#/lib/toast'
 import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
 import { rbacFieldErrors, type RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
 import { SettingsFieldError, SettingsFormFooter } from '../components/settings-form-footer'
-import { useInstanceSettings, useSettingsBlocker } from '../components/settings-shell'
+import {
+  useInstanceSettings,
+  useSettingsBlocker,
+  useSettingsDraft,
+} from '../components/instance-settings-context'
 import { useSettingMutations } from '../hooks/setting-mutations'
 import { mutationFeedback, networkFeedback } from '../lib/feedback'
 import {
@@ -52,7 +56,11 @@ function AuthenticationSettingsForm({ settings }: { settings: AuthenticationSett
   const deliveryConfigured = instance?.email.delivery.configured ?? false
   const mutations = useSettingMutations()
   const errorPrefix = useId()
-  const [draft, setDraft] = useState<AuthenticationDraft>(() => authenticationDraft(settings))
+  const [draft, setDraft, resetDraft] = useSettingsDraft<AuthenticationDraft>(
+    'authentication',
+    settings.version,
+    () => authenticationDraft(settings),
+  )
   const [errors, setErrors] = useState<Partial<Record<HashingField, FieldError>>>({})
   const [serverErrors, setServerErrors] = useState<Record<string, string>>({})
   const [feedback, setFeedback] = useState<RbacFeedbackState | null>(null)
@@ -178,7 +186,7 @@ function AuthenticationSettingsForm({ settings }: { settings: AuthenticationSett
                     ? 'settingsEmailSignInDeliveryOff'
                     : 'settingsEmailSignInNeedsDelivery',
                 )}{' '}
-                <Link to="/settings/email" className="text-link">
+                <Link to="/email" className="text-link">
                   {t('settingsEmailSignInConfigureDelivery')}
                 </Link>
               </p>
@@ -230,7 +238,7 @@ function AuthenticationSettingsForm({ settings }: { settings: AuthenticationSett
             dirty={dirty}
             pending={pending}
             onDiscard={() => {
-              setDraft(authenticationDraft(settings))
+              resetDraft()
               setErrors({})
               setServerErrors({})
               setFeedback(null)

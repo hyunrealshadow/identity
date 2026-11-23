@@ -9,14 +9,14 @@ use crate::setting::EmailDeliverySettings;
 /// email delivery settings.
 pub const EMAIL_DELIVERY_SECRET_PURPOSE: &str = "setting.email.delivery.secret";
 
-/// One rendered message to a single recipient.
+/// One rendered message to a single recipient. The sender adds a plain-text
+/// alternative derived from the HTML body.
 #[derive(Clone)]
 pub struct EmailMessage {
     pub to_address: String,
     pub to_name: Option<String>,
     pub subject: String,
     pub html: String,
-    pub text: String,
 }
 
 impl std::fmt::Debug for EmailMessage {

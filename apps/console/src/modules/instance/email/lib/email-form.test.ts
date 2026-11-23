@@ -1,10 +1,15 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  addTemplateTranslation,
+  customizeEmailTemplate,
   emailDeliveryDraft,
   emailDeliveryInput,
   emailTemplateInput,
+  removeTemplateTranslation,
+  templateContent,
   templateFieldErrors,
+  updateTemplateContent,
   type EmailDelivery,
   type EmailTemplate,
 } from './email-form'
@@ -88,36 +93,58 @@ describe('email delivery form', () => {
 })
 
 describe('email template form', () => {
+  const page = (value: string) => ({ subject: value, html: `<p>${value}</p>` })
+  const builtIn = {
+    default: page('Hello'),
+    translations: [{ locale: 'zh-CN', content: page('你好') }],
+  }
   const template: EmailTemplate = {
     kind: 'SIGN_IN_CODE',
     variables: ['code'],
+    customized: false,
     version: 't1',
-    locales: ['en-US', 'zh-CN'].map((locale) => ({
-      locale,
-      customized: false,
-      subject: 'S',
-      html: 'H',
-      text: 'T',
-      defaultSubject: 'S',
-      defaultHtml: 'H',
-      defaultText: 'T',
-    })),
+    content: builtIn,
+    builtIn,
   }
 
-  it('sends only customized locales and maps their errors back by locale', () => {
-    const drafts = [
-      { locale: 'en-US', customized: false, subject: 'S', html: 'H', text: 'T' },
-      { locale: 'zh-CN', customized: true, subject: '{{ code }}', html: '{% if %}', text: 'T' },
-    ]
-    expect(emailTemplateInput(template, drafts)).toEqual({
+  it('customizes a copy of the built-in template and resets with null content', () => {
+    const draft = customizeEmailTemplate(template)
+    expect(draft).toEqual({ customized: true, ...builtIn })
+    expect(emailTemplateInput(template, { ...draft, customized: false })).toEqual({
       kind: 'SIGN_IN_CODE',
-      locales: [
-        { locale: 'zh-CN', content: { subject: '{{ code }}', html: '{% if %}', text: 'T' } },
-      ],
+      content: null,
       expectedVersion: 't1',
     })
+  })
+
+  it('adds, edits and removes translations in language order', () => {
+    let draft = customizeEmailTemplate(template)
+    draft = addTemplateTranslation(draft, 'fr', draft.default)
+    draft = addTemplateTranslation(draft, 'fr', page('ignored'))
+    draft = updateTemplateContent(draft, 'fr', { subject: 'Bonjour' })
+    expect(draft.translations.map((translation) => translation.locale)).toEqual(['fr', 'zh-CN'])
+    expect(templateContent(draft, 'fr')?.subject).toBe('Bonjour')
+    expect(templateContent(draft, null)?.subject).toBe('Hello')
+
+    expect(emailTemplateInput(template, draft).content?.translations).toEqual([
+      { locale: 'fr', content: { ...page('Hello'), subject: 'Bonjour' } },
+      { locale: 'zh-CN', content: page('你好') },
+    ])
+    expect(removeTemplateTranslation(draft, 'fr').translations).toHaveLength(1)
+  })
+
+  it('maps server field errors back to the language and part', () => {
+    const draft = addTemplateTranslation(customizeEmailTemplate(template), 'fr', page('Salut'))
     expect(
-      templateFieldErrors(drafts, { 'input.locales.0.content.html': 'broken' }),
-    ).toEqual({ 'zh-CN': { html: 'broken' } })
+      templateFieldErrors(draft, {
+        'input.content.default.subject': 'missing',
+        'input.content.translations.0.content.html': 'broken',
+        'input.content.translations.1.locale': 'duplicate',
+      }),
+    ).toEqual({
+      '': { subject: 'missing' },
+      fr: { html: 'broken' },
+      'zh-CN': { locale: 'duplicate' },
+    })
   })
 })

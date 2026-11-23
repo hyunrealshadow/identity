@@ -450,21 +450,22 @@ export type EmailAuthenticationMethod =
 export type EmailTemplateContentInput = {
   html: string;
   subject: string;
-  text: string;
 };
 
 export type EmailTemplateKind =
   /** The one-time code and sign-in link of email sign-in. */
   | 'SIGN_IN_CODE';
 
-export type EmailTemplateLocaleInput = {
-  content: EmailTemplateContentInput;
-  locale: string;
-};
-
 export type EmailTemplatePreviewInput = {
   content: EmailTemplateContentInput;
   kind: EmailTemplateKind;
+  /** The language previewed; omit it for the default content. */
+  locale?: string | null | undefined;
+};
+
+export type EmailTemplateTranslationInput = {
+  content: EmailTemplateContentInput;
+  /** Language tag. */
   locale: string;
 };
 
@@ -544,6 +545,11 @@ export type KeyUse =
   | 'ENCRYPTION'
   /** Signs tokens; its public part is published in the JWKS. */
   | 'SIGNING';
+
+export type LocalizedEmailTemplateInput = {
+  default: EmailTemplateContentInput;
+  translations: Array<EmailTemplateTranslationInput>;
+};
 
 export type LocalizedTextInput = {
   locale: string;
@@ -756,12 +762,15 @@ export type UpdateEmailDeliverySettingsInput = {
   senderName?: string | null | undefined;
 };
 
-/** Replace one template. Locales left out use the built-in template. */
+/**
+ * Replace one template with an operator's own, or with `content: null` use
+ * the built-in template again.
+ */
 export type UpdateEmailTemplateInput = {
   clientMutationId?: string | null | undefined;
+  content?: LocalizedEmailTemplateInput | null | undefined;
   expectedVersion: string;
   kind: EmailTemplateKind;
-  locales: Array<EmailTemplateLocaleInput>;
 };
 
 export type UpdateGroupInput = {
@@ -1168,6 +1177,34 @@ export type AuditEventDetailQueryQueryVariables = Exact<{
 
 export type AuditEventDetailQueryQuery = { auditEvent: { id: string, occurredAt: string, category: AuditCategory, action: AuditAction, outcome: AuditOutcome, failureReason: AuditFailureReason | null, clientId: string | null, authMethods: Array<AuditAuthMethod>, ipAddress: string | null, userAgent: string | null, requestId: string | null, traceId: string | null, client?: { id: string, name: string, names: Array<{ locale: string, value: string }> } | null, device: { browser: string | null, browserVersion: string | null, os: string | null, osVersion: string | null } | null, actor: { kind: AuditActorKind, id: string | null, oid: string | null, label: string | null, user?: { id: string, username: string, email: string, nickname: string | null } | null, client?: { id: string, name: string, names: Array<{ locale: string, value: string }> } | null }, target: { kind: AuditTargetKind, id: string | null, oid: string, label: string | null } | null, changes: Array<{ field: AuditField, kind: AuditChangeKind, oldValue: unknown, newValue: unknown, added: Array<unknown>, removed: Array<unknown> }> } | null };
 
+export type ConsoleUpdateEmailDeliverySettingsMutationVariables = Exact<{
+  input: UpdateEmailDeliverySettingsInput;
+}>;
+
+
+export type ConsoleUpdateEmailDeliverySettingsMutation = { updateEmailDeliverySettings: { clientMutationId: string | null, settings: { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, identifierEnumerationAllowed: boolean, emailSignInEnabled: boolean, version: string, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } }, email: { delivery: { enabled: boolean, host: string, port: number, security: SmtpSecurity, senderAddress: string, senderName: string | null, configured: boolean, version: string, portRange: { min: number, max: number }, authentication: { method: EmailAuthenticationMethod, username: string | null, passwordSet: boolean, tokenEndpoint: string | null, clientId: string | null, clientSecretSet: boolean, grant: Xoauth2Grant | null, refreshTokenSet: boolean, scope: string | null } }, templates: Array<{ kind: EmailTemplateKind, variables: Array<string>, customized: boolean, version: string, content: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> }, builtIn: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> } }> } } | null } };
+
+export type ConsoleUpdateEmailTemplateMutationVariables = Exact<{
+  input: UpdateEmailTemplateInput;
+}>;
+
+
+export type ConsoleUpdateEmailTemplateMutation = { updateEmailTemplate: { clientMutationId: string | null, settings: { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, identifierEnumerationAllowed: boolean, emailSignInEnabled: boolean, version: string, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } }, email: { delivery: { enabled: boolean, host: string, port: number, security: SmtpSecurity, senderAddress: string, senderName: string | null, configured: boolean, version: string, portRange: { min: number, max: number }, authentication: { method: EmailAuthenticationMethod, username: string | null, passwordSet: boolean, tokenEndpoint: string | null, clientId: string | null, clientSecretSet: boolean, grant: Xoauth2Grant | null, refreshTokenSet: boolean, scope: string | null } }, templates: Array<{ kind: EmailTemplateKind, variables: Array<string>, customized: boolean, version: string, content: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> }, builtIn: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> } }> } } | null } };
+
+export type ConsoleSendTestEmailMutationVariables = Exact<{
+  input: SendTestEmailInput;
+}>;
+
+
+export type ConsoleSendTestEmailMutation = { sendTestEmail: { sent: boolean, clientMutationId: string | null } };
+
+export type ConsoleEmailTemplatePreviewQueryVariables = Exact<{
+  input: EmailTemplatePreviewInput;
+}>;
+
+
+export type ConsoleEmailTemplatePreviewQuery = { emailTemplatePreview: { subject: string, html: string } | null };
+
 export type ConsoleKeyFieldsFragment = { id: string, keyId: string, use: KeyUse, status: KeyStatus, inUse: boolean, algorithms: Array<string>, keyIds: Array<string>, hasCertificate: boolean, rotatedFromId: string | null, createdAt: string, expiresAt: string | null, rotatedAt: string | null, revokedAt: string | null };
 
 export type ConsoleKeysQueryVariables = Exact<{
@@ -1219,54 +1256,28 @@ export type ConsoleSigningKeyAlgorithmsQueryVariables = Exact<{ [key: string]: n
 
 export type ConsoleSigningKeyAlgorithmsQuery = { signingKeyAlgorithms: Array<{ algorithm: SigningAlgorithm, keyAlgorithm: KeyAlgorithm, keyName: string }> };
 
-export type ConsoleInstanceSettingsFieldsFragment = { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, identifierEnumerationAllowed: boolean, emailSignInEnabled: boolean, version: string, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } }, email: { delivery: { enabled: boolean, host: string, port: number, security: SmtpSecurity, senderAddress: string, senderName: string | null, configured: boolean, version: string, portRange: { min: number, max: number }, authentication: { method: EmailAuthenticationMethod, username: string | null, passwordSet: boolean, tokenEndpoint: string | null, clientId: string | null, clientSecretSet: boolean, grant: Xoauth2Grant | null, refreshTokenSet: boolean, scope: string | null } }, templates: Array<{ kind: EmailTemplateKind, variables: Array<string>, version: string, locales: Array<{ locale: string, customized: boolean, subject: string, html: string, text: string, defaultSubject: string, defaultHtml: string, defaultText: string }> }> } };
+export type ConsoleInstanceSettingsFieldsFragment = { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, identifierEnumerationAllowed: boolean, emailSignInEnabled: boolean, version: string, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } }, email: { delivery: { enabled: boolean, host: string, port: number, security: SmtpSecurity, senderAddress: string, senderName: string | null, configured: boolean, version: string, portRange: { min: number, max: number }, authentication: { method: EmailAuthenticationMethod, username: string | null, passwordSet: boolean, tokenEndpoint: string | null, clientId: string | null, clientSecretSet: boolean, grant: Xoauth2Grant | null, refreshTokenSet: boolean, scope: string | null } }, templates: Array<{ kind: EmailTemplateKind, variables: Array<string>, customized: boolean, version: string, content: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> }, builtIn: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> } }> } };
+
+export type ConsoleLocalizedEmailTemplateFieldsFragment = { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> };
 
 export type ConsoleInstanceSettingsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type ConsoleInstanceSettingsQuery = { instanceSettings: { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, identifierEnumerationAllowed: boolean, emailSignInEnabled: boolean, version: string, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } }, email: { delivery: { enabled: boolean, host: string, port: number, security: SmtpSecurity, senderAddress: string, senderName: string | null, configured: boolean, version: string, portRange: { min: number, max: number }, authentication: { method: EmailAuthenticationMethod, username: string | null, passwordSet: boolean, tokenEndpoint: string | null, clientId: string | null, clientSecretSet: boolean, grant: Xoauth2Grant | null, refreshTokenSet: boolean, scope: string | null } }, templates: Array<{ kind: EmailTemplateKind, variables: Array<string>, version: string, locales: Array<{ locale: string, customized: boolean, subject: string, html: string, text: string, defaultSubject: string, defaultHtml: string, defaultText: string }> }> } } | null };
+export type ConsoleInstanceSettingsQuery = { instanceSettings: { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, identifierEnumerationAllowed: boolean, emailSignInEnabled: boolean, version: string, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } }, email: { delivery: { enabled: boolean, host: string, port: number, security: SmtpSecurity, senderAddress: string, senderName: string | null, configured: boolean, version: string, portRange: { min: number, max: number }, authentication: { method: EmailAuthenticationMethod, username: string | null, passwordSet: boolean, tokenEndpoint: string | null, clientId: string | null, clientSecretSet: boolean, grant: Xoauth2Grant | null, refreshTokenSet: boolean, scope: string | null } }, templates: Array<{ kind: EmailTemplateKind, variables: Array<string>, customized: boolean, version: string, content: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> }, builtIn: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> } }> } } | null };
 
 export type ConsoleUpdateProtocolSettingsMutationVariables = Exact<{
   input: UpdateProtocolSettingsInput;
 }>;
 
 
-export type ConsoleUpdateProtocolSettingsMutation = { updateProtocolSettings: { clientMutationId: string | null, settings: { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, identifierEnumerationAllowed: boolean, emailSignInEnabled: boolean, version: string, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } }, email: { delivery: { enabled: boolean, host: string, port: number, security: SmtpSecurity, senderAddress: string, senderName: string | null, configured: boolean, version: string, portRange: { min: number, max: number }, authentication: { method: EmailAuthenticationMethod, username: string | null, passwordSet: boolean, tokenEndpoint: string | null, clientId: string | null, clientSecretSet: boolean, grant: Xoauth2Grant | null, refreshTokenSet: boolean, scope: string | null } }, templates: Array<{ kind: EmailTemplateKind, variables: Array<string>, version: string, locales: Array<{ locale: string, customized: boolean, subject: string, html: string, text: string, defaultSubject: string, defaultHtml: string, defaultText: string }> }> } } | null } };
+export type ConsoleUpdateProtocolSettingsMutation = { updateProtocolSettings: { clientMutationId: string | null, settings: { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, identifierEnumerationAllowed: boolean, emailSignInEnabled: boolean, version: string, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } }, email: { delivery: { enabled: boolean, host: string, port: number, security: SmtpSecurity, senderAddress: string, senderName: string | null, configured: boolean, version: string, portRange: { min: number, max: number }, authentication: { method: EmailAuthenticationMethod, username: string | null, passwordSet: boolean, tokenEndpoint: string | null, clientId: string | null, clientSecretSet: boolean, grant: Xoauth2Grant | null, refreshTokenSet: boolean, scope: string | null } }, templates: Array<{ kind: EmailTemplateKind, variables: Array<string>, customized: boolean, version: string, content: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> }, builtIn: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> } }> } } | null } };
 
 export type ConsoleUpdateAuthenticationSettingsMutationVariables = Exact<{
   input: UpdateAuthenticationSettingsInput;
 }>;
 
 
-export type ConsoleUpdateAuthenticationSettingsMutation = { updateAuthenticationSettings: { clientMutationId: string | null, settings: { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, identifierEnumerationAllowed: boolean, emailSignInEnabled: boolean, version: string, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } }, email: { delivery: { enabled: boolean, host: string, port: number, security: SmtpSecurity, senderAddress: string, senderName: string | null, configured: boolean, version: string, portRange: { min: number, max: number }, authentication: { method: EmailAuthenticationMethod, username: string | null, passwordSet: boolean, tokenEndpoint: string | null, clientId: string | null, clientSecretSet: boolean, grant: Xoauth2Grant | null, refreshTokenSet: boolean, scope: string | null } }, templates: Array<{ kind: EmailTemplateKind, variables: Array<string>, version: string, locales: Array<{ locale: string, customized: boolean, subject: string, html: string, text: string, defaultSubject: string, defaultHtml: string, defaultText: string }> }> } } | null } };
-
-export type ConsoleUpdateEmailDeliverySettingsMutationVariables = Exact<{
-  input: UpdateEmailDeliverySettingsInput;
-}>;
-
-
-export type ConsoleUpdateEmailDeliverySettingsMutation = { updateEmailDeliverySettings: { clientMutationId: string | null, settings: { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, identifierEnumerationAllowed: boolean, emailSignInEnabled: boolean, version: string, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } }, email: { delivery: { enabled: boolean, host: string, port: number, security: SmtpSecurity, senderAddress: string, senderName: string | null, configured: boolean, version: string, portRange: { min: number, max: number }, authentication: { method: EmailAuthenticationMethod, username: string | null, passwordSet: boolean, tokenEndpoint: string | null, clientId: string | null, clientSecretSet: boolean, grant: Xoauth2Grant | null, refreshTokenSet: boolean, scope: string | null } }, templates: Array<{ kind: EmailTemplateKind, variables: Array<string>, version: string, locales: Array<{ locale: string, customized: boolean, subject: string, html: string, text: string, defaultSubject: string, defaultHtml: string, defaultText: string }> }> } } | null } };
-
-export type ConsoleUpdateEmailTemplateMutationVariables = Exact<{
-  input: UpdateEmailTemplateInput;
-}>;
-
-
-export type ConsoleUpdateEmailTemplateMutation = { updateEmailTemplate: { clientMutationId: string | null, settings: { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, identifierEnumerationAllowed: boolean, emailSignInEnabled: boolean, version: string, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } }, email: { delivery: { enabled: boolean, host: string, port: number, security: SmtpSecurity, senderAddress: string, senderName: string | null, configured: boolean, version: string, portRange: { min: number, max: number }, authentication: { method: EmailAuthenticationMethod, username: string | null, passwordSet: boolean, tokenEndpoint: string | null, clientId: string | null, clientSecretSet: boolean, grant: Xoauth2Grant | null, refreshTokenSet: boolean, scope: string | null } }, templates: Array<{ kind: EmailTemplateKind, variables: Array<string>, version: string, locales: Array<{ locale: string, customized: boolean, subject: string, html: string, text: string, defaultSubject: string, defaultHtml: string, defaultText: string }> }> } } | null } };
-
-export type ConsoleSendTestEmailMutationVariables = Exact<{
-  input: SendTestEmailInput;
-}>;
-
-
-export type ConsoleSendTestEmailMutation = { sendTestEmail: { sent: boolean, clientMutationId: string | null } };
-
-export type ConsoleEmailTemplatePreviewQueryVariables = Exact<{
-  input: EmailTemplatePreviewInput;
-}>;
-
-
-export type ConsoleEmailTemplatePreviewQuery = { emailTemplatePreview: { subject: string, html: string, text: string } | null };
+export type ConsoleUpdateAuthenticationSettingsMutation = { updateAuthenticationSettings: { clientMutationId: string | null, settings: { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, identifierEnumerationAllowed: boolean, emailSignInEnabled: boolean, version: string, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } }, email: { delivery: { enabled: boolean, host: string, port: number, security: SmtpSecurity, senderAddress: string, senderName: string | null, configured: boolean, version: string, portRange: { min: number, max: number }, authentication: { method: EmailAuthenticationMethod, username: string | null, passwordSet: boolean, tokenEndpoint: string | null, clientId: string | null, clientSecretSet: boolean, grant: Xoauth2Grant | null, refreshTokenSet: boolean, scope: string | null } }, templates: Array<{ kind: EmailTemplateKind, variables: Array<string>, customized: boolean, version: string, content: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> }, builtIn: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> } }> } } | null } };
 
 export type ConsoleUserRolesQueryVariables = Exact<{
   userId: string | number;
@@ -1784,6 +1795,21 @@ export const ConsoleKeyFieldsFragmentDoc = new TypedDocumentString(`
   revokedAt
 }
     `, {"fragmentName":"ConsoleKeyFields"}) as unknown as TypedDocumentString<ConsoleKeyFieldsFragment, unknown>;
+export const ConsoleLocalizedEmailTemplateFieldsFragmentDoc = new TypedDocumentString(`
+    fragment ConsoleLocalizedEmailTemplateFields on LocalizedEmailTemplate {
+  default {
+    subject
+    html
+  }
+  translations {
+    locale
+    content {
+      subject
+      html
+    }
+  }
+}
+    `, {"fragmentName":"ConsoleLocalizedEmailTemplateFields"}) as unknown as TypedDocumentString<ConsoleLocalizedEmailTemplateFieldsFragment, unknown>;
 export const ConsoleInstanceSettingsFieldsFragmentDoc = new TypedDocumentString(`
     fragment ConsoleInstanceSettingsFields on InstanceSettings {
   general {
@@ -1865,21 +1891,30 @@ export const ConsoleInstanceSettingsFieldsFragmentDoc = new TypedDocumentString(
     templates {
       kind
       variables
+      customized
       version
-      locales {
-        locale
-        customized
-        subject
-        html
-        text
-        defaultSubject
-        defaultHtml
-        defaultText
+      content {
+        ...ConsoleLocalizedEmailTemplateFields
+      }
+      builtIn {
+        ...ConsoleLocalizedEmailTemplateFields
       }
     }
   }
 }
-    `, {"fragmentName":"ConsoleInstanceSettingsFields"}) as unknown as TypedDocumentString<ConsoleInstanceSettingsFieldsFragment, unknown>;
+    fragment ConsoleLocalizedEmailTemplateFields on LocalizedEmailTemplate {
+  default {
+    subject
+    html
+  }
+  translations {
+    locale
+    content {
+      subject
+      html
+    }
+  }
+}`, {"fragmentName":"ConsoleInstanceSettingsFields"}) as unknown as TypedDocumentString<ConsoleInstanceSettingsFieldsFragment, unknown>;
 export const ConsoleBootstrapDocument = new TypedDocumentString(`
     query ConsoleBootstrap {
   effectivePermissions {
@@ -2678,6 +2713,248 @@ export const AuditEventDetailQueryDocument = new TypedDocumentString(`
     removed
   }
 }`) as unknown as TypedDocumentString<AuditEventDetailQueryQuery, AuditEventDetailQueryQueryVariables>;
+export const ConsoleUpdateEmailDeliverySettingsDocument = new TypedDocumentString(`
+    mutation ConsoleUpdateEmailDeliverySettings($input: UpdateEmailDeliverySettingsInput!) {
+  updateEmailDeliverySettings(input: $input) {
+    clientMutationId
+    settings {
+      ...ConsoleInstanceSettingsFields
+    }
+  }
+}
+    fragment ConsoleInstanceSettingsFields on InstanceSettings {
+  general {
+    issuer
+    loginUrl
+    consoleUrl
+    initializedAt
+  }
+  protocol {
+    oauthVersion
+    requirePushedAuthorizationRequests
+    pushedAuthorizationRequestLifetimeSeconds
+    pushedAuthorizationRequestLifetimeRange {
+      min
+      max
+    }
+    deviceAuthorizationRequestLifetimeSeconds
+    deviceAuthorizationRequestLifetimeRange {
+      min
+      max
+    }
+    deviceAuthorizationPollingIntervalSeconds
+    deviceAuthorizationPollingIntervalRange {
+      min
+      max
+    }
+    dynamicRegistrationEnabled
+    version
+  }
+  authentication {
+    breachedPasswordCheckEnabled
+    identifierEnumerationAllowed
+    emailSignInEnabled
+    passwordHashing {
+      timeCost
+      timeCostRange {
+        min
+        max
+      }
+      memoryCostKib
+      memoryCostKibRange {
+        min
+        max
+      }
+      parallelism
+      parallelismRange {
+        min
+        max
+      }
+    }
+    version
+  }
+  email {
+    delivery {
+      enabled
+      host
+      port
+      portRange {
+        min
+        max
+      }
+      security
+      senderAddress
+      senderName
+      authentication {
+        method
+        username
+        passwordSet
+        tokenEndpoint
+        clientId
+        clientSecretSet
+        grant
+        refreshTokenSet
+        scope
+      }
+      configured
+      version
+    }
+    templates {
+      kind
+      variables
+      customized
+      version
+      content {
+        ...ConsoleLocalizedEmailTemplateFields
+      }
+      builtIn {
+        ...ConsoleLocalizedEmailTemplateFields
+      }
+    }
+  }
+}
+fragment ConsoleLocalizedEmailTemplateFields on LocalizedEmailTemplate {
+  default {
+    subject
+    html
+  }
+  translations {
+    locale
+    content {
+      subject
+      html
+    }
+  }
+}`) as unknown as TypedDocumentString<ConsoleUpdateEmailDeliverySettingsMutation, ConsoleUpdateEmailDeliverySettingsMutationVariables>;
+export const ConsoleUpdateEmailTemplateDocument = new TypedDocumentString(`
+    mutation ConsoleUpdateEmailTemplate($input: UpdateEmailTemplateInput!) {
+  updateEmailTemplate(input: $input) {
+    clientMutationId
+    settings {
+      ...ConsoleInstanceSettingsFields
+    }
+  }
+}
+    fragment ConsoleInstanceSettingsFields on InstanceSettings {
+  general {
+    issuer
+    loginUrl
+    consoleUrl
+    initializedAt
+  }
+  protocol {
+    oauthVersion
+    requirePushedAuthorizationRequests
+    pushedAuthorizationRequestLifetimeSeconds
+    pushedAuthorizationRequestLifetimeRange {
+      min
+      max
+    }
+    deviceAuthorizationRequestLifetimeSeconds
+    deviceAuthorizationRequestLifetimeRange {
+      min
+      max
+    }
+    deviceAuthorizationPollingIntervalSeconds
+    deviceAuthorizationPollingIntervalRange {
+      min
+      max
+    }
+    dynamicRegistrationEnabled
+    version
+  }
+  authentication {
+    breachedPasswordCheckEnabled
+    identifierEnumerationAllowed
+    emailSignInEnabled
+    passwordHashing {
+      timeCost
+      timeCostRange {
+        min
+        max
+      }
+      memoryCostKib
+      memoryCostKibRange {
+        min
+        max
+      }
+      parallelism
+      parallelismRange {
+        min
+        max
+      }
+    }
+    version
+  }
+  email {
+    delivery {
+      enabled
+      host
+      port
+      portRange {
+        min
+        max
+      }
+      security
+      senderAddress
+      senderName
+      authentication {
+        method
+        username
+        passwordSet
+        tokenEndpoint
+        clientId
+        clientSecretSet
+        grant
+        refreshTokenSet
+        scope
+      }
+      configured
+      version
+    }
+    templates {
+      kind
+      variables
+      customized
+      version
+      content {
+        ...ConsoleLocalizedEmailTemplateFields
+      }
+      builtIn {
+        ...ConsoleLocalizedEmailTemplateFields
+      }
+    }
+  }
+}
+fragment ConsoleLocalizedEmailTemplateFields on LocalizedEmailTemplate {
+  default {
+    subject
+    html
+  }
+  translations {
+    locale
+    content {
+      subject
+      html
+    }
+  }
+}`) as unknown as TypedDocumentString<ConsoleUpdateEmailTemplateMutation, ConsoleUpdateEmailTemplateMutationVariables>;
+export const ConsoleSendTestEmailDocument = new TypedDocumentString(`
+    mutation ConsoleSendTestEmail($input: SendTestEmailInput!) {
+  sendTestEmail(input: $input) {
+    sent
+    clientMutationId
+  }
+}
+    `) as unknown as TypedDocumentString<ConsoleSendTestEmailMutation, ConsoleSendTestEmailMutationVariables>;
+export const ConsoleEmailTemplatePreviewDocument = new TypedDocumentString(`
+    query ConsoleEmailTemplatePreview($input: EmailTemplatePreviewInput!) {
+  emailTemplatePreview(input: $input) {
+    subject
+    html
+  }
+}
+    `) as unknown as TypedDocumentString<ConsoleEmailTemplatePreviewQuery, ConsoleEmailTemplatePreviewQueryVariables>;
 export const ConsoleKeysDocument = new TypedDocumentString(`
     query ConsoleKeys($filter: KeyFilter, $first: Int, $after: String, $last: Int, $before: String) {
   keys(
@@ -2921,17 +3198,27 @@ export const ConsoleInstanceSettingsDocument = new TypedDocumentString(`
     templates {
       kind
       variables
+      customized
       version
-      locales {
-        locale
-        customized
-        subject
-        html
-        text
-        defaultSubject
-        defaultHtml
-        defaultText
+      content {
+        ...ConsoleLocalizedEmailTemplateFields
       }
+      builtIn {
+        ...ConsoleLocalizedEmailTemplateFields
+      }
+    }
+  }
+}
+fragment ConsoleLocalizedEmailTemplateFields on LocalizedEmailTemplate {
+  default {
+    subject
+    html
+  }
+  translations {
+    locale
+    content {
+      subject
+      html
     }
   }
 }`) as unknown as TypedDocumentString<ConsoleInstanceSettingsQuery, ConsoleInstanceSettingsQueryVariables>;
@@ -3024,17 +3311,27 @@ export const ConsoleUpdateProtocolSettingsDocument = new TypedDocumentString(`
     templates {
       kind
       variables
+      customized
       version
-      locales {
-        locale
-        customized
-        subject
-        html
-        text
-        defaultSubject
-        defaultHtml
-        defaultText
+      content {
+        ...ConsoleLocalizedEmailTemplateFields
       }
+      builtIn {
+        ...ConsoleLocalizedEmailTemplateFields
+      }
+    }
+  }
+}
+fragment ConsoleLocalizedEmailTemplateFields on LocalizedEmailTemplate {
+  default {
+    subject
+    html
+  }
+  translations {
+    locale
+    content {
+      subject
+      html
     }
   }
 }`) as unknown as TypedDocumentString<ConsoleUpdateProtocolSettingsMutation, ConsoleUpdateProtocolSettingsMutationVariables>;
@@ -3127,243 +3424,30 @@ export const ConsoleUpdateAuthenticationSettingsDocument = new TypedDocumentStri
     templates {
       kind
       variables
+      customized
       version
-      locales {
-        locale
-        customized
-        subject
-        html
-        text
-        defaultSubject
-        defaultHtml
-        defaultText
+      content {
+        ...ConsoleLocalizedEmailTemplateFields
       }
+      builtIn {
+        ...ConsoleLocalizedEmailTemplateFields
+      }
+    }
+  }
+}
+fragment ConsoleLocalizedEmailTemplateFields on LocalizedEmailTemplate {
+  default {
+    subject
+    html
+  }
+  translations {
+    locale
+    content {
+      subject
+      html
     }
   }
 }`) as unknown as TypedDocumentString<ConsoleUpdateAuthenticationSettingsMutation, ConsoleUpdateAuthenticationSettingsMutationVariables>;
-export const ConsoleUpdateEmailDeliverySettingsDocument = new TypedDocumentString(`
-    mutation ConsoleUpdateEmailDeliverySettings($input: UpdateEmailDeliverySettingsInput!) {
-  updateEmailDeliverySettings(input: $input) {
-    clientMutationId
-    settings {
-      ...ConsoleInstanceSettingsFields
-    }
-  }
-}
-    fragment ConsoleInstanceSettingsFields on InstanceSettings {
-  general {
-    issuer
-    loginUrl
-    consoleUrl
-    initializedAt
-  }
-  protocol {
-    oauthVersion
-    requirePushedAuthorizationRequests
-    pushedAuthorizationRequestLifetimeSeconds
-    pushedAuthorizationRequestLifetimeRange {
-      min
-      max
-    }
-    deviceAuthorizationRequestLifetimeSeconds
-    deviceAuthorizationRequestLifetimeRange {
-      min
-      max
-    }
-    deviceAuthorizationPollingIntervalSeconds
-    deviceAuthorizationPollingIntervalRange {
-      min
-      max
-    }
-    dynamicRegistrationEnabled
-    version
-  }
-  authentication {
-    breachedPasswordCheckEnabled
-    identifierEnumerationAllowed
-    emailSignInEnabled
-    passwordHashing {
-      timeCost
-      timeCostRange {
-        min
-        max
-      }
-      memoryCostKib
-      memoryCostKibRange {
-        min
-        max
-      }
-      parallelism
-      parallelismRange {
-        min
-        max
-      }
-    }
-    version
-  }
-  email {
-    delivery {
-      enabled
-      host
-      port
-      portRange {
-        min
-        max
-      }
-      security
-      senderAddress
-      senderName
-      authentication {
-        method
-        username
-        passwordSet
-        tokenEndpoint
-        clientId
-        clientSecretSet
-        grant
-        refreshTokenSet
-        scope
-      }
-      configured
-      version
-    }
-    templates {
-      kind
-      variables
-      version
-      locales {
-        locale
-        customized
-        subject
-        html
-        text
-        defaultSubject
-        defaultHtml
-        defaultText
-      }
-    }
-  }
-}`) as unknown as TypedDocumentString<ConsoleUpdateEmailDeliverySettingsMutation, ConsoleUpdateEmailDeliverySettingsMutationVariables>;
-export const ConsoleUpdateEmailTemplateDocument = new TypedDocumentString(`
-    mutation ConsoleUpdateEmailTemplate($input: UpdateEmailTemplateInput!) {
-  updateEmailTemplate(input: $input) {
-    clientMutationId
-    settings {
-      ...ConsoleInstanceSettingsFields
-    }
-  }
-}
-    fragment ConsoleInstanceSettingsFields on InstanceSettings {
-  general {
-    issuer
-    loginUrl
-    consoleUrl
-    initializedAt
-  }
-  protocol {
-    oauthVersion
-    requirePushedAuthorizationRequests
-    pushedAuthorizationRequestLifetimeSeconds
-    pushedAuthorizationRequestLifetimeRange {
-      min
-      max
-    }
-    deviceAuthorizationRequestLifetimeSeconds
-    deviceAuthorizationRequestLifetimeRange {
-      min
-      max
-    }
-    deviceAuthorizationPollingIntervalSeconds
-    deviceAuthorizationPollingIntervalRange {
-      min
-      max
-    }
-    dynamicRegistrationEnabled
-    version
-  }
-  authentication {
-    breachedPasswordCheckEnabled
-    identifierEnumerationAllowed
-    emailSignInEnabled
-    passwordHashing {
-      timeCost
-      timeCostRange {
-        min
-        max
-      }
-      memoryCostKib
-      memoryCostKibRange {
-        min
-        max
-      }
-      parallelism
-      parallelismRange {
-        min
-        max
-      }
-    }
-    version
-  }
-  email {
-    delivery {
-      enabled
-      host
-      port
-      portRange {
-        min
-        max
-      }
-      security
-      senderAddress
-      senderName
-      authentication {
-        method
-        username
-        passwordSet
-        tokenEndpoint
-        clientId
-        clientSecretSet
-        grant
-        refreshTokenSet
-        scope
-      }
-      configured
-      version
-    }
-    templates {
-      kind
-      variables
-      version
-      locales {
-        locale
-        customized
-        subject
-        html
-        text
-        defaultSubject
-        defaultHtml
-        defaultText
-      }
-    }
-  }
-}`) as unknown as TypedDocumentString<ConsoleUpdateEmailTemplateMutation, ConsoleUpdateEmailTemplateMutationVariables>;
-export const ConsoleSendTestEmailDocument = new TypedDocumentString(`
-    mutation ConsoleSendTestEmail($input: SendTestEmailInput!) {
-  sendTestEmail(input: $input) {
-    sent
-    clientMutationId
-  }
-}
-    `) as unknown as TypedDocumentString<ConsoleSendTestEmailMutation, ConsoleSendTestEmailMutationVariables>;
-export const ConsoleEmailTemplatePreviewDocument = new TypedDocumentString(`
-    query ConsoleEmailTemplatePreview($input: EmailTemplatePreviewInput!) {
-  emailTemplatePreview(input: $input) {
-    subject
-    html
-    text
-  }
-}
-    `) as unknown as TypedDocumentString<ConsoleEmailTemplatePreviewQuery, ConsoleEmailTemplatePreviewQueryVariables>;
 export const ConsoleUserRolesDocument = new TypedDocumentString(`
     query ConsoleUserRoles($userId: ID!, $source: AuthorizationSource, $enabled: Boolean, $orderBy: UserRoleOrder, $first: Int, $after: String, $last: Int, $before: String) {
   user(id: $userId) {

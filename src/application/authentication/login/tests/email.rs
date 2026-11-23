@@ -96,7 +96,7 @@ impl EmailSender for RecordingSender {
     }
 }
 
-/// Puts the code in the subject and the link in the text body.
+/// Puts the code in the subject and the link in the body.
 struct ContextRenderer;
 
 impl EmailTemplateRenderer for ContextRenderer {
@@ -107,8 +107,7 @@ impl EmailTemplateRenderer for ContextRenderer {
     ) -> Result<RenderedEmail, EmailTemplateRenderError> {
         Ok(RenderedEmail {
             subject: context["code"].as_str().unwrap().to_owned(),
-            html: String::new(),
-            text: context["link"].as_str().unwrap().to_owned(),
+            html: context["link"].as_str().unwrap().to_owned(),
         })
     }
 }
@@ -260,7 +259,7 @@ async fn the_emailed_link_works_once() {
     flow.send().await.unwrap();
     let token = flow
         .last_message()
-        .text
+        .html
         .strip_prefix(LINK_PREFIX)
         .unwrap()
         .to_owned();

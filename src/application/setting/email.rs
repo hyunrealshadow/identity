@@ -25,10 +25,10 @@ use super::{
 use crate::{
     data_protection::DataProtector,
     email::{
-        EMAIL_DELIVERY_SECRET_PURPOSE, EMAIL_LOCALES, EmailMessage, EmailSender,
+        EMAIL_DELIVERY_SECRET_PURPOSE, EmailMessage, EmailSender, EmailTemplate,
         EmailTemplateContent, EmailTemplateKind, EmailTemplateRenderError, EmailTemplateRenderer,
-        RenderedEmail, default_template,
-        template::{MAX_BODY_LENGTH, MAX_SUBJECT_LENGTH, effective_template},
+        RenderedEmail, built_in_template, effective_template,
+        template::{MAX_BODY_LENGTH, MAX_SUBJECT_LENGTH, MAX_TEMPLATE_TRANSLATIONS},
     },
     error::{AppError, codes::instance::InstanceErrorCode},
     observability::{BusinessEvent, EventValue},
@@ -125,20 +125,14 @@ pub struct EmailDeliveryView {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct EmailTemplateLocaleView {
-    pub locale: &'static str,
-    /// Whether an operator replaced the built-in template.
-    pub customized: bool,
-    /// The template sent for this locale.
-    pub content: EmailTemplateContent,
-    pub default_content: EmailTemplateContent,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EmailTemplateView {
     pub kind: EmailTemplateKind,
     pub variables: &'static [&'static str],
-    pub locales: Vec<EmailTemplateLocaleView>,
+    /// Whether an operator replaced the built-in template.
+    pub customized: bool,
+    /// The template that is sent.
+    pub template: EmailTemplate,
+    pub built_in: EmailTemplate,
     pub version: Uuid,
 }
 
@@ -164,23 +158,16 @@ impl From<&InstanceSettingsState> for EmailSettingsView {
                 version: InstanceSettingSection::Email.version(state),
             },
             templates: EmailTemplateKind::iter()
-                .map(|kind| EmailTemplateView {
-                    kind,
-                    variables: kind.variables(),
-                    locales: EMAIL_LOCALES
-                        .iter()
-                        .map(|locale| {
-                            let (content, customized) =
-                                effective_template(&state.email_templates, kind, locale);
-                            EmailTemplateLocaleView {
-                                locale,
-                                customized,
-                                content,
-                                default_content: default_template(kind, locale),
-                            }
-                        })
-                        .collect(),
-                    version: InstanceSettingSection::EmailTemplate(kind).version(state),
+                .map(|kind| {
+                    let (template, customized) = effective_template(&state.email_templates, kind);
+                    EmailTemplateView {
+                        kind,
+                        variables: kind.variables(),
+                        customized,
+                        template,
+                        built_in: built_in_template(kind),
+                        version: InstanceSettingSection::EmailTemplate(kind).version(state),
+                    }
                 })
                 .collect(),
         }
@@ -220,12 +207,10 @@ pub fn email_delivery_audit_values(settings: &EmailDeliverySettings) -> Value {
     value
 }
 
-/// One template kind as audited: which locales are replaced, their subject,
-/// and a digest of each body rather than the body itself.
+/// One template kind as audited: the subject of its default content and of
+/// each translation, and a digest of each body rather than the body itself.
 #[must_use]
-pub fn email_template_audit_values(
-    locales: Option<&BTreeMap<String, EmailTemplateContent>>,
-) -> Value {
+pub fn email_template_audit_values(template: Option<&EmailTemplate>) -> Value {
     fn digest(value: &str) -> String {
         let digest = Sha256::digest(value.as_bytes());
         let hex = digest[..8]
@@ -234,22 +219,22 @@ pub fn email_template_audit_values(
             .collect::<String>();
         format!("sha256:{hex}")
     }
-    Value::Object(
-        locales
-            .into_iter()
-            .flatten()
-            .map(|(locale, content)| {
-                (
-                    locale.clone(),
-                    serde_json::json!({
-                        "subject": content.subject,
-                        "html": digest(&content.html),
-                        "text": digest(&content.text),
-                    }),
-                )
-            })
-            .collect(),
-    )
+    fn content(content: &EmailTemplateContent) -> Value {
+        serde_json::json!({
+            "subject": content.subject,
+            "html": digest(&content.html),
+        })
+    }
+    template.map_or(Value::Null, |template| {
+        serde_json::json!({
+            "default": content(&template.default),
+            "translations": template
+                .translations
+                .iter()
+                .map(|(locale, translation)| (locale.clone(), content(translation)))
+                .collect::<serde_json::Map<_, _>>(),
+        })
+    })
 }
 
 // ─── Commands ────────────────────────────────────────────────────────────────
@@ -290,11 +275,17 @@ pub struct UpdateEmailDeliveryCommand {
 #[derive(Debug, Clone)]
 pub struct UpdateEmailTemplateCommand {
     pub kind: EmailTemplateKind,
-    /// Locales replaced by an operator. Every other locale uses its built-in
-    /// template, so leaving a locale out resets it.
-    pub locales: Vec<(String, EmailTemplateContent)>,
+    /// The operator's template, or `None` to use the built-in one again.
+    pub template: Option<EmailTemplateDraft>,
     pub expected_version: Uuid,
     pub client_mutation_id: Option<String>,
+}
+
+/// An operator template as submitted: translations in the order entered.
+#[derive(Debug, Clone)]
+pub struct EmailTemplateDraft {
+    pub default: EmailTemplateContent,
+    pub translations: Vec<(String, EmailTemplateContent)>,
 }
 
 #[derive(Debug, Clone)]
@@ -569,28 +560,17 @@ impl InstanceSettingService {
         let result = async {
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
             let renderer = Arc::clone(&self.email_dependencies()?.renderer);
-            let mut locales = BTreeMap::new();
-            for (index, (locale, content)) in command.locales.into_iter().enumerate() {
-                let Some(locale) = EMAIL_LOCALES.iter().find(|known| **known == locale) else {
-                    return Err(
-                        AppError::from_code(InstanceErrorCode::UnsupportedEmailLocale)
-                            .with_param("locale", locale)
-                            .with_field(format!("locales.{index}.locale")),
-                    );
-                };
-                check_template(renderer.as_ref(), command.kind, locale, &content).map_err(
-                    |error| error.with_field_prefix(&format!("locales.{index}.content.")),
-                )?;
-                locales.insert((*locale).to_owned(), content);
-            }
+            let template = command
+                .template
+                .map(|draft| check_draft(renderer.as_ref(), command.kind, draft))
+                .transpose()?;
             let kind = command.kind;
             let build = move |state: &InstanceSettingsState| {
                 let mut templates = state.email_templates.clone();
-                if locales.is_empty() {
-                    templates.remove(&kind);
-                } else {
-                    templates.insert(kind, locales);
-                }
+                match template {
+                    Some(template) => templates.insert(kind, template),
+                    None => templates.remove(&kind),
+                };
                 Ok(SettingChanges::default().set::<EmailTemplatesSetting>(&templates)?)
             };
             self.write(
@@ -606,23 +586,23 @@ impl InstanceSettingService {
         result
     }
 
-    /// Render a draft template with sample values, without saving it.
+    /// Render one language of a draft template with sample values, without
+    /// saving it. `locale` is the language previewed; `None` previews the
+    /// default content.
     #[tracing::instrument(skip_all, name = "setting.email_template.preview", fields(email.template = kind.as_str()))]
     pub fn preview_email_template(
         &self,
         kind: EmailTemplateKind,
-        locale: &str,
+        locale: Option<&str>,
         content: &EmailTemplateContent,
     ) -> Result<RenderedEmail, AppError> {
-        let Some(locale) = EMAIL_LOCALES.iter().find(|known| **known == locale) else {
-            return Err(
-                AppError::from_code(InstanceErrorCode::UnsupportedEmailLocale)
-                    .with_param("locale", locale.to_owned())
-                    .with_field("locale"),
-            );
+        let locale = match locale {
+            Some(locale) => Some(canonical_locale(locale, "locale")?),
+            None => None,
         };
         let renderer = &self.email_dependencies()?.renderer;
-        check_template(renderer.as_ref(), kind, locale, content).map_err(TemplateCheck::into_error)
+        check_template(renderer.as_ref(), kind, locale.as_deref(), content)
+            .map_err(|check| check.into_error("content."))
     }
 
     /// Send a short message with the stored delivery settings.
@@ -640,7 +620,11 @@ impl InstanceSettingService {
                     InstanceErrorCode::EmailDeliveryNotConfigured,
                 ));
             }
-            let locale = crate::email::select_locale([command.locale.as_str()]);
+            let locale = if command.locale.trim().starts_with("zh") {
+                "zh-CN"
+            } else {
+                "en-US"
+            };
             dependencies
                 .sender
                 .send(&state.email_delivery, test_message(recipient, locale))
@@ -674,25 +658,60 @@ struct TemplateCheck {
 }
 
 impl TemplateCheck {
-    fn into_error(self) -> AppError {
-        self.error.with_field(format!("content.{}", self.part))
-    }
-
-    fn with_field_prefix(self, prefix: &str) -> AppError {
+    fn into_error(self, prefix: &str) -> AppError {
         self.error.with_field(format!("{prefix}{}", self.part))
     }
+}
+
+fn canonical_locale(locale: &str, field: &str) -> Result<String, AppError> {
+    identity_domain::rbac::metadata::canonicalize_locale(locale).map_err(|_| {
+        AppError::from_code(InstanceErrorCode::UnsupportedEmailLocale)
+            .with_param("locale", locale.to_owned())
+            .with_field(field.to_owned())
+    })
+}
+
+/// Validate every language of a draft and key its translations by canonical
+/// language tag. Field paths follow the input: `default.subject`,
+/// `translations.<index>.content.html`.
+fn check_draft(
+    renderer: &dyn EmailTemplateRenderer,
+    kind: EmailTemplateKind,
+    draft: EmailTemplateDraft,
+) -> Result<EmailTemplate, AppError> {
+    check_template(renderer, kind, None, &draft.default)
+        .map_err(|check| check.into_error("default."))?;
+    if draft.translations.len() > MAX_TEMPLATE_TRANSLATIONS {
+        return Err(AppError::from_code(InstanceErrorCode::EmailTemplateTooLong)
+            .with_param("max", MAX_TEMPLATE_TRANSLATIONS.to_string())
+            .with_field("translations"));
+    }
+    let mut translations = BTreeMap::new();
+    for (index, (locale, content)) in draft.translations.into_iter().enumerate() {
+        let locale = canonical_locale(&locale, &format!("translations.{index}.locale"))?;
+        check_template(renderer, kind, Some(&locale), &content)
+            .map_err(|check| check.into_error(&format!("translations.{index}.content.")))?;
+        if translations.insert(locale.clone(), content).is_some() {
+            return Err(AppError::from_code(InstanceErrorCode::DuplicateEmailLocale)
+                .with_param("locale", locale)
+                .with_field(format!("translations.{index}.locale")));
+        }
+    }
+    Ok(EmailTemplate {
+        default: draft.default,
+        translations,
+    })
 }
 
 fn check_template(
     renderer: &dyn EmailTemplateRenderer,
     kind: EmailTemplateKind,
-    locale: &str,
+    locale: Option<&str>,
     content: &EmailTemplateContent,
 ) -> Result<RenderedEmail, TemplateCheck> {
     for (value, max, part) in [
         (&content.subject, MAX_SUBJECT_LENGTH, "subject"),
         (&content.html, MAX_BODY_LENGTH, "html"),
-        (&content.text, MAX_BODY_LENGTH, "text"),
     ] {
         if value.chars().count() > max {
             return Err(TemplateCheck {
@@ -709,7 +728,7 @@ fn check_template(
         }
     }
     renderer
-        .render(content, &kind.sample_context(locale))
+        .render(content, &kind.sample_context(locale.unwrap_or("en")))
         .map_err(|EmailTemplateRenderError { part, detail }| TemplateCheck {
             error: AppError::from_code(InstanceErrorCode::InvalidEmailTemplate)
                 .with_param("detail", detail),
@@ -731,7 +750,6 @@ fn test_message(recipient: String, locale: &str) -> EmailMessage {
         to_name: None,
         subject: subject.to_owned(),
         html: format!("<!doctype html><html lang=\"{locale}\"><body><p>{line}</p></body></html>"),
-        text: format!("{line}\n"),
     }
 }
 
@@ -836,5 +854,104 @@ mod tests {
         assert!(check_token_endpoint("http://oauth2.example.com/token").is_err());
         assert!(check_token_endpoint("https://user:pass@example.com/token").is_err());
         assert!(check_token_endpoint("token").is_err());
+    }
+
+    struct EchoRenderer;
+
+    impl EmailTemplateRenderer for EchoRenderer {
+        fn render(
+            &self,
+            content: &EmailTemplateContent,
+            _context: &Value,
+        ) -> Result<RenderedEmail, EmailTemplateRenderError> {
+            if content.html.contains("{% broken") {
+                return Err(EmailTemplateRenderError {
+                    part: crate::email::EmailTemplatePart::Html,
+                    detail: "unexpected tag".to_owned(),
+                });
+            }
+            Ok(RenderedEmail {
+                subject: content.subject.clone(),
+                html: content.html.clone(),
+            })
+        }
+    }
+
+    fn page(html: &str) -> EmailTemplateContent {
+        EmailTemplateContent {
+            subject: "Subject".to_owned(),
+            html: html.to_owned(),
+        }
+    }
+
+    fn field(error: &AppError) -> String {
+        error
+            .validation()
+            .and_then(|validation| validation.fields().first())
+            .map(|field| field.field().to_owned())
+            .unwrap_or_default()
+    }
+
+    #[test]
+    fn a_draft_keys_translations_by_canonical_language_tag() {
+        let kind = EmailTemplateKind::SignInCode;
+        let template = check_draft(
+            &EchoRenderer,
+            kind,
+            EmailTemplateDraft {
+                default: page("<p>hi</p>"),
+                translations: vec![("zh_cn".to_owned(), page("<p>你好</p>"))],
+            },
+        )
+        .unwrap();
+        assert_eq!(template.translations.keys().collect::<Vec<_>>(), ["zh-CN"]);
+
+        let duplicate = check_draft(
+            &EchoRenderer,
+            kind,
+            EmailTemplateDraft {
+                default: page("<p>hi</p>"),
+                translations: vec![
+                    ("zh-CN".to_owned(), page("<p>1</p>")),
+                    ("zh_cn".to_owned(), page("<p>2</p>")),
+                ],
+            },
+        )
+        .unwrap_err();
+        assert_eq!(
+            duplicate.code(),
+            InstanceErrorCode::DuplicateEmailLocale as u32
+        );
+        assert_eq!(field(&duplicate), "translations.1.locale");
+    }
+
+    #[test]
+    fn a_draft_error_names_the_language_and_part() {
+        let kind = EmailTemplateKind::SignInCode;
+        let broken = check_draft(
+            &EchoRenderer,
+            kind,
+            EmailTemplateDraft {
+                default: page("<p>hi</p>"),
+                translations: vec![("fr".to_owned(), page("{% broken %}"))],
+            },
+        )
+        .unwrap_err();
+        assert_eq!(
+            broken.code(),
+            InstanceErrorCode::InvalidEmailTemplate as u32
+        );
+        assert_eq!(field(&broken), "translations.0.content.html");
+
+        let empty = check_draft(
+            &EchoRenderer,
+            kind,
+            EmailTemplateDraft {
+                default: page("  "),
+                translations: Vec::new(),
+            },
+        )
+        .unwrap_err();
+        assert_eq!(field(&empty), "default.html");
     }
 }

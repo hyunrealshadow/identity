@@ -1259,17 +1259,35 @@ type EmailTemplate {
 	Variables the template receives, as dotted paths.
 	"""
 	variables: [String!]!
-	locales: [EmailTemplateLocale!]!
 	"""
-	UUID optimistic-lock version of this template, across its locales.
+	Whether an operator replaced the built-in template.
+	"""
+	customized: Boolean!
+	"""
+	The template that is sent.
+	"""
+	content: LocalizedEmailTemplate!
+	"""
+	The template shipped with the instance, used while not customized.
+	"""
+	builtIn: LocalizedEmailTemplate!
+	"""
+	UUID optimistic-lock version of this template.
 	"""
 	version: UUID!
+}
+
+"""
+One language of a template, as Tera source.
+"""
+type EmailTemplateContent {
+	subject: String!
+	html: String!
 }
 
 input EmailTemplateContentInput {
 	subject: String!
 	html: String!
-	text: String!
 }
 
 enum EmailTemplateKind {
@@ -1279,39 +1297,35 @@ enum EmailTemplateKind {
 	SIGN_IN_CODE
 }
 
-type EmailTemplateLocale {
-	locale: String!
-	"""
-	Whether this locale replaces the built-in template.
-	"""
-	customized: Boolean!
-	"""
-	The subject sent for this locale, as Tera source.
-	"""
-	subject: String!
-	html: String!
-	text: String!
-	defaultSubject: String!
-	defaultHtml: String!
-	defaultText: String!
-}
-
-input EmailTemplateLocaleInput {
-	locale: String!
-	content: EmailTemplateContentInput!
-}
-
 """
 A template rendered with sample values.
 """
 type EmailTemplatePreview {
 	subject: String!
 	html: String!
-	text: String!
 }
 
 input EmailTemplatePreviewInput {
 	kind: EmailTemplateKind!
+	"""
+	The language previewed; omit it for the default content.
+	"""
+	locale: String
+	content: EmailTemplateContentInput!
+}
+
+type EmailTemplateTranslation {
+	"""
+	Language tag.
+	"""
+	locale: String!
+	content: EmailTemplateContent!
+}
+
+input EmailTemplateTranslationInput {
+	"""
+	Language tag.
+	"""
 	locale: String!
 	content: EmailTemplateContentInput!
 }
@@ -1742,6 +1756,23 @@ enum KeyUse {
 	Protects sessions, tokens and cursors.
 	"""
 	ENCRYPTION
+}
+
+"""
+Default content, used when no translation fits the reader, and its
+translations.
+"""
+type LocalizedEmailTemplate {
+	default: EmailTemplateContent!
+	"""
+	Ordered by language tag.
+	"""
+	translations: [EmailTemplateTranslation!]!
+}
+
+input LocalizedEmailTemplateInput {
+	default: EmailTemplateContentInput!
+	translations: [EmailTemplateTranslationInput!]!
 }
 
 type LocalizedText {
@@ -2660,11 +2691,12 @@ input UpdateEmailInput {
 }
 
 """
-Replace one template. Locales left out use the built-in template.
+Replace one template with an operator's own, or with `content: null` use
+the built-in template again.
 """
 input UpdateEmailTemplateInput {
 	kind: EmailTemplateKind!
-	locales: [EmailTemplateLocaleInput!]!
+	content: LocalizedEmailTemplateInput
 	expectedVersion: UUID!
 	clientMutationId: String
 }

@@ -6,7 +6,7 @@ pub mod template;
 
 pub use delivery::{EMAIL_DELIVERY_SECRET_PURPOSE, EmailDeliveryError, EmailMessage, EmailSender};
 pub use template::{
-    EMAIL_LOCALES, EmailTemplateContent, EmailTemplateKind, EmailTemplatePart,
+    EmailTemplate, EmailTemplateContent, EmailTemplateKind, EmailTemplatePart,
     EmailTemplateRenderError, EmailTemplateRenderer, EmailTemplates, RenderedEmail,
-    default_template, select_locale,
+    built_in_template, effective_template,
 };

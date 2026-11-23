@@ -46,7 +46,11 @@ impl SettingQuery {
             .state
             .services()
             .instance_setting()
-            .preview_email_template(input.kind.into(), &input.locale, &input.content.into())
+            .preview_email_template(
+                input.kind.into(),
+                input.locale.as_deref(),
+                &input.content.into(),
+            )
             .map_err(|error| app_error(ctx, error))?;
         Ok(Some(rendered.into()))
     }

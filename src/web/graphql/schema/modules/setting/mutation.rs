@@ -180,11 +180,7 @@ impl SettingMutation {
                     &authority,
                     UpdateEmailTemplateCommand {
                         kind: input.kind.into(),
-                        locales: input
-                            .locales
-                            .into_iter()
-                            .map(|locale| (locale.locale, locale.content.into()))
-                            .collect(),
+                        template: input.content.map(Into::into),
                         expected_version: input.expected_version,
                         client_mutation_id: input.client_mutation_id,
                     },

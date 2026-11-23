@@ -7,12 +7,12 @@ import type {
   Xoauth2Grant,
 } from '#/generated/graphql'
 import type { MessageKey } from '#/lib/i18n'
-import { parseWholeNumber, type FieldError, type InstanceSettings } from './settings-form'
+import { parseWholeNumber, type FieldError, type InstanceSettings } from '../../settings/lib/settings-form'
 
 export type EmailSettings = InstanceSettings['email']
 export type EmailDelivery = EmailSettings['delivery']
 export type EmailTemplate = EmailSettings['templates'][number]
-export type EmailTemplateLocale = EmailTemplate['locales'][number]
+export type LocalizedEmailTemplate = EmailTemplate['content']
 
 /**
  * What an operator edits. Secrets start empty: an empty secret keeps the
@@ -177,76 +177,155 @@ export const emailTemplateLabels: Record<
 export interface EmailTemplateContentDraft {
   subject: string
   html: string
-  text: string
 }
 
-/** One locale of a template being edited. */
-export interface EmailTemplateLocaleDraft extends EmailTemplateContentDraft {
+export interface EmailTemplateTranslationDraft {
   locale: string
+  content: EmailTemplateContentDraft
+}
+
+/**
+ * A template being edited. Like other localized text it has default content,
+ * used when no translation fits the reader, and translations in any language.
+ */
+export interface EmailTemplateDraft {
   customized: boolean
+  default: EmailTemplateContentDraft
+  translations: EmailTemplateTranslationDraft[]
 }
 
-export function emailTemplateDraft(template: EmailTemplate): EmailTemplateLocaleDraft[] {
-  return template.locales.map((locale) => ({
-    locale: locale.locale,
-    customized: locale.customized,
-    subject: locale.subject,
-    html: locale.html,
-    text: locale.text,
-  }))
-}
+/** The language being edited: `null` is the default content. */
+export type EmailTemplateLanguage = string | null
 
-/** The built-in content of `locale`. */
-export function defaultContent(template: EmailTemplate, locale: string): EmailTemplateContentDraft {
-  const found = template.locales.find((entry) => entry.locale === locale)
+function copy(template: LocalizedEmailTemplate): Omit<EmailTemplateDraft, 'customized'> {
   return {
-    subject: found?.defaultSubject ?? '',
-    html: found?.defaultHtml ?? '',
-    text: found?.defaultText ?? '',
+    default: { ...template.default },
+    translations: template.translations.map((translation) => ({
+      locale: translation.locale,
+      content: { ...translation.content },
+    })),
   }
 }
 
-/** The content a locale sends: its own when customized, else the built-in one. */
-export function effectiveContent(
+export function emailTemplateDraft(template: EmailTemplate): EmailTemplateDraft {
+  return { customized: template.customized, ...copy(template.content) }
+}
+
+/** Start customizing from the built-in template, so nothing is lost. */
+export function customizeEmailTemplate(template: EmailTemplate): EmailTemplateDraft {
+  return { customized: true, ...copy(template.builtIn) }
+}
+
+/** What is sent while the draft is in effect. */
+export function effectiveEmailTemplate(
   template: EmailTemplate,
-  draft: EmailTemplateLocaleDraft,
-): EmailTemplateContentDraft {
-  return draft.customized ? draft : defaultContent(template, draft.locale)
+  draft: EmailTemplateDraft,
+): Omit<EmailTemplateDraft, 'customized'> {
+  return draft.customized ? draft : copy(template.builtIn)
+}
+
+export function templateContent(
+  template: Omit<EmailTemplateDraft, 'customized'>,
+  language: EmailTemplateLanguage,
+): EmailTemplateContentDraft | undefined {
+  if (language === null) return template.default
+  return template.translations.find((translation) => translation.locale === language)?.content
+}
+
+/** Replace the content of one language. */
+export function updateTemplateContent(
+  draft: EmailTemplateDraft,
+  language: EmailTemplateLanguage,
+  patch: Partial<EmailTemplateContentDraft>,
+): EmailTemplateDraft {
+  if (language === null) return { ...draft, default: { ...draft.default, ...patch } }
+  return {
+    ...draft,
+    translations: draft.translations.map((translation) =>
+      translation.locale === language
+        ? { ...translation, content: { ...translation.content, ...patch } }
+        : translation,
+    ),
+  }
+}
+
+export function addTemplateTranslation(
+  draft: EmailTemplateDraft,
+  locale: string,
+  content: EmailTemplateContentDraft,
+): EmailTemplateDraft {
+  if (draft.translations.some((translation) => translation.locale === locale)) return draft
+  return {
+    ...draft,
+    translations: [...draft.translations, { locale, content: { ...content } }].sort((a, b) =>
+      a.locale.localeCompare(b.locale),
+    ),
+  }
+}
+
+export function removeTemplateTranslation(
+  draft: EmailTemplateDraft,
+  locale: string,
+): EmailTemplateDraft {
+  return {
+    ...draft,
+    translations: draft.translations.filter((translation) => translation.locale !== locale),
+  }
 }
 
 export function emailTemplateInput(
   template: EmailTemplate,
-  drafts: EmailTemplateLocaleDraft[],
+  draft: EmailTemplateDraft,
 ): Omit<UpdateEmailTemplateInput, 'clientMutationId'> {
   return {
     kind: template.kind,
-    locales: drafts
-      .filter((draft) => draft.customized)
-      .map((draft) => ({
-        locale: draft.locale,
-        content: { subject: draft.subject, html: draft.html, text: draft.text },
-      })),
+    content: draft.customized
+      ? {
+          default: { ...draft.default },
+          translations: draft.translations.map((translation) => ({
+            locale: translation.locale,
+            content: { ...translation.content },
+          })),
+        }
+      : null,
     expectedVersion: template.version,
   }
 }
 
+/** The key of a language in {@link templateFieldErrors}. */
+export function languageKey(language: EmailTemplateLanguage) {
+  return language ?? ''
+}
+
 /**
- * Server field errors of a template save, by locale and part:
- * `locales.<index>.content.<part>` becomes `{ [locale]: { [part]: message } }`.
+ * Server field errors of a template save, by language and part:
+ * `content.default.html` and `content.translations.<index>.content.html`
+ * (paths may carry an `input.` prefix).
  */
 export function templateFieldErrors(
-  drafts: EmailTemplateLocaleDraft[],
+  draft: EmailTemplateDraft,
   fields: Record<string, string>,
-): Record<string, Partial<Record<keyof EmailTemplateContentDraft, string>>> {
-  const customized = drafts.filter((draft) => draft.customized)
-  const result: Record<string, Partial<Record<keyof EmailTemplateContentDraft, string>>> = {}
+): Record<string, Partial<Record<keyof EmailTemplateContentDraft | 'locale', string>>> {
+  const result: Record<
+    string,
+    Partial<Record<keyof EmailTemplateContentDraft | 'locale', string>>
+  > = {}
   for (const [path, message] of Object.entries(fields)) {
-    const match = /(?:^|\.)locales\.(\d+)\.content\.(subject|html|text)$/u.exec(path)
-    if (!match) continue
-    const locale = customized[Number(match[1])]?.locale
-    if (!locale) continue
-    const part = match[2] as keyof EmailTemplateContentDraft
-    result[locale] = { ...result[locale], [part]: message }
+    const defaultMatch = /(?:^|\.)default\.(subject|html)$/u.exec(path)
+    const translationMatch =
+      /(?:^|\.)translations\.(\d+)\.(?:content\.(subject|html)|(locale))$/u.exec(path)
+    let language: EmailTemplateLanguage | undefined
+    let part: keyof EmailTemplateContentDraft | 'locale' | undefined
+    if (defaultMatch) {
+      language = null
+      part = defaultMatch[1] as keyof EmailTemplateContentDraft
+    } else if (translationMatch) {
+      language = draft.translations[Number(translationMatch[1])]?.locale
+      part = (translationMatch[2] ?? translationMatch[3]) as keyof EmailTemplateContentDraft | 'locale'
+    }
+    if (language === undefined || !part) continue
+    const key = languageKey(language)
+    result[key] = { ...result[key], [part]: message }
   }
   return result
 }

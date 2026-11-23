@@ -3,13 +3,16 @@
 
 use async_graphql::{Enum, InputObject, Object, SimpleObject};
 use identity_application::{
-    email::{EmailTemplateContent, EmailTemplateKind as AppEmailTemplateKind, RenderedEmail},
+    email::{
+        EmailTemplate as AppEmailTemplate, EmailTemplateContent as AppEmailTemplateContent,
+        EmailTemplateKind as AppEmailTemplateKind, RenderedEmail,
+    },
     setting::{
         SmtpSecurity as AppSmtpSecurity, Xoauth2Grant as AppXoauth2Grant,
         email::{
             EmailAuthenticationInput as AppEmailAuthenticationInput,
             EmailAuthenticationMethod as AppEmailAuthenticationMethod, EmailAuthenticationView,
-            EmailDeliveryView, EmailSettingsView, EmailTemplateLocaleView, EmailTemplateView,
+            EmailDeliveryView, EmailSettingsView, EmailTemplateDraft, EmailTemplateView,
             SMTP_PORT_RANGE,
         },
     },
@@ -242,60 +245,73 @@ impl EmailTemplate {
         self.view.variables.to_vec()
     }
 
-    async fn locales(&self) -> Vec<EmailTemplateLocale> {
-        self.view
-            .locales
-            .iter()
-            .cloned()
-            .map(|view| EmailTemplateLocale { view })
-            .collect()
+    /// Whether an operator replaced the built-in template.
+    async fn customized(&self) -> bool {
+        self.view.customized
     }
 
-    /// UUID optimistic-lock version of this template, across its locales.
+    /// The template that is sent.
+    async fn content(&self) -> LocalizedEmailTemplate {
+        LocalizedEmailTemplate::from(&self.view.template)
+    }
+
+    /// The template shipped with the instance, used while not customized.
+    async fn built_in(&self) -> LocalizedEmailTemplate {
+        LocalizedEmailTemplate::from(&self.view.built_in)
+    }
+
+    /// UUID optimistic-lock version of this template.
     async fn version(&self) -> Uuid {
         self.view.version
     }
 }
 
-pub(crate) struct EmailTemplateLocale {
-    view: EmailTemplateLocaleView,
+/// Default content, used when no translation fits the reader, and its
+/// translations.
+#[derive(SimpleObject)]
+pub(crate) struct LocalizedEmailTemplate {
+    default: EmailTemplateContent,
+    /// Ordered by language tag.
+    translations: Vec<EmailTemplateTranslation>,
 }
 
-#[Object]
-impl EmailTemplateLocale {
-    async fn locale(&self) -> &'static str {
-        self.view.locale
+impl From<&AppEmailTemplate> for LocalizedEmailTemplate {
+    fn from(template: &AppEmailTemplate) -> Self {
+        Self {
+            default: EmailTemplateContent::from(&template.default),
+            translations: template
+                .translations
+                .iter()
+                .map(|(locale, content)| EmailTemplateTranslation {
+                    locale: locale.clone(),
+                    content: EmailTemplateContent::from(content),
+                })
+                .collect(),
+        }
     }
+}
 
-    /// Whether this locale replaces the built-in template.
-    async fn customized(&self) -> bool {
-        self.view.customized
-    }
+/// One language of a template, as Tera source.
+#[derive(SimpleObject)]
+pub(crate) struct EmailTemplateContent {
+    subject: String,
+    html: String,
+}
 
-    /// The subject sent for this locale, as Tera source.
-    async fn subject(&self) -> &str {
-        &self.view.content.subject
+impl From<&AppEmailTemplateContent> for EmailTemplateContent {
+    fn from(content: &AppEmailTemplateContent) -> Self {
+        Self {
+            subject: content.subject.clone(),
+            html: content.html.clone(),
+        }
     }
+}
 
-    async fn html(&self) -> &str {
-        &self.view.content.html
-    }
-
-    async fn text(&self) -> &str {
-        &self.view.content.text
-    }
-
-    async fn default_subject(&self) -> &str {
-        &self.view.default_content.subject
-    }
-
-    async fn default_html(&self) -> &str {
-        &self.view.default_content.html
-    }
-
-    async fn default_text(&self) -> &str {
-        &self.view.default_content.text
-    }
+#[derive(SimpleObject)]
+pub(crate) struct EmailTemplateTranslation {
+    /// Language tag.
+    locale: String,
+    content: EmailTemplateContent,
 }
 
 /// SMTP authentication to store. Leave a secret out to keep the stored one
@@ -365,33 +381,51 @@ pub(crate) struct EmailTemplateContentInput {
     pub subject: String,
     #[graphql(validator(chars_max_length = 100000))]
     pub html: String,
-    #[graphql(validator(chars_max_length = 100000))]
-    pub text: String,
 }
 
-impl From<EmailTemplateContentInput> for EmailTemplateContent {
+impl From<EmailTemplateContentInput> for AppEmailTemplateContent {
     fn from(input: EmailTemplateContentInput) -> Self {
         Self {
             subject: input.subject,
             html: input.html,
-            text: input.text,
         }
     }
 }
 
 #[derive(Clone, InputObject)]
-pub(crate) struct EmailTemplateLocaleInput {
+pub(crate) struct EmailTemplateTranslationInput {
+    /// Language tag.
     #[graphql(validator(chars_max_length = 35))]
     pub locale: String,
     pub content: EmailTemplateContentInput,
 }
 
-/// Replace one template. Locales left out use the built-in template.
+#[derive(Clone, InputObject)]
+pub(crate) struct LocalizedEmailTemplateInput {
+    pub default: EmailTemplateContentInput,
+    #[graphql(validator(max_items = 20))]
+    pub translations: Vec<EmailTemplateTranslationInput>,
+}
+
+impl From<LocalizedEmailTemplateInput> for EmailTemplateDraft {
+    fn from(input: LocalizedEmailTemplateInput) -> Self {
+        Self {
+            default: input.default.into(),
+            translations: input
+                .translations
+                .into_iter()
+                .map(|translation| (translation.locale, translation.content.into()))
+                .collect(),
+        }
+    }
+}
+
+/// Replace one template with an operator's own, or with `content: null` use
+/// the built-in template again.
 #[derive(Clone, InputObject)]
 pub(crate) struct UpdateEmailTemplateInput {
     pub kind: EmailTemplateKind,
-    #[graphql(validator(max_items = 10))]
-    pub locales: Vec<EmailTemplateLocaleInput>,
+    pub content: Option<LocalizedEmailTemplateInput>,
     pub expected_version: Uuid,
     #[graphql(validator(chars_max_length = 255))]
     pub client_mutation_id: Option<String>,
@@ -418,8 +452,9 @@ pub(crate) struct SendTestEmailPayload {
 #[derive(Clone, InputObject)]
 pub(crate) struct EmailTemplatePreviewInput {
     pub kind: EmailTemplateKind,
+    /// The language previewed; omit it for the default content.
     #[graphql(validator(chars_max_length = 35))]
-    pub locale: String,
+    pub locale: Option<String>,
     pub content: EmailTemplateContentInput,
 }
 
@@ -428,7 +463,6 @@ pub(crate) struct EmailTemplatePreviewInput {
 pub(crate) struct EmailTemplatePreview {
     pub subject: String,
     pub html: String,
-    pub text: String,
 }
 
 impl From<RenderedEmail> for EmailTemplatePreview {
@@ -436,7 +470,6 @@ impl From<RenderedEmail> for EmailTemplatePreview {
         Self {
             subject: rendered.subject,
             html: rendered.html,
-            text: rendered.text,
         }
     }
 }

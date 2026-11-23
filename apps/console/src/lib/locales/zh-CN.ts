@@ -66,6 +66,7 @@ const shared = {
   navPermissions: '权限',
   navRoleAssignments: '角色分配',
   navEffectivePermissions: '有效权限',
+  navEmail: '邮件',
   navSettings: '设置',
   navAudit: '审计',
   navAuditLog: '审计日志',

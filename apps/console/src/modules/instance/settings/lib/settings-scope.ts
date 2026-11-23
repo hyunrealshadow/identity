@@ -11,10 +11,6 @@ export function settingsScope(permissions: EffectivePermissions | null | undefin
       'mutation',
       'updateAuthenticationSettings',
     ),
-    emailWrite: fieldAffordance(permissions, 'mutation', 'updateEmailDeliverySettings'),
-    emailTemplateWrite: fieldAffordance(permissions, 'mutation', 'updateEmailTemplate'),
-    testEmail: fieldAffordance(permissions, 'mutation', 'sendTestEmail'),
-    emailPreview: fieldAffordance(permissions, 'query', 'emailTemplatePreview'),
   }
 }
 

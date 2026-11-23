@@ -13,6 +13,7 @@ import {
   ChevronsLeft,
   ChevronsRight,
   LayoutDashboard,
+  Mail,
   Menu,
   ScrollText,
   Settings,
@@ -35,6 +36,7 @@ interface NavEntry {
     | '/resources'
     | '/audit-events'
     | '/settings'
+    | '/email'
   icon: LucideIcon
 }
 
@@ -71,7 +73,10 @@ const groups: NavGroup[] = [
   },
   {
     label: 'navInstance',
-    entries: [{ label: 'navSettings', to: '/settings', icon: Settings }],
+    entries: [
+      { label: 'navSettings', to: '/settings', icon: Settings },
+      { label: 'navEmail', to: '/email', icon: Mail },
+    ],
   },
 ]
 

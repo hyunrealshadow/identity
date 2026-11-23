@@ -74,23 +74,21 @@ impl EmailTemplateRenderer for TeraEmailTemplateRenderer {
             // A header holds one line.
             subject: subject.split_whitespace().collect::<Vec<_>>().join(" "),
             html: render_part(&engine, &content.html, &context, EmailTemplatePart::Html)?,
-            text: render_part(&engine, &content.text, &context, EmailTemplatePart::Text)?,
         })
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use identity_application::email::{EmailTemplateKind, default_template};
+    use identity_application::email::{EmailTemplateKind, built_in_template};
     use serde_json::json;
 
     use super::*;
 
-    fn content(subject: &str, html: &str, text: &str) -> EmailTemplateContent {
+    fn content(subject: &str, html: &str) -> EmailTemplateContent {
         EmailTemplateContent {
             subject: subject.to_owned(),
             html: html.to_owned(),
-            text: text.to_owned(),
         }
     }
 
@@ -98,34 +96,33 @@ mod tests {
     fn escapes_values_only_in_the_html_body() {
         let rendered = TeraEmailTemplateRenderer
             .render(
-                &content("Hi {{ name }}\n again", "<p>{{ name }}</p>", "{{ name }}"),
+                &content("Hi {{ name }}\n again", "<p>{{ name }}</p>"),
                 &json!({ "name": "<b>Ann & Bo</b>" }),
             )
             .unwrap();
 
         assert_eq!(rendered.subject, "Hi <b>Ann & Bo</b> again");
         assert_eq!(rendered.html, "<p>&lt;b&gt;Ann &amp; Bo&lt;/b&gt;</p>");
-        assert_eq!(rendered.text, "<b>Ann & Bo</b>");
     }
 
     #[test]
     fn reports_the_part_that_fails() {
         let error = TeraEmailTemplateRenderer
-            .render(&content("ok", "<p>{% if %}</p>", "ok"), &json!({}))
+            .render(&content("ok", "<p>{% if %}</p>"), &json!({}))
             .unwrap_err();
         assert_eq!(error.part, EmailTemplatePart::Html);
         assert!(!error.detail.is_empty());
 
         let missing = TeraEmailTemplateRenderer
-            .render(&content("ok", "ok", "{{ missing.value }}"), &json!({}))
+            .render(&content("{{ missing.value }}", "ok"), &json!({}))
             .unwrap_err();
-        assert_eq!(missing.part, EmailTemplatePart::Text);
+        assert_eq!(missing.part, EmailTemplatePart::Subject);
     }
 
     #[test]
     fn templates_cannot_include_other_templates() {
         let error = TeraEmailTemplateRenderer
-            .render(&content("ok", "{% include \"config\" %}", "ok"), &json!({}))
+            .render(&content("ok", "{% include \"config\" %}"), &json!({}))
             .unwrap_err();
         assert_eq!(error.part, EmailTemplatePart::Html);
     }
@@ -133,26 +130,30 @@ mod tests {
     #[test]
     fn built_in_templates_render_with_their_sample_values() {
         let kind = EmailTemplateKind::SignInCode;
-        for locale in ["en-US", "zh-CN"] {
+        let template = built_in_template(kind);
+        let languages = std::iter::once((&template.default, "en")).chain(
+            template
+                .translations
+                .iter()
+                .map(|(tag, content)| (content, tag.as_str())),
+        );
+        for (content, locale) in languages {
             let rendered = TeraEmailTemplateRenderer
-                .render(
-                    &default_template(kind, locale),
-                    &kind.sample_context(locale),
-                )
+                .render(content, &kind.sample_context(locale))
                 .unwrap();
             assert!(rendered.subject.contains("246810"));
             assert!(rendered.html.contains("246810"));
             assert!(
                 rendered
-                    .text
+                    .html
                     .contains("https://login.example.com/login/email")
             );
             assert!(!rendered.subject.contains('\n'));
         }
-        let mut without_application = kind.sample_context("en-US");
+        let mut without_application = kind.sample_context("en");
         without_application["application"] = Value::Null;
         let rendered = TeraEmailTemplateRenderer
-            .render(&default_template(kind, "en-US"), &without_application)
+            .render(&template.default, &without_application)
             .unwrap();
         assert_eq!(rendered.subject, "246810 is your sign-in code");
     }

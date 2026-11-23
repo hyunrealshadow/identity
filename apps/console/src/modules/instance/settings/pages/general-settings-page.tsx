@@ -6,7 +6,7 @@ import {
 } from '#/components/settings-section'
 import { formatDateTime } from '#/lib/format'
 import { useLocale, useTranslator } from '#/lib/i18n'
-import { useInstanceSettings, useSettingsBlocker } from '../components/settings-shell'
+import { useInstanceSettings, useSettingsBlocker } from '../components/instance-settings-context'
 
 function AddressValue({ value, label }: { value: string | null | undefined; label: string }) {
   if (!value) return null

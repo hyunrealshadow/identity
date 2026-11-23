@@ -14,5 +14,6 @@ E29011 = The test email could not be sent: { $detail }
 E29012 = This field is required.
 E29013 = Enter a valid email address.
 E29014 = Enter an absolute HTTPS URL.
-E29015 = Templates are not available in { $locale }.
+E29015 = { $locale } is not a valid language tag.
+E29017 = { $locale } already has a translation.
 E29016 = The template must be at most { $max } characters.

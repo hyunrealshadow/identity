@@ -62,6 +62,19 @@ struct TokenErrorResponse {
     error_description: Option<String>,
 }
 
+/// Line width of the plain-text alternative.
+const PLAIN_TEXT_WIDTH: usize = 78;
+
+/// The plain-text alternative of an HTML body, for clients that do not show
+/// HTML. Links are kept as numbered references below the text.
+fn plain_text(html: &str) -> String {
+    html2text::config::plain_no_decorate()
+        .link_footnotes(true)
+        .no_link_wrapping()
+        .string_from_read(html.as_bytes(), PLAIN_TEXT_WIDTH)
+        .unwrap_or_default()
+}
+
 fn truncate(text: &str) -> String {
     let text = text.trim();
     let mut out: String = text.chars().take(MAX_DETAIL_LENGTH).collect();
@@ -253,7 +266,7 @@ impl EmailSender for SmtpEmailSender {
                 .to(mailbox(message.to_name.as_deref(), &message.to_address)?)
                 .subject(message.subject)
                 .multipart(MultiPart::alternative_plain_html(
-                    message.text,
+                    plain_text(&message.html),
                     message.html,
                 ))
                 .map_err(|error| EmailDeliveryError::Transport {
@@ -287,5 +300,24 @@ impl EmailSender for SmtpEmailSender {
         }
         .instrument(span)
         .await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_plain_text_alternative_keeps_text_and_links() {
+        let link = "https://login.example.com/login/email?login_id=a&token=b";
+        let text = plain_text(&format!(
+            "<!doctype html><html><head><style>p {{ color: red }}</style></head>\
+             <body><p>Your code is <strong>246810</strong></p>\
+             <p><a href=\"{}\">Sign in</a></p></body></html>",
+            link.replace('&', "&amp;")
+        ));
+        assert!(text.contains("Your code is 246810"), "{text}");
+        assert!(text.contains(link), "{text}");
+        assert!(!text.contains("color"));
     }
 }

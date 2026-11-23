@@ -27,6 +27,7 @@ pub enum InstanceErrorCode {
     InvalidEmailTokenEndpoint = 29014,
     UnsupportedEmailLocale = 29015,
     EmailTemplateTooLong = 29016,
+    DuplicateEmailLocale = 29017,
 }
 
 impl InstanceErrorCode {
@@ -40,7 +41,8 @@ impl InstanceErrorCode {
             | Self::InvalidEmailAddress
             | Self::InvalidEmailTokenEndpoint
             | Self::UnsupportedEmailLocale
-            | Self::EmailTemplateTooLong => ErrorKind::Validation,
+            | Self::EmailTemplateTooLong
+            | Self::DuplicateEmailLocale => ErrorKind::Validation,
             Self::VersionConflict
             | Self::KeyNotCurrent
             | Self::LastActiveKey

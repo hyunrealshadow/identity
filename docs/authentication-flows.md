@@ -140,8 +140,9 @@ delivery is off.
 - The code is stored only data-protected and the link only as a SHA-256
   digest, in the interaction's authentication challenge, which the successful
   verification consumes.
-- The message uses the account's locale, then the request's `ui_locales`, then
-  the Login page language, and the email template of that locale.
+- The message uses the template translation that matches the account's locale,
+  then the request's `ui_locales`, then the Login page language (exact tag
+  first, then the same language), and otherwise the template's default content.
 
 ## Credential stages
 

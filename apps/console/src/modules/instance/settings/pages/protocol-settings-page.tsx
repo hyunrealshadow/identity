@@ -14,7 +14,11 @@ import { toast } from '#/lib/toast'
 import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
 import { rbacFieldErrors, type RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
 import { SettingsFieldError, SettingsFormFooter } from '../components/settings-form-footer'
-import { useInstanceSettings, useSettingsBlocker } from '../components/settings-shell'
+import {
+  useInstanceSettings,
+  useSettingsBlocker,
+  useSettingsDraft,
+} from '../components/instance-settings-context'
 import { useSettingMutations } from '../hooks/setting-mutations'
 import { mutationFeedback, networkFeedback } from '../lib/feedback'
 import {
@@ -50,7 +54,11 @@ function ProtocolSettingsForm({ settings }: { settings: ProtocolSettings }) {
   const { scope, query } = useInstanceSettings()
   const mutations = useSettingMutations()
   const errorPrefix = useId()
-  const [draft, setDraft] = useState<ProtocolDraft>(() => protocolDraft(settings))
+  const [draft, setDraft, resetDraft] = useSettingsDraft<ProtocolDraft>(
+    'protocol',
+    settings.version,
+    () => protocolDraft(settings),
+  )
   const [errors, setErrors] = useState<Partial<Record<ProtocolNumberField, FieldError>>>({})
   const [serverErrors, setServerErrors] = useState<Record<string, string>>({})
   const [feedback, setFeedback] = useState<RbacFeedbackState | null>(null)
@@ -222,7 +230,7 @@ function ProtocolSettingsForm({ settings }: { settings: ProtocolSettings }) {
             dirty={dirty}
             pending={pending}
             onDiscard={() => {
-              setDraft(protocolDraft(settings))
+              resetDraft()
               setErrors({})
               setServerErrors({})
               setFeedback(null)

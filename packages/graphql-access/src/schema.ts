@@ -1900,14 +1900,24 @@ export const schemaMetadata: SchemaMetadata = {
       "interfaces": [],
       "possibleTypes": [],
       "fields": {
+        "builtIn": {
+          "name": "builtIn",
+          "returnType": "LocalizedEmailTemplate",
+          "policies": []
+        },
+        "content": {
+          "name": "content",
+          "returnType": "LocalizedEmailTemplate",
+          "policies": []
+        },
+        "customized": {
+          "name": "customized",
+          "returnType": "Boolean",
+          "policies": []
+        },
         "kind": {
           "name": "kind",
           "returnType": "EmailTemplateKind",
-          "policies": []
-        },
-        "locales": {
-          "name": "locales",
-          "returnType": "EmailTemplateLocale",
           "policies": []
         },
         "variables": {
@@ -1922,48 +1932,18 @@ export const schemaMetadata: SchemaMetadata = {
         }
       }
     },
-    "EmailTemplateLocale": {
+    "EmailTemplateContent": {
       "kind": "OBJECT",
       "interfaces": [],
       "possibleTypes": [],
       "fields": {
-        "customized": {
-          "name": "customized",
-          "returnType": "Boolean",
-          "policies": []
-        },
-        "defaultHtml": {
-          "name": "defaultHtml",
-          "returnType": "String",
-          "policies": []
-        },
-        "defaultSubject": {
-          "name": "defaultSubject",
-          "returnType": "String",
-          "policies": []
-        },
-        "defaultText": {
-          "name": "defaultText",
-          "returnType": "String",
-          "policies": []
-        },
         "html": {
           "name": "html",
           "returnType": "String",
           "policies": []
         },
-        "locale": {
-          "name": "locale",
-          "returnType": "String",
-          "policies": []
-        },
         "subject": {
           "name": "subject",
-          "returnType": "String",
-          "policies": []
-        },
-        "text": {
-          "name": "text",
           "returnType": "String",
           "policies": []
         }
@@ -1983,9 +1963,21 @@ export const schemaMetadata: SchemaMetadata = {
           "name": "subject",
           "returnType": "String",
           "policies": []
+        }
+      }
+    },
+    "EmailTemplateTranslation": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "content": {
+          "name": "content",
+          "returnType": "EmailTemplateContent",
+          "policies": []
         },
-        "text": {
-          "name": "text",
+        "locale": {
+          "name": "locale",
           "returnType": "String",
           "policies": []
         }
@@ -2903,6 +2895,23 @@ export const schemaMetadata: SchemaMetadata = {
               "runtime": true
             }
           ]
+        }
+      }
+    },
+    "LocalizedEmailTemplate": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "default": {
+          "name": "default",
+          "returnType": "EmailTemplateContent",
+          "policies": []
+        },
+        "translations": {
+          "name": "translations",
+          "returnType": "EmailTemplateTranslation",
+          "policies": []
         }
       }
     },

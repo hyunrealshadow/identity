@@ -3,7 +3,10 @@
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    email::template::{EMAIL_LOCALES, EmailTemplates, MAX_BODY_LENGTH, MAX_SUBJECT_LENGTH},
+    email::template::{
+        EmailTemplateContent, EmailTemplates, MAX_BODY_LENGTH, MAX_SUBJECT_LENGTH,
+        MAX_TEMPLATE_TRANSLATIONS,
+    },
     setting::{SettingDefinition, SettingSection, SettingValidationError},
 };
 
@@ -155,18 +158,26 @@ impl SettingDefinition for EmailTemplatesSetting {
     }
 
     fn validate(value: &Self::Value) -> Result<(), SettingValidationError> {
-        for locales in value.values() {
-            for (locale, content) in locales {
-                if !EMAIL_LOCALES.contains(&locale.as_str()) {
-                    return Err(SettingValidationError::new(format!(
-                        "unsupported email template locale `{locale}`"
-                    )));
-                }
-                if content.subject.chars().count() > MAX_SUBJECT_LENGTH
-                    || content.html.chars().count() > MAX_BODY_LENGTH
-                    || content.text.chars().count() > MAX_BODY_LENGTH
+        let too_long = |content: &EmailTemplateContent| {
+            content.subject.chars().count() > MAX_SUBJECT_LENGTH
+                || content.html.chars().count() > MAX_BODY_LENGTH
+        };
+        for template in value.values() {
+            if template.translations.len() > MAX_TEMPLATE_TRANSLATIONS {
+                return Err(SettingValidationError::new(
+                    "too many template translations",
+                ));
+            }
+            if too_long(&template.default) || template.translations.values().any(too_long) {
+                return Err(SettingValidationError::new("email template is too long"));
+            }
+            for locale in template.translations.keys() {
+                if identity_domain::rbac::metadata::canonicalize_locale(locale).as_deref()
+                    != Ok(locale.as_str())
                 {
-                    return Err(SettingValidationError::new("email template is too long"));
+                    return Err(SettingValidationError::new(format!(
+                        "invalid email template locale `{locale}`"
+                    )));
                 }
             }
         }

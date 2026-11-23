@@ -563,7 +563,7 @@ async fn graphql_http_denies_email_settings_without_management_authority() {
         (
             "emailTemplatePreview",
             r#"query { emailTemplatePreview(input: { kind: SIGN_IN_CODE, locale: "en-US",
-                content: { subject: "{{ code }}", html: "<p>{{ code }}</p>", text: "{{ code }}" } })
+                content: { subject: "{{ code }}", html: "<p>{{ code }}</p>" } })
                 { subject } }"#
                 .to_owned(),
         ),
@@ -580,7 +580,7 @@ async fn graphql_http_denies_email_settings_without_management_authority() {
         (
             "updateEmailTemplate",
             format!(
-                r#"mutation {{ updateEmailTemplate(input: {{ kind: SIGN_IN_CODE, locales: [],
+                r#"mutation {{ updateEmailTemplate(input: {{ kind: SIGN_IN_CODE, content: null,
                     expectedVersion: "{version}" }}) {{ clientMutationId }} }}"#
             ),
         ),

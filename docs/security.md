@@ -43,7 +43,7 @@ account-or-password error; see
 ### Email delivery
 
 Email is sent through the SMTP server in the `email.delivery` settings
-(Console: *Settings › Email*), with STARTTLS, implicit TLS, or no transport
+(Console: *Instance › Email*), with STARTTLS, implicit TLS, or no transport
 security, and either a username and password or OAuth 2.0 `XOAUTH2`. For
 XOAUTH2 the instance obtains access tokens from the configured token endpoint
 with a refresh token or client credentials and caches them until shortly before
@@ -52,13 +52,15 @@ stored data-protected, are never returned by the API, and appear in the audit
 log only as a fingerprint; leaving one empty when saving keeps the stored
 value. An operator can send a test message with the saved settings.
 
-Email templates are localized per message kind and locale (`email.templates`).
-Each locale uses its built-in template until an operator replaces it. Templates
+Each message kind has one email template (`email.templates`): default content
+and optional translations keyed by language tag, each a subject and an HTML
+body. A kind uses its built-in template until an operator replaces it. Templates
 use Tera syntax; each is rendered with a fresh engine that holds only that
 template and no custom functions, values are escaped in the HTML body, and a
-template is rendered with sample values before it is saved. The Console shows
-the rendered draft in a sandboxed frame that cannot run scripts. Audit records
-keep each locale's subject and a digest of its bodies.
+template is rendered with sample values before it is saved. The plain-text
+alternative of a message is derived from its rendered HTML when it is sent.
+The Console shows the rendered draft in a sandboxed frame that cannot run
+scripts. Audit records keep each language's subject and a digest of its body.
 
 ## Multi-factor authentication
 

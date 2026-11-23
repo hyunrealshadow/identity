@@ -42,7 +42,7 @@ import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-
 import type { RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
 import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
 import { UserSelectField } from '#/modules/user-management/users/components/user-form-fields'
-import { useInstanceSettings } from '../../settings/components/settings-shell'
+import { useInstanceSettings } from '../../settings/components/instance-settings-context'
 import { mutationFeedback, networkFeedback } from '../../settings/lib/feedback'
 import { KeyStatusChip } from '../components/key-status'
 import { useKeyMutations } from '../hooks/key-mutations'
