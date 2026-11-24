@@ -102,12 +102,15 @@ impl From<Xoauth2Grant> for AppXoauth2Grant {
 pub(crate) enum EmailTemplateKind {
     /// The one-time code and sign-in link of email sign-in.
     SignInCode,
+    /// The link that verifies an account's email address.
+    EmailVerification,
 }
 
 impl From<AppEmailTemplateKind> for EmailTemplateKind {
     fn from(value: AppEmailTemplateKind) -> Self {
         match value {
             AppEmailTemplateKind::SignInCode => Self::SignInCode,
+            AppEmailTemplateKind::EmailVerification => Self::EmailVerification,
         }
     }
 }
@@ -116,6 +119,7 @@ impl From<EmailTemplateKind> for AppEmailTemplateKind {
     fn from(value: EmailTemplateKind) -> Self {
         match value {
             EmailTemplateKind::SignInCode => Self::SignInCode,
+            EmailTemplateKind::EmailVerification => Self::EmailVerification,
         }
     }
 }

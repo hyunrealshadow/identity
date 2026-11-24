@@ -7,10 +7,12 @@ use super::{
         AccountGroupConnection, AccountPermissionConnection, AccountRoleConnection,
         load_account_groups, load_account_permissions, load_account_roles,
     },
+    email_verification::AccountEmailVerification,
     types::UserNode,
 };
 use crate::graphql::schema::{
     authorization::{ScopeGuard, UserPrincipalGuard, request_context},
+    error::app_error,
     modules::{
         group::types::GroupOrder,
         resource::support::page_args,
@@ -29,6 +31,28 @@ impl AccountQuery {
     )]
     async fn account(&self, ctx: &Context<'_>) -> Result<Option<UserNode>> {
         Ok(Some(UserNode::from(request_context(ctx)?.user()?.clone())))
+    }
+
+    /// Whether the current user can verify an email address, and the
+    /// verification link in progress (`user.read` only).
+    #[graphql(
+        guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::UserRead))",
+        directive = access::apply(ScopeGuard::policy(ApiScope::UserRead))
+    )]
+    async fn account_email_verification(
+        &self,
+        ctx: &Context<'_>,
+    ) -> Result<AccountEmailVerification> {
+        let request = request_context(ctx)?;
+        let account = request.state.services().account();
+        let pending = account
+            .pending_email_verification(request.user_oid()?)
+            .await
+            .map_err(|error| app_error(ctx, error))?;
+        Ok(AccountEmailVerification::new(
+            account.email_verification_available(),
+            pending,
+        ))
     }
 
     /// Active groups the current user belongs to (`user.read` only).

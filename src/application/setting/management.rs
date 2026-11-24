@@ -93,6 +93,9 @@ impl InstanceSettingSection {
             Self::Authentication => "authentication",
             Self::Email => "email",
             Self::EmailTemplate(EmailTemplateKind::SignInCode) => "email_template.sign_in_code",
+            Self::EmailTemplate(EmailTemplateKind::EmailVerification) => {
+                "email_template.email_verification"
+            }
         }
     }
 

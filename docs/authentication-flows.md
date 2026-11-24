@@ -39,6 +39,7 @@ session rules are summarized in [security.md](security.md).
 | Return to the protocol | `GET /oauth2/continue` | Protocol layer |
 | Code or device redemption | `POST /oauth2/token` | Protocol layer |
 | Device verification entry | `GET /device`, `POST /oauth2/device` | Login and protocol layer |
+| Email verification link | `GET`/`POST /verify-email`, `POST /internal/email-verification` | Login and account service |
 | RP-initiated logout | `GET`/`POST /openid/logout` | Protocol layer |
 | Back-channel and front-channel logout | client `backchannel_logout_uri` / `frontchannel_logout_uri` | Protocol layer |
 
@@ -143,6 +144,41 @@ delivery is off.
 - The message uses the template translation that matches the account's locale,
   then the request's `ui_locales`, then the Login page language (exact tag
   first, then the same language), and otherwise the template's default content.
+
+### Email address verification
+
+An account's email address is verified by following a single-use link emailed
+to it. Only a verified address can be used for [email sign-in](#email-sign-in).
+
+- From the account center the user can send a link to their current,
+  unverified address, resend it, or withdraw a pending change.
+- Changing the address there (which needs recent authentication) sends the link
+  to the **new** address; the current address, and whether it is verified, stay
+  in place until the link is followed. Entering the current address again
+  withdraws a pending change. While email delivery is off, the address is
+  replaced at once and is unverified.
+- The link points at `{login_domain}/verify-email?token=…` and needs no
+  session, so it works on another device. Opening it only shows a
+  confirmation; the address is verified when the user continues, so a mail
+  scanner that fetches the link cannot use it. The Login server passes the
+  token to Identity's private workload listener.
+- A link is valid for 24 hours and is consumed by its use. Only a SHA-256
+  digest of its token is stored. An account has at most one outstanding link:
+  a new request replaces the previous one, and any later change of the account's
+  address, by the user or an administrator, voids it. When the link is
+  followed, another account that has taken the address in the meantime makes it
+  fail.
+- Sends are at least 60 seconds apart and at most five per account in 24
+  hours, whichever address they go to.
+- Verifying replaces the address when needed, marks it verified, renews the
+  account `version`, and writes an `ACCOUNT_EMAIL_VERIFY` audit record in the
+  same transaction. A failed audit write leaves the address and the link
+  unchanged. Profile-like changes such as this do not revoke sessions or
+  grants.
+- The message uses the `email_verification` template, localized like the
+  sign-in email from the account's locale and then the request language.
+- An administrator can mark an address verified or unverified when editing the
+  user in the Console; a changed address otherwise starts out unverified.
 
 ## Credential stages
 

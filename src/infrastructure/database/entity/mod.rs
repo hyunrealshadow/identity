@@ -18,6 +18,7 @@ pub mod client_openid_connect_cors_origin;
 pub mod client_openid_connect_credential;
 pub mod client_openid_connect_platform;
 pub mod client_scope;
+pub mod email_verification;
 pub mod key;
 pub mod key_jwk;
 pub mod login;

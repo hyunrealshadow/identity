@@ -20,6 +20,7 @@ use identity_domain::{
 };
 use uuid::Uuid;
 
+use super::email_verification::EmailVerificationDependencies;
 use crate::{
     error::{
         AppError,
@@ -29,8 +30,9 @@ use crate::{
 };
 
 pub struct AccountService {
-    user_repo: Arc<dyn UserRepository>,
-    events: Arc<dyn EventSink>,
+    pub(super) user_repo: Arc<dyn UserRepository>,
+    pub(super) events: Arc<dyn EventSink>,
+    pub(super) email_verification: Option<EmailVerificationDependencies>,
 }
 
 impl AccountService {
@@ -39,7 +41,15 @@ impl AccountService {
         Self {
             user_repo,
             events: Arc::new(NoopEventSink),
+            email_verification: None,
         }
+    }
+
+    /// Attach what email verification needs to send and confirm links.
+    #[must_use]
+    pub fn with_email_verification(mut self, dependencies: EmailVerificationDependencies) -> Self {
+        self.email_verification = Some(dependencies);
+        self
     }
 
     /// Attach the key event and audit sink.
@@ -67,19 +77,6 @@ impl AccountService {
     }
 
     #[tracing::instrument(skip_all, name = "account.update")]
-    pub async fn update_email(&self, user_oid: UserOid, email: &str) -> Result<User, AppError> {
-        let update = validate_email(email)?;
-        let user = self
-            .user_repo
-            .update_identifier(user_oid, update)
-            .await
-            .map_err(map_identifier_error)?
-            .ok_or_else(|| AppError::from_code(CommonErrorCode::NotFound))?;
-        self.record_account_change("email", user_oid, "success");
-        Ok(user)
-    }
-
-    #[tracing::instrument(skip_all, name = "account.update")]
     pub async fn update_profile(
         &self,
         user_oid: UserOid,
@@ -99,7 +96,7 @@ impl AccountService {
     /// Record an account mutation in the audit stream. Only the actor, the
     /// change category and the outcome are recorded; before/after values are
     /// never emitted.
-    fn record_account_change(
+    pub(super) fn record_account_change(
         &self,
         category: &'static str,
         user_oid: UserOid,
@@ -149,7 +146,7 @@ fn validate_username(username: &str) -> Result<UserIdentifierUpdate, AppError> {
     }
 }
 
-fn validate_email(email: &str) -> Result<UserIdentifierUpdate, AppError> {
+pub(super) fn validate_email(email: &str) -> Result<UserIdentifierUpdate, AppError> {
     match normalize_email(email) {
         Ok(normalized) => Ok(UserIdentifierUpdate::Email {
             value: email.trim().to_owned(),
@@ -193,7 +190,7 @@ fn invalid_time_zone() -> AppError {
     )
 }
 
-fn map_identifier_error(error: UserRepositoryError) -> AppError {
+pub(super) fn map_identifier_error(error: UserRepositoryError) -> AppError {
     match error {
         UserRepositoryError::UsernameExists => {
             AppError::from_code(AccountErrorCode::UsernameExists).with_field("username")

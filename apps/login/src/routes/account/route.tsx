@@ -41,6 +41,10 @@ export interface AccountData {
   sessions: { edges: Array<{ node: AccountSession }> }
   security: { mfaEnabled: boolean; totpEnabled: boolean; recoveryCodesRemaining: number; preferredMfaMethod: 'passkey' | 'otp' }
   effectivePermissions: { requestableScopes: string[]; effectiveScopes: string[] }
+  accountEmailVerification: {
+    available: boolean
+    pending: { email: string; changesEmail: boolean; sentAt: string; expiresAt: string; resendAvailableAt: string } | null
+  }
 }
 
 const ACCOUNT_QUERY = `query AccountHome {
@@ -49,6 +53,7 @@ const ACCOUNT_QUERY = `query AccountHome {
   security { mfaEnabled totpEnabled recoveryCodesRemaining preferredMfaMethod }
   passkeys { id name }
   effectivePermissions { requestableScopes effectiveScopes }
+  accountEmailVerification { available pending { email changesEmail sentAt expiresAt resendAvailableAt } }
 }`
 
 const loadAccountData = createServerFn({ method: 'GET' }).handler(async () => {
@@ -204,7 +209,7 @@ function AccountLayout() {
           <section className="min-w-0">
             <AccountReauthProvider locale={current.locale} access={current.access}>
             <div className="mb-5 space-y-3">
-              {visibleMessage ? <Alert className="text-success"><CircleCheck aria-hidden="true" /><AlertTitle>{visibleMessage === 'reauthenticated' ? t('accountReauthenticated') : t('accountSaved')}</AlertTitle><AlertAction><Button variant="ghost" size="icon-xs" aria-label={t('close')} onClick={() => setVisibleMessage(undefined)}><X aria-hidden="true" /></Button></AlertAction></Alert> : null}
+              {visibleMessage ? <Alert className="text-success"><CircleCheck aria-hidden="true" /><AlertTitle>{visibleMessage === 'reauthenticated' ? t('accountReauthenticated') : visibleMessage === 'verificationSent' ? t('accountVerificationEmailSent') : t('accountSaved')}</AlertTitle><AlertAction><Button variant="ghost" size="icon-xs" aria-label={t('close')} onClick={() => setVisibleMessage(undefined)}><X aria-hidden="true" /></Button></AlertAction></Alert> : null}
               {visibleError ? <Alert variant="destructive"><CircleAlert aria-hidden="true" /><AlertTitle>{t('accountRequestFailed')}</AlertTitle><AlertDescription>{visibleError}</AlertDescription><AlertAction><Button variant="ghost" size="icon-xs" aria-label={t('close')} onClick={() => setVisibleError(undefined)}><X aria-hidden="true" /></Button></AlertAction></Alert> : null}
             </div>
             <Outlet />

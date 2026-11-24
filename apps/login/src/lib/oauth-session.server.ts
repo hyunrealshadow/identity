@@ -51,7 +51,7 @@ export interface MfaUiSession {
 }
 
 export interface AccountFlashSession {
-  message?: 'saved' | 'reauthenticated'
+  message?: 'saved' | 'reauthenticated' | 'verificationSent'
   error?: string
   fields?: Record<string, string>
 }

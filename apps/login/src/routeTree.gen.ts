@@ -19,6 +19,7 @@ import { Route as DeviceRouteImport } from './routes/device'
 import { Route as InstallRouteImport } from './routes/install'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LogoutRouteImport } from './routes/logout'
+import { Route as VerifyEmailRouteImport } from './routes/verify-email'
 import { Route as AccountIndexRouteImport } from './routes/account/index'
 import { Route as AccountIdentifiersRouteImport } from './routes/account/identifiers'
 import { Route as AccountProfileRouteImport } from './routes/account/profile'
@@ -31,6 +32,7 @@ import { Route as HealthReadyRouteImport } from './routes/health.ready'
 import { Route as LoginMethodRouteImport } from './routes/login.$method'
 import { Route as LoginMfaSetupRouteImport } from './routes/login.mfa-setup'
 import { Route as LoginPasskeySetupRouteImport } from './routes/login.passkey-setup'
+import { Route as VerifyEmailOutcomeRouteImport } from './routes/verify-email_.$outcome'
 import { Route as AccountMfaSetupRouteImport } from './routes/account/mfa/setup'
 
 const IndexRoute = IndexRouteImport.update({
@@ -81,6 +83,11 @@ const LoginRoute = LoginRouteImport.update({
 const LogoutRoute = LogoutRouteImport.update({
   id: '/logout',
   path: '/logout',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const VerifyEmailRoute = VerifyEmailRouteImport.update({
+  id: '/verify-email',
+  path: '/verify-email',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AccountIndexRoute = AccountIndexRouteImport.update({
@@ -143,6 +150,11 @@ const LoginPasskeySetupRoute = LoginPasskeySetupRouteImport.update({
   path: '/passkey-setup',
   getParentRoute: () => LoginRoute,
 } as any)
+const VerifyEmailOutcomeRoute = VerifyEmailOutcomeRouteImport.update({
+  id: '/verify-email_/$outcome',
+  path: '/verify-email/$outcome',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AccountMfaSetupRoute = AccountMfaSetupRouteImport.update({
   id: '/mfa/setup',
   path: '/mfa/setup',
@@ -160,6 +172,7 @@ export interface FileRoutesByFullPath {
   '/install': typeof InstallRoute
   '/login': typeof LoginRouteWithChildren
   '/logout': typeof LogoutRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/account/identifiers': typeof AccountIdentifiersRoute
   '/account/profile': typeof AccountProfileRoute
   '/account/security': typeof AccountSecurityRoute
@@ -171,6 +184,7 @@ export interface FileRoutesByFullPath {
   '/login/$method': typeof LoginMethodRoute
   '/login/mfa-setup': typeof LoginMfaSetupRoute
   '/login/passkey-setup': typeof LoginPasskeySetupRoute
+  '/verify-email/$outcome': typeof VerifyEmailOutcomeRoute
   '/account/': typeof AccountIndexRoute
   '/account/mfa/setup': typeof AccountMfaSetupRoute
 }
@@ -184,6 +198,7 @@ export interface FileRoutesByTo {
   '/install': typeof InstallRoute
   '/login': typeof LoginRouteWithChildren
   '/logout': typeof LogoutRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/account/identifiers': typeof AccountIdentifiersRoute
   '/account/profile': typeof AccountProfileRoute
   '/account/security': typeof AccountSecurityRoute
@@ -195,6 +210,7 @@ export interface FileRoutesByTo {
   '/login/$method': typeof LoginMethodRoute
   '/login/mfa-setup': typeof LoginMfaSetupRoute
   '/login/passkey-setup': typeof LoginPasskeySetupRoute
+  '/verify-email/$outcome': typeof VerifyEmailOutcomeRoute
   '/account': typeof AccountIndexRoute
   '/account/mfa/setup': typeof AccountMfaSetupRoute
 }
@@ -210,6 +226,7 @@ export interface FileRoutesById {
   '/install': typeof InstallRoute
   '/login': typeof LoginRouteWithChildren
   '/logout': typeof LogoutRoute
+  '/verify-email': typeof VerifyEmailRoute
   '/account/identifiers': typeof AccountIdentifiersRoute
   '/account/profile': typeof AccountProfileRoute
   '/account/security': typeof AccountSecurityRoute
@@ -221,6 +238,7 @@ export interface FileRoutesById {
   '/login/$method': typeof LoginMethodRoute
   '/login/mfa-setup': typeof LoginMfaSetupRoute
   '/login/passkey-setup': typeof LoginPasskeySetupRoute
+  '/verify-email_/$outcome': typeof VerifyEmailOutcomeRoute
   '/account/': typeof AccountIndexRoute
   '/account/mfa/setup': typeof AccountMfaSetupRoute
 }
@@ -237,6 +255,7 @@ export interface FileRouteTypes {
     | '/install'
     | '/login'
     | '/logout'
+    | '/verify-email'
     | '/account/identifiers'
     | '/account/profile'
     | '/account/security'
@@ -248,6 +267,7 @@ export interface FileRouteTypes {
     | '/login/$method'
     | '/login/mfa-setup'
     | '/login/passkey-setup'
+    | '/verify-email/$outcome'
     | '/account/'
     | '/account/mfa/setup'
   fileRoutesByTo: FileRoutesByTo
@@ -261,6 +281,7 @@ export interface FileRouteTypes {
     | '/install'
     | '/login'
     | '/logout'
+    | '/verify-email'
     | '/account/identifiers'
     | '/account/profile'
     | '/account/security'
@@ -272,6 +293,7 @@ export interface FileRouteTypes {
     | '/login/$method'
     | '/login/mfa-setup'
     | '/login/passkey-setup'
+    | '/verify-email/$outcome'
     | '/account'
     | '/account/mfa/setup'
   id:
@@ -286,6 +308,7 @@ export interface FileRouteTypes {
     | '/install'
     | '/login'
     | '/logout'
+    | '/verify-email'
     | '/account/identifiers'
     | '/account/profile'
     | '/account/security'
@@ -297,6 +320,7 @@ export interface FileRouteTypes {
     | '/login/$method'
     | '/login/mfa-setup'
     | '/login/passkey-setup'
+    | '/verify-email_/$outcome'
     | '/account/'
     | '/account/mfa/setup'
   fileRoutesById: FileRoutesById
@@ -312,10 +336,12 @@ export interface RootRouteChildren {
   InstallRoute: typeof InstallRoute
   LoginRoute: typeof LoginRouteWithChildren
   LogoutRoute: typeof LogoutRoute
+  VerifyEmailRoute: typeof VerifyEmailRoute
   DeviceOutcomeRoute: typeof DeviceOutcomeRoute
   HealthLiveRoute: typeof HealthLiveRoute
   HealthMetricsRoute: typeof HealthMetricsRoute
   HealthReadyRoute: typeof HealthReadyRoute
+  VerifyEmailOutcomeRoute: typeof VerifyEmailOutcomeRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -388,6 +414,13 @@ declare module '@tanstack/react-router' {
       path: '/logout'
       fullPath: '/logout'
       preLoaderRoute: typeof LogoutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/verify-email': {
+      id: '/verify-email'
+      path: '/verify-email'
+      fullPath: '/verify-email'
+      preLoaderRoute: typeof VerifyEmailRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/account/': {
@@ -474,6 +507,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginPasskeySetupRouteImport
       parentRoute: typeof LoginRoute
     }
+    '/verify-email_/$outcome': {
+      id: '/verify-email_/$outcome'
+      path: '/verify-email/$outcome'
+      fullPath: '/verify-email/$outcome'
+      preLoaderRoute: typeof VerifyEmailOutcomeRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/account/mfa/setup': {
       id: '/account/mfa/setup'
       path: '/mfa/setup'
@@ -531,10 +571,12 @@ const rootRouteChildren: RootRouteChildren = {
   InstallRoute: InstallRoute,
   LoginRoute: LoginRouteWithChildren,
   LogoutRoute: LogoutRoute,
+  VerifyEmailRoute: VerifyEmailRoute,
   DeviceOutcomeRoute: DeviceOutcomeRoute,
   HealthLiveRoute: HealthLiveRoute,
   HealthMetricsRoute: HealthMetricsRoute,
   HealthReadyRoute: HealthReadyRoute,
+  VerifyEmailOutcomeRoute: VerifyEmailOutcomeRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

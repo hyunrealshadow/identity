@@ -392,6 +392,56 @@
     "module": "account"
   },
   {
+    "code": 15007,
+    "kind": "forbidden",
+    "fluentKey": "E15007",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "account"
+  },
+  {
+    "code": 15008,
+    "kind": "rate_limit",
+    "fluentKey": "E15008",
+    "requiredParams": [
+      "seconds"
+    ],
+    "optionalParams": [],
+    "module": "account"
+  },
+  {
+    "code": 15009,
+    "kind": "rate_limit",
+    "fluentKey": "E15009",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "account"
+  },
+  {
+    "code": 15010,
+    "kind": "conflict",
+    "fluentKey": "E15010",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "account"
+  },
+  {
+    "code": 15011,
+    "kind": "gone",
+    "fluentKey": "E15011",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "account"
+  },
+  {
+    "code": 15012,
+    "kind": "internal",
+    "fluentKey": "E15012",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "account"
+  },
+  {
     "code": 23000,
     "kind": "validation",
     "fluentKey": "E23000",

@@ -33,6 +33,9 @@ pub const MAX_TEMPLATE_TRANSLATIONS: usize = MAX_LOCALIZED_ENTRIES;
 pub enum EmailTemplateKind {
     /// The one-time code and sign-in link of email sign-in.
     SignInCode,
+    /// The link that verifies an account's email address, or the new
+    /// address that replaces it.
+    EmailVerification,
 }
 
 impl EmailTemplateKind {
@@ -40,6 +43,7 @@ impl EmailTemplateKind {
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::SignInCode => "sign_in_code",
+            Self::EmailVerification => "email_verification",
         }
     }
 
@@ -54,6 +58,15 @@ impl EmailTemplateKind {
                 "user.name",
                 "user.email",
                 "application.name",
+                "locale",
+            ],
+            Self::EmailVerification => &[
+                "link",
+                "email",
+                "changes_email",
+                "expires_in_hours",
+                "user.name",
+                "user.email",
                 "locale",
             ],
         }
@@ -74,6 +87,17 @@ impl EmailTemplateKind {
                     "email": "alex@example.com",
                 },
                 "application": { "name": "Example App" },
+                "locale": locale,
+            }),
+            Self::EmailVerification => json!({
+                "link": "https://login.example.com/verify-email?token=example",
+                "email": "alex.new@example.com",
+                "changes_email": true,
+                "expires_in_hours": 24,
+                "user": {
+                    "name": if chinese { "张三" } else { "Alex Doe" },
+                    "email": "alex@example.com",
+                },
                 "locale": locale,
             }),
         }
@@ -154,6 +178,19 @@ pub fn built_in_template(kind: EmailTemplateKind) -> EmailTemplate {
                 content(
                     include_str!("templates/sign_in_code/zh-CN/subject.txt"),
                     include_str!("templates/sign_in_code/zh-CN/body.html"),
+                ),
+            )]),
+        },
+        EmailTemplateKind::EmailVerification => EmailTemplate {
+            default: content(
+                include_str!("templates/email_verification/en-US/subject.txt"),
+                include_str!("templates/email_verification/en-US/body.html"),
+            ),
+            translations: BTreeMap::from([(
+                "zh-CN".to_owned(),
+                content(
+                    include_str!("templates/email_verification/zh-CN/subject.txt"),
+                    include_str!("templates/email_verification/zh-CN/body.html"),
                 ),
             )]),
         },

@@ -4,6 +4,13 @@ import {
   AlertTitle,
 } from '@identity/ui/components/alert'
 import { Button } from '@identity/ui/components/button'
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldLabel,
+} from '@identity/ui/components/field'
+import { Switch } from '@identity/ui/components/switch'
 import { useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, Save, TriangleAlert } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -32,6 +39,7 @@ import {
   editDraftSnapshot,
   editDraftSnapshotHasContent,
   emailChangeResetsVerification,
+  expectedEmailVerified,
   restoreEditDraft,
   updateDraftChanged,
   updateInputFromDraft,
@@ -363,11 +371,29 @@ export function UserEditPage({ userId }: { userId: string }) {
   }
 
   function setAccountField(field: 'username' | 'email', value: string) {
-    changeDraft((current) => ({ ...current, [field]: value }))
+    changeDraft((current) => {
+      const next = { ...current, [field]: value }
+      // The verification state follows the address unless the administrator
+      // chooses it: a different address starts out unverified.
+      if (
+        field === 'email' &&
+        current.emailVerified === expectedEmailVerified(readyUser, current.email)
+      ) {
+        next.emailVerified = expectedEmailVerified(readyUser, value)
+      }
+      return next
+    })
     setFeedback(null)
     clearLocalError(field)
     clearLocalError('noChanges')
     clearFieldError(field)
+  }
+
+  function setEmailVerified(value: boolean) {
+    changeDraft((current) => ({ ...current, emailVerified: value }))
+    setFeedback(null)
+    clearLocalError('noChanges')
+    clearFieldError('emailVerified')
   }
 
   function setProfileField(field: UserProfileField, value: string) {
@@ -564,6 +590,22 @@ export function UserEditPage({ userId }: { userId: string }) {
                   error={emailError}
                 />
               </div>
+              <Field orientation="horizontal" className="max-w-xl">
+                <FieldContent>
+                  <FieldLabel htmlFor="user-email-verified">
+                    {t('usersFieldEmailVerified')}
+                  </FieldLabel>
+                  <FieldDescription>
+                    {t('usersFieldEmailVerifiedDescription')}
+                  </FieldDescription>
+                </FieldContent>
+                <Switch
+                  id="user-email-verified"
+                  checked={readyDraft.emailVerified}
+                  disabled={pending}
+                  onCheckedChange={setEmailVerified}
+                />
+              </Field>
             </section>
 
             <section className="space-y-4 border-t border-border pt-6">

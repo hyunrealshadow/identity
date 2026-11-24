@@ -45,6 +45,7 @@ export type AssignUserRolesInput = {
 export type AuditAction =
   | 'ACCESS_TOKEN_REVOKE'
   | 'ACCOUNT_CREDENTIAL_REPLACE'
+  | 'ACCOUNT_EMAIL_VERIFY'
   | 'ACCOUNT_IDENTIFIER_UPDATE'
   | 'ACCOUNT_LOCK'
   | 'ACCOUNT_PASSKEY_ADD'
@@ -453,6 +454,8 @@ export type EmailTemplateContentInput = {
 };
 
 export type EmailTemplateKind =
+  /** The link that verifies an account's email address. */
+  | 'EMAIL_VERIFICATION'
   /** The one-time code and sign-in link of email sign-in. */
   | 'SIGN_IN_CODE';
 
@@ -822,6 +825,11 @@ export type UpdateScopeInput = {
 export type UpdateUserInput = {
   clientMutationId?: string | null | undefined;
   email?: string | null | undefined;
+  /**
+   * Mark the email address verified or unverified. Without it, a changed
+   * address becomes unverified.
+   */
+  emailVerified?: boolean | null | undefined;
   expectedVersion: string;
   id: string | number;
   profile?: UserProfilePatchInput | null | undefined;

@@ -151,6 +151,9 @@ pub(super) struct UpdateUserInput {
     pub username: MaybeUndefined<String>,
     #[graphql(validator(chars_max_length = 320))]
     pub email: MaybeUndefined<String>,
+    /// Mark the email address verified or unverified. Without it, a changed
+    /// address becomes unverified.
+    pub email_verified: Option<bool>,
     pub profile: Option<UserProfilePatchInput>,
     pub expected_version: Uuid,
     #[graphql(default, validator(chars_max_length = 1000))]

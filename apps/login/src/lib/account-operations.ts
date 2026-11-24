@@ -8,7 +8,9 @@ export const accountOperations = {
   'update-mfa-preference': { authorization: 'default', document: `mutation UpdateMfaPreference($method: PreferredMfaMethod!) { updatePreferredMfaMethod(method: $method) }` },
   'update-profile': { authorization: 'default', document: `mutation UpdateProfile($input: UpdateProfileInput!) { updateProfile(input: $input) { user { id username givenName familyName nickname locale theme zoneInfo } } }` },
   'update-username': { authorization: 'elevated', document: `mutation UpdateUsername($input: UpdateUsernameInput!) { updateUsername(input: $input) { user { id username } } }` },
-  'update-email': { authorization: 'elevated', document: `mutation UpdateEmail($input: UpdateEmailInput!) { updateEmail(input: $input) { user { id email emailVerified } } }` },
+  'update-email': { authorization: 'elevated', document: `mutation UpdateEmail($input: UpdateEmailInput!) { updateEmail(input: $input) { user { id email emailVerified } verification { email changesEmail } } }` },
+  'send-email-verification': { authorization: 'default', document: `mutation SendEmailVerification($input: SendEmailVerificationInput!) { sendEmailVerification(input: $input) { verification { email changesEmail } } }` },
+  'cancel-email-verification': { authorization: 'default', document: `mutation CancelEmailVerification($input: CancelEmailVerificationInput!) { cancelEmailVerification(input: $input) { cancelled } }` },
   'change-password': { authorization: 'elevated', document: `mutation ChangePassword($input: ChangePasswordInput!) { changePassword(input: $input) { changed } }` },
   'begin-totp': { authorization: 'elevated', document: `mutation BeginTotpEnrollment { beginTotpEnrollment { secret otpAuthUri enrollmentToken recoveryCodes } }` },
   'use-legacy-totp': { authorization: 'elevated', document: `mutation ChangeTotpEnrollmentAlgorithm($input: ChangeTotpEnrollmentAlgorithmInput!) {

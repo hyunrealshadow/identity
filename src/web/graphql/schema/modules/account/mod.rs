@@ -1,4 +1,5 @@
 mod access;
+mod email_verification;
 mod mutation;
 mod query;
 mod types;

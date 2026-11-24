@@ -4,6 +4,7 @@ use identity_application::{
     audit::AuditQueryService,
     authentication::{
         account::AccountService,
+        email_verification::EmailVerificationDependencies,
         login::{LoginEmailDependencies, LoginMfaEnrollmentDependencies, LoginService},
         mfa::MfaService,
         passkey::PasskeyService,
@@ -69,6 +70,7 @@ use crate::{
             client_authorization::ClientAuthorizationRepositoryImpl,
             client_management::ClientManagementRepositoryImpl,
             device_authorization::DeviceAuthorizationRepositoryImpl,
+            email_verification::EmailVerificationRepositoryImpl,
             group_management::GroupManagementRepositoryImpl, install::InstallRepositoryImpl,
             instance_overview::InstanceOverviewRepositoryImpl,
             instance_setting::InstanceSettingRepositoryImpl, key::KeyRepositoryImpl,
@@ -274,6 +276,12 @@ impl AppServices {
             session: SessionService::new(Arc::new(SessionRepositoryImpl::new(db.clone())))
                 .with_events(Arc::clone(&events)),
             account: AccountService::new(Arc::new(UserRepositoryImpl::new(db.clone())))
+                .with_email_verification(EmailVerificationDependencies {
+                    repository: Arc::new(EmailVerificationRepositoryImpl::new(db.clone())),
+                    sender: Arc::clone(&email_sender),
+                    renderer: Arc::clone(&email_renderer),
+                    settings: settings.store(),
+                })
                 .with_events(Arc::clone(&events)),
             mfa,
             key: AsymmetricKeyService::new(

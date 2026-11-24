@@ -286,6 +286,7 @@ audit_actions! {
     SettingEmailTemplateUpdate => Management, Setting;
     AccountProfileUpdate => Account, User;
     AccountIdentifierUpdate => Account, User;
+    AccountEmailVerify => Account, User;
     AccountPasswordChange => Account, User;
     AccountCredentialReplace => Account, User;
     AccountTotpEnable => Account, User;

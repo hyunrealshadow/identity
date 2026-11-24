@@ -1,3 +1,4 @@
+pub mod email_verification;
 pub mod management;
 pub mod model;
 pub mod normalization;

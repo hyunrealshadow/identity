@@ -145,6 +145,8 @@ pub struct UpdateUserCommand {
     pub user_oid: UserOid,
     pub username: Option<String>,
     pub email: Option<String>,
+    /// Mark the address verified or unverified.
+    pub email_verified: Option<bool>,
     pub profile: UserProfilePatch,
     pub expected_version: Uuid,
     pub reason: String,

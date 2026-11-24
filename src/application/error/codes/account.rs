@@ -10,6 +10,14 @@ pub enum AccountErrorCode {
     EmailInvalid,
     UsernameExists,
     EmailExists,
+    /// Email delivery is not configured, so no verification can be sent.
+    EmailVerificationUnavailable,
+    EmailVerificationResendTooSoon,
+    EmailVerificationLimitReached,
+    EmailAlreadyVerified,
+    /// The link is unknown, expired, used, or voided by a later change.
+    EmailVerificationInvalid,
+    EmailVerificationDeliveryFailed,
 }
 
 impl AppErrorCode for AccountErrorCode {
@@ -20,7 +28,15 @@ impl AppErrorCode for AccountErrorCode {
             | Self::UsernameInvalid
             | Self::EmailRequired
             | Self::EmailInvalid => ErrorKind::Validation,
-            Self::UsernameExists | Self::EmailExists => ErrorKind::Conflict,
+            Self::UsernameExists | Self::EmailExists | Self::EmailAlreadyVerified => {
+                ErrorKind::Conflict
+            }
+            Self::EmailVerificationUnavailable => ErrorKind::Forbidden,
+            Self::EmailVerificationResendTooSoon | Self::EmailVerificationLimitReached => {
+                ErrorKind::RateLimit
+            }
+            Self::EmailVerificationInvalid => ErrorKind::Gone,
+            Self::EmailVerificationDeliveryFailed => ErrorKind::Internal,
         }
     }
 
@@ -33,6 +49,12 @@ impl AppErrorCode for AccountErrorCode {
             Self::EmailInvalid => 15004,
             Self::UsernameExists => 15005,
             Self::EmailExists => 15006,
+            Self::EmailVerificationUnavailable => 15007,
+            Self::EmailVerificationResendTooSoon => 15008,
+            Self::EmailVerificationLimitReached => 15009,
+            Self::EmailAlreadyVerified => 15010,
+            Self::EmailVerificationInvalid => 15011,
+            Self::EmailVerificationDeliveryFailed => 15012,
         }
     }
 }

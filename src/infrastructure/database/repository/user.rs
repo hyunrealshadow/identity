@@ -15,6 +15,7 @@ use serde_json::{Value, json};
 use uuid::Uuid;
 
 use super::authorization_lifecycle::{renew_user_version_in_txn, sync_user_authority_in_txn};
+use super::email_verification::discard_for_user_in_txn;
 use crate::database::{
     audit,
     entity::{
@@ -311,8 +312,17 @@ impl UserRepositoryImpl {
             }
         }
         active.updated_at = Set(Some(Utc::now().into()));
+        let email_changed = matches!(
+            &update,
+            UserIdentifierUpdate::Email { normalized, .. } if normalized != &model.email_normalized
+        );
         match active.update(&txn).await {
             Ok(mut model) => {
+                if email_changed {
+                    discard_for_user_in_txn(&txn, model.id)
+                        .await
+                        .map_err(|error| UserRepositoryError::QueryFailed(Box::new(error)))?;
+                }
                 model.version = renew_user_version_in_txn(&txn, model.id)
                     .await
                     .map_err(|error| UserRepositoryError::QueryFailed(Box::new(error)))?

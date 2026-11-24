@@ -152,7 +152,9 @@ export async function executeAccountAction(
       )
       await clearElevatedAuthorization()
     } else if (action === 'update-email') {
-      await requireGraphql(
+      const result = await requireGraphql<{
+        updateEmail: { verification: { email: string } | null }
+      }>(
         accountOperations["update-email"].document,
         {
           input: {
@@ -162,6 +164,22 @@ export async function executeAccountAction(
         { authorization: 'elevated' },
       )
       await clearElevatedAuthorization()
+      if (result.updateEmail.verification) {
+        await storeAccountFlash({ message: 'verificationSent' })
+        return { ok: true }
+      }
+    } else if (action === 'send-email-verification') {
+      await requireGraphql(
+        accountOperations["send-email-verification"].document,
+        { input: {} },
+      )
+      await storeAccountFlash({ message: 'verificationSent' })
+      return { ok: true }
+    } else if (action === 'cancel-email-verification') {
+      await requireGraphql(
+        accountOperations["cancel-email-verification"].document,
+        { input: {} },
+      )
     } else if (action === 'change-password') {
       const newPassword = values.new_password ?? ''
       if (newPassword !== (values.confirm_password ?? '')) {

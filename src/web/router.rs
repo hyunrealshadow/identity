@@ -9,7 +9,10 @@ use identity_infrastructure::{
 use salvo::{Router, Service, affix_state::inject, serve_static::StaticDir};
 
 use super::{
-    controllers::{auth, install, oauth2, observability, openid, well_known, workload_runtime},
+    controllers::{
+        auth, email_verification, install, oauth2, observability, openid, well_known,
+        workload_runtime,
+    },
     middleware::{
         RequestIdMiddleware, RequireUpstreamHttps, RequireWorkload, ResolveClientIp,
         TraceContextMiddleware, audit_request_context, require_login_workload,
@@ -88,7 +91,8 @@ pub fn internal_router(
     let mut login = Router::new()
         .hoop(require_login_workload)
         .push(install::status_routes())
-        .push(install::routes());
+        .push(install::routes())
+        .push(email_verification::routes());
     if config.observability.self_metrics.enable {
         login = login.push(
             Router::with_path(internal_relative_route(

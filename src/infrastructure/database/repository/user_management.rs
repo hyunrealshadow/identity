@@ -41,6 +41,7 @@ use super::{
         ensure_recoverable_authorization_administrator, lock_owner_lifecycle,
         renew_user_version_in_txn, sync_user_authority_in_txn,
     },
+    email_verification::discard_for_user_in_txn,
     session_security::lock_account_sessions,
     shared::lock_user_credentials,
     user::{to_domain, update_theme_preference, user_attribute_changes},
@@ -797,6 +798,9 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
                 active.email_verified = Set(false);
             }
         }
+        if let Some(verified) = command.email_verified {
+            active.email_verified = Set(verified);
+        }
         let mut preferences = model.preferences.clone();
         let mut preferences_changed = false;
         if let Some(theme) = command.profile.theme {
@@ -868,6 +872,15 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         let version = renew_user_version_in_txn(&txn, updated.id)
             .await
             .map_err(storage)?;
+        // A changed address voids any verification of the previous one; an
+        // address marked verified needs none.
+        if updated.email_normalized != model.email_normalized
+            || (updated.email_verified && !model.email_verified)
+        {
+            discard_for_user_in_txn(&txn, updated.id)
+                .await
+                .map_err(storage)?;
+        }
         let mut updated = updated;
         updated.version = version.as_uuid();
         append_semantic_audit(

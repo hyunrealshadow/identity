@@ -362,6 +362,7 @@ impl UserManagementService {
                 user_oid: command.user_oid,
                 username,
                 email,
+                email_verified: command.email_verified,
                 profile,
                 expected_version: command.expected_version,
                 reason,

@@ -7,6 +7,7 @@ pub mod client_authorization;
 mod client_authorization_query;
 pub mod client_management;
 pub mod device_authorization;
+pub mod email_verification;
 pub mod group_management;
 pub mod install;
 pub mod instance_overview;

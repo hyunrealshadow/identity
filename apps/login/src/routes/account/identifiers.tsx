@@ -6,7 +6,7 @@ import { AccountActionForm } from '#/components/account-action-form'
 import { AccountDialog } from '#/components/account-dialog'
 import { useDialogState } from '#/components/use-dialog-state'
 import { PageHeading, ProfileField, SettingsCard, SettingsRow } from '#/components/account-settings'
-import { translate } from '#/lib/i18n'
+import { translate, type Locale } from '#/lib/i18n'
 import { useAccount } from './route'
 
 export const Route = createFileRoute('/account/identifiers')({
@@ -16,6 +16,8 @@ export const Route = createFileRoute('/account/identifiers')({
 function IdentifiersPage() {
   const { locale, data, flash } = useAccount()
   const account = data.account
+  const verification = data.accountEmailVerification
+  const pending = verification.pending
   const t = (key: Parameters<typeof translate>[1]) => translate(locale, key)
 
   return (
@@ -43,8 +45,28 @@ function IdentifiersPage() {
                   : t('accountEmailUnverified')}
               </span>
             }
-            action={<EmailModal account={account} flash={flash} t={t} />}
+            action={
+              <div className="flex flex-wrap gap-2">
+                {!account.emailVerified && verification.available && !pending ? (
+                  <AccountActionForm
+                    action="send-email-verification"
+                    requestFailedMessage={t('accountRequestFailed')}
+                  >
+                    <Button type="submit" variant="outline">{t('accountSendVerificationEmail')}</Button>
+                  </AccountActionForm>
+                ) : null}
+                <EmailModal account={account} flash={flash} t={t} verifies={verification.available} />
+              </div>
+            }
           />
+          {pending ? (
+            <PendingVerification
+              email={pending.email}
+              changesEmail={pending.changesEmail}
+              locale={locale}
+              t={t}
+            />
+          ) : null}
       </SettingsCard>
     </>
   )
@@ -53,6 +75,47 @@ function IdentifiersPage() {
 type Account = ReturnType<typeof useAccount>['data']['account']
 type Flash = ReturnType<typeof useAccount>['flash']
 type Translator = (key: Parameters<typeof translate>[1]) => string
+
+/** The verification link in progress: resend it, or withdraw a change. */
+function PendingVerification({
+  email,
+  changesEmail,
+  locale,
+  t,
+}: {
+  email: string
+  changesEmail: boolean
+  locale: Locale
+  t: Translator
+}) {
+  return (
+    <div className="mt-4 flex flex-col gap-3 rounded-md border border-border bg-muted/40 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-sm leading-5 text-muted-foreground">
+        {translate(
+          locale,
+          changesEmail ? 'accountEmailChangePending' : 'accountEmailVerificationPending',
+          { email },
+        )}
+      </p>
+      <div className="flex shrink-0 flex-wrap gap-2">
+        {changesEmail ? (
+          <AccountActionForm
+            action="cancel-email-verification"
+            requestFailedMessage={t('accountRequestFailed')}
+          >
+            <Button type="submit" variant="ghost" size="sm">{t('accountCancelEmailChange')}</Button>
+          </AccountActionForm>
+        ) : null}
+        <AccountActionForm
+          action="send-email-verification"
+          requestFailedMessage={t('accountRequestFailed')}
+        >
+          <Button type="submit" variant="outline" size="sm">{t('accountResendVerificationEmail')}</Button>
+        </AccountActionForm>
+      </div>
+    </div>
+  )
+}
 
 function UsernameModal({ account, flash, t }: { account: Account; flash: Flash; t: Translator }) {
   const modal = useDialogState()
@@ -82,7 +145,17 @@ function UsernameModal({ account, flash, t }: { account: Account; flash: Flash; 
   )
 }
 
-function EmailModal({ account, flash, t }: { account: Account; flash: Flash; t: Translator }) {
+function EmailModal({
+  account,
+  flash,
+  t,
+  verifies,
+}: {
+  account: Account
+  flash: Flash
+  t: Translator
+  verifies: boolean
+}) {
   const modal = useDialogState()
   return (
     <>
@@ -94,6 +167,9 @@ function EmailModal({ account, flash, t }: { account: Account; flash: Flash; t: 
           onSuccess={modal.close}
           className="grid gap-4"
         >
+          <p className="text-sm leading-5 text-muted-foreground">
+            {t(verifies ? 'accountEmailChangeVerifyHint' : 'accountEmailChangeImmediateHint')}
+          </p>
           <ProfileField
             name="email"
             label={t('accountEmail')}
@@ -103,7 +179,7 @@ function EmailModal({ account, flash, t }: { account: Account; flash: Flash; t: 
             type="email"
           />
           <Button type="submit" className="justify-self-end">
-            {t('accountSaveEmail')}
+            {t(verifies ? 'accountSendVerificationEmail' : 'accountSaveEmail')}
           </Button>
         </AccountActionForm>
       </AccountDialog>

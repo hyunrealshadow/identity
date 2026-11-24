@@ -192,6 +192,7 @@ export function emailDeliveryInput(
 /** URL segment of each template kind. */
 const templateSlugs: Record<EmailTemplateKind, string> = {
   SIGN_IN_CODE: 'sign-in-code',
+  EMAIL_VERIFICATION: 'email-verification',
 }
 
 export function emailTemplateSlug(kind: EmailTemplateKind) {
@@ -211,6 +212,10 @@ export const emailTemplateLabels: Record<
   SIGN_IN_CODE: {
     title: 'settingsEmailTemplateSignInCode',
     description: 'settingsEmailTemplateSignInCodeHint',
+  },
+  EMAIL_VERIFICATION: {
+    title: 'settingsEmailTemplateEmailVerification',
+    description: 'settingsEmailTemplateEmailVerificationHint',
   },
 }
 

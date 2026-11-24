@@ -21,6 +21,22 @@ input AccessPolicy {
 	runtime: Boolean!
 }
 
+"""
+Whether the account can verify its email address, and the verification
+in progress.
+"""
+type AccountEmailVerification {
+	"""
+	Whether this instance can send verification emails. Without it, a
+	changed address is replaced at once and stays unverified.
+	"""
+	available: Boolean!
+	"""
+	The link that was sent and can still be followed.
+	"""
+	pending: EmailVerificationRequest
+}
+
 type AccountGroup {
 	id: ID!
 	name: String!
@@ -215,6 +231,7 @@ enum AuditAction {
 	SETTING_EMAIL_TEMPLATE_UPDATE
 	ACCOUNT_PROFILE_UPDATE
 	ACCOUNT_IDENTIFIER_UPDATE
+	ACCOUNT_EMAIL_VERIFY
 	ACCOUNT_PASSWORD_CHANGE
 	ACCOUNT_CREDENTIAL_REPLACE
 	ACCOUNT_TOTP_ENABLE
@@ -530,6 +547,18 @@ type BeginTotpEnrollmentPayload {
 	otpAuthUri: String!
 	enrollmentToken: String!
 	recoveryCodes: [String!]!
+	clientMutationId: String
+}
+
+input CancelEmailVerificationInput {
+	clientMutationId: String
+}
+
+type CancelEmailVerificationPayload {
+	"""
+	Whether a verification was in progress.
+	"""
+	cancelled: Boolean!
 	clientMutationId: String
 }
 
@@ -1295,6 +1324,10 @@ enum EmailTemplateKind {
 	The one-time code and sign-in link of email sign-in.
 	"""
 	SIGN_IN_CODE
+	"""
+	The link that verifies an account's email address.
+	"""
+	EMAIL_VERIFICATION
 }
 
 """
@@ -1328,6 +1361,26 @@ input EmailTemplateTranslationInput {
 	"""
 	locale: String!
 	content: EmailTemplateContentInput!
+}
+
+"""
+A verification link that was emailed.
+"""
+type EmailVerificationRequest {
+	"""
+	The address the link was sent to.
+	"""
+	email: String!
+	"""
+	Whether following the link replaces the account's current address.
+	"""
+	changesEmail: Boolean!
+	sentAt: DateTime!
+	expiresAt: DateTime!
+	"""
+	When another link may be requested.
+	"""
+	resendAvailableAt: DateTime!
 }
 
 type GeneralSettings {
@@ -1787,7 +1840,23 @@ input LocalizedTextInput {
 
 type MutationRoot {
 	updateUsername(input: UpdateUsernameInput!): UpdateProfilePayload! @access(policy: {scopes: ["user.write"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: RECENT, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: false})
-	updateEmail(input: UpdateEmailInput!): UpdateProfilePayload! @access(policy: {scopes: ["user.write"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: RECENT, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: false})
+	"""
+	Change the account's email address. While this instance can send
+	email, a verification link goes to the new address and the current
+	address stays until it is followed; otherwise the address is replaced
+	at once and is unverified.
+	"""
+	updateEmail(input: UpdateEmailInput!): UpdateEmailPayload! @access(policy: {scopes: ["user.write"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: RECENT, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: false})
+	"""
+	Email a new verification link: to the address of a pending change, or
+	else to the account's current address.
+	"""
+	sendEmailVerification(input: SendEmailVerificationInput!): SendEmailVerificationPayload! @access(policy: {scopes: ["user.write"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
+	"""
+	Withdraw the verification in progress; its link stops working and a
+	pending address change is discarded.
+	"""
+	cancelEmailVerification(input: CancelEmailVerificationInput!): CancelEmailVerificationPayload! @access(policy: {scopes: ["user.write"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
 	updateProfile(input: UpdateProfileInput!): UpdateProfilePayload! @access(policy: {scopes: ["user.write"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
 	prepareMfaManagement: Boolean! @access(policy: {scopes: ["user.write"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
 	prepareMfaRecoveryCodes: RecoveryCodeEnrollmentPayload! @access(policy: {scopes: ["user.write"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false}) @access(policy: {scopes: [], authentication: ACCOUNT_SECURITY, maxAge: 300, elevatedMaxAge: 3600, userOnly: true, runtime: true})
@@ -2020,6 +2089,11 @@ contributes its own business field; there is no `viewer` wrapper and no
 """
 type QueryRoot {
 	account: User @access(policy: {scopes: ["user.read"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
+	"""
+	Whether the current user can verify an email address, and the
+	verification link in progress (`user.read` only).
+	"""
+	accountEmailVerification: AccountEmailVerification! @access(policy: {scopes: ["user.read"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
 	"""
 	Active groups the current user belongs to (`user.read` only).
 	"""
@@ -2480,6 +2554,15 @@ input ScopeStateInput {
 	clientMutationId: String
 }
 
+input SendEmailVerificationInput {
+	clientMutationId: String
+}
+
+type SendEmailVerificationPayload {
+	verification: EmailVerificationRequest!
+	clientMutationId: String
+}
+
 input SendTestEmailInput {
 	recipient: String!
 	"""
@@ -2694,6 +2777,19 @@ input UpdateEmailInput {
 	clientMutationId: String
 }
 
+type UpdateEmailPayload {
+	"""
+	The account. Its address is unchanged while `verification` is set.
+	"""
+	user: User!
+	"""
+	The link sent to the new address, which replaces the current one
+	once followed.
+	"""
+	verification: EmailVerificationRequest
+	clientMutationId: String
+}
+
 """
 Replace one template with an operator's own, or with `content: null` use
 the built-in template again.
@@ -2788,6 +2884,11 @@ input UpdateUserInput {
 	id: ID!
 	username: String
 	email: String
+	"""
+	Mark the email address verified or unverified. Without it, a changed
+	address becomes unverified.
+	"""
+	emailVerified: Boolean
 	profile: UserProfilePatchInput
 	expectedVersion: UUID!
 	reason: String! = ""

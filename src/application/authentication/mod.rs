@@ -1,5 +1,6 @@
 pub mod account;
 pub mod challenge;
+pub mod email_verification;
 pub mod error;
 pub mod hash;
 pub mod login;

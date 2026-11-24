@@ -452,6 +452,7 @@ describe('executeAccountAction', () => {
   })
 
   it('updates an email independently and never sends the username', async () => {
+    mocks.identityGraphql.mockResolvedValue({ updateEmail: { verification: null } })
     await expect(executeAccountAction({
       action: 'update-email',
       values: { email: 'alice@example.com' },
@@ -463,6 +464,34 @@ describe('executeAccountAction', () => {
       { authorization: 'elevated' },
     )
     expect(mocks.clearElevatedAuthorization).toHaveBeenCalledOnce()
+    expect(mocks.storeAccountFlash).toHaveBeenCalledWith({ message: 'saved' })
+  })
+
+  it('reports a verification email when the new address must be verified first', async () => {
+    mocks.identityGraphql.mockResolvedValue({
+      updateEmail: { verification: { email: 'alice@example.com', changesEmail: true } },
+    })
+    await expect(executeAccountAction({
+      action: 'update-email',
+      values: { email: 'alice@example.com' },
+    })).resolves.toEqual({ ok: true })
+
+    expect(mocks.storeAccountFlash).toHaveBeenCalledWith({ message: 'verificationSent' })
+    expect(mocks.storeAccountFlash).not.toHaveBeenCalledWith({ message: 'saved' })
+  })
+
+  it('resends a verification email with the default account authorization', async () => {
+    await expect(executeAccountAction({
+      action: 'send-email-verification',
+      values: {},
+    })).resolves.toEqual({ ok: true })
+
+    expect(mocks.identityGraphql).toHaveBeenCalledWith(
+      expect.stringContaining('mutation SendEmailVerification'),
+      { input: {} },
+      undefined,
+    )
+    expect(mocks.storeAccountFlash).toHaveBeenCalledWith({ message: 'verificationSent' })
   })
 
   it('restarts only the sealed popup reauthentication state', async () => {

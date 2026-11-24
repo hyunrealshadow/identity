@@ -27,6 +27,7 @@ export type UserProfileDraft = Record<UserProfileField, string>
 export interface UserEditDraft {
   username: string
   email: string
+  emailVerified: boolean
   profile: UserProfileDraft
 }
 
@@ -45,6 +46,7 @@ export interface CreateUserDraft {
 export interface UserEditDraftSnapshot {
   username?: string
   email?: string
+  emailVerified?: boolean
   profile?: Partial<Record<UserProfileField, string>>
 }
 
@@ -111,6 +113,7 @@ export function editDraftFromUser(user: ProjectedUser): UserEditDraft {
   return {
     username: user.username,
     email: user.email,
+    emailVerified: user.emailVerified,
     profile: profileDraftFromUser(user),
   }
 }
@@ -132,6 +135,7 @@ export function editDraftSnapshot(
 
   if (draft.username.trim() !== user.username) snapshot.username = draft.username
   if (draft.email.trim() !== user.email) snapshot.email = draft.email
+  if (emailVerifiedChanged(user, draft)) snapshot.emailVerified = draft.emailVerified
 
   const profile: Partial<Record<UserProfileField, string>> = {}
   for (const field of USER_PROFILE_FIELDS) {
@@ -150,6 +154,7 @@ export function editDraftSnapshotHasContent(
   return (
     snapshot.username !== undefined ||
     snapshot.email !== undefined ||
+    snapshot.emailVerified !== undefined ||
     Object.keys(snapshot.profile ?? {}).length > 0
   )
 }
@@ -171,7 +176,11 @@ export function restoreEditDraft(
   if (username !== undefined) draft.username = username
 
   const email = storedText(value.email)
-  if (email !== undefined) draft.email = email
+  if (email !== undefined) {
+    draft.email = email
+    draft.emailVerified = expectedEmailVerified(user, draft.email)
+  }
+  if (typeof value.emailVerified === 'boolean') draft.emailVerified = value.emailVerified
 
   if (isRecord(value.profile)) {
     for (const field of USER_PROFILE_FIELDS) {
@@ -252,6 +261,7 @@ export function updateDraftChanged(
   return (
     draft.username.trim() !== user.username ||
     draft.email.trim() !== user.email ||
+    emailVerifiedChanged(user, draft) ||
     profileChanged(user, draft.profile)
   )
 }
@@ -261,6 +271,18 @@ export function emailChangeResetsVerification(
   draft: UserEditDraft,
 ): boolean {
   return draft.email.trim() !== user.email
+}
+
+/** The verification state the server applies without an explicit choice:
+    a changed address becomes unverified. */
+export function expectedEmailVerified(user: ProjectedUser, email: string): boolean {
+  return email.trim() === user.email ? user.emailVerified : false
+}
+
+/** Whether the administrator chose a verification state the server would not
+    apply on its own. */
+export function emailVerifiedChanged(user: ProjectedUser, draft: UserEditDraft): boolean {
+  return draft.emailVerified !== expectedEmailVerified(user, draft.email)
 }
 
 /**
@@ -322,6 +344,7 @@ export function updateInputFromDraft(
 
   const email = draft.email.trim()
   if (email !== user.email) input.email = email
+  if (emailVerifiedChanged(user, draft)) input.emailVerified = draft.emailVerified
 
   const profile = profilePatchFromDraft(user, draft.profile)
   if (profile) input.profile = profile

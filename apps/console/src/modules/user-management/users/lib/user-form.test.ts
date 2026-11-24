@@ -60,6 +60,40 @@ describe('sparse user updates', () => {
     expect(input?.profile?.nickname).toBeUndefined()
   })
 
+  it('leaves a changed address to become unverified on the server', () => {
+    const current = user()
+    const draft = editDraftFromUser(current)
+    draft.email = 'ada.lovelace@example.test'
+    draft.emailVerified = false
+
+    const input = updateInputFromDraft(current, draft)
+
+    expect(input?.email).toBe('ada.lovelace@example.test')
+    expect(input).not.toHaveProperty('emailVerified')
+  })
+
+  it('sends an explicit verification choice the server would not make itself', () => {
+    const unverified = user({ emailVerified: false })
+    const marked = editDraftFromUser(unverified)
+    marked.emailVerified = true
+    expect(updateInputFromDraft(unverified, marked)).toMatchObject({ emailVerified: true })
+
+    const current = user()
+    const changedAndVerified = editDraftFromUser(current)
+    changedAndVerified.email = 'ada.lovelace@example.test'
+    changedAndVerified.emailVerified = true
+    expect(updateInputFromDraft(current, changedAndVerified)).toMatchObject({
+      email: 'ada.lovelace@example.test',
+      emailVerified: true,
+    })
+
+    const unmarked = editDraftFromUser(current)
+    unmarked.emailVerified = false
+    const input = updateInputFromDraft(current, unmarked)
+    expect(input).toMatchObject({ emailVerified: false })
+    expect(input).not.toHaveProperty('email')
+  })
+
   it('clears a nullable profile field with an explicit null', () => {
     const current = user({ nickname: 'ada' })
     const draft = editDraftFromUser(current)
@@ -83,6 +117,8 @@ describe('safe edit draft snapshots', () => {
     const current = user()
     const draft = editDraftFromUser(current)
     draft.email = 'ada.lovelace@example.test'
+    // As the form does: a different address starts out unverified.
+    draft.emailVerified = false
     draft.profile.givenName = 'Augusta'
 
     const snapshot = editDraftSnapshot(current, draft)

@@ -1,6 +1,7 @@
 pub mod auth;
 #[cfg(feature = "oidc-conformance")]
 pub mod conformance;
+pub mod email_verification;
 pub mod install;
 pub mod oauth2;
 pub mod observability;

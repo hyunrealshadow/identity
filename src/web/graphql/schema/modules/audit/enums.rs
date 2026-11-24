@@ -164,6 +164,7 @@ pub(crate) enum AuditAction {
     SettingEmailTemplateUpdate,
     AccountProfileUpdate,
     AccountIdentifierUpdate,
+    AccountEmailVerify,
     AccountPasswordChange,
     AccountCredentialReplace,
     AccountTotpEnable,

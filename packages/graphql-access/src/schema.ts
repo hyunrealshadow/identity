@@ -7,6 +7,23 @@ export const schemaMetadata: SchemaMetadata = {
   "queryTypeName": "QueryRoot",
   "mutationTypeName": "MutationRoot",
   "types": {
+    "AccountEmailVerification": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "available": {
+          "name": "available",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "pending": {
+          "name": "pending",
+          "returnType": "EmailVerificationRequest",
+          "policies": []
+        }
+      }
+    },
     "AccountGroup": {
       "kind": "OBJECT",
       "interfaces": [],
@@ -760,6 +777,23 @@ export const schemaMetadata: SchemaMetadata = {
         },
         "secret": {
           "name": "secret",
+          "returnType": "String",
+          "policies": []
+        }
+      }
+    },
+    "CancelEmailVerificationPayload": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "cancelled": {
+          "name": "cancelled",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "clientMutationId": {
+          "name": "clientMutationId",
           "returnType": "String",
           "policies": []
         }
@@ -1983,6 +2017,38 @@ export const schemaMetadata: SchemaMetadata = {
         }
       }
     },
+    "EmailVerificationRequest": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "changesEmail": {
+          "name": "changesEmail",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "email": {
+          "name": "email",
+          "returnType": "String",
+          "policies": []
+        },
+        "expiresAt": {
+          "name": "expiresAt",
+          "returnType": "DateTime",
+          "policies": []
+        },
+        "resendAvailableAt": {
+          "name": "resendAvailableAt",
+          "returnType": "DateTime",
+          "policies": []
+        },
+        "sentAt": {
+          "name": "sentAt",
+          "returnType": "DateTime",
+          "policies": []
+        }
+      }
+    },
     "GeneralSettings": {
       "kind": "OBJECT",
       "interfaces": [],
@@ -3048,6 +3114,20 @@ export const schemaMetadata: SchemaMetadata = {
             }
           ]
         },
+        "cancelEmailVerification": {
+          "name": "cancelEmailVerification",
+          "returnType": "CancelEmailVerificationPayload",
+          "policies": [
+            {
+              "scopes": [
+                "user.write"
+              ],
+              "authentication": "SESSION",
+              "userOnly": true,
+              "runtime": false
+            }
+          ]
+        },
         "changePassword": {
           "name": "changePassword",
           "returnType": "ChangePasswordPayload",
@@ -3687,6 +3767,20 @@ export const schemaMetadata: SchemaMetadata = {
             }
           ]
         },
+        "sendEmailVerification": {
+          "name": "sendEmailVerification",
+          "returnType": "SendEmailVerificationPayload",
+          "policies": [
+            {
+              "scopes": [
+                "user.write"
+              ],
+              "authentication": "SESSION",
+              "userOnly": true,
+              "runtime": false
+            }
+          ]
+        },
         "sendTestEmail": {
           "name": "sendTestEmail",
           "returnType": "SendTestEmailPayload",
@@ -3820,7 +3914,7 @@ export const schemaMetadata: SchemaMetadata = {
         },
         "updateEmail": {
           "name": "updateEmail",
-          "returnType": "UpdateProfilePayload",
+          "returnType": "UpdateEmailPayload",
           "policies": [
             {
               "scopes": [
@@ -4184,6 +4278,20 @@ export const schemaMetadata: SchemaMetadata = {
         "account": {
           "name": "account",
           "returnType": "User",
+          "policies": [
+            {
+              "scopes": [
+                "user.read"
+              ],
+              "authentication": "SESSION",
+              "userOnly": true,
+              "runtime": false
+            }
+          ]
+        },
+        "accountEmailVerification": {
+          "name": "accountEmailVerification",
+          "returnType": "AccountEmailVerification",
           "policies": [
             {
               "scopes": [
@@ -5334,6 +5442,23 @@ export const schemaMetadata: SchemaMetadata = {
         }
       }
     },
+    "SendEmailVerificationPayload": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "clientMutationId": {
+          "name": "clientMutationId",
+          "returnType": "String",
+          "policies": []
+        },
+        "verification": {
+          "name": "verification",
+          "returnType": "EmailVerificationRequest",
+          "policies": []
+        }
+      }
+    },
     "SendTestEmailPayload": {
       "kind": "OBJECT",
       "interfaces": [],
@@ -5499,6 +5624,28 @@ export const schemaMetadata: SchemaMetadata = {
         "clientMutationId": {
           "name": "clientMutationId",
           "returnType": "String",
+          "policies": []
+        }
+      }
+    },
+    "UpdateEmailPayload": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "clientMutationId": {
+          "name": "clientMutationId",
+          "returnType": "String",
+          "policies": []
+        },
+        "user": {
+          "name": "user",
+          "returnType": "User",
+          "policies": []
+        },
+        "verification": {
+          "name": "verification",
+          "returnType": "EmailVerificationRequest",
           "policies": []
         }
       }

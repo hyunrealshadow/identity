@@ -84,6 +84,9 @@ pub struct UpdateUserTransaction {
     pub user_oid: UserOid,
     pub username: Option<UserIdentifierValue>,
     pub email: Option<UserIdentifierValue>,
+    /// Mark the address verified or unverified. Without it, a changed
+    /// address becomes unverified.
+    pub email_verified: Option<bool>,
     pub profile: UserProfilePatch,
     pub expected_version: Uuid,
     pub reason: String,

@@ -142,6 +142,8 @@ const messages = {
   settingsEmailTemplatesSectionHint: '每种邮件都有包含默认内容和译文的内置模板，可替换为自己的模板',
   settingsEmailTemplateSignInCode: '登录验证码',
   settingsEmailTemplateSignInCodeHint: '邮件登录的一次性验证码和登录链接',
+  settingsEmailTemplateEmailVerification: '邮箱验证',
+  settingsEmailTemplateEmailVerificationHint: '验证账号邮箱地址或新邮箱地址的一次性链接',
   settingsEmailTemplateBuiltIn: '内置',
   settingsEmailTemplateCrumb: '模板',
   settingsEmailTemplateMissing: '此模板不存在',

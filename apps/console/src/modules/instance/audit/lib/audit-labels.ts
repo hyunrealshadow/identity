@@ -15,6 +15,7 @@ import type { MessageKey } from '#/lib/i18n'
 export const AUDIT_ACTION_LABELS: Readonly<Record<AuditAction, MessageKey>> = {
   ACCOUNT_CREDENTIAL_REPLACE: 'auditActionAccountCredentialReplace',
   ACCOUNT_IDENTIFIER_UPDATE: 'auditActionAccountIdentifierUpdate',
+  ACCOUNT_EMAIL_VERIFY: 'auditActionAccountEmailVerify',
   ACCOUNT_LOCK: 'auditActionAccountLock',
   ACCOUNT_PASSKEY_ADD: 'auditActionAccountPasskeyAdd',
   ACCOUNT_PASSKEY_REMOVE: 'auditActionAccountPasskeyRemove',
@@ -176,6 +177,7 @@ export const AUDIT_FIELD_LABELS: Readonly<Record<AuditField, MessageKey>> = {
 export const AUDIT_SENTENCE_LABELS: Readonly<Record<AuditAction, MessageKey>> = {
   ACCOUNT_CREDENTIAL_REPLACE: 'auditSentenceAccountCredentialReplace',
   ACCOUNT_IDENTIFIER_UPDATE: 'auditSentenceAccountIdentifierUpdate',
+  ACCOUNT_EMAIL_VERIFY: 'auditSentenceAccountEmailVerify',
   ACCOUNT_LOCK: 'auditSentenceAccountLock',
   ACCOUNT_PASSKEY_ADD: 'auditSentenceAccountPasskeyAdd',
   ACCOUNT_PASSKEY_REMOVE: 'auditSentenceAccountPasskeyRemove',

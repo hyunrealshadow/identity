@@ -117,7 +117,7 @@ const enUS = {
   usersCreateDraftPasswordHint:
     'Your saved draft was restored. Re-enter the initial password to continue.',
   usersEmailVerificationNote:
-    'Email verification cannot be changed in this console. New users and changed email addresses are treated as unverified.',
+    'New users start with an unverified email address. You can mark it verified when editing the user.',
   usersSectionProfile: 'Optional profile',
   usersAdditionalProfile: 'Additional profile fields',
   usersSectionProfileDescription:
@@ -227,7 +227,10 @@ const enUS = {
     'Only changed fields are included in the update request.',
   usersEditNoChanges: 'Make at least one change before saving.',
   usersEditEmailVerifiedReset:
-    'Changing the email address marks it as unverified.',
+    'Changing the email address marks it as unverified unless you choose otherwise below.',
+  usersFieldEmailVerified: 'Email address verified',
+  usersFieldEmailVerifiedDescription:
+    'Turn on only if you know the user receives email at this address. A verified address can be used for email sign-in.',
   usersEditAction: 'Edit user',
   usersEditSaveAction: 'Save changes',
   usersEditPending: 'Saving changes…',

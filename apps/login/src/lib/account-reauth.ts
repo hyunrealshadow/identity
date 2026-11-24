@@ -30,7 +30,12 @@ export function accountActionDestination(action: string) {
   if (action === 'update-profile') {
     return '/account/profile'
   }
-  if (action === 'update-username' || action === 'update-email') {
+  if (
+    action === 'update-username' ||
+    action === 'update-email' ||
+    action === 'send-email-verification' ||
+    action === 'cancel-email-verification'
+  ) {
     return '/account/identifiers'
   }
   return '/account/security'

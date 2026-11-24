@@ -152,6 +152,13 @@ pagination with lazy `totalCount`. The Account Center queries
 authenticated session) and evaluates `hasManagementAccess` in
 `@identity/graphql-access` against executable schema metadata together with the
 configured Console URL to decide whether to show the Console menu entry.
+`accountEmailVerification` reports whether the instance can send verification
+email and the link in progress. `updateEmail` returns the link sent to a new
+address in `verification` (the address itself changes only once it is
+followed), and `sendEmailVerification` and `cancelEmailVerification` resend or
+withdraw it; see
+[email address verification](authentication-flows.md#email-address-verification).
+Administrators set `emailVerified` through `updateUser`.
 
 **Dashboard aggregates.** `instanceOverview` returns real instance aggregates,
 each loaded only after its own authorization check, so a missing permission or a

@@ -142,6 +142,9 @@ const messages = {
   settingsEmailTemplatesSectionHint: 'Each message has a built-in template with default content and translations. Replace any of them with your own.',
   settingsEmailTemplateSignInCode: 'Sign-in code',
   settingsEmailTemplateSignInCodeHint: 'The one-time code and sign-in link of email sign-in',
+  settingsEmailTemplateEmailVerification: 'Email verification',
+  settingsEmailTemplateEmailVerificationHint:
+    'The one-time link that verifies an account’s email address or its new address',
   settingsEmailTemplateBuiltIn: 'Built-in',
   settingsEmailTemplateCrumb: 'Template',
   settingsEmailTemplateMissing: 'This template does not exist.',
