@@ -1,8 +1,8 @@
 import { Field, FieldError, FieldLabel } from '@identity/ui/components/field'
 import { createFileRoute, notFound, redirect } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
-import { ArrowLeft, CircleAlert, MailCheck } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { ArrowLeft, CircleAlert, CircleCheck, MailCheck } from 'lucide-react'
+import { useState } from 'react'
 
 import { LoginMethodAlternatives } from '#/components/login-method-alternatives'
 import { PasskeyLogin } from '#/components/passkey-login'
@@ -13,6 +13,7 @@ import { LoginClient } from '#/components/login-client'
 import { ProgressiveForm } from '#/components/progressive-form'
 import { SubmitButton } from '#/components/submit-button'
 import { TextField } from '#/components/text-field'
+import { useSecondsUntil } from '#/components/use-seconds-until'
 import { GroupedCodeInput, TotpInput } from '#/components/totp-input'
 import {
   errorMessage,
@@ -29,7 +30,12 @@ import {
 import { translate } from '#/lib/i18n'
 import { requestLocale } from '#/lib/i18n.server'
 import { submitLoginMethod } from '#/lib/login-method.server'
-import { loginCredentialType, loginMethodPath, loginChallengeDestination } from '#/lib/login-navigation'
+import {
+  loginCredentialType,
+  loginMethodPath,
+  loginChallengeDestination,
+  loginPasswordResetDestination,
+} from '#/lib/login-navigation'
 
 interface ChallengeSearch {
   login_id?: string
@@ -37,6 +43,8 @@ interface ChallengeSearch {
   token?: string
   error?: string
   restart?: string
+  /** `password_reset` after a forgotten password was replaced. */
+  notice?: string
   ui_locales?: string
 }
 
@@ -163,6 +171,7 @@ export const Route = createFileRoute('/login/$method')({
     token: optionalString(search.token),
     error: optionalString(search.error),
     restart: optionalString(search.restart),
+    notice: optionalString(search.notice),
     ui_locales: optionalString(search.ui_locales),
   }),
   loaderDeps: ({ search }) => ({
@@ -273,6 +282,11 @@ function ChallengePage() {
 
       {visibleError && !restartRequired ? (
         <ErrorAlert className="mb-5" title={t('verificationFailed')} message={visibleError} />
+      ) : search.notice === 'password_reset' && !restartRequired && credentialType === 'password' ? (
+        <p className="mb-5 flex items-start gap-2 rounded-lg bg-muted/60 px-3 py-2.5 text-sm text-muted-foreground" role="status">
+          <CircleCheck className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+          {t('passwordResetDone')}
+        </p>
       ) : null}
 
       {restartRequired && !restartUnavailable ? (
@@ -386,6 +400,17 @@ function ChallengePage() {
           />
         )}
 
+        {credentialType === 'password' && data.status?.password_reset_available ? (
+          <p className="-mt-3 text-right text-sm">
+            <a
+              href={loginPasswordResetDestination(loginId, data.uiLocales || undefined)}
+              className="text-link font-medium"
+            >
+              {t('forgotPassword')}
+            </a>
+          </p>
+        ) : null}
+
         <SubmitButton fullWidth>
           {isOtp || isRecoveryCode || isEmail ? t('verify') : t('login')}
         </SubmitButton>
@@ -445,27 +470,4 @@ function ChallengePage() {
       ) : null}
     </AuthShell>
   )
-}
-
-/**
- * Whole seconds until `at`, counting down while the page is open. Rendered on
- * the server too, so the resend button starts disabled without JavaScript.
- */
-function useSecondsUntil(at: string | undefined) {
-  const deadline = at ? Date.parse(at) : Number.NaN
-  const remaining = () =>
-    Number.isNaN(deadline) ? 0 : Math.max(0, Math.ceil((deadline - Date.now()) / 1000))
-  const [seconds, setSeconds] = useState(remaining)
-  useEffect(() => {
-    setSeconds(remaining())
-    if (Number.isNaN(deadline)) return
-    const timer = window.setInterval(() => {
-      const next = remaining()
-      setSeconds(next)
-      if (next <= 0) window.clearInterval(timer)
-    }, 1000)
-    return () => window.clearInterval(timer)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [deadline])
-  return seconds
 }

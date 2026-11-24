@@ -85,6 +85,11 @@ const messages = {
   settingsEmailSignInNeedsDelivery: 'Turn on and configure email delivery before enabling email sign-in.',
   settingsEmailSignInDeliveryOff: 'Email delivery is off or unconfigured, so email sign-in is not offered.',
   settingsEmailSignInConfigureDelivery: 'Email settings',
+  settingsPasswordReset: 'Password reset',
+  settingsPasswordResetHint:
+    'Someone who forgot their password can set a new one with a one-time link sent to the account’s verified email address. Resetting signs the account out everywhere; a second factor is still required.',
+  settingsPasswordResetNeedsDelivery: 'Turn on and configure email delivery before enabling password reset.',
+  settingsPasswordResetDeliveryOff: 'Email delivery is off or unconfigured, so password reset is not offered.',
   settingsEmailRequired: 'This field is required.',
   settingsEmailInvalidAddress: 'Enter a valid email address.',
   settingsEmailDeliverySection: 'Server',
@@ -145,6 +150,8 @@ const messages = {
   settingsEmailTemplateEmailVerification: 'Email verification',
   settingsEmailTemplateEmailVerificationHint:
     'The one-time link that verifies an account’s email address or its new address',
+  settingsEmailTemplatePasswordReset: 'Password reset',
+  settingsEmailTemplatePasswordResetHint: 'The one-time link that sets a new password for someone who forgot theirs',
   settingsEmailTemplateBuiltIn: 'Built-in',
   settingsEmailTemplateCrumb: 'Template',
   settingsEmailTemplateMissing: 'This template does not exist.',

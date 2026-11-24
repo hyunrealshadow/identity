@@ -34,6 +34,22 @@ export function loginChallengeDestination(
   return `${loginMethodPath(credentialType)}?${search}`
 }
 
+export const loginPasswordResetPath = '/login/reset-password'
+
+/** The page that emails a reset link for a forgotten password, or sets the
+    new password when `token` is the link's. */
+export function loginPasswordResetDestination(
+  loginId: string,
+  uiLocales?: string,
+  options: { token?: string; restart?: 'required' | 'unavailable' } = {},
+) {
+  const search = new URLSearchParams({ login_id: loginId })
+  if (uiLocales) search.set('ui_locales', uiLocales)
+  if (options.token) search.set('token', options.token)
+  if (options.restart) search.set('restart', options.restart)
+  return `${loginPasswordResetPath}?${search}`
+}
+
 export const loginMfaSetupPath = '/login/mfa-setup'
 export const loginPasskeySetupPath = '/login/passkey-setup'
 

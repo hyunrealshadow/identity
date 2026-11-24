@@ -31,23 +31,23 @@ use crate::{
     },
 };
 
-struct StoredMemoryChallenge {
+pub(super) struct StoredMemoryChallenge {
     user_oid: Option<Uuid>,
     binding: ChallengeBinding,
     method: ChallengeMethod,
     purpose: ChallengePurpose,
-    state: Value,
+    pub(super) state: Value,
     expires_at: DateTime<Utc>,
 }
 
-struct MemoryChallenges {
+pub(super) struct MemoryChallenges {
     logins: Arc<Mutex<TestLoginRepoState>>,
-    stored: Mutex<HashMap<Uuid, StoredMemoryChallenge>>,
+    pub(super) stored: Mutex<HashMap<Uuid, StoredMemoryChallenge>>,
     order: Mutex<Vec<Uuid>>,
 }
 
 impl MemoryChallenges {
-    fn new(logins: Arc<Mutex<TestLoginRepoState>>) -> Self {
+    pub(super) fn new(logins: Arc<Mutex<TestLoginRepoState>>) -> Self {
         Self {
             logins,
             stored: Mutex::new(HashMap::new()),
@@ -256,8 +256,8 @@ impl ChallengeRepository for MemoryChallenges {
 
 /// Records what would be sent; the body carries the rendered context.
 #[derive(Default)]
-struct RecordingSender {
-    sent: Mutex<Vec<EmailMessage>>,
+pub(super) struct RecordingSender {
+    pub(super) sent: Mutex<Vec<EmailMessage>>,
 }
 
 #[async_trait]
@@ -288,7 +288,7 @@ impl EmailTemplateRenderer for ContextRenderer {
     }
 }
 
-struct PlainProtector;
+pub(super) struct PlainProtector;
 
 #[async_trait]
 impl DataProtector for PlainProtector {

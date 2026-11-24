@@ -21,6 +21,13 @@ pub enum AccountErrorCode {
 }
 
 impl AppErrorCode for AccountErrorCode {
+    fn required_params(self) -> &'static [&'static str] {
+        match self {
+            Self::EmailVerificationResendTooSoon => &["seconds"],
+            _ => &[],
+        }
+    }
+
     fn kind(self) -> ErrorKind {
         match self {
             Self::ValidationFailed

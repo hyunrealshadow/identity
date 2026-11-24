@@ -198,6 +198,37 @@ function AuthenticationSettingsForm({ settings }: { settings: AuthenticationSett
               />
             ) : null}
           </SettingsRow>
+          <SettingsRow
+            label={t('settingsPasswordReset')}
+            description={t('settingsPasswordResetHint')}
+            action={
+              <SettingsSwitch
+                label={t('settingsPasswordReset')}
+                isSelected={draft.passwordResetEnabled}
+                onChange={(value) => change('passwordResetEnabled', value)}
+                isDisabled={disabled || (!deliveryConfigured && !draft.passwordResetEnabled)}
+              />
+            }
+          >
+            {!deliveryConfigured ? (
+              <p className="text-xs leading-5 text-muted-foreground">
+                {t(
+                  draft.passwordResetEnabled
+                    ? 'settingsPasswordResetDeliveryOff'
+                    : 'settingsPasswordResetNeedsDelivery',
+                )}{' '}
+                <Link to="/email" className="text-link">
+                  {t('settingsEmailSignInConfigureDelivery')}
+                </Link>
+              </p>
+            ) : null}
+            {serverErrors.passwordResetEnabled ? (
+              <SettingsFieldError
+                id={`${errorPrefix}-passwordResetEnabled`}
+                message={serverErrors.passwordResetEnabled}
+              />
+            ) : null}
+          </SettingsRow>
         </SettingsGroup>
 
         <SettingsGroup title={t('settingsPasswordPolicySection')}>

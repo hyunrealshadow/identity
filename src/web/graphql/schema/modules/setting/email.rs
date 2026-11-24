@@ -104,6 +104,8 @@ pub(crate) enum EmailTemplateKind {
     SignInCode,
     /// The link that verifies an account's email address.
     EmailVerification,
+    /// The link that replaces a forgotten password from the sign-in flow.
+    PasswordReset,
 }
 
 impl From<AppEmailTemplateKind> for EmailTemplateKind {
@@ -111,6 +113,7 @@ impl From<AppEmailTemplateKind> for EmailTemplateKind {
         match value {
             AppEmailTemplateKind::SignInCode => Self::SignInCode,
             AppEmailTemplateKind::EmailVerification => Self::EmailVerification,
+            AppEmailTemplateKind::PasswordReset => Self::PasswordReset,
         }
     }
 }
@@ -120,6 +123,7 @@ impl From<EmailTemplateKind> for AppEmailTemplateKind {
         match value {
             EmailTemplateKind::SignInCode => Self::SignInCode,
             EmailTemplateKind::EmailVerification => Self::EmailVerification,
+            EmailTemplateKind::PasswordReset => Self::PasswordReset,
         }
     }
 }

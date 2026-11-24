@@ -66,12 +66,15 @@ impl UserRepository for TestUserRepo {
 
 pub(super) struct TestCredentialRepo {
     pub(super) credentials: Mutex<Vec<UserCredential>>,
+    /// Accounts and logins of each password reset.
+    pub(super) resets: Mutex<Vec<(UserOid, Uuid)>>,
 }
 
 impl TestCredentialRepo {
     pub(super) fn new(credentials: Vec<UserCredential>) -> Self {
         Self {
             credentials: Mutex::new(credentials),
+            resets: Mutex::new(Vec::new()),
         }
     }
 }
@@ -111,6 +114,18 @@ impl UserCredentialRepository for TestCredentialRepo {
         _keep: Option<SessionOid>,
     ) -> Result<u32, UserCredentialRepositoryError> {
         Ok(2)
+    }
+
+    async fn reset_password_and_revoke(
+        &self,
+        user: UserOid,
+        _credential: UserCredentialOid,
+        _expected: &Password,
+        _password: &Password,
+        login: Uuid,
+    ) -> Result<u32, UserCredentialRepositoryError> {
+        self.resets.lock().unwrap().push((user, login));
+        Ok(3)
     }
 
     async fn consume_totp_counter(

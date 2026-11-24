@@ -30,6 +30,8 @@ impl ChallengeMethod {
 pub enum ChallengePurpose {
     Authentication,
     CredentialRegistration,
+    /// Replacing a forgotten password from the sign-in flow.
+    PasswordReset,
 }
 
 impl ChallengePurpose {
@@ -37,6 +39,7 @@ impl ChallengePurpose {
         match self {
             Self::Authentication => "authentication",
             Self::CredentialRegistration => "credential_registration",
+            Self::PasswordReset => "password_reset",
         }
     }
 }

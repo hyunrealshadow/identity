@@ -181,6 +181,15 @@ pub enum TokenErrorCode {
 }
 
 impl AppErrorCode for TokenErrorCode {
+    fn required_params(self) -> &'static [&'static str] {
+        match self {
+            Self::UnsupportedGrantType => &["grant_type"],
+            Self::AssertionAlgUnsupported => &["alg"],
+            Self::PkceMethodUnsupported => &["code_challenge_method"],
+            _ => &[],
+        }
+    }
+
     fn kind(self) -> ErrorKind {
         match self {
             Self::UnsupportedGrantType

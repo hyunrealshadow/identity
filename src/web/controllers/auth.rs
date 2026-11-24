@@ -6,6 +6,8 @@
 //! 3. `POST /api/auth/login/identifier` – validate identifier, create login
 //! 4. `POST /api/auth/login/email-code` – email a sign-in code and link
 //!    (optional first factor)
+//!    `POST /api/auth/login/password-reset[/check|/confirm]` – email a link
+//!    that replaces a forgotten password, then set the new one
 //! 5. `POST /api/auth/login/challenge`  – verify credential, create session
 //! 6. `POST /api/auth/login/mfa-enrollment[/confirm]` – enroll a missing
 //!    second factor when the request requires `aal2`
@@ -42,7 +44,8 @@ use crate::{
         EmailCodeRequest as EmailCodeRequestBody, EmailCodeResponse, IdentifierRequest,
         IdentifierResponse, LoginClientDisplay, LoginStatusResponse, MfaEnrollmentAlgorithmRequest,
         MfaEnrollmentConfirmRequest, MfaEnrollmentRequest, MfaEnrollmentResponse,
-        PasskeyEnrollmentConfirmRequest, PasskeyEnrollmentResponse, RestartLoginRequest,
+        PasskeyEnrollmentConfirmRequest, PasskeyEnrollmentResponse, PasswordResetCheckRequest,
+        PasswordResetConfirmRequest, PasswordResetStatusResponse, RestartLoginRequest,
         RestartLoginResponse, SelectAccountRequest, SelectAccountResponse, SessionInfo,
         SwitchLoginRequest, SwitchLoginResponse, UserDisplayInfo,
     },
@@ -59,6 +62,11 @@ pub fn routes() -> Router {
         .push(Router::with_path("api/auth/login/identifier").post(identifier))
         .push(Router::with_path("api/auth/login/challenge").post(challenge))
         .push(Router::with_path("api/auth/login/email-code").post(email_code))
+        .push(Router::with_path("api/auth/login/password-reset").post(password_reset))
+        .push(Router::with_path("api/auth/login/password-reset/check").post(check_password_reset))
+        .push(
+            Router::with_path("api/auth/login/password-reset/confirm").post(confirm_password_reset),
+        )
         .push(Router::with_path("api/auth/login/passkey/options").post(passkey_options))
         .push(Router::with_path("api/auth/login/restart").post(restart_login))
         .push(Router::with_path("api/auth/login/switch").post(switch_login))
@@ -219,6 +227,16 @@ async fn login_status(
         .login()
         .email_code_resend_available_at(&login)
         .await?;
+    let password_reset_available = ctx
+        .services()
+        .login()
+        .password_reset_offered(&login)
+        .await?;
+    let password_reset_resend_available_at = ctx
+        .services()
+        .login()
+        .password_reset_resend_available_at(&login)
+        .await?;
     let preferred_credential_type =
         login::preferred_credential_type(&login, &credential_types, mfa_preference);
     let credential_types = login::challenge_credential_types(&login, &credential_types);
@@ -263,6 +281,8 @@ async fn login_status(
             enrollment_method,
             ui_locales,
             email_code_resend_available_at,
+            password_reset_available,
+            password_reset_resend_available_at,
             continue_uri,
         },
     );
@@ -504,7 +524,7 @@ async fn email_code(depot: &mut Depot, req: &mut Request, res: &mut Response) ->
         ),
         Err(_) => (None, None),
     };
-    let link_prefix = email_link_prefix(&ctx, &body.id, ui_locales.as_deref())?;
+    let link_prefix = login_link_prefix(&ctx, "login/email", &body.id, ui_locales.as_deref())?;
     let mut locales = ui_locales.unwrap_or_default();
     locales.extend(body.locales);
     let sent = ctx
@@ -529,10 +549,11 @@ async fn email_code(depot: &mut Depot, req: &mut Request, res: &mut Response) ->
     Ok(())
 }
 
-/// The login application's email sign-in page for `login_id`, ending where
-/// the link token is appended.
-fn email_link_prefix(
+/// The login application page `route` for `login_id`, ending where an
+/// emailed link token is appended.
+fn login_link_prefix(
     ctx: &crate::boot::AppState,
+    route: &str,
     login_id: &str,
     ui_locales: Option<&[String]>,
 ) -> Result<String, AppError> {
@@ -548,15 +569,15 @@ fn email_link_prefix(
             AppError::from_code(
                 crate::application::error::codes::authorize_http::AuthorizeHttpErrorCode::LoginDomainNotConfigured,
             )
-            .with_param("route", "login/email")
+            .with_param("route", route.to_owned())
         })?;
     let mut url = url::Url::parse(login_domain.trim())
-        .and_then(|base| base.join("login/email"))
+        .and_then(|base| base.join(route))
         .map_err(|error| {
             AppError::from_code(
                 crate::application::error::codes::authorize_http::AuthorizeHttpErrorCode::LoginDomainNotConfigured,
             )
-            .with_param("route", "login/email")
+            .with_param("route", route.to_owned())
             .with_source(error)
         })?;
     {
@@ -568,6 +589,125 @@ fn email_link_prefix(
     }
     // The token is base64url, so it needs no further encoding.
     Ok(format!("{url}&token="))
+}
+
+/// `POST /api/auth/login/password-reset`
+///
+/// Email a link that replaces a forgotten password, for a login waiting for
+/// its first factor. While the login conceals whether an account exists, the
+/// answer is the same whether or not anything was sent.
+#[handler]
+async fn password_reset(
+    depot: &mut Depot,
+    req: &mut Request,
+    res: &mut Response,
+) -> JsonWebResult<()> {
+    let ctx = app_state(depot)?;
+    let body: EmailCodeRequestBody = parse_json(req).await?;
+    let login_oid = ctx
+        .services()
+        .oidc_authorize()
+        .decrypt_login_id(&body.id)
+        .await?;
+    let (application_name, ui_locales) = match ctx
+        .services()
+        .oidc_authorize()
+        .load_continue_context_by_login(&body.id)
+        .await
+    {
+        Ok(context) => (
+            Some(context.client.client().name.clone()),
+            context.stored.request.ui_locales,
+        ),
+        Err(_) => (None, None),
+    };
+    let link_prefix = login_link_prefix(
+        &ctx,
+        "login/reset-password",
+        &body.id,
+        ui_locales.as_deref(),
+    )?;
+    let mut locales = ui_locales.unwrap_or_default();
+    locales.extend(body.locales);
+    let sent = ctx
+        .services()
+        .login()
+        .send_password_reset(login::PasswordResetRequest {
+            login_oid,
+            locales,
+            application_name,
+            link_prefix,
+        })
+        .await?;
+    render_json(
+        res,
+        StatusCode::OK,
+        EmailCodeResponse {
+            status: "sent",
+            expires_at: sent.expires_at,
+            resend_available_at: sent.resend_available_at,
+        },
+    );
+    Ok(())
+}
+
+/// `POST /api/auth/login/password-reset/check`
+///
+/// Whether a reset link can still be used, without using it.
+#[handler]
+async fn check_password_reset(
+    depot: &mut Depot,
+    req: &mut Request,
+    res: &mut Response,
+) -> JsonWebResult<()> {
+    let ctx = app_state(depot)?;
+    let body: PasswordResetCheckRequest = parse_json(req).await?;
+    let login_oid = ctx
+        .services()
+        .oidc_authorize()
+        .decrypt_login_id(&body.id)
+        .await?;
+    ctx.services()
+        .login()
+        .check_password_reset_link(login_oid, &body.token)
+        .await?;
+    render_json(
+        res,
+        StatusCode::OK,
+        PasswordResetStatusResponse { status: "valid" },
+    );
+    Ok(())
+}
+
+/// `POST /api/auth/login/password-reset/confirm`
+///
+/// Replace the password with a reset link. The login returns to its password
+/// step; every session of the account ends.
+#[handler]
+async fn confirm_password_reset(
+    depot: &mut Depot,
+    req: &mut Request,
+    res: &mut Response,
+) -> JsonWebResult<()> {
+    let ctx = app_state(depot)?;
+    let body: PasswordResetConfirmRequest = parse_json(req).await?;
+    let login_oid = ctx
+        .services()
+        .oidc_authorize()
+        .decrypt_login_id(&body.id)
+        .await?;
+    ctx.services()
+        .login()
+        .reset_password(login_oid, &body.token, &body.new_password)
+        .await?;
+    render_json(
+        res,
+        StatusCode::OK,
+        PasswordResetStatusResponse {
+            status: "password_reset",
+        },
+    );
+    Ok(())
 }
 
 #[handler]

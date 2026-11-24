@@ -185,6 +185,13 @@ pub struct LoginStatusResponse {
     /// for this login.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub email_code_resend_available_at: Option<DateTime<Utc>>,
+    /// Whether the password step offers to reset a forgotten password by
+    /// email. Offered for every identifier while the account is concealed.
+    pub password_reset_available: bool,
+    /// When another password reset email may be requested, once one has been
+    /// sent for this login.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password_reset_resend_available_at: Option<DateTime<Utc>>,
     /// Absolute OP `/oauth2/continue?login_id=X` URI, present only when authenticated.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub continue_uri: Option<String>,
@@ -248,6 +255,31 @@ pub struct EmailCodeResponse {
     pub status: &'static str,
     pub expires_at: DateTime<Utc>,
     pub resend_available_at: DateTime<Utc>,
+}
+
+/// `POST /api/auth/login/password-reset/check` request.
+#[derive(Debug, Deserialize)]
+pub struct PasswordResetCheckRequest {
+    /// Encrypted login.oid the reset link belongs to.
+    pub id: String,
+    /// The token of the emailed reset link.
+    pub token: String,
+}
+
+/// `POST /api/auth/login/password-reset/confirm` request.
+#[derive(Debug, Deserialize)]
+pub struct PasswordResetConfirmRequest {
+    /// Encrypted login.oid the reset link belongs to.
+    pub id: String,
+    /// The token of the emailed reset link.
+    pub token: String,
+    pub new_password: String,
+}
+
+/// `POST /api/auth/login/password-reset/check` and `/confirm` response.
+#[derive(Debug, Serialize)]
+pub struct PasswordResetStatusResponse {
+    pub status: &'static str,
 }
 
 /// `POST /api/auth/login/challenge` request.

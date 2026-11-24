@@ -20,6 +20,13 @@ pub enum GraphqlTransportErrorCode {
 }
 
 impl AppErrorCode for GraphqlTransportErrorCode {
+    fn required_params(self) -> &'static [&'static str] {
+        match self {
+            Self::QueryTooDeep | Self::QueryTooComplex => &["max"],
+            _ => &[],
+        }
+    }
+
     fn kind(self) -> ErrorKind {
         match self {
             Self::Unauthenticated | Self::InvalidToken => ErrorKind::Unauthorized,

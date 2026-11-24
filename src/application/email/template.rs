@@ -36,6 +36,8 @@ pub enum EmailTemplateKind {
     /// The link that verifies an account's email address, or the new
     /// address that replaces it.
     EmailVerification,
+    /// The link that replaces a forgotten password from the sign-in flow.
+    PasswordReset,
 }
 
 impl EmailTemplateKind {
@@ -44,6 +46,7 @@ impl EmailTemplateKind {
         match self {
             Self::SignInCode => "sign_in_code",
             Self::EmailVerification => "email_verification",
+            Self::PasswordReset => "password_reset",
         }
     }
 
@@ -67,6 +70,14 @@ impl EmailTemplateKind {
                 "expires_in_hours",
                 "user.name",
                 "user.email",
+                "locale",
+            ],
+            Self::PasswordReset => &[
+                "link",
+                "expires_in_minutes",
+                "user.name",
+                "user.email",
+                "application.name",
                 "locale",
             ],
         }
@@ -98,6 +109,16 @@ impl EmailTemplateKind {
                     "name": if chinese { "张三" } else { "Alex Doe" },
                     "email": "alex@example.com",
                 },
+                "locale": locale,
+            }),
+            Self::PasswordReset => json!({
+                "link": "https://login.example.com/login/reset-password?login_id=example&token=example",
+                "expires_in_minutes": 15,
+                "user": {
+                    "name": if chinese { "张三" } else { "Alex Doe" },
+                    "email": "alex@example.com",
+                },
+                "application": { "name": "Example App" },
                 "locale": locale,
             }),
         }
@@ -191,6 +212,19 @@ pub fn built_in_template(kind: EmailTemplateKind) -> EmailTemplate {
                 content(
                     include_str!("templates/email_verification/zh-CN/subject.txt"),
                     include_str!("templates/email_verification/zh-CN/body.html"),
+                ),
+            )]),
+        },
+        EmailTemplateKind::PasswordReset => EmailTemplate {
+            default: content(
+                include_str!("templates/password_reset/en-US/subject.txt"),
+                include_str!("templates/password_reset/en-US/body.html"),
+            ),
+            translations: BTreeMap::from([(
+                "zh-CN".to_owned(),
+                content(
+                    include_str!("templates/password_reset/zh-CN/subject.txt"),
+                    include_str!("templates/password_reset/zh-CN/body.html"),
                 ),
             )]),
         },

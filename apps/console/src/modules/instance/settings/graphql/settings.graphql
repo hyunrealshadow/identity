@@ -30,6 +30,7 @@ fragment ConsoleInstanceSettingsFields on InstanceSettings {
     breachedPasswordCheckEnabled
     identifierEnumerationAllowed
     emailSignInEnabled
+    passwordResetEnabled
     passwordHashing {
       timeCost
       timeCostRange {

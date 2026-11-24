@@ -743,6 +743,11 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "PasswordHashing",
           "policies": []
         },
+        "passwordResetEnabled": {
+          "name": "passwordResetEnabled",
+          "returnType": "Boolean",
+          "policies": []
+        },
         "version": {
           "name": "version",
           "returnType": "UUID",

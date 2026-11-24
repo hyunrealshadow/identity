@@ -288,6 +288,7 @@ audit_actions! {
     AccountIdentifierUpdate => Account, User;
     AccountEmailVerify => Account, User;
     AccountPasswordChange => Account, User;
+    AccountPasswordReset => Account, User;
     AccountCredentialReplace => Account, User;
     AccountTotpEnable => Account, User;
     AccountTotpDisable => Account, User;

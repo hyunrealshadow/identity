@@ -32,6 +32,7 @@ import { Route as HealthReadyRouteImport } from './routes/health.ready'
 import { Route as LoginMethodRouteImport } from './routes/login.$method'
 import { Route as LoginMfaSetupRouteImport } from './routes/login.mfa-setup'
 import { Route as LoginPasskeySetupRouteImport } from './routes/login.passkey-setup'
+import { Route as LoginResetPasswordRouteImport } from './routes/login.reset-password'
 import { Route as VerifyEmailOutcomeRouteImport } from './routes/verify-email_.$outcome'
 import { Route as AccountMfaSetupRouteImport } from './routes/account/mfa/setup'
 
@@ -150,6 +151,11 @@ const LoginPasskeySetupRoute = LoginPasskeySetupRouteImport.update({
   path: '/passkey-setup',
   getParentRoute: () => LoginRoute,
 } as any)
+const LoginResetPasswordRoute = LoginResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
+  getParentRoute: () => LoginRoute,
+} as any)
 const VerifyEmailOutcomeRoute = VerifyEmailOutcomeRouteImport.update({
   id: '/verify-email_/$outcome',
   path: '/verify-email/$outcome',
@@ -184,6 +190,7 @@ export interface FileRoutesByFullPath {
   '/login/$method': typeof LoginMethodRoute
   '/login/mfa-setup': typeof LoginMfaSetupRoute
   '/login/passkey-setup': typeof LoginPasskeySetupRoute
+  '/login/reset-password': typeof LoginResetPasswordRoute
   '/verify-email/$outcome': typeof VerifyEmailOutcomeRoute
   '/account/': typeof AccountIndexRoute
   '/account/mfa/setup': typeof AccountMfaSetupRoute
@@ -210,6 +217,7 @@ export interface FileRoutesByTo {
   '/login/$method': typeof LoginMethodRoute
   '/login/mfa-setup': typeof LoginMfaSetupRoute
   '/login/passkey-setup': typeof LoginPasskeySetupRoute
+  '/login/reset-password': typeof LoginResetPasswordRoute
   '/verify-email/$outcome': typeof VerifyEmailOutcomeRoute
   '/account': typeof AccountIndexRoute
   '/account/mfa/setup': typeof AccountMfaSetupRoute
@@ -238,6 +246,7 @@ export interface FileRoutesById {
   '/login/$method': typeof LoginMethodRoute
   '/login/mfa-setup': typeof LoginMfaSetupRoute
   '/login/passkey-setup': typeof LoginPasskeySetupRoute
+  '/login/reset-password': typeof LoginResetPasswordRoute
   '/verify-email_/$outcome': typeof VerifyEmailOutcomeRoute
   '/account/': typeof AccountIndexRoute
   '/account/mfa/setup': typeof AccountMfaSetupRoute
@@ -267,6 +276,7 @@ export interface FileRouteTypes {
     | '/login/$method'
     | '/login/mfa-setup'
     | '/login/passkey-setup'
+    | '/login/reset-password'
     | '/verify-email/$outcome'
     | '/account/'
     | '/account/mfa/setup'
@@ -293,6 +303,7 @@ export interface FileRouteTypes {
     | '/login/$method'
     | '/login/mfa-setup'
     | '/login/passkey-setup'
+    | '/login/reset-password'
     | '/verify-email/$outcome'
     | '/account'
     | '/account/mfa/setup'
@@ -320,6 +331,7 @@ export interface FileRouteTypes {
     | '/login/$method'
     | '/login/mfa-setup'
     | '/login/passkey-setup'
+    | '/login/reset-password'
     | '/verify-email_/$outcome'
     | '/account/'
     | '/account/mfa/setup'
@@ -507,6 +519,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginPasskeySetupRouteImport
       parentRoute: typeof LoginRoute
     }
+    '/login/reset-password': {
+      id: '/login/reset-password'
+      path: '/reset-password'
+      fullPath: '/login/reset-password'
+      preLoaderRoute: typeof LoginResetPasswordRouteImport
+      parentRoute: typeof LoginRoute
+    }
     '/verify-email_/$outcome': {
       id: '/verify-email_/$outcome'
       path: '/verify-email/$outcome'
@@ -550,12 +569,14 @@ interface LoginRouteChildren {
   LoginMethodRoute: typeof LoginMethodRoute
   LoginMfaSetupRoute: typeof LoginMfaSetupRoute
   LoginPasskeySetupRoute: typeof LoginPasskeySetupRoute
+  LoginResetPasswordRoute: typeof LoginResetPasswordRoute
 }
 
 const LoginRouteChildren: LoginRouteChildren = {
   LoginMethodRoute: LoginMethodRoute,
   LoginMfaSetupRoute: LoginMfaSetupRoute,
   LoginPasskeySetupRoute: LoginPasskeySetupRoute,
+  LoginResetPasswordRoute: LoginResetPasswordRoute,
 }
 
 const LoginRouteWithChildren = LoginRoute._addFileChildren(LoginRouteChildren)

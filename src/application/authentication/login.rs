@@ -37,6 +37,7 @@ mod otp;
 mod passkey;
 mod password;
 mod password_change;
+mod password_reset;
 mod recovery_code;
 mod session;
 
@@ -48,6 +49,9 @@ pub use email::{
     email_sign_in_available,
 };
 pub use enrollment::{LoginMfaEnrollmentDependencies, LoginPasskeyEnrollment, LoginTotpEnrollment};
+pub use password_reset::{
+    PasswordResetRequest, PasswordResetSent, can_receive_password_reset, password_reset_available,
+};
 
 // ─── Input/Output Types ──────────────────────────────────────────────────────
 

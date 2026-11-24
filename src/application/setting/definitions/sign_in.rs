@@ -29,3 +29,18 @@ impl SettingDefinition for EmailSignInEnabledSetting {
         false
     }
 }
+
+/// Whether someone who forgot their password may replace it from the
+/// sign-in flow with a one-time link sent to the account's verified email
+/// address. Offered only while email delivery is configured.
+pub struct PasswordResetEnabledSetting;
+
+impl SettingDefinition for PasswordResetEnabledSetting {
+    type Value = bool;
+
+    const KEY: &'static str = "auth.login.password_reset_enabled";
+
+    fn default_value() -> Self::Value {
+        true
+    }
+}

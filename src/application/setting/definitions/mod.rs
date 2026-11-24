@@ -19,4 +19,6 @@ pub use openid_connect::{
     PushedAuthorizationSettings,
 };
 pub use password::{BreachedPasswordCheckEnabledSetting, PasswordHashSetting};
-pub use sign_in::{EmailSignInEnabledSetting, IdentifierEnumerationAllowedSetting};
+pub use sign_in::{
+    EmailSignInEnabledSetting, IdentifierEnumerationAllowedSetting, PasswordResetEnabledSetting,
+};

@@ -104,10 +104,16 @@ export interface LoginStatusResponse {
   ui_locales?: Array<string>
   /** When another sign-in email may be requested, once one was sent for this login. */
   email_code_resend_available_at?: string
+  password_reset_available?: boolean
+  password_reset_resend_available_at?: string
   continue_uri?: string
 }
 
 /** From `/api/auth/login/email-code`; the same whether or not an account matched. */
+export interface PasswordResetStatusResponse {
+  status: 'valid' | 'password_reset'
+}
+
 export interface EmailCodeResponse {
   status: 'sent'
   expires_at: string

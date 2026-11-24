@@ -172,6 +172,20 @@ pub enum AuthorizeErrorCode {
 }
 
 impl AppErrorCode for AuthorizeErrorCode {
+    fn required_params(self) -> &'static [&'static str] {
+        match self {
+            Self::ResponseTypeInvalid => &["response_type"],
+            Self::DisplayValueInvalid => &["display"],
+            Self::PromptValueInvalid => &["prompt"],
+            Self::CodeChallengeMethodInvalid => &["code_challenge_method"],
+            Self::RequiredParamMissing => &["fields"],
+            Self::RequestObjectAlgUnsupported => &["alg"],
+            Self::ScopeNotAssignedToClient => &["scopes"],
+            Self::ResponseModeInvalid => &["response_mode"],
+            _ => &[],
+        }
+    }
+
     fn kind(self) -> ErrorKind {
         match self {
             Self::ClientIdInvalid

@@ -103,6 +103,7 @@ impl SettingMutation {
                         breached_password_check_enabled: input.breached_password_check_enabled,
                         identifier_enumeration_allowed: input.identifier_enumeration_allowed,
                         email_sign_in_enabled: input.email_sign_in_enabled,
+                        password_reset_enabled: input.password_reset_enabled,
                         password_hashing: PasswordHashingView {
                             time_cost: hashing.time_cost,
                             memory_cost_kib: hashing.memory_cost_kib,

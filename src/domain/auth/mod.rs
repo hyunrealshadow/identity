@@ -218,6 +218,11 @@ pub const EMAIL_CODE_RESEND_INTERVAL: Duration = Duration::from_secs(60);
 /// Sign-in emails one login may send in total.
 pub const MAX_EMAIL_CODE_SENDS: i32 = 5;
 
+/// How long an emailed password reset link stays valid. Sending one extends
+/// the login to at least this long from the moment it is sent, and the resend
+/// interval and send limit of sign-in emails apply to it as well.
+pub const PASSWORD_RESET_TTL: Duration = Duration::from_secs(15 * 60);
+
 /// Duration after which a login flow expires (from `created_at`).
 pub const LOGIN_EXPIRY: Duration = Duration::from_secs(5 * 60);
 

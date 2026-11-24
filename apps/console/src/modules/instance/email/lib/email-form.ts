@@ -193,6 +193,7 @@ export function emailDeliveryInput(
 const templateSlugs: Record<EmailTemplateKind, string> = {
   SIGN_IN_CODE: 'sign-in-code',
   EMAIL_VERIFICATION: 'email-verification',
+  PASSWORD_RESET: 'password-reset',
 }
 
 export function emailTemplateSlug(kind: EmailTemplateKind) {
@@ -216,6 +217,10 @@ export const emailTemplateLabels: Record<
   EMAIL_VERIFICATION: {
     title: 'settingsEmailTemplateEmailVerification',
     description: 'settingsEmailTemplateEmailVerificationHint',
+  },
+  PASSWORD_RESET: {
+    title: 'settingsEmailTemplatePasswordReset',
+    description: 'settingsEmailTemplatePasswordResetHint',
   },
 }
 

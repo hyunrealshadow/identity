@@ -145,6 +145,37 @@ delivery is off.
   then the request's `ui_locales`, then the Login page language (exact tag
   first, then the same language), and otherwise the template's default content.
 
+### Password reset
+
+The authentication setting `auth.login.password_reset_enabled` (Console:
+*Password reset*, default `true`) lets someone who forgot their password set a
+new one from the password step. It is offered only while email delivery is
+configured, can be turned on only then, and needs an account with a password
+and a **verified** email address. Email templates: *Password reset*.
+
+- The password step links to `/login/reset-password?login_id=…`, which emails
+  a single-use link to `{login_domain}/login/reset-password?login_id=…&token=…`.
+  The link belongs to that interaction, expires after 15 minutes, and sending
+  extends the interaction to at least that long. Sends follow email sign-in:
+  at least 60 seconds apart, at most five per interaction; a new send replaces
+  the previous link.
+- Opening the link only shows the new-password form; the link is used up when
+  the password is replaced, so a rejected password (same policy as a password
+  change) or a mail scanner fetching it leaves it usable.
+- Replacing the password revokes every session of the account with its grants
+  and fails its other pending logins, in the same transaction as the audit
+  record `ACCOUNT_PASSWORD_RESET`. The interaction the link came from stays at
+  `IdentifierVerified` with its failed attempts cleared, and a lockout from
+  failed attempts ends. The user returns to the password step and signs in
+  with the new password; an enrolled second factor is still required.
+- Not offered from an interaction that started from an existing session
+  (reauthentication), since the reset would end that session.
+- While the interaction conceals whether an account exists, the reset is
+  offered for every identifier and the send answers the same whether or not an
+  email goes out.
+- A temporarily locked account is still refused at the identifier step, so
+  it waits for the lock to expire before it can reach the reset.
+
 ### Email address verification
 
 An account's email address is verified by following a single-use link emailed

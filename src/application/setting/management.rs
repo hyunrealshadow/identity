@@ -24,7 +24,7 @@ use uuid::Uuid;
 use super::{
     AppSettings, BreachedPasswordCheckEnabledSetting, EmailDeliverySettings,
     EmailSignInEnabledSetting, IdentifierEnumerationAllowedSetting, InstallationSettings,
-    OpenIdConnectSettings, PasswordHashSetting, SettingChanges,
+    OpenIdConnectSettings, PasswordHashSetting, PasswordResetEnabledSetting, SettingChanges,
     email::{EmailManagementDependencies, EmailSettingsView},
     runtime::RefreshableSetting,
 };
@@ -96,6 +96,9 @@ impl InstanceSettingSection {
             Self::EmailTemplate(EmailTemplateKind::EmailVerification) => {
                 "email_template.email_verification"
             }
+            Self::EmailTemplate(EmailTemplateKind::PasswordReset) => {
+                "email_template.password_reset"
+            }
         }
     }
 
@@ -144,6 +147,7 @@ pub struct InstanceSettingsState {
     pub breached_password_check_enabled: bool,
     pub identifier_enumeration_allowed: bool,
     pub email_sign_in_enabled: bool,
+    pub password_reset_enabled: bool,
     pub email_delivery: EmailDeliverySettings,
     pub email_templates: EmailTemplates,
 }
@@ -155,6 +159,7 @@ pub struct AuthenticationSectionValues<'a> {
     pub breached_password_check_enabled: bool,
     pub identifier_enumeration_allowed: bool,
     pub email_sign_in_enabled: bool,
+    pub password_reset_enabled: bool,
 }
 
 impl InstanceSettingsState {
@@ -165,6 +170,7 @@ impl InstanceSettingsState {
             breached_password_check_enabled: self.breached_password_check_enabled,
             identifier_enumeration_allowed: self.identifier_enumeration_allowed,
             email_sign_in_enabled: self.email_sign_in_enabled,
+            password_reset_enabled: self.password_reset_enabled,
         }
     }
 }
@@ -200,6 +206,7 @@ pub struct AuthenticationSettingsView {
     pub breached_password_check_enabled: bool,
     pub identifier_enumeration_allowed: bool,
     pub email_sign_in_enabled: bool,
+    pub password_reset_enabled: bool,
     pub password_hashing: PasswordHashingView,
     pub version: Uuid,
 }
@@ -244,6 +251,7 @@ impl From<&InstanceSettingsState> for InstanceSettingsView {
                 breached_password_check_enabled: state.breached_password_check_enabled,
                 identifier_enumeration_allowed: state.identifier_enumeration_allowed,
                 email_sign_in_enabled: state.email_sign_in_enabled,
+                password_reset_enabled: state.password_reset_enabled,
                 password_hashing: PasswordHashingView {
                     time_cost: argon2.time_cost,
                     memory_cost_kib: argon2.memory_cost,
@@ -273,6 +281,7 @@ pub struct UpdateAuthenticationSettingsCommand {
     pub breached_password_check_enabled: bool,
     pub identifier_enumeration_allowed: bool,
     pub email_sign_in_enabled: bool,
+    pub password_reset_enabled: bool,
     pub password_hashing: PasswordHashingView,
     pub expected_version: Uuid,
     pub client_mutation_id: Option<String>,
@@ -438,6 +447,7 @@ impl InstanceSettingService {
             let breached = command.breached_password_check_enabled;
             let enumeration = command.identifier_enumeration_allowed;
             let email_sign_in = command.email_sign_in_enabled;
+            let password_reset = command.password_reset_enabled;
             let build = move |state: &InstanceSettingsState| {
                 // Turning email sign-in on needs a way to send it. Once on,
                 // it stays saved if delivery is later turned off; it is then
@@ -451,11 +461,21 @@ impl InstanceSettingService {
                             .with_field("emailSignInEnabled"),
                     );
                 }
+                if password_reset
+                    && !state.password_reset_enabled
+                    && !state.email_delivery.is_configured()
+                {
+                    return Err(
+                        AppError::from_code(InstanceErrorCode::EmailDeliveryNotConfigured)
+                            .with_field("passwordResetEnabled"),
+                    );
+                }
                 Ok(SettingChanges::default()
                     .set::<PasswordHashSetting>(&options)?
                     .set::<BreachedPasswordCheckEnabledSetting>(&breached)?
                     .set::<IdentifierEnumerationAllowedSetting>(&enumeration)?
-                    .set::<EmailSignInEnabledSetting>(&email_sign_in)?)
+                    .set::<EmailSignInEnabledSetting>(&email_sign_in)?
+                    .set::<PasswordResetEnabledSetting>(&password_reset)?)
             };
             self.write(
                 authority,
@@ -562,6 +582,7 @@ mod tests {
             breached_password_check_enabled: true,
             identifier_enumeration_allowed: true,
             email_sign_in_enabled: false,
+            password_reset_enabled: true,
             email_delivery: EmailDeliverySettings::default(),
             email_templates: EmailTemplates::new(),
         }

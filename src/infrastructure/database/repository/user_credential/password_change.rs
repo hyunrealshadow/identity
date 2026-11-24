@@ -1,6 +1,6 @@
 //! Account security transition: all mutations commit or roll back together.
 use super::*;
-use identity_domain::auth::SessionOid;
+use identity_domain::auth::{LOGIN_EXPIRY, SessionOid};
 use sea_orm::{ConnectionTrait, DbBackend, Statement};
 use user::Column as UserColumn;
 use user_credential::Column as UserCredentialColumn;
@@ -16,6 +16,7 @@ impl UserCredentialRepositoryImpl {
         expected: &Password,
         password: &Password,
         keep: Option<SessionOid>,
+        reset_login: Option<UuidUuid>,
     ) -> Result<u32, UserCredentialRepositoryError> {
         let fail = |error| UserCredentialRepositoryError::UpdatePasswordFailed(Box::new(error));
         let txn = self.db.begin().await.map_err(fail)?;
@@ -79,8 +80,32 @@ impl UserCredentialRepositoryImpl {
             "UPDATE session SET status = 'revoked', revoked_at = now(), updated_at = now() WHERE user_id = $1 AND ($2::uuid IS NULL OR oid <> $2) AND status = 'active' AND revoked_at IS NULL",
             [owner.id.into(), keep_oid.into()])).await.map_err(fail)?;
         // Invalidating pending flows also closes an already-verified password/MFA race.
+        // A reset keeps the login it came from while that login has verified
+        // no factor yet, so the account can sign in with the new password.
         txn.execute_raw(Statement::from_sql_and_values(DbBackend::Postgres,
-            "UPDATE login SET status = 'failed', updated_at = now() WHERE user_id = $1 AND status IN ('created', 'identifier_verified', 'mfa_required', 'mfa_enrollment_required')", [owner.id.into()])).await.map_err(fail)?;
+            "UPDATE login SET status = 'failed', updated_at = now() WHERE user_id = $1 AND status IN ('created', 'identifier_verified', 'mfa_required', 'mfa_enrollment_required') AND NOT ($2::uuid IS NOT NULL AND oid = $2 AND status = 'identifier_verified')", [owner.id.into(), reset_login.into()])).await.map_err(fail)?;
+        if let Some(login) = reset_login {
+            txn.execute_raw(Statement::from_sql_and_values(DbBackend::Postgres,
+                "UPDATE login SET failed_attempts = 0, failure_reason = NULL, expires_at = GREATEST(expires_at, now() + make_interval(secs => $3)), updated_at = now() WHERE user_id = $1 AND oid = $2 AND status = 'identifier_verified'",
+                [owner.id.into(), login.into(), (LOGIN_EXPIRY.as_secs_f64()).into()])).await.map_err(fail)?;
+            // Proving the email address ends a lockout caused by wrong passwords.
+            UserEntity::update_many()
+                .col_expr(UserColumn::FailedAttempts, Expr::value(0i32))
+                .col_expr(UserColumn::Locked, Expr::value(false))
+                .col_expr(
+                    UserColumn::LockedUntil,
+                    Expr::value(Option::<chrono::DateTime<chrono::FixedOffset>>::None),
+                )
+                .filter(UserColumn::Id.eq(owner.id))
+                .filter(
+                    UserColumn::LockedUntil
+                        .is_not_null()
+                        .or(UserColumn::Locked.eq(false)),
+                )
+                .exec(&txn)
+                .await
+                .map_err(fail)?;
+        }
         txn.execute_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,
             "DELETE FROM authentication_challenge WHERE user_id = $1",
@@ -104,11 +129,18 @@ impl UserCredentialRepositoryImpl {
             .map_err(fail)?;
         audit::record(
             &txn,
-            AuditRecord::success(AuditAction::AccountPasswordChange, Uuid::from(user))
-                .default_actor(AuditActor::user(Uuid::from(user)))
-                .with_changes(|changes| {
-                    changes.secret(AuditField::Password);
-                }),
+            AuditRecord::success(
+                if reset_login.is_some() {
+                    AuditAction::AccountPasswordReset
+                } else {
+                    AuditAction::AccountPasswordChange
+                },
+                Uuid::from(user),
+            )
+            .default_actor(AuditActor::user(Uuid::from(user)))
+            .with_changes(|changes| {
+                changes.secret(AuditField::Password);
+            }),
         )
         .await
         .map_err(fail)?;

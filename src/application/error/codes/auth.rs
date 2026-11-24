@@ -38,9 +38,30 @@ pub enum AuthErrorCode {
     EmailCodeResendTooSoon,
     /// The sign-in email could not be sent.
     EmailDeliveryFailed,
+    /// The account cannot replace its password by email: password reset is
+    /// off, email cannot be sent, or the account has no password or no
+    /// verified email address.
+    PasswordResetUnavailable,
+    /// The password reset link is wrong, used, or expired.
+    PasswordResetLinkInvalid,
+    /// Another password reset email was requested before the resend interval
+    /// passed.
+    PasswordResetResendTooSoon,
+    /// The password reset email could not be sent.
+    PasswordResetDeliveryFailed,
 }
 
 impl AppErrorCode for AuthErrorCode {
+    fn required_params(self) -> &'static [&'static str] {
+        match self {
+            Self::CredentialTypeUnsupported => &["credential_type"],
+            Self::SessionNotFound => &["session_id"],
+            Self::PasskeyLimitReached => &["limit"],
+            Self::EmailCodeResendTooSoon | Self::PasswordResetResendTooSoon => &["seconds"],
+            _ => &[],
+        }
+    }
+
     fn kind(self) -> ErrorKind {
         match self {
             AuthErrorCode::UserNotFound | AuthErrorCode::SessionNotFound => ErrorKind::NotFound,
@@ -66,15 +87,18 @@ impl AppErrorCode for AuthErrorCode {
             | AuthErrorCode::PasswordTooSimilar
             | AuthErrorCode::PasswordBreached
             | AuthErrorCode::InvalidTotpEnrollment
-            | AuthErrorCode::InvalidMfaEnrollment => ErrorKind::Validation,
+            | AuthErrorCode::InvalidMfaEnrollment
+            | AuthErrorCode::PasswordResetUnavailable
+            | AuthErrorCode::PasswordResetLinkInvalid => ErrorKind::Validation,
 
-            AuthErrorCode::TooManyAttempts | AuthErrorCode::EmailCodeResendTooSoon => {
-                ErrorKind::RateLimit
-            }
+            AuthErrorCode::TooManyAttempts
+            | AuthErrorCode::EmailCodeResendTooSoon
+            | AuthErrorCode::PasswordResetResendTooSoon => ErrorKind::RateLimit,
 
             AuthErrorCode::DeviceAuthorizationRevocationFailed
             | AuthErrorCode::PasswordCheckUnavailable
-            | AuthErrorCode::EmailDeliveryFailed => ErrorKind::Internal,
+            | AuthErrorCode::EmailDeliveryFailed
+            | AuthErrorCode::PasswordResetDeliveryFailed => ErrorKind::Internal,
         }
     }
 
@@ -110,6 +134,10 @@ impl AppErrorCode for AuthErrorCode {
             AuthErrorCode::InvalidAccountOrPassword => 11027,
             AuthErrorCode::EmailCodeResendTooSoon => 11028,
             AuthErrorCode::EmailDeliveryFailed => 11029,
+            AuthErrorCode::PasswordResetUnavailable => 11030,
+            AuthErrorCode::PasswordResetLinkInvalid => 11031,
+            AuthErrorCode::PasswordResetResendTooSoon => 11032,
+            AuthErrorCode::PasswordResetDeliveryFailed => 11033,
         }
     }
 }

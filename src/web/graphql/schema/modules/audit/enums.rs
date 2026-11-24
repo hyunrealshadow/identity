@@ -166,6 +166,7 @@ pub(crate) enum AuditAction {
     AccountIdentifierUpdate,
     AccountEmailVerify,
     AccountPasswordChange,
+    AccountPasswordReset,
     AccountCredentialReplace,
     AccountTotpEnable,
     AccountTotpDisable,

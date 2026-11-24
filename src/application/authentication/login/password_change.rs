@@ -17,7 +17,7 @@ use std::sync::Arc;
 use uuid::Uuid;
 
 impl LoginService {
-    async fn prepare_password_change(
+    pub(super) async fn prepare_password_change(
         &self,
         user_oid: UserOid,
         new_password: &str,

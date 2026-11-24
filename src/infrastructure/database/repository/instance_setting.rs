@@ -15,6 +15,7 @@ use identity_application::{
         AppSettings, BreachedPasswordCheckEnabledSetting, EmailDeliverySettings,
         EmailSignInEnabledSetting, EmailTemplatesSetting, IdentifierEnumerationAllowedSetting,
         InstallationSettings, OpenIdConnectSettings, PasswordHashSetting,
+        PasswordResetEnabledSetting,
         email::{email_delivery_audit_values, email_template_audit_values},
         management::{
             InstanceSettingRepository, InstanceSettingRepositoryError, InstanceSettingSection,
@@ -80,6 +81,7 @@ async fn load_state<C: ConnectionTrait>(
         breached_password_check_enabled: snapshot.get::<BreachedPasswordCheckEnabledSetting>(),
         identifier_enumeration_allowed: snapshot.get::<IdentifierEnumerationAllowedSetting>(),
         email_sign_in_enabled: snapshot.get::<EmailSignInEnabledSetting>(),
+        password_reset_enabled: snapshot.get::<PasswordResetEnabledSetting>(),
         email_delivery: snapshot.section::<EmailDeliverySettings>(),
         email_templates: snapshot.get::<EmailTemplatesSetting>(),
     })

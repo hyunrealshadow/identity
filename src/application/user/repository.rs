@@ -92,6 +92,24 @@ pub trait UserCredentialRepository: Send + Sync {
         ))
     }
 
+    /// Like [`Self::change_password_and_revoke`] keeping no session, for a
+    /// password replaced through an emailed reset link. The login the reset
+    /// came from stays open while it has verified no factor, with its failed
+    /// attempts cleared; a lockout from failed attempts ends.
+    async fn reset_password_and_revoke(
+        &self,
+        user: UserOid,
+        credential: UserCredentialOid,
+        expected: &Password,
+        password: &Password,
+        login: Uuid,
+    ) -> Result<u32, UserCredentialRepositoryError> {
+        let _ = (user, credential, expected, password, login);
+        Err(UserCredentialRepositoryError::UpdatePasswordFailed(
+            Box::new(IoError::other("password resets are not configured")),
+        ))
+    }
+
     /// Atomically stores `counter` in the OTP credential's JSONB data only if
     /// it is greater than the previously consumed counter.
     async fn consume_totp_counter(

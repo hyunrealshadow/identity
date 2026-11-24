@@ -36,3 +36,7 @@ E11026 = Password security checks are temporarily unavailable. Please try again 
 E11027 = The account or password is incorrect. Try again.
 E11028 = A sign-in email was sent recently. You can request another in { $seconds } seconds.
 E11029 = The sign-in email could not be sent. Try again later or use another method.
+E11030 = This account's password cannot be reset by email. Contact your administrator.
+E11031 = The reset link is invalid or has expired. Request a new one.
+E11032 = A reset email was sent recently. You can request another in { $seconds } seconds.
+E11033 = The reset email could not be sent. Try again later.

@@ -14,7 +14,7 @@ pub use definitions::{
     DeviceAuthorizationSettings, DomainSetting, DynamicRegistrationSettings, EmailDeliverySettings,
     EmailSignInEnabledSetting, EmailTemplatesSetting, IdentifierEnumerationAllowedSetting,
     InstallationSettings, LoginClientIdSetting, LoginDomainSetting, OpenIdConnectSettings,
-    PasswordHashSetting,
+    PasswordHashSetting, PasswordResetEnabledSetting,
 };
 pub use definitions::{
     ProtectedSecret, PushedAuthorizationSettings, SmtpAuthentication, SmtpSecurity, Xoauth2Grant,

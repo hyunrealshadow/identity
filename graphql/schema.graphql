@@ -233,6 +233,7 @@ enum AuditAction {
 	ACCOUNT_IDENTIFIER_UPDATE
 	ACCOUNT_EMAIL_VERIFY
 	ACCOUNT_PASSWORD_CHANGE
+	ACCOUNT_PASSWORD_RESET
 	ACCOUNT_CREDENTIAL_REPLACE
 	ACCOUNT_TOTP_ENABLE
 	ACCOUNT_TOTP_DISABLE
@@ -518,6 +519,12 @@ type AuthenticationSettings {
 	configured.
 	"""
 	emailSignInEnabled: Boolean!
+	"""
+	Whether someone who forgot their password may replace it from the
+	sign-in flow with a link sent to the account's verified email address.
+	Offered only while email delivery is configured.
+	"""
+	passwordResetEnabled: Boolean!
 	"""
 	Argon2id cost for newly stored password hashes.
 	"""
@@ -1328,6 +1335,10 @@ enum EmailTemplateKind {
 	The link that verifies an account's email address.
 	"""
 	EMAIL_VERIFICATION
+	"""
+	The link that replaces a forgotten password from the sign-in flow.
+	"""
+	PASSWORD_RESET
 }
 
 """
@@ -2739,6 +2750,7 @@ input UpdateAuthenticationSettingsInput {
 	breachedPasswordCheckEnabled: Boolean!
 	identifierEnumerationAllowed: Boolean!
 	emailSignInEnabled: Boolean!
+	passwordResetEnabled: Boolean!
 	passwordHashing: PasswordHashingInput!
 	expectedVersion: UUID!
 	clientMutationId: String

@@ -169,7 +169,19 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         password: &Password,
         keep: Option<SessionOid>,
     ) -> Result<u32, UserCredentialRepositoryError> {
-        self.change_password_transaction(user, credential, expected, password, keep)
+        self.change_password_transaction(user, credential, expected, password, keep, None)
+            .await
+    }
+
+    async fn reset_password_and_revoke(
+        &self,
+        user: UserOid,
+        credential: UserCredentialOid,
+        expected: &Password,
+        password: &Password,
+        login: Uuid,
+    ) -> Result<u32, UserCredentialRepositoryError> {
+        self.change_password_transaction(user, credential, expected, password, None, Some(login))
             .await
     }
 

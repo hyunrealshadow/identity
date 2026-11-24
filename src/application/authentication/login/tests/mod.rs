@@ -283,6 +283,7 @@ mod email;
 mod enrollment;
 mod passkey;
 mod password_change;
+mod password_reset;
 mod priority;
 mod reauthentication;
 mod sessions;

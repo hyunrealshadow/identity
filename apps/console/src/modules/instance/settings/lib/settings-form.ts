@@ -111,6 +111,7 @@ export interface AuthenticationDraft {
   breachedPasswordCheckEnabled: boolean
   identifierEnumerationAllowed: boolean
   emailSignInEnabled: boolean
+  passwordResetEnabled: boolean
   timeCost: string
   memoryCostKib: string
   parallelism: string
@@ -123,6 +124,7 @@ export function authenticationDraft(settings: AuthenticationSettings): Authentic
     breachedPasswordCheckEnabled: settings.breachedPasswordCheckEnabled,
     identifierEnumerationAllowed: settings.identifierEnumerationAllowed,
     emailSignInEnabled: settings.emailSignInEnabled,
+    passwordResetEnabled: settings.passwordResetEnabled,
     timeCost: String(settings.passwordHashing.timeCost),
     memoryCostKib: String(settings.passwordHashing.memoryCostKib),
     parallelism: String(settings.passwordHashing.parallelism),
@@ -157,6 +159,7 @@ export function authenticationInput(
       breachedPasswordCheckEnabled: draft.breachedPasswordCheckEnabled,
       identifierEnumerationAllowed: draft.identifierEnumerationAllowed,
       emailSignInEnabled: draft.emailSignInEnabled,
+      passwordResetEnabled: draft.passwordResetEnabled,
       passwordHashing: {
         timeCost: values.timeCost!,
         memoryCostKib: values.memoryCostKib!,

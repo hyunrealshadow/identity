@@ -57,6 +57,14 @@ impl GraphqlErrorCode {
 }
 
 impl AppErrorCode for GraphqlErrorCode {
+    fn required_params(self) -> &'static [&'static str] {
+        match self {
+            Self::PageSizeInvalid => &["max"],
+            Self::InsufficientScope => &["scope"],
+            _ => &[],
+        }
+    }
+
     fn kind(self) -> ErrorKind {
         match self {
             Self::InsufficientScope

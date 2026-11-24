@@ -174,6 +174,13 @@ impl AuthenticationSettings {
         self.view.email_sign_in_enabled
     }
 
+    /// Whether someone who forgot their password may replace it from the
+    /// sign-in flow with a link sent to the account's verified email address.
+    /// Offered only while email delivery is configured.
+    async fn password_reset_enabled(&self) -> bool {
+        self.view.password_reset_enabled
+    }
+
     /// Argon2id cost for newly stored password hashes.
     async fn password_hashing(&self) -> PasswordHashing {
         let hashing = &self.view.password_hashing;
@@ -248,6 +255,7 @@ pub(crate) struct UpdateAuthenticationSettingsInput {
     pub breached_password_check_enabled: bool,
     pub identifier_enumeration_allowed: bool,
     pub email_sign_in_enabled: bool,
+    pub password_reset_enabled: bool,
     pub password_hashing: PasswordHashingInput,
     pub expected_version: Uuid,
     #[graphql(validator(chars_max_length = 255))]

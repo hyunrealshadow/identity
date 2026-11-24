@@ -336,6 +336,40 @@
     "module": "auth"
   },
   {
+    "code": 11030,
+    "kind": "validation",
+    "fluentKey": "E11030",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "auth"
+  },
+  {
+    "code": 11031,
+    "kind": "validation",
+    "fluentKey": "E11031",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "auth"
+  },
+  {
+    "code": 11032,
+    "kind": "rate_limit",
+    "fluentKey": "E11032",
+    "requiredParams": [
+      "seconds"
+    ],
+    "optionalParams": [],
+    "module": "auth"
+  },
+  {
+    "code": 11033,
+    "kind": "internal",
+    "fluentKey": "E11033",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "auth"
+  },
+  {
     "code": 15000,
     "kind": "validation",
     "fluentKey": "E15000",
