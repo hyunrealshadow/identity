@@ -101,6 +101,8 @@ impl AuditQueryField {
 pub enum AuditTextMatcher {
     Exact(String),
     Prefix(String),
+    /// `*` matches any run of characters and `?` one character; a backslash
+    /// makes the next character literal.
     Wildcard(String),
     Contains(String),
     Exists,
@@ -174,6 +176,22 @@ pub enum AuditQueryError {
 }
 
 /// Parse and validate a native Lucene query string for security audit events.
+///
+/// The grammar is the one the query input in `packages/lucene-input` builds
+/// its syntax tree with (`syntax-tree.ts`), read strictly: where that tree
+/// marks a missing or unparsed part, this parser rejects the query.
+///
+/// ```text
+/// query     := implicit?
+/// implicit  := or or*                       (juxtaposition, lowest precedence)
+/// or        := and (("OR" | "||") and)*
+/// and       := primary (("AND" | "&&") primary)*
+/// primary   := ("NOT" | "!") primary | "(" implicit ")" | field ":" fieldTerm | term
+/// fieldTerm := ("NOT" | "!") fieldTerm | "(" implicit ")" | cmp term
+///            | "[" term "TO" term "]" | term
+/// ```
+///
+/// Keywords match in any letter case; `TO` is a keyword only inside a range.
 pub fn parse_audit_query(
     raw: &str,
     reference_now: DateTime<Utc>,
@@ -187,22 +205,21 @@ pub fn parse_audit_query(
         });
     }
 
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
+    let tokens = tokenize(raw)?;
+    if tokens.is_empty() {
         return Ok(AuditQueryExpr::MatchAll);
     }
 
     let mut parser = Parser {
-        src: trimmed,
+        tokens,
         pos: 0,
         clauses: 0,
         reference_now,
         tz: time_zone.as_tz(),
     };
-    let expr = parser.parse_or_expr(None, 0)?;
-    parser.skip_ws();
-    if !parser.is_eof() {
-        return Err(parser.unexpected_tail_error());
+    let expr = parser.parse_implicit(None, 0)?;
+    if let Some(token) = parser.peek() {
+        return Err(unexpected_token(token));
     }
     Ok(expr)
 }
@@ -215,47 +232,340 @@ enum CmpOp {
     Lte,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum UnaryOp {
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Token {
+    /// A name directly followed by `:`.
+    Field(String),
+    /// The `:` after a field name.
+    Colon,
+    /// A `:` with no field name before it.
+    StrayColon,
+    And,
+    Or,
     Not,
-    Plus,
-}
-
-#[derive(Debug, Clone)]
-enum Atom {
-    Word { text: String },
+    /// `TO` between the brackets of a range.
+    To,
+    Cmp(CmpOp),
+    Open,
+    Close,
+    RangeOpen,
+    RangeClose,
+    /// A quoted phrase, unescaped.
     Quoted(String),
+    /// An unquoted term as written, backslash escapes included.
+    Word(String),
 }
 
-struct Parser<'a> {
-    src: &'a str,
+fn syntax(detail: &'static str) -> AuditQueryError {
+    AuditQueryError::SyntaxError { detail }
+}
+
+/// Split a query into tokens the way the query input's tokenizer does.
+fn tokenize(src: &str) -> Result<Vec<Token>, AuditQueryError> {
+    let mut tokens = Vec::new();
+    let mut index = 0;
+    let mut range_depth = 0usize;
+
+    while let Some(ch) = src[index..].chars().next() {
+        let rest = &src[index..];
+        if ch.is_whitespace() {
+            index += ch.len_utf8();
+            continue;
+        }
+
+        if ch == '"' || ch == '\'' {
+            let (value, end) = read_quoted(src, index, ch)?;
+            tokens.push(Token::Quoted(value));
+            index = end;
+            continue;
+        }
+
+        if ch == '/' {
+            return Err(AuditQueryError::UnsupportedRegex);
+        }
+
+        let symbol = [
+            ("&&", Token::And),
+            ("||", Token::Or),
+            (">=", Token::Cmp(CmpOp::Gte)),
+            ("<=", Token::Cmp(CmpOp::Lte)),
+            (">", Token::Cmp(CmpOp::Gt)),
+            ("<", Token::Cmp(CmpOp::Lt)),
+            ("!", Token::Not),
+            ("(", Token::Open),
+            (")", Token::Close),
+            ("[", Token::RangeOpen),
+            ("]", Token::RangeClose),
+        ]
+        .into_iter()
+        .find(|(text, _)| rest.starts_with(text));
+        if let Some((text, token)) = symbol {
+            match token {
+                Token::RangeOpen => range_depth += 1,
+                Token::RangeClose => range_depth = range_depth.saturating_sub(1),
+                _ => {}
+            }
+            tokens.push(token);
+            index += text.len();
+            continue;
+        }
+
+        if ch == ':' {
+            tokens.push(if matches!(tokens.last(), Some(Token::Field(_))) {
+                Token::Colon
+            } else {
+                Token::StrayColon
+            });
+            index += 1;
+            continue;
+        }
+
+        // A value may contain colons, as in `ipAddress:::1`.
+        let allow_colon = matches!(
+            tokens.last(),
+            Some(Token::Colon | Token::RangeOpen | Token::Cmp(_) | Token::To)
+        );
+        let end = read_date_time(rest)
+            .or_else(|| read_time(rest))
+            .map_or_else(|| read_word(src, index, allow_colon), |len| index + len);
+        let text = &src[index..end];
+        let token = if src[end..].trim_start().starts_with(':') && is_field_name(text) {
+            Token::Field(text.to_owned())
+        } else if text.eq_ignore_ascii_case("AND") {
+            Token::And
+        } else if text.eq_ignore_ascii_case("OR") {
+            Token::Or
+        } else if text.eq_ignore_ascii_case("NOT") {
+            Token::Not
+        } else if range_depth > 0 && text.eq_ignore_ascii_case("TO") {
+            Token::To
+        } else {
+            Token::Word(text.to_owned())
+        };
+        tokens.push(token);
+        index = end;
+    }
+
+    Ok(tokens)
+}
+
+/// A quoted phrase in `"` or `'`; a backslash makes the next character literal.
+fn read_quoted(src: &str, from: usize, quote: char) -> Result<(String, usize), AuditQueryError> {
+    let body = from + quote.len_utf8();
+    let mut out = String::new();
+    let mut chars = src[body..].char_indices();
+    while let Some((offset, ch)) = chars.next() {
+        if ch == '\\' {
+            if let Some((_, escaped)) = chars.next() {
+                out.push(escaped);
+            }
+            continue;
+        }
+        if ch == quote {
+            return Ok((out, body + offset + ch.len_utf8()));
+        }
+        out.push(ch);
+    }
+    Err(syntax("unclosed quoted string"))
+}
+
+/// An unquoted term. It ends at whitespace or a character with a meaning of
+/// its own; a backslash keeps the next character in the term.
+fn read_word(src: &str, from: usize, allow_colon: bool) -> usize {
+    let mut index = from;
+    let mut chars = src[from..].chars();
+    while let Some(ch) = chars.next() {
+        let stops = ch.is_whitespace()
+            || matches!(ch, '(' | ')' | '[' | ']' | '!' | '&' | '|' | '<' | '>')
+            || (ch == ':' && !allow_colon);
+        if stops {
+            break;
+        }
+        index += ch.len_utf8();
+        if ch == '\\'
+            && let Some(escaped) = chars.next()
+        {
+            index += escaped.len_utf8();
+        }
+    }
+    if index == from {
+        // A lone `&` or `|` is a term of its own.
+        index + src[from..].chars().next().map_or(0, char::len_utf8)
+    } else {
+        index
+    }
+}
+
+fn digits(bytes: &[u8], from: usize, count: usize) -> bool {
+    bytes.len() >= from + count && bytes[from..from + count].iter().all(u8::is_ascii_digit)
+}
+
+/// `HH:MM:SS` with up to three fractional digits.
+fn read_time(rest: &str) -> Option<usize> {
+    let bytes = rest.as_bytes();
+    let shape = digits(bytes, 0, 2)
+        && bytes.get(2) == Some(&b':')
+        && digits(bytes, 3, 2)
+        && bytes.get(5) == Some(&b':')
+        && digits(bytes, 6, 2);
+    if !shape {
+        return None;
+    }
+    let mut len = 8;
+    if bytes.get(len) == Some(&b'.') {
+        let fraction = bytes[len + 1..]
+            .iter()
+            .take(3)
+            .take_while(|byte| byte.is_ascii_digit())
+            .count();
+        if fraction > 0 {
+            len += 1 + fraction;
+        }
+    }
+    Some(len)
+}
+
+/// An ISO 8601 date and time with a zone, such as `2026-11-19T00:00:00Z`.
+fn read_date_time(rest: &str) -> Option<usize> {
+    let bytes = rest.as_bytes();
+    let date = digits(bytes, 0, 4)
+        && bytes.get(4) == Some(&b'-')
+        && digits(bytes, 5, 2)
+        && bytes.get(7) == Some(&b'-')
+        && digits(bytes, 8, 2)
+        && bytes.get(10) == Some(&b'T');
+    if !date {
+        return None;
+    }
+    let mut len = 11 + read_time(&rest[11..])?;
+    match bytes.get(len) {
+        Some(b'Z') => len += 1,
+        Some(b'+' | b'-') if digits(bytes, len + 1, 2) => {
+            len += 3;
+            if bytes.get(len) == Some(&b':') {
+                len += 1;
+            }
+            if !digits(bytes, len, 2) {
+                return None;
+            }
+            len += 2;
+        }
+        _ => return None,
+    }
+    Some(len)
+}
+
+fn is_field_name(text: &str) -> bool {
+    let mut chars = text.chars();
+    chars
+        .next()
+        .is_some_and(|ch| ch.is_ascii_alphabetic() || ch == '_')
+        && chars.all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '_' | '.' | '-'))
+}
+
+fn unexpected_token(token: &Token) -> AuditQueryError {
+    syntax(match token {
+        Token::Close => "unmatched closing parenthesis",
+        Token::RangeClose => "unexpected range closing bracket",
+        Token::StrayColon => "missing field name before colon",
+        Token::And | Token::Or => "unexpected binary boolean operator",
+        Token::Cmp(_) => "comparison operator must follow a field name",
+        Token::RangeOpen => "range query must follow a field name",
+        _ => "unexpected trailing tokens",
+    })
+}
+
+/// A term's value as the query states it.
+enum TermValue {
+    Quoted(String),
+    Word(String),
+}
+
+impl TermValue {
+    /// The value with escapes resolved.
+    fn text(&self) -> String {
+        match self {
+            Self::Quoted(value) => value.clone(),
+            Self::Word(raw) => {
+                let mut out = String::with_capacity(raw.len());
+                let mut chars = raw.chars();
+                while let Some(ch) = chars.next() {
+                    if ch == '\\'
+                        && let Some(escaped) = chars.next()
+                    {
+                        out.push(escaped);
+                    } else {
+                        out.push(ch);
+                    }
+                }
+                out
+            }
+        }
+    }
+
+    fn is_bare_star(&self) -> bool {
+        matches!(self, Self::Word(raw) if raw == "*")
+    }
+
+    /// Reject fuzzy (`~`) and boost (`^`) suffixes, which are not supported.
+    fn check_supported(&self) -> Result<(), AuditQueryError> {
+        let Self::Word(raw) = self else {
+            return Ok(());
+        };
+        for piece in wildcard_pieces(raw) {
+            match piece {
+                Piece::Char('~') => return Err(AuditQueryError::UnsupportedFuzzy),
+                Piece::Char('^') => return Err(AuditQueryError::UnsupportedBoost),
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+}
+
+/// A character of an unquoted term: literal, or an unescaped wildcard.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Piece {
+    Char(char),
+    Escaped(char),
+    Any,
+    One,
+}
+
+fn wildcard_pieces(raw: &str) -> Vec<Piece> {
+    let mut pieces = Vec::with_capacity(raw.len());
+    let mut chars = raw.chars();
+    while let Some(ch) = chars.next() {
+        pieces.push(match ch {
+            '\\' => match chars.next() {
+                Some(escaped) => Piece::Escaped(escaped),
+                None => Piece::Char('\\'),
+            },
+            '*' => Piece::Any,
+            '?' => Piece::One,
+            other => Piece::Char(other),
+        });
+    }
+    pieces
+}
+
+struct Parser {
+    tokens: Vec<Token>,
     pos: usize,
     clauses: usize,
     reference_now: DateTime<Utc>,
     tz: Tz,
 }
 
-impl<'a> Parser<'a> {
-    fn rest(&self) -> &'a str {
-        &self.src[self.pos..]
+impl Parser {
+    fn peek(&self) -> Option<&Token> {
+        self.tokens.get(self.pos)
     }
 
-    fn is_eof(&self) -> bool {
-        self.pos >= self.src.len()
-    }
-
-    fn peek_char(&self) -> Option<char> {
-        self.rest().chars().next()
-    }
-
-    fn skip_ws(&mut self) {
-        while let Some(ch) = self.peek_char() {
-            if ch.is_whitespace() {
-                self.pos += ch.len_utf8();
-            } else {
-                break;
-            }
-        }
+    fn advance(&mut self) -> Option<Token> {
+        let token = self.tokens.get(self.pos).cloned();
+        self.pos += 1;
+        token
     }
 
     fn record_clause(&mut self) -> Result<(), AuditQueryError> {
@@ -268,599 +578,263 @@ impl<'a> Parser<'a> {
         Ok(())
     }
 
-    fn check_depth(depth: usize) -> Result<(), AuditQueryError> {
+    fn starts_primary(&self) -> bool {
+        matches!(
+            self.peek(),
+            Some(Token::Not | Token::Open | Token::Field(_) | Token::Quoted(_) | Token::Word(_))
+        )
+    }
+
+    fn starts_field_term(&self) -> bool {
+        matches!(
+            self.peek(),
+            Some(
+                Token::Not
+                    | Token::Open
+                    | Token::Cmp(_)
+                    | Token::RangeOpen
+                    | Token::Quoted(_)
+                    | Token::Word(_)
+            )
+        )
+    }
+
+    /// Clauses side by side: every one must match. This binds more loosely
+    /// than `OR`, so `a b OR c` means `a AND (b OR c)`.
+    fn parse_implicit(
+        &mut self,
+        field: Option<AuditQueryField>,
+        depth: usize,
+    ) -> Result<AuditQueryExpr, AuditQueryError> {
+        let mut items = vec![self.parse_or(field, depth)?];
+        while self.starts_primary() {
+            items.push(self.parse_or(field, depth)?);
+        }
+        Ok(join(items, false))
+    }
+
+    fn parse_or(
+        &mut self,
+        field: Option<AuditQueryField>,
+        depth: usize,
+    ) -> Result<AuditQueryExpr, AuditQueryError> {
+        let mut items = vec![self.parse_and(field, depth)?];
+        while self.peek() == Some(&Token::Or) {
+            self.advance();
+            items.push(self.parse_and(field, depth)?);
+        }
+        Ok(join(items, true))
+    }
+
+    fn parse_and(
+        &mut self,
+        field: Option<AuditQueryField>,
+        depth: usize,
+    ) -> Result<AuditQueryExpr, AuditQueryError> {
+        let mut items = vec![self.parse_primary(field, depth)?];
+        while self.peek() == Some(&Token::And) {
+            self.advance();
+            items.push(self.parse_primary(field, depth)?);
+        }
+        Ok(join(items, false))
+    }
+
+    /// A clause. Inside a field group, `field` is the field bare terms apply to.
+    fn parse_primary(
+        &mut self,
+        field: Option<AuditQueryField>,
+        depth: usize,
+    ) -> Result<AuditQueryExpr, AuditQueryError> {
+        match self.peek() {
+            None => Err(syntax("expected query clause")),
+            Some(Token::Not) => {
+                self.advance();
+                if !self.starts_primary() {
+                    return Err(syntax("missing operand after unary operator"));
+                }
+                let inner = self.parse_primary(field, depth)?;
+                Ok(AuditQueryExpr::Not(Box::new(inner)))
+            }
+            Some(Token::Open) => self.parse_group(field, depth),
+            Some(Token::Field(name)) => {
+                let name = name.clone();
+                self.advance();
+                self.advance(); // the colon
+                let field = AuditQueryField::parse(&name)
+                    .ok_or(AuditQueryError::UnknownField { field: name })?;
+                self.parse_field_term(field, depth)
+            }
+            Some(Token::Quoted(_) | Token::Word(_)) => {
+                let value = self.take_value().expect("checked term token");
+                self.leaf(field, &value)
+            }
+            Some(Token::Close) => Err(syntax("expected query clause")),
+            Some(token) => Err(unexpected_token(token)),
+        }
+    }
+
+    fn parse_group(
+        &mut self,
+        field: Option<AuditQueryField>,
+        depth: usize,
+    ) -> Result<AuditQueryExpr, AuditQueryError> {
+        self.advance();
+        let depth = depth + 1;
         if depth > MAX_AUDIT_QUERY_DEPTH {
             return Err(AuditQueryError::TooDeeplyNested {
                 max: MAX_AUDIT_QUERY_DEPTH,
             });
         }
-        Ok(())
-    }
-
-    fn unexpected_tail_error(&self) -> AuditQueryError {
-        match self.peek_char() {
-            Some(')') => AuditQueryError::SyntaxError {
-                detail: "unmatched closing parenthesis",
-            },
-            Some(']') | Some('}') => AuditQueryError::SyntaxError {
-                detail: "unexpected range closing bracket",
-            },
-            Some('~') => AuditQueryError::UnsupportedFuzzy,
-            Some('^') => AuditQueryError::UnsupportedBoost,
-            _ => AuditQueryError::SyntaxError {
-                detail: "unexpected trailing tokens",
-            },
-        }
-    }
-
-    fn starts_with_keyword(&self, kw: &str) -> bool {
-        let rest = self.rest();
-        if !rest.starts_with(kw) {
-            return false;
-        }
-        match rest[kw.len()..].chars().next() {
-            None => true,
-            Some(ch) => ch.is_whitespace() || matches!(ch, '(' | ')' | '[' | '{' | ']' | '}' | '"'),
-        }
-    }
-
-    fn try_consume_or(&mut self) -> bool {
-        self.skip_ws();
-        if self.rest().starts_with("||") {
-            self.pos += 2;
-            return true;
-        }
-        if self.starts_with_keyword("OR") {
-            self.pos += 2;
-            return true;
-        }
-        false
-    }
-
-    fn try_consume_and(&mut self) -> bool {
-        self.skip_ws();
-        if self.rest().starts_with("&&") {
-            self.pos += 2;
-            return true;
-        }
-        if self.starts_with_keyword("AND") {
-            self.pos += 3;
-            return true;
-        }
-        false
-    }
-
-    fn peek_at_stop_delimiter(&self) -> bool {
-        let rest = self.rest();
-        if rest.is_empty() {
-            return true;
-        }
-        matches!(rest.chars().next(), Some(')') | Some(']') | Some('}'))
-    }
-
-    fn peek_starts_or(&self) -> bool {
-        let rest = self.rest();
-        rest.starts_with("||") || self.starts_with_keyword("OR")
-    }
-
-    fn parse_or_expr(
-        &mut self,
-        active_field: Option<AuditQueryField>,
-        depth: usize,
-    ) -> Result<AuditQueryExpr, AuditQueryError> {
-        let first = self.parse_and_expr(active_field, depth)?;
-        let mut items = vec![first];
-        while self.try_consume_or() {
-            items.push(self.parse_and_expr(active_field, depth)?);
-        }
-        Ok(if items.len() == 1 {
-            items.into_iter().next().expect("checked len == 1")
-        } else {
-            AuditQueryExpr::Or(items)
-        })
-    }
-
-    fn parse_and_expr(
-        &mut self,
-        active_field: Option<AuditQueryField>,
-        depth: usize,
-    ) -> Result<AuditQueryExpr, AuditQueryError> {
-        let first = self.parse_unary_expr(active_field, depth)?;
-        let mut items = vec![first];
-        loop {
-            self.skip_ws();
-            if self.peek_at_stop_delimiter() || self.peek_starts_or() {
-                break;
-            }
-            if self.try_consume_and() {
-                items.push(self.parse_unary_expr(active_field, depth)?);
+        if self.peek() == Some(&Token::Close) {
+            return Err(syntax(if field.is_some() {
+                "empty field group"
             } else {
-                // Implicit whitespace AND
-                items.push(self.parse_unary_expr(active_field, depth)?);
-            }
+                "empty parenthesized group"
+            }));
         }
-        Ok(if items.len() == 1 {
-            items.into_iter().next().expect("checked len == 1")
-        } else {
-            AuditQueryExpr::And(items)
-        })
-    }
-
-    fn parse_unary_expr(
-        &mut self,
-        active_field: Option<AuditQueryField>,
-        depth: usize,
-    ) -> Result<AuditQueryExpr, AuditQueryError> {
-        self.skip_ws();
-        if self.is_eof() || self.peek_at_stop_delimiter() {
-            return Err(AuditQueryError::SyntaxError {
-                detail: "expected query clause",
-            });
-        }
-
-        let unary = if self.starts_with_keyword("NOT") {
-            self.pos += 3;
-            Some(UnaryOp::Not)
-        } else if self.rest().starts_with(['!', '-']) {
-            self.pos += 1;
-            Some(UnaryOp::Not)
-        } else if self.rest().starts_with('+') {
-            self.pos += 1;
-            Some(UnaryOp::Plus)
-        } else {
-            None
-        };
-
-        if let Some(op) = unary {
-            self.skip_ws();
-            if self.is_eof()
-                || self.peek_at_stop_delimiter()
-                || self.peek_starts_or()
-                || self.starts_with_keyword("AND")
-                || self.rest().starts_with("&&")
-            {
-                return Err(AuditQueryError::SyntaxError {
-                    detail: "missing operand after unary operator",
-                });
-            }
-            let inner = self.parse_unary_expr(active_field, depth)?;
-            return Ok(match op {
-                UnaryOp::Not => AuditQueryExpr::Not(Box::new(inner)),
-                UnaryOp::Plus => inner,
-            });
-        }
-
-        if self.starts_with_keyword("AND")
-            || self.starts_with_keyword("OR")
-            || self.rest().starts_with("&&")
-            || self.rest().starts_with("||")
-        {
-            return Err(AuditQueryError::SyntaxError {
-                detail: "unexpected binary boolean operator",
-            });
-        }
-
-        self.parse_primary(active_field, depth)
-    }
-
-    fn parse_primary(
-        &mut self,
-        active_field: Option<AuditQueryField>,
-        depth: usize,
-    ) -> Result<AuditQueryExpr, AuditQueryError> {
-        self.skip_ws();
-        match self.peek_char() {
-            None => Err(AuditQueryError::SyntaxError {
-                detail: "expected query clause",
-            }),
-            Some('(') => {
-                self.pos += 1;
-                let next_depth = depth + 1;
-                Self::check_depth(next_depth)?;
-                self.skip_ws();
-                if self.peek_char() == Some(')') {
-                    return Err(AuditQueryError::SyntaxError {
-                        detail: "empty parenthesized group",
-                    });
-                }
-                let inner = self.parse_or_expr(active_field, next_depth)?;
-                self.skip_ws();
-                if self.peek_char() != Some(')') {
-                    return Err(AuditQueryError::SyntaxError {
-                        detail: "unclosed parenthesis",
-                    });
-                }
-                self.pos += 1;
-                self.check_unsupported_suffix()?;
-                Ok(inner)
-            }
-            Some('[') | Some('{') => {
-                if let Some(field) = active_field {
-                    self.parse_range_for_field(field)
-                } else {
-                    Err(AuditQueryError::SyntaxError {
-                        detail: "range query must follow a field name",
-                    })
-                }
-            }
-            Some(':') => Err(AuditQueryError::SyntaxError {
-                detail: "missing field name before colon",
-            }),
-            Some('/') => {
-                if self.scan_regex_literal() {
-                    Err(AuditQueryError::UnsupportedRegex)
-                } else if let Some(field) = active_field {
-                    self.parse_field_value(field)
-                } else {
-                    self.record_clause()?;
-                    let atom = self.read_clause_atom(false)?;
-                    let value = match atom {
-                        Atom::Quoted(s) | Atom::Word { text: s, .. } => s,
-                    };
-                    self.check_unsupported_suffix()?;
-                    Ok(AuditQueryExpr::FreeText(value))
-                }
-            }
-            Some('~') => Err(AuditQueryError::UnsupportedFuzzy),
-            Some('^') => Err(AuditQueryError::UnsupportedBoost),
-            _ => {
-                if let Some(field) = active_field {
-                    return self.parse_field_value(field);
-                }
-
-                // If active_field is None, we might have `field:value` or bare term.
-                if self.starts_with_cmp_op().is_some() {
-                    return Err(AuditQueryError::SyntaxError {
-                        detail: "comparison operator must follow a field name",
-                    });
-                }
-
-                let atom = self.read_clause_atom(true)?;
-                match atom {
-                    Atom::Quoted(text) => {
-                        self.check_unsupported_suffix()?;
-                        if self.peek_char() == Some(':') {
-                            return Err(AuditQueryError::SyntaxError {
-                                detail: "field name cannot be quoted",
-                            });
-                        }
-                        self.record_clause()?;
-                        Ok(AuditQueryExpr::FreeText(text))
-                    }
-                    Atom::Word { text, .. } => {
-                        if self.peek_char() == Some(':') {
-                            self.pos += 1;
-                            let field = AuditQueryField::parse(&text).ok_or_else(|| {
-                                AuditQueryError::UnknownField {
-                                    field: text.clone(),
-                                }
-                            })?;
-                            return self.parse_after_field_colon(field, depth);
-                        }
-                        self.check_unsupported_suffix()?;
-                        self.record_clause()?;
-                        Ok(AuditQueryExpr::FreeText(text))
-                    }
-                }
-            }
+        let inner = self.parse_implicit(field, depth)?;
+        match self.advance() {
+            Some(Token::Close) => Ok(inner),
+            None => Err(syntax("unclosed parenthesis")),
+            Some(token) => Err(unexpected_token(&token)),
         }
     }
 
-    fn parse_after_field_colon(
+    fn parse_field_term(
         &mut self,
         field: AuditQueryField,
         depth: usize,
     ) -> Result<AuditQueryExpr, AuditQueryError> {
-        self.skip_ws();
-        match self.peek_char() {
-            None => Err(AuditQueryError::SyntaxError {
-                detail: "missing value after field colon",
-            }),
-            Some(')') | Some(']') | Some('}') => Err(AuditQueryError::SyntaxError {
-                detail: "missing value after field colon",
-            }),
-            Some('(') => {
-                self.pos += 1;
-                let next_depth = depth + 1;
-                Self::check_depth(next_depth)?;
-                self.skip_ws();
-                if self.peek_char() == Some(')') {
-                    return Err(AuditQueryError::SyntaxError {
-                        detail: "empty field group",
+        match self.peek() {
+            Some(Token::Not) => {
+                self.advance();
+                if !self.starts_field_term() {
+                    return Err(syntax("missing operand after unary operator"));
+                }
+                let inner = self.parse_field_term(field, depth)?;
+                Ok(AuditQueryExpr::Not(Box::new(inner)))
+            }
+            Some(Token::Open) => self.parse_group(Some(field), depth),
+            Some(&Token::Cmp(op)) => {
+                self.advance();
+                let Some(value) = self.take_value() else {
+                    return Err(syntax(if self.peek() == Some(&Token::RangeOpen) {
+                        "unexpected bracket after comparison operator"
+                    } else {
+                        "missing value after comparison operator"
+                    }));
+                };
+                if !field.is_date() {
+                    return Err(AuditQueryError::UnsupportedOperator {
+                        field: field.as_str(),
                     });
                 }
-                let inner = self.parse_or_expr(Some(field), next_depth)?;
-                self.skip_ws();
-                if self.peek_char() != Some(')') {
-                    return Err(AuditQueryError::SyntaxError {
-                        detail: "unclosed field group parenthesis",
-                    });
-                }
-                self.pos += 1;
-                self.check_unsupported_suffix()?;
-                Ok(inner)
-            }
-            _ => self.parse_field_value(field),
-        }
-    }
-
-    fn starts_with_cmp_op(&self) -> Option<(CmpOp, usize)> {
-        let rest = self.rest();
-        if rest.starts_with(">=") {
-            Some((CmpOp::Gte, 2))
-        } else if rest.starts_with("<=") {
-            Some((CmpOp::Lte, 2))
-        } else if rest.starts_with('>') {
-            Some((CmpOp::Gt, 1))
-        } else if rest.starts_with('<') {
-            Some((CmpOp::Lt, 1))
-        } else {
-            None
-        }
-    }
-
-    fn parse_field_value(
-        &mut self,
-        field: AuditQueryField,
-    ) -> Result<AuditQueryExpr, AuditQueryError> {
-        self.skip_ws();
-        if matches!(self.peek_char(), Some('[') | Some('{')) {
-            return self.parse_range_for_field(field);
-        }
-        if let Some((op, len)) = self.starts_with_cmp_op() {
-            self.pos += len;
-            self.skip_ws();
-            if self.is_eof() || self.peek_at_stop_delimiter() {
-                return Err(AuditQueryError::SyntaxError {
-                    detail: "missing value after comparison operator",
-                });
-            }
-            if !field.is_date() {
-                return Err(AuditQueryError::UnsupportedOperator {
-                    field: field.as_str(),
-                });
-            }
-            if matches!(self.peek_char(), Some('[') | Some('{')) {
-                return Err(AuditQueryError::SyntaxError {
-                    detail: "unexpected bracket after comparison operator",
-                });
-            }
-            let atom = self.read_value_atom()?;
-            self.check_unsupported_suffix()?;
-            let raw_val = match atom {
-                Atom::Quoted(s) | Atom::Word { text: s, .. } => s,
-            };
-            if raw_val.is_empty() {
-                return Err(AuditQueryError::InvalidDateValue { value: raw_val });
-            }
-            self.record_clause()?;
-            return build_occurred_at_cmp(op, &raw_val, self.reference_now, self.tz);
-        }
-
-        if self.scan_regex_literal() {
-            return Err(AuditQueryError::UnsupportedRegex);
-        }
-
-        let atom = self.read_value_atom()?;
-        if self.peek_char() == Some(':') {
-            // Unquoted secondary colons can only remain inside value_atom directly;
-            // if read_value_atom stopped at ':' (it doesn't!), fail safely.
-        }
-        self.check_unsupported_suffix()?;
-
-        match atom {
-            Atom::Quoted(value) => {
-                if self.peek_char() == Some(':') {
-                    return Err(AuditQueryError::SyntaxError {
-                        detail: "unexpected colon after quoted value",
-                    });
+                value.check_supported()?;
+                let text = value.text();
+                if text.is_empty() {
+                    return Err(AuditQueryError::InvalidDateValue { value: text });
                 }
                 self.record_clause()?;
-                build_field_predicate(field, &value, true, self.reference_now, self.tz)
+                build_occurred_at_cmp(op, &text, self.reference_now, self.tz)
             }
-            Atom::Word { text, .. } => {
-                if matches!(text.as_str(), "AND" | "OR" | "NOT") {
-                    return Err(AuditQueryError::SyntaxError {
-                        detail: "boolean keyword cannot be used as an unquoted field value",
-                    });
-                }
-                self.record_clause()?;
-                build_field_predicate(field, &text, false, self.reference_now, self.tz)
+            Some(Token::RangeOpen) => self.parse_range(field),
+            Some(Token::Quoted(_) | Token::Word(_)) => {
+                let value = self.take_value().expect("checked term token");
+                self.leaf(Some(field), &value)
             }
+            Some(Token::And | Token::Or) => Err(syntax(
+                "boolean keyword cannot be used as an unquoted field value",
+            )),
+            _ => Err(syntax("missing value after field colon")),
         }
     }
 
-    fn parse_range_for_field(
-        &mut self,
-        field: AuditQueryField,
-    ) -> Result<AuditQueryExpr, AuditQueryError> {
-        let open_ch = self.peek_char().expect("checked open bracket");
-        let min_inclusive = match open_ch {
-            '[' => true,
-            '{' => false,
-            _ => unreachable!(),
-        };
-        self.pos += 1;
-
+    /// `[start TO end]`, both ends inclusive.
+    fn parse_range(&mut self, field: AuditQueryField) -> Result<AuditQueryExpr, AuditQueryError> {
+        self.advance();
         if !field.is_date() {
             return Err(AuditQueryError::UnsupportedRangeField {
                 field: field.as_str(),
             });
         }
-
-        self.skip_ws();
-        let min_atom = self.read_value_atom()?;
-        let min_raw = match min_atom {
-            Atom::Quoted(s) | Atom::Word { text: s, .. } => s,
-        };
-        if min_raw.is_empty() {
-            return Err(AuditQueryError::SyntaxError {
-                detail: "missing lower bound in range",
-            });
+        let start = self
+            .take_bound()?
+            .ok_or(syntax("missing lower bound in range"))?;
+        if self.advance() != Some(Token::To) {
+            return Err(syntax("expected TO inside range query"));
         }
-
-        self.skip_ws();
-        if !self.starts_with_keyword("TO") {
-            return Err(AuditQueryError::SyntaxError {
-                detail: "expected TO inside range query",
-            });
+        let end = self
+            .take_bound()?
+            .ok_or(syntax("missing upper bound in range"))?;
+        if self.advance() != Some(Token::RangeClose) {
+            return Err(syntax("unclosed range bracket"));
         }
-        self.pos += 2;
-
-        self.skip_ws();
-        if self.is_eof() || matches!(self.peek_char(), Some(']') | Some('}')) {
-            return Err(AuditQueryError::SyntaxError {
-                detail: "missing upper bound in range",
-            });
-        }
-        let max_atom = self.read_value_atom()?;
-        let max_raw = match max_atom {
-            Atom::Quoted(s) | Atom::Word { text: s, .. } => s,
-        };
-
-        self.skip_ws();
-        let max_inclusive = match self.peek_char() {
-            Some(']') => true,
-            Some('}') => false,
-            _ => {
-                return Err(AuditQueryError::SyntaxError {
-                    detail: "unclosed range bracket",
-                });
-            }
-        };
-        self.pos += 1;
-        self.check_unsupported_suffix()?;
         self.record_clause()?;
-
-        build_occurred_at_range(
-            &min_raw,
-            min_inclusive,
-            &max_raw,
-            max_inclusive,
-            self.reference_now,
-            self.tz,
-        )
+        build_occurred_at_range(&start, true, &end, true, self.reference_now, self.tz)
     }
 
-    fn check_unsupported_suffix(&self) -> Result<(), AuditQueryError> {
-        match self.peek_char() {
-            Some('~') => Err(AuditQueryError::UnsupportedFuzzy),
-            Some('^') => Err(AuditQueryError::UnsupportedBoost),
-            _ => Ok(()),
-        }
+    fn take_value(&mut self) -> Option<TermValue> {
+        let value = match self.peek()? {
+            Token::Quoted(value) => TermValue::Quoted(value.clone()),
+            Token::Word(raw) => TermValue::Word(raw.clone()),
+            _ => return None,
+        };
+        self.advance();
+        Some(value)
     }
 
-    fn scan_regex_literal(&self) -> bool {
-        let rest = self.rest();
-        if !rest.starts_with('/') {
-            return false;
-        }
-        let mut escaped = false;
-        for ch in rest[1..].chars() {
-            if escaped {
-                escaped = false;
-                continue;
-            }
-            if ch == '\\' {
-                escaped = true;
-                continue;
-            }
-            if ch == '/' {
-                return true;
-            }
-        }
-        false
+    fn take_bound(&mut self) -> Result<Option<String>, AuditQueryError> {
+        let Some(value) = self.take_value() else {
+            return Ok(None);
+        };
+        value.check_supported()?;
+        let text = value.text();
+        Ok((!text.is_empty()).then_some(text))
     }
 
-    fn read_clause_atom(&mut self, stop_at_colon: bool) -> Result<Atom, AuditQueryError> {
-        self.skip_ws();
-        if self.peek_char() == Some('"') {
-            return Ok(Atom::Quoted(self.read_quoted_string()?));
+    fn leaf(
+        &mut self,
+        field: Option<AuditQueryField>,
+        value: &TermValue,
+    ) -> Result<AuditQueryExpr, AuditQueryError> {
+        value.check_supported()?;
+        self.record_clause()?;
+        match field {
+            Some(field) => build_field_predicate(field, value, self.reference_now, self.tz),
+            None => Ok(AuditQueryExpr::FreeText(value.text())),
         }
-        self.read_unquoted_word(stop_at_colon)
     }
+}
 
-    fn read_value_atom(&mut self) -> Result<Atom, AuditQueryError> {
-        self.skip_ws();
-        if self.peek_char() == Some('"') {
-            return Ok(Atom::Quoted(self.read_quoted_string()?));
-        }
-        self.read_unquoted_word(false)
+/// Combine clauses, flattening nested lists of the same kind.
+fn join(items: Vec<AuditQueryExpr>, or: bool) -> AuditQueryExpr {
+    if items.len() == 1 {
+        return items.into_iter().next().expect("checked len == 1");
     }
-
-    fn read_quoted_string(&mut self) -> Result<String, AuditQueryError> {
-        debug_assert_eq!(self.peek_char(), Some('"'));
-        self.pos += 1;
-        let mut out = String::new();
-        let mut escaped = false;
-        while let Some(ch) = self.peek_char() {
-            self.pos += ch.len_utf8();
-            if escaped {
-                match ch {
-                    '"' | '\\' | '/' => out.push(ch),
-                    'n' => out.push('\n'),
-                    'r' => out.push('\r'),
-                    't' => out.push('\t'),
-                    other => {
-                        out.push('\\');
-                        out.push(other);
-                    }
-                }
-                escaped = false;
-            } else if ch == '\\' {
-                escaped = true;
-            } else if ch == '"' {
-                return Ok(out);
-            } else {
-                out.push(ch);
+    let mut flat = Vec::with_capacity(items.len());
+    for item in items {
+        match (or, item) {
+            (false, AuditQueryExpr::And(children)) | (true, AuditQueryExpr::Or(children)) => {
+                flat.extend(children);
             }
+            (_, other) => flat.push(other),
         }
-        Err(AuditQueryError::SyntaxError {
-            detail: "unclosed quoted string",
-        })
     }
-
-    fn read_unquoted_word(&mut self, stop_at_colon: bool) -> Result<Atom, AuditQueryError> {
-        let start = self.pos;
-        while let Some(ch) = self.peek_char() {
-            if ch.is_whitespace() {
-                break;
-            }
-            if matches!(ch, '(' | ')' | '[' | '{' | ']' | '}' | '"' | '~' | '^') {
-                break;
-            }
-            if self.rest().starts_with("&&") || self.rest().starts_with("||") {
-                break;
-            }
-            if ch == ':' && stop_at_colon {
-                break;
-            }
-            self.pos += ch.len_utf8();
-        }
-        if self.pos == start {
-            return match self.peek_char() {
-                Some('~') => Err(AuditQueryError::UnsupportedFuzzy),
-                Some('^') => Err(AuditQueryError::UnsupportedBoost),
-                _ => Err(AuditQueryError::SyntaxError {
-                    detail: "unexpected token",
-                }),
-            };
-        }
-        Ok(Atom::Word {
-            text: self.src[start..self.pos].to_owned(),
-        })
+    if or {
+        AuditQueryExpr::Or(flat)
+    } else {
+        AuditQueryExpr::And(flat)
     }
 }
 
 fn build_field_predicate(
     field: AuditQueryField,
-    value: &str,
-    quoted: bool,
+    value: &TermValue,
     reference_now: DateTime<Utc>,
     tz: Tz,
 ) -> Result<AuditQueryExpr, AuditQueryError> {
     if field.is_date() {
-        return match parse_time_value(value, reference_now, tz)? {
+        return match parse_time_value(&value.text(), reference_now, tz)? {
             ParsedTimeValue::Exact(instant) => Ok(AuditQueryExpr::OccurredAtRange {
                 min: Some(AuditTimeBound {
                     instant,
@@ -892,20 +866,20 @@ fn build_field_predicate(
     }
 
     if field.is_identifier() {
-        if !quoted && value == "*" {
+        if value.is_bare_star() {
             return Ok(AuditQueryExpr::Identifier {
                 field,
                 value: AuditIdentifierMatch::Exists,
             });
         }
-        let oid = resolve_identifier(field, value)?;
+        let oid = resolve_identifier(field, &value.text())?;
         return Ok(AuditQueryExpr::Identifier {
             field,
             value: AuditIdentifierMatch::Exact(oid),
         });
     }
 
-    let matcher = match build_text_matcher(value, quoted) {
+    let matcher = match build_text_matcher(value) {
         AuditTextMatcher::Exact(exact) => {
             AuditTextMatcher::Exact(field.canonical_value(&exact).ok_or_else(|| {
                 AuditQueryError::UnknownValue {
@@ -919,33 +893,57 @@ fn build_field_predicate(
     Ok(AuditQueryExpr::Text { field, matcher })
 }
 
-fn build_text_matcher(value: &str, quoted: bool) -> AuditTextMatcher {
-    if quoted {
-        return AuditTextMatcher::Exact(value.to_owned());
+/// A quoted phrase matches exactly. In an unquoted term, `*` and `?` are
+/// wildcards unless escaped with a backslash.
+fn build_text_matcher(value: &TermValue) -> AuditTextMatcher {
+    let TermValue::Word(raw) = value else {
+        return AuditTextMatcher::Exact(value.text());
+    };
+    let pieces = wildcard_pieces(raw);
+    let literal = |pieces: &[Piece]| -> Option<String> {
+        pieces
+            .iter()
+            .map(|piece| match piece {
+                Piece::Char(ch) | Piece::Escaped(ch) => Some(*ch),
+                Piece::Any | Piece::One => None,
+            })
+            .collect()
+    };
+
+    if let Some(text) = literal(&pieces) {
+        return AuditTextMatcher::Exact(text);
     }
-    if value == "*" {
+    if pieces == [Piece::Any] {
         return AuditTextMatcher::Exists;
     }
-    if let Some(prefix) = value.strip_suffix('*')
+    if let [rest @ .., Piece::Any] = pieces.as_slice()
+        && let Some(prefix) = literal(rest)
         && !prefix.is_empty()
-        && !prefix.contains('*')
-        && !prefix.contains('?')
     {
-        return AuditTextMatcher::Prefix(prefix.to_owned());
+        return AuditTextMatcher::Prefix(prefix);
     }
-    if let Some(middle) = value
-        .strip_prefix('*')
-        .and_then(|rest| rest.strip_suffix('*'))
+    if let [Piece::Any, middle @ .., Piece::Any] = pieces.as_slice()
+        && let Some(middle) = literal(middle)
         && !middle.is_empty()
-        && !middle.contains('*')
-        && !middle.contains('?')
     {
-        return AuditTextMatcher::Contains(middle.to_owned());
+        return AuditTextMatcher::Contains(middle);
     }
-    if value.contains('*') || value.contains('?') {
-        return AuditTextMatcher::Wildcard(value.to_owned());
+
+    // The pattern keeps `*` and `?` as wildcards and escapes literal ones.
+    let mut pattern = String::with_capacity(raw.len());
+    for piece in pieces {
+        match piece {
+            Piece::Any => pattern.push('*'),
+            Piece::One => pattern.push('?'),
+            Piece::Char(ch) | Piece::Escaped(ch) => {
+                if matches!(ch, '*' | '?' | '\\') {
+                    pattern.push('\\');
+                }
+                pattern.push(ch);
+            }
+        }
     }
-    AuditTextMatcher::Exact(value.to_owned())
+    AuditTextMatcher::Wildcard(pattern)
 }
 
 fn resolve_identifier(field: AuditQueryField, value: &str) -> Result<Uuid, AuditQueryError> {
@@ -1428,43 +1426,109 @@ mod tests {
         );
     }
 
+    /// The query input's tree shape for a parsed query: see `grammar-cases.json`.
+    fn shape(expr: &AuditQueryExpr) -> serde_json::Value {
+        use serde_json::json;
+        match expr {
+            AuditQueryExpr::And(items) => {
+                json!({ "and": items.iter().map(shape).collect::<Vec<_>>() })
+            }
+            AuditQueryExpr::Or(items) => {
+                json!({ "or": items.iter().map(shape).collect::<Vec<_>>() })
+            }
+            AuditQueryExpr::Not(inner) => json!({ "not": shape(inner) }),
+            AuditQueryExpr::Text { field, matcher } => {
+                let value = match matcher {
+                    AuditTextMatcher::Exact(value) | AuditTextMatcher::Wildcard(value) => {
+                        value.clone()
+                    }
+                    AuditTextMatcher::Prefix(prefix) => format!("{prefix}*"),
+                    AuditTextMatcher::Contains(middle) => format!("*{middle}*"),
+                    AuditTextMatcher::Exists => "*".to_owned(),
+                };
+                json!({ "field": field.as_str(), "value": value })
+            }
+            AuditQueryExpr::FreeText(text) => json!({ "text": text }),
+            other => json!({ "unsupported": format!("{other:?}") }),
+        }
+    }
+
     #[test]
-    fn boolean_precedence_implicit_and_and_field_grouping() {
+    fn follows_the_query_input_grammar_cases() {
+        let cases: serde_json::Value = serde_json::from_str(include_str!(
+            "../../../packages/lucene-input/src/lib/grammar-cases.json"
+        ))
+        .unwrap();
+
+        for case in cases["valid"].as_array().unwrap() {
+            let query = case["query"].as_str().unwrap();
+            let parsed = parse_audit_query(query, ref_now(), utc())
+                .unwrap_or_else(|error| panic!("{query:?} should parse: {error}"));
+            if let Some(tree) = case.get("tree") {
+                assert_eq!(&shape(&parsed), tree, "tree of {query:?}");
+            }
+        }
+        for query in cases["invalid"].as_array().unwrap() {
+            let query = query.as_str().unwrap();
+            assert!(
+                parse_audit_query(query, ref_now(), utc()).is_err(),
+                "{query:?} should be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn side_by_side_clauses_bind_more_loosely_than_or() {
         let parsed = parse_audit_query(
-            "action:(user_create OR GROUP_DELETE) -outcome:failure && actorKind:user OR traceId:*",
+            "action:(user_create OR GROUP_DELETE) NOT outcome:failure && actorKind:USER OR traceId:*",
             ref_now(),
             utc(),
         )
         .unwrap();
 
+        let text = |field, value: &str| AuditQueryExpr::Text {
+            field,
+            matcher: AuditTextMatcher::Exact(value.to_owned()),
+        };
         assert_eq!(
             parsed,
-            AuditQueryExpr::Or(vec![
-                AuditQueryExpr::And(vec![
-                    AuditQueryExpr::Or(vec![
-                        AuditQueryExpr::Text {
-                            field: AuditQueryField::Action,
-                            matcher: AuditTextMatcher::Exact("user_create".to_owned()),
-                        },
-                        AuditQueryExpr::Text {
-                            field: AuditQueryField::Action,
-                            matcher: AuditTextMatcher::Exact("group_delete".to_owned()),
-                        },
+            AuditQueryExpr::And(vec![
+                AuditQueryExpr::Or(vec![
+                    text(AuditQueryField::Action, "user_create"),
+                    text(AuditQueryField::Action, "group_delete"),
+                ]),
+                AuditQueryExpr::Or(vec![
+                    AuditQueryExpr::And(vec![
+                        AuditQueryExpr::Not(Box::new(text(AuditQueryField::Outcome, "failure"))),
+                        text(AuditQueryField::ActorKind, "user"),
                     ]),
-                    AuditQueryExpr::Not(Box::new(AuditQueryExpr::Text {
-                        field: AuditQueryField::Outcome,
-                        matcher: AuditTextMatcher::Exact("failure".to_owned()),
-                    })),
                     AuditQueryExpr::Text {
-                        field: AuditQueryField::ActorKind,
-                        matcher: AuditTextMatcher::Exact("user".to_owned()),
+                        field: AuditQueryField::TraceId,
+                        matcher: AuditTextMatcher::Exists,
                     },
                 ]),
-                AuditQueryExpr::Text {
-                    field: AuditQueryField::TraceId,
-                    matcher: AuditTextMatcher::Exists,
-                },
             ])
+        );
+    }
+
+    #[test]
+    fn escaped_wildcards_match_literally() {
+        let matcher = |query: &str| match parse_audit_query(query, ref_now(), utc()).unwrap() {
+            AuditQueryExpr::Text { matcher, .. } => matcher,
+            other => panic!("unexpected expr: {other:?}"),
+        };
+
+        assert_eq!(
+            matcher(r"actorLabel:a\*b"),
+            AuditTextMatcher::Exact("a*b".to_owned())
+        );
+        assert_eq!(
+            matcher(r"actorLabel:a\*b*"),
+            AuditTextMatcher::Prefix("a*b".to_owned())
+        );
+        assert_eq!(
+            matcher(r"actorLabel:a\?*b"),
+            AuditTextMatcher::Wildcard(r"a\?*b".to_owned())
         );
     }
 

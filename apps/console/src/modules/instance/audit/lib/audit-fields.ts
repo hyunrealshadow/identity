@@ -58,10 +58,7 @@ export function formatLuceneValue(value: string): string {
   const needsQuotes =
     value.length === 0 ||
     /[\s()[\]{}"'\\~^!:+<>/*?&|]/.test(value) ||
-    value === 'AND' ||
-    value === 'OR' ||
-    value === 'NOT' ||
-    value === 'TO'
+    /^(AND|OR|NOT|TO)$/i.test(value)
   if (!needsQuotes) {
     return value
   }

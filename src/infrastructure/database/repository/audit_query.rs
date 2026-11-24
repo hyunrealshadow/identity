@@ -311,9 +311,17 @@ fn contains_pattern(text: &str) -> LikeExpr {
 
 fn wildcard_to_like(pattern: &str) -> String {
     let mut out = String::with_capacity(pattern.len() + 4);
-    for ch in pattern.chars() {
+    let mut chars = pattern.chars();
+    while let Some(ch) = chars.next() {
         match ch {
-            '\\' => out.push_str("\\\\"),
+            '\\' => match chars.next() {
+                Some(escaped @ ('\\' | '%' | '_')) => {
+                    out.push('\\');
+                    out.push(escaped);
+                }
+                Some(escaped) => out.push(escaped),
+                None => out.push_str("\\\\"),
+            },
             '%' => out.push_str("\\%"),
             '_' => out.push_str("\\_"),
             '*' => out.push('%'),

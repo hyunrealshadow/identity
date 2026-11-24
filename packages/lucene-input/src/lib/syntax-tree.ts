@@ -108,7 +108,7 @@ class SyntaxTreeParser {
     }
 
     if (this.isTerm(token)) {
-      return this.termNode(this.advance());
+      return this.termNode(this.advanceTerm());
     }
 
     return undefined;
@@ -174,8 +174,7 @@ class SyntaxTreeParser {
     }
 
     if (this.isTerm(token)) {
-      this.advance();
-      return this.termNode(token, fieldType);
+      return this.termNode(this.advanceTerm(), fieldType);
     }
 
     return undefined;
@@ -185,7 +184,7 @@ class SyntaxTreeParser {
     const open = this.advance();
     const startToken = this.peek();
     const start =
-      startToken && this.isTerm(startToken) ? this.termNode(this.advance(), fieldType) : this.missingNode(open.to);
+      startToken && this.isTerm(startToken) ? this.termNode(this.advanceTerm(), fieldType) : this.missingNode(open.to);
     const operator = this.peek();
     if (operator && /^to$/i.test(operator.text)) {
       this.advance();
@@ -194,7 +193,7 @@ class SyntaxTreeParser {
     const endToken = this.peek();
     const end =
       endToken && this.isTerm(endToken)
-        ? this.termNode(this.advance(), fieldType)
+        ? this.termNode(this.advanceTerm(), fieldType)
         : this.missingNode(operator?.to ?? start.to ?? open.to);
     const close = this.peek()?.text === ']' ? this.advance() : undefined;
 
@@ -367,6 +366,30 @@ class SyntaxTreeParser {
 
   private previous(): LuceneToken {
     return this.tokens[this.#cursor - 1];
+  }
+
+  /**
+   * One term, joining the pieces written without a gap between them, so
+   * `user_*` is a single wildcard term rather than `user_` followed by `*`.
+   */
+  private advanceTerm(): LuceneToken {
+    let token = this.advance();
+    for (let next = this.peek(); next && next.from === token.to && this.joinsTerm(token, next); next = this.peek()) {
+      this.advance();
+      token = {
+        type: token.type === 'wildcard' || next.type === 'wildcard' ? 'wildcard' : token.type,
+        from: token.from,
+        to: next.to,
+        text: token.text + next.text
+      };
+    }
+    return token;
+  }
+
+  private joinsTerm(token: LuceneToken, next: LuceneToken): boolean {
+    const piece = (candidate: LuceneToken) =>
+      candidate.type === 'term' || candidate.type === 'date' || candidate.type === 'wildcard';
+    return piece(token) && piece(next);
   }
 
   private advance(): LuceneToken {

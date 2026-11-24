@@ -181,6 +181,12 @@ audit log. `query` accepts the server-parsed Lucene filter DSL (up to 2048
 characters, nesting depth 16, and 64 leaf clauses) over fields named after
 `AuditEvent`; enumerated values are the enum names in any letter case
 (`action:role_update`, `action:ROLE_*`), and unknown values are rejected.
+The grammar is the Console query input's (`packages/lucene-input`): `AND`/`&&`,
+`OR`/`||`, `NOT`/`!` and a range's `TO` match in any letter case; clauses side
+by side must all match and bind more loosely than `OR` (`a b OR c` is
+`a AND (b OR c)`); ranges are inclusive `[from TO to]`; phrases take `"` or
+`'`, and a backslash makes the next character literal (`a\*`). Both sides
+run the cases in `packages/lucene-input/src/lib/grammar-cases.json`.
 `occurredAt` bare dates and calendar math resolve against `timeZone` (default
 `UTC`). Encrypted cursors bind the category, normalized query, time zone, sort
 order, and initial `snapshot_at` timestamp so relative ranges such as `now-24h`
