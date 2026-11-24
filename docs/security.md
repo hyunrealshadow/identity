@@ -48,13 +48,16 @@ Two authentication settings, both off by default:
 
 Each of these re-checks `management.user.write` for the target inside its
 transaction, compares the user `version`, writes its audit record in the same
-transaction, and ends every session of the user with its grants:
+transaction, and ends every session of the user with its grants. An
+administrator cannot reset their own password, clear their own second factors,
+or require a password change on their own account through user management;
+self-service sign-in methods belong in the account center.
 
 - **Reset password** (`resetUserPassword`, audit `USER_PASSWORD_RESET`) stores a
-  generated temporary password (four groups of five characters without
-  look-alikes, about 115 bits), returns it once, requires a change at the next
-  sign-in, and ends a lockout from failed attempts. An account without a
-  password receives one.
+  generated temporary password (16 characters mixing uppercase, lowercase,
+  digits, and symbols without look-alikes), returns it once, requires a change
+  at the next sign-in, and ends a lockout from failed attempts. An account
+  without a password receives one.
 - **Require a password change** (`updateUser` with `passwordChangeRequired`)
   sets or clears the same requirement without changing the password. Any
   password change by the user clears it.

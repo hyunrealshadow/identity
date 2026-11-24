@@ -11,7 +11,7 @@
 use std::sync::Arc;
 
 use identity_domain::{
-    authorization::OwnerProtectionError,
+    authorization::{ActorPrincipal, OwnerProtectionError},
     user::{
         UserManagementRecord, UserOid,
         normalization::{
@@ -233,6 +233,7 @@ impl UserManagementService {
         command: UserStateCommand,
     ) -> Result<UserPasswordResetResult, AppError> {
         let result = async {
+            reject_self_credential_action(authority, command.user_oid)?;
             let transaction = self.state_transaction(authority, &command)?;
             let temporary_password = temporary_password();
             let snapshot = self.settings.snapshot();
@@ -270,6 +271,7 @@ impl UserManagementService {
         command: UserStateCommand,
     ) -> Result<UserManagementRecord, AppError> {
         let result = async {
+            reject_self_credential_action(authority, command.user_oid)?;
             let transaction = self.state_transaction(authority, &command)?;
             let outcome = self
                 .repository
@@ -462,6 +464,9 @@ impl UserManagementService {
         authority: &UserManagementAuthority,
         command: UpdateUserCommand,
     ) -> Result<UserManagementRecord, AppError> {
+        if command.password_change_required == Some(true) {
+            reject_self_credential_action(authority, command.user_oid)?;
+        }
         let reason = validate_reason(&command.reason)?;
         validate_client_mutation_id(command.client_mutation_id.as_deref())?;
 
@@ -573,6 +578,21 @@ impl UserManagementService {
         }
         self.events.emit(event);
     }
+}
+
+fn reject_self_credential_action(
+    authority: &UserManagementAuthority,
+    target: UserOid,
+) -> Result<(), AppError> {
+    if matches!(
+        authority.actor.principal,
+        ActorPrincipal::User { user_oid, .. } if user_oid == target
+    ) {
+        return Err(AppError::from_code(
+            UserManagementErrorCode::SelfCredentialActionNotAllowed,
+        ));
+    }
+    Ok(())
 }
 
 fn page_conflict() -> AppError {
@@ -742,26 +762,34 @@ fn map_mutation_outcome(
     }
 }
 
-/// Characters of a generated temporary password: no look-alikes such as
-/// `0`/`O` or `1`/`l`/`I`, so it can be read out or copied by hand.
-const TEMPORARY_PASSWORD_ALPHABET: &[u8] =
-    b"abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+/// Characters of a generated temporary password: four unambiguous character
+/// classes without look-alikes (`0`/`O` or `1`/`l`/`I`).
+const TEMPORARY_PASSWORD_LOWER: &[u8] = b"abcdefghjkmnpqrstuvwxyz";
+const TEMPORARY_PASSWORD_UPPER: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ";
+const TEMPORARY_PASSWORD_DIGITS: &[u8] = b"23456789";
+const TEMPORARY_PASSWORD_SYMBOLS: &[u8] = b"!@#$%^&*";
+const TEMPORARY_PASSWORD_ALL: &[u8] =
+    b"abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789!@#$%^&*";
+const TEMPORARY_PASSWORD_LENGTH: usize = 16;
 
-/// Four groups of five, about 115 bits: `xxxxx-xxxxx-xxxxx-xxxxx`.
+/// Sixteen random characters covering lowercase, uppercase, digits, and symbols.
 fn temporary_password() -> String {
     use rand::RngExt;
     let mut rng = rand::rng();
-    (0..4)
-        .map(|_| {
-            (0..5)
-                .map(|_| {
-                    let index = rng.random_range(0..TEMPORARY_PASSWORD_ALPHABET.len());
-                    char::from(TEMPORARY_PASSWORD_ALPHABET[index])
-                })
-                .collect::<String>()
-        })
-        .collect::<Vec<_>>()
-        .join("-")
+    let mut pick = |alphabet: &[u8]| alphabet[rng.random_range(0..alphabet.len())];
+    let mut chars = Vec::with_capacity(TEMPORARY_PASSWORD_LENGTH);
+    chars.push(pick(TEMPORARY_PASSWORD_LOWER));
+    chars.push(pick(TEMPORARY_PASSWORD_UPPER));
+    chars.push(pick(TEMPORARY_PASSWORD_DIGITS));
+    chars.push(pick(TEMPORARY_PASSWORD_SYMBOLS));
+    while chars.len() < TEMPORARY_PASSWORD_LENGTH {
+        chars.push(pick(TEMPORARY_PASSWORD_ALL));
+    }
+    for i in (1..chars.len()).rev() {
+        let j = rng.random_range(0..=i);
+        chars.swap(i, j);
+    }
+    chars.into_iter().map(char::from).collect()
 }
 
 fn map_repository_error(error: UserManagementRepositoryError) -> AppError {
@@ -788,7 +816,9 @@ mod tests {
     use async_trait::async_trait;
     use chrono::{Duration, Utc};
     use identity_domain::{
-        authorization::{ActorContext, HumanAuthenticationContext, PolicyVersion, RequestId},
+        authorization::{
+            ActorContext, ActorPrincipal, HumanAuthenticationContext, PolicyVersion, RequestId,
+        },
         user::{UserManagementRecord, UserOid, UserTheme},
     };
     use uuid::Uuid;
@@ -1092,15 +1122,38 @@ mod tests {
         let first = super::temporary_password();
         let second = super::temporary_password();
         assert_ne!(first, second);
-        assert_eq!(first.len(), 23);
-        assert!(first.split('-').all(|group| group.len() == 5));
-        assert!(
-            first
-                .chars()
-                .filter(|c| *c != '-')
-                .all(|c| super::TEMPORARY_PASSWORD_ALPHABET.contains(&(c as u8)))
-        );
-        assert!(!first.contains(['0', 'O', '1', 'l', 'I']));
+        for password in [&first, &second] {
+            assert_eq!(password.len(), super::TEMPORARY_PASSWORD_LENGTH);
+            assert!(!password.contains('-'));
+            assert!(!password.contains(['0', 'O', '1', 'l', 'I']));
+            assert!(
+                password
+                    .bytes()
+                    .all(|b| super::TEMPORARY_PASSWORD_ALL.contains(&b))
+            );
+            assert!(
+                password
+                    .bytes()
+                    .any(|b| super::TEMPORARY_PASSWORD_LOWER.contains(&b))
+            );
+            assert!(
+                password
+                    .bytes()
+                    .any(|b| super::TEMPORARY_PASSWORD_UPPER.contains(&b))
+            );
+            assert!(
+                password
+                    .bytes()
+                    .any(|b| super::TEMPORARY_PASSWORD_DIGITS.contains(&b))
+            );
+            assert!(
+                password
+                    .bytes()
+                    .any(|b| super::TEMPORARY_PASSWORD_SYMBOLS.contains(&b))
+            );
+            crate::authentication::password_policy::validate_password(password, &[], "password")
+                .unwrap();
+        }
     }
 
     #[tokio::test]
@@ -1143,6 +1196,88 @@ mod tests {
             error.code(),
             crate::error::codes::user_management::UserManagementErrorCode::SessionNotFound as u32
         );
+    }
+
+    #[tokio::test]
+    async fn self_credential_actions_are_refused_for_users_only() {
+        let auth = authority();
+        let ActorPrincipal::User {
+            user_oid: self_oid, ..
+        } = auth.actor.principal
+        else {
+            panic!("expected user actor");
+        };
+        let service = service(UserManagementMutationOutcome::UserNotFound);
+        let state = model::UserStateCommand {
+            user_oid: self_oid,
+            expected_version: Uuid::new_v4(),
+            reason: String::new(),
+            client_mutation_id: None,
+        };
+        let self_code =
+            crate::error::codes::user_management::UserManagementErrorCode::SelfCredentialActionNotAllowed as u32;
+        let not_found_code =
+            crate::error::codes::user_management::UserManagementErrorCode::UserNotFound as u32;
+
+        let err = service
+            .reset_user_password(&auth, state.clone())
+            .await
+            .err()
+            .unwrap();
+        assert_eq!(err.code(), self_code);
+
+        let err = service.reset_user_mfa(&auth, state).await.unwrap_err();
+        assert_eq!(err.code(), self_code);
+
+        let update = |password_change_required| model::UpdateUserCommand {
+            user_oid: self_oid,
+            username: None,
+            email: None,
+            email_verified: None,
+            password_change_required,
+            profile: UserProfilePatch::default(),
+            expected_version: Uuid::new_v4(),
+            reason: String::new(),
+            client_mutation_id: None,
+        };
+        let err = service
+            .update_user(&auth, update(Some(true)))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), self_code);
+
+        let err = service.update_user(&auth, update(None)).await.unwrap_err();
+        assert_eq!(err.code(), not_found_code);
+
+        let machine_auth = UserManagementAuthority::new(
+            ActorContext::for_client(
+                Uuid::new_v4(),
+                RequestId::new("request-client").unwrap(),
+                None,
+            ),
+            BTreeSet::new(),
+            None,
+            Uuid::new_v4(),
+            PolicyVersion::from_uuid(Uuid::new_v4()),
+        );
+        let err = service
+            .reset_user_mfa(
+                &machine_auth,
+                model::UserStateCommand {
+                    user_oid: self_oid,
+                    expected_version: Uuid::new_v4(),
+                    reason: String::new(),
+                    client_mutation_id: None,
+                },
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), not_found_code);
+        let err = service
+            .update_user(&machine_auth, update(Some(true)))
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), not_found_code);
     }
 
     #[tokio::test]

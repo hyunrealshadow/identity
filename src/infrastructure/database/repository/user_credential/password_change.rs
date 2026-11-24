@@ -4,10 +4,9 @@ use identity_application::user::repository::PasswordReplacementKind;
 use identity_domain::auth::LOGIN_EXPIRY;
 use sea_orm::{ConnectionTrait, DbBackend, Statement};
 use user::Column as UserColumn;
-use user_credential::Column as UserCredentialColumn;
 use uuid::Uuid as UuidUuid;
 
-use super::super::{authorization_lifecycle::withdraw_user_authority_in_txn, session};
+use super::super::{authorization_lifecycle::withdraw_user_authority_for_login_in_txn, session};
 
 impl UserCredentialRepositoryImpl {
     pub(super) async fn change_password_transaction(
@@ -49,13 +48,16 @@ impl UserCredentialRepositoryImpl {
             return Err(UserCredentialRepositoryError::CredentialNotFound);
         }
         // The replaced hash stays as an expired password credential for the
-        // history check: every credential read ignores expired rows.
+        // history check: every credential read ignores expired rows. Admin
+        // temporary passwords are not recorded so they never displace a user
+        // password from history.
         if replacement.keep_history > 0 {
             txn.execute_raw(Statement::from_sql_and_values(
                 DbBackend::Postgres,
                 "INSERT INTO user_credential (oid, user_id, type, data, expires_at, created_at, updated_at) \
                  SELECT gen_random_uuid(), user_id, type, data, now(), created_at, updated_at \
-                 FROM user_credential WHERE oid = $1 AND user_id = $2 AND type = 'password'",
+                 FROM user_credential WHERE oid = $1 AND user_id = $2 AND type = 'password' \
+                 AND COALESCE(data->>'temporary', 'false') <> 'true'",
                 [Uuid::from(credential).into(), owner.id.into()],
             ))
             .await
@@ -68,34 +70,27 @@ impl UserCredentialRepositoryImpl {
         // in the same transaction. Credential usage-only paths keep their OID.
         // The authority fingerprint hashes this OID, never password material.
         let replacement_oid = UuidUuid::new_v4();
-        let changed = UserCredentialEntity::update_many()
-            .col_expr(UserCredentialColumn::Oid, Expr::value(replacement_oid))
-            .col_expr(
-                UserCredentialColumn::Data,
-                Expr::value(
-                    to_value(password).map_err(UserCredentialRepositoryError::Serialization)?,
-                ),
-            )
-            .col_expr(
-                UserCredentialColumn::UpdatedAt,
-                Expr::value(Some(Utc::now().fixed_offset())),
-            )
-            .filter(UserCredentialColumn::Oid.eq(Uuid::from(credential)))
-            .filter(UserCredentialColumn::UserId.eq(owner.id))
-            .filter(UserCredentialColumn::Type.eq("password"))
-            .filter(
-                UserCredentialColumn::Data
-                    .eq(to_value(expected).map_err(UserCredentialRepositoryError::Serialization)?),
-            )
-            .filter(
-                Condition::any()
-                    .add(UserCredentialColumn::ExpiresAt.is_null())
-                    .add(UserCredentialColumn::ExpiresAt.gt(Utc::now())),
-            )
-            .exec(&txn)
+        let new_data = to_value(password).map_err(UserCredentialRepositoryError::Serialization)?;
+        let expected_data =
+            to_value(expected).map_err(UserCredentialRepositoryError::Serialization)?;
+        let changed = txn
+            .execute_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                "UPDATE user_credential SET oid = $1, data = $2::jsonb, updated_at = now() \
+                 WHERE oid = $3 AND user_id = $4 AND type = 'password' \
+                 AND (data - 'temporary') = $5::jsonb \
+                 AND (expires_at IS NULL OR expires_at > now())",
+                [
+                    replacement_oid.into(),
+                    new_data.into(),
+                    Uuid::from(credential).into(),
+                    owner.id.into(),
+                    expected_data.into(),
+                ],
+            ))
             .await
             .map_err(fail)?;
-        if changed.rows_affected != 1 {
+        if changed.rows_affected() != 1 {
             return Err(UserCredentialRepositoryError::CredentialNotFound);
         }
         let keep_oid = keep.map(|s| s.0);
@@ -155,10 +150,15 @@ impl UserCredentialRepositoryImpl {
         // A password change is a permanent authority boundary even when a
         // caller intentionally keeps one session: rotate the CAS token and mark
         // every subject artifact (including already consumed single-use
-        // parents) withdrawn.
-        withdraw_user_authority_in_txn(&txn, owner.id)
-            .await
-            .map_err(fail)?;
+        // parents) withdrawn, sparing only the pending request of the active
+        // reset or required-password-change login so it can finish.
+        withdraw_user_authority_for_login_in_txn(
+            &txn,
+            owner.id,
+            kept_login.map(|oid| (oid, kept_status)),
+        )
+        .await
+        .map_err(fail)?;
         audit::record(
             &txn,
             AuditRecord::success(

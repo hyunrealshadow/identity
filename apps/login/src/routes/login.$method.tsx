@@ -36,6 +36,7 @@ import {
   loginChallengeDestination,
   loginPasswordResetDestination,
 } from '#/lib/login-navigation'
+import { withUiLocales } from '#/lib/ui-locale'
 
 interface ChallengeSearch {
   login_id?: string
@@ -182,6 +183,9 @@ export const Route = createFileRoute('/login/$method')({
   loader: async ({ deps, params }) => {
     if (!loginCredentialType(params.method)) throw notFound()
     const page = await loadChallengePage({ data: { ...deps, method: params.method } })
+    if (page.status?.status === 'password_change_required' && page.status.challenge_uri) {
+      throw redirect({ href: withUiLocales(page.status.challenge_uri, page.uiLocales) })
+    }
     if (params.method === 'password' && page.status &&
         !page.status.credential_types.includes('password') &&
         page.status.preferred_credential_type) {

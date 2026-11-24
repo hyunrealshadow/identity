@@ -1,6 +1,6 @@
 import { Alert, AlertDescription } from '@identity/ui/components/alert'
 import { Badge } from '@identity/ui/components/badge'
-import { Button } from '@identity/ui/components/button'
+import { Button, buttonVariants } from '@identity/ui/components/button'
 import {
   Dialog,
   DialogContent,
@@ -8,9 +8,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@identity/ui/components/dialog'
+import { Skeleton } from '@identity/ui/components/skeleton'
 import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
 import { DataTable, type DataTableColumn } from '@identity/ui/data-table'
-import { KeyRound, LogOut, ShieldOff, TriangleAlert } from 'lucide-react'
+import { ExternalLink, KeyRound, LogOut, ShieldOff, TriangleAlert } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
@@ -22,6 +23,7 @@ import {
   type ConsoleUserSessionsQuery,
   type ConsoleUserSessionsQueryVariables,
 } from '#/generated/graphql'
+import { useAuth } from '#/lib/auth/context'
 import { formatDateTime } from '#/lib/format'
 import {
   failureDescriptionKey,
@@ -30,13 +32,14 @@ import {
 import type { GraphQLFailure, GraphQLIssue, GraphQLStepUp } from '#/lib/graphql/transport'
 import { useConsoleQuery } from '#/lib/graphql/use-console-query'
 import { useLocale, useTranslator, type MessageKey } from '#/lib/i18n'
+import { useRuntimeConfig } from '#/lib/runtime-config'
 import { toast } from '#/lib/toast'
 import { useWorkspace } from '#/lib/workspace'
 import { useUserDetailContext } from '../components/user-detail-context'
 import { MutationFeedback } from '../components/user-feedback'
 import { useUserMutations } from '../hooks/user-mutations'
 import type { MutationFeedbackState } from '../lib/user-errors'
-import { userManagementScope } from '../lib/user-scope'
+import { isCurrentUser, userManagementScope } from '../lib/user-scope'
 
 type Session = NonNullable<
   ConsoleUserSessionsQuery['user']
@@ -83,9 +86,57 @@ function sessionDevice(session: Session): string {
   return [browser, os].filter(Boolean).join(' / ') || session.deviceName || session.deviceType || ''
 }
 
+function UserSecuritySkeleton({ label }: { label: string }) {
+  return (
+    <div
+      role="status"
+      aria-label={label}
+      aria-busy="true"
+      className="space-y-8"
+    >
+      <section className="space-y-3" aria-hidden="true">
+        <div className="flex flex-col gap-3 px-1 sm:flex-row sm:items-start sm:justify-between">
+          <div className="space-y-2">
+            <Skeleton className="h-5 w-28 rounded-lg" />
+            <Skeleton className="h-4 w-72 max-w-full rounded-lg" />
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Skeleton className="h-9 w-28 rounded-lg" />
+            <Skeleton className="h-9 w-32 rounded-lg" />
+          </div>
+        </div>
+        <div className="grid gap-px overflow-hidden rounded-lg border border-border bg-border sm:grid-cols-2">
+          {Array.from({ length: 4 }, (_, index) => (
+            <div
+              key={index}
+              className="flex items-center justify-between gap-3 bg-background px-4 py-3"
+            >
+              <Skeleton className="h-4 w-28 rounded-lg" />
+              <Skeleton className="h-5 w-16 rounded-full" />
+            </div>
+          ))}
+        </div>
+      </section>
+      <section className="space-y-3" aria-hidden="true">
+        <div className="space-y-2 px-1">
+          <Skeleton className="h-5 w-20 rounded-lg" />
+          <Skeleton className="h-4 w-56 max-w-full rounded-lg" />
+        </div>
+        <div className="space-y-3 rounded-lg border border-border p-4">
+          <Skeleton className="h-9 w-full rounded-lg" />
+          <Skeleton className="h-10 w-full rounded-lg" />
+          <Skeleton className="h-10 w-full rounded-lg" />
+        </div>
+      </section>
+    </div>
+  )
+}
+
 export function UserSecurityPage() {
   const t = useTranslator()
   const { locale, timeZone } = useLocale()
+  const { claims } = useAuth()
+  const { accountUrl } = useRuntimeConfig()
   const detail = useUserDetailContext()
   const user = detail.user
   const workspace = useWorkspace()
@@ -109,7 +160,13 @@ export function UserSecurityPage() {
   const confirmDialog = useOverlayState()
   const revealDialog = useOverlayState()
 
-  if (!user) return null
+  if (!user) {
+    if (detail.status === 'idle' || detail.status === 'loading') {
+      return <UserSecuritySkeleton label={t('usersDetailLoading')} />
+    }
+    return null
+  }
+  const selfTarget = isCurrentUser(user.id, claims?.sub)
   const methods = user.authenticationMethods
   const hasSecondFactor = Boolean(
     methods && (methods.authenticatorApp || methods.recoveryCodes || methods.passkey),
@@ -264,10 +321,15 @@ export function UserSecurityPage() {
               {t('usersSecurityMethodsTitle')}
             </h2>
             <p className="mt-0.5 max-w-2xl text-xs leading-5 text-muted-foreground">
-              {t('usersSecurityMethodsDescription')}
+              {t(selfTarget ? 'usersSecuritySelfMethodsDescription' : 'usersSecurityMethodsDescription')}
             </p>
           </div>
-          {scope.credentials ? (
+          {selfTarget ? (
+            <a href={accountUrl} className={buttonVariants({ variant: 'outline' })}>
+              <ExternalLink className="size-4" aria-hidden="true" />
+              {t('usersSecuritySelfAccountCenter')}
+            </a>
+          ) : scope.credentials ? (
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" disabled={pending} onClick={() => ask('resetPassword')}>
                 <KeyRound className="size-4" aria-hidden="true" />
@@ -308,7 +370,7 @@ export function UserSecurityPage() {
                 )}
               </p>
             </div>
-            {scope.update ? (
+            {scope.update && !selfTarget ? (
               <Button
                 variant="outline"
                 size="sm"

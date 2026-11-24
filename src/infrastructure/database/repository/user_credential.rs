@@ -136,28 +136,31 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         password: &Password,
     ) -> Result<(), UserCredentialRepositoryError> {
         let new_data = to_value(password).map_err(UserCredentialRepositoryError::Serialization)?;
+        let expected_data =
+            to_value(expected).map_err(UserCredentialRepositoryError::Serialization)?;
 
-        let result = UserCredentialEntity::update_many()
-            .col_expr(UserCredentialColumn::Data, Expr::value(new_data))
-            .col_expr(
-                UserCredentialColumn::UpdatedAt,
-                Expr::value(Some(Utc::now().fixed_offset())),
-            )
-            .filter(UserCredentialColumn::Oid.eq(Uuid::from(credential_oid)))
-            .filter(
-                UserCredentialColumn::Data
-                    .eq(to_value(expected).map_err(UserCredentialRepositoryError::Serialization)?),
-            )
-            .filter(UserCredentialColumn::Type.eq(CredentialType::Password.as_ref()))
-            .filter(
-                Condition::any()
-                    .add(UserCredentialColumn::ExpiresAt.is_null())
-                    .add(UserCredentialColumn::ExpiresAt.gt(Utc::now())),
-            )
-            .exec(&self.db)
+        // Keep `updated_at` untouched: transparent Argon2 rehashing does not
+        // change when the user chose the password (`password_set_at`), so it
+        // must not extend password lifetime under `auth.password.max_age_days`.
+        let result = self
+            .db
+            .execute_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                "UPDATE user_credential \
+                 SET data = CASE WHEN data ? 'temporary' \
+                     THEN jsonb_set($1::jsonb, '{temporary}', data->'temporary', true) \
+                     ELSE $1::jsonb END \
+                 WHERE oid = $2 AND type = 'password' AND (data - 'temporary') = $3::jsonb \
+                 AND (expires_at IS NULL OR expires_at > now())",
+                [
+                    new_data.into(),
+                    Uuid::from(credential_oid).into(),
+                    expected_data.into(),
+                ],
+            ))
             .await
             .map_err(|e| UserCredentialRepositoryError::UpdatePasswordFailed(Box::new(e)))?;
-        if result.rows_affected != 1 {
+        if result.rows_affected() != 1 {
             return Err(UserCredentialRepositoryError::CredentialNotFound);
         }
         Ok(())

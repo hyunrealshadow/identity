@@ -244,7 +244,7 @@ async fn login_status(
     let enrollment_method = (login.status == LoginStatus::MFA_ENROLLMENT_REQUIRED)
         .then(|| login::enrollment_method(&login));
     let challenge_uri = if login.status == LoginStatus::PASSWORD_CHANGE_REQUIRED {
-        Some(login_password_change_uri(&id))
+        Some(login_password_change_uri(&id, ui_locales.as_deref()))
     } else if let Some(method) = enrollment_method.filter(|_| user.is_some()) {
         Some(login_enrollment_uri(&id, method, ui_locales.as_deref()))
     } else if user.is_some()
@@ -801,9 +801,12 @@ async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> 
 
 /// The login application page where a sign-in replaces the password its
 /// account must change.
-fn login_password_change_uri(login_id: &str) -> String {
+fn login_password_change_uri(login_id: &str, ui_locales: Option<&[String]>) -> String {
     let mut query = Serializer::new(String::new());
     query.append_pair("login_id", login_id);
+    if let Some(ui_locales) = ui_locales.filter(|values| !values.is_empty()) {
+        query.append_pair("ui_locales", &ui_locales.join(" "));
+    }
     format!("/login/change-password?{}", query.finish())
 }
 
@@ -819,7 +822,7 @@ fn render_password_change_required(login_id: &str, res: &mut Response) {
             enrollment_method: None,
             session: None,
             acr: None,
-            continue_uri: Some(login_password_change_uri(login_id)),
+            continue_uri: Some(login_password_change_uri(login_id, None)),
             sessions: None,
         },
     );

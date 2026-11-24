@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router'
+import { createFileRoute, redirect } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { CircleAlert, KeyRound } from 'lucide-react'
 
@@ -13,9 +13,13 @@ import { errorMessage, identityJson, isTerminalLoginError } from '#/lib/identity
 import type { ActiveAccountsResponse, LoginStatusResponse } from '#/lib/identity-types'
 import { translate } from '#/lib/i18n'
 import { requestLocale } from '#/lib/i18n.server'
-import { loginPasswordChangePath } from '#/lib/login-navigation'
+import {
+  loginChallengeDestination,
+  loginPasswordChangePath,
+} from '#/lib/login-navigation'
 import { submitPasswordChange } from '#/lib/password-change.server'
 import { consumeFormFlash } from '#/lib/responses.server'
+import { withUiLocales } from '#/lib/ui-locale'
 
 interface PasswordChangeSearch {
   login_id?: string
@@ -44,6 +48,7 @@ const loadPasswordChangePage = createServerFn({ method: 'GET' })
       fields: flash?.fields ?? {},
       restartRequired: data.restart === 'required' || data.restart === 'unavailable',
       restartUnavailable: data.restart === 'unavailable',
+      redirectTo: undefined as string | undefined,
     }
     if (!loginId) return { ...page, error: page.error ?? translate(locale, 'missingLogin') }
     try {
@@ -55,8 +60,22 @@ const loadPasswordChangePage = createServerFn({ method: 'GET' })
         }
       }
       page.status = await identityJson<LoginStatusResponse>(`/api/auth/login/${encodeURIComponent(loginId)}`)
-      if (page.status.status === 'expired' || page.status.status !== 'password_change_required') {
+      if (page.status.status === 'expired') {
         return { ...page, restartRequired: true, error: translate(locale, 'challengeExpiredDescription') }
+      }
+      if (page.status.status !== 'password_change_required') {
+        const search = new URLSearchParams({ login_id: loginId })
+        if (uiLocales) search.set('ui_locales', uiLocales)
+        return {
+          ...page,
+          redirectTo:
+            page.status.continue_uri ??
+            page.status.challenge_uri ??
+            ((page.status.status === 'mfa_required' || page.status.status === 'identifier_verified') &&
+            page.status.preferred_credential_type
+              ? loginChallengeDestination(loginId, page.status.preferred_credential_type, uiLocales)
+              : `/login?${search}`),
+        }
       }
       return page
     } catch (error) {
@@ -78,7 +97,13 @@ export const Route = createFileRoute('/login/change-password')({
     restart: search.restart,
     uiLocales: search.ui_locales,
   }),
-  loader: ({ deps }) => loadPasswordChangePage({ data: deps }),
+  loader: async ({ deps }) => {
+    const page = await loadPasswordChangePage({ data: deps })
+    if (page.redirectTo) {
+      throw redirect({ href: withUiLocales(page.redirectTo, page.uiLocales), reloadDocument: true })
+    }
+    return page
+  },
   server: {
     handlers: {
       POST: ({ request }) => submitPasswordChange(request),

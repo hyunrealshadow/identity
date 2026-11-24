@@ -2588,6 +2588,14 @@
     "module": "user.management"
   },
   {
+    "code": 16024,
+    "kind": "conflict",
+    "fluentKey": "E16024",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "user.management"
+  },
+  {
     "code": 17000,
     "kind": "validation",
     "fluentKey": "E17000",

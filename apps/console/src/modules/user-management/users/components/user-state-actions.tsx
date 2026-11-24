@@ -260,6 +260,16 @@ export function UserStateActions({
               {t('usersUnlockAction')}
             </Button>
           ) : null}
+          {showDelete ? (
+            <Button
+              variant="destructive"
+              disabled={!versionReady}
+              onClick={deleteState.open}
+            >
+              <Trash2 className="size-4" aria-hidden="true" />
+              {t('usersDeleteAction')}
+            </Button>
+          ) : null}
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">{t('usersStateNoAction')}</p>

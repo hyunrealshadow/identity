@@ -104,6 +104,7 @@ WITH subject AS (
     FROM user_credential credential
     JOIN subject user_row ON user_row.id = credential.user_id
     WHERE credential.type IN ('password', 'otp', 'passkey')
+      AND (credential.expires_at IS NULL OR credential.expires_at > now())
 )
 SELECT kind, payload FROM dependencies
 "#,

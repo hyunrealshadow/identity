@@ -16,3 +16,4 @@ E16020 = The user's access could not be invalidated. No changes were committed.
 E16021 = Disable the user before deleting it.
 E16022 = This user has no password and could not sign in without its second factors. Reset the password first.
 E16023 = The session does not exist or does not belong to this user.
+E16024 = You cannot perform this credential action on your own account. Manage your sign-in methods in the account center.

@@ -270,6 +270,8 @@ const enUS = {
   usersStateDeletedToast: 'User deleted',
   usersSecurityMethodsTitle: 'Sign-in methods',
   usersSecurityMethodsDescription: 'The sign-in methods this user has set up. Resetting the password or clearing second factors signs the user out on every device.',
+  usersSecuritySelfMethodsDescription: 'Sign-in methods on your own account are managed in the account center.',
+  usersSecuritySelfAccountCenter: 'Manage in account center',
   usersSecurityMethodPassword: 'Password',
   usersSecurityMethodAuthenticator: 'Authenticator app',
   usersSecurityMethodRecoveryCodes: 'Recovery codes',

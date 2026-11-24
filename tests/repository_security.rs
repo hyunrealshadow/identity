@@ -1191,3 +1191,537 @@ async fn email_code_admission_is_atomic_and_independent_of_the_account() {
     })
     .await;
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured PostgreSQL test database"]
+async fn required_password_change_keeps_active_interaction() {
+    for request_type in ["authorization_request", "device_authorization_request"] {
+        common::isolated(move |db| async move {
+            let user = Uuid::new_v4();
+            let credential = Uuid::new_v4();
+            let client = Uuid::new_v4();
+            let kept_request = Uuid::new_v4();
+            let other_request = Uuid::new_v4();
+            let token = Uuid::new_v4();
+            let kept_login = Uuid::new_v4();
+            let other_login = Uuid::new_v4();
+            let kept_session = Uuid::new_v4();
+            let other_session = Uuid::new_v4();
+            let old = password("OLD-PASSWORD");
+            let new = password("NEW-PASSWORD");
+            let data = |login: Uuid| {
+                format!(
+                    r#"{{"interaction":{{"selected_user_oid":"{user}"}},"claimed_login_oid":"{login}"}}"#
+                )
+            };
+            sql(&db, &format!(r#"
+                INSERT INTO "user" (oid,name,name_normalized,email,email_normalized,password_change_required)
+                  VALUES ('{user}','{user}','{user}','{user}@example.test','{user}@example.test',true);
+                INSERT INTO client (oid,name,protocol) VALUES ('{client}','pw-change-test','openid_connect');
+                INSERT INTO user_credential (oid,user_id,type,data)
+                  SELECT '{credential}',id,'password','{}'::jsonb FROM "user" WHERE oid='{user}';
+                INSERT INTO session (oid,user_id,status,amr,last_active_at,authenticated_at,expires_at)
+                  SELECT s,id,'active','["pwd"]',now(),now(),now()+interval '7 days'
+                  FROM "user",unnest(ARRAY['{kept_session}'::uuid,'{other_session}'::uuid]) s WHERE oid='{user}';
+                INSERT INTO client_authorization (oid,client_id,type,data,expires_at)
+                  SELECT '{kept_request}',id,'{request_type}','{}',now()+interval '1 day' FROM client WHERE oid='{client}';
+                INSERT INTO client_authorization (oid,client_id,type,data,expires_at)
+                  SELECT '{other_request}',id,'{request_type}','{}',now()+interval '1 day' FROM client WHERE oid='{client}';
+                INSERT INTO client_authorization (oid,client_id,type,data,expires_at)
+                  SELECT '{token}',id,'access_token','{{"user_oid":"{user}"}}',now()+interval '1 day' FROM client WHERE oid='{client}';
+                INSERT INTO login (oid,client_id,client_authorization_id,user_id,session_id,status,requested_acr_values,expires_at)
+                  SELECT l.oid,c.id,a.id,u.id,s.id,'password_change_required','["aal1"]'::jsonb,now()+interval '5 minutes'
+                  FROM client c,"user" u,session s,
+                    (VALUES ('{kept_login}'::uuid,'{kept_request}'::uuid),('{other_login}'::uuid,'{other_request}'::uuid)) l(oid,request),
+                    client_authorization a
+                  WHERE c.oid='{client}' AND u.oid='{user}' AND s.oid='{kept_session}' AND a.oid=l.request;
+            "#, serde_json::to_string(&old).unwrap(), data(kept_login), data(other_login))).await;
+
+            let repo = UserCredentialRepositoryImpl::new(db.clone());
+            let revoked = repo
+                .replace_password(
+                    user.into(),
+                    credential.into(),
+                    &old,
+                    &new,
+                    PasswordReplacement {
+                        kind: PasswordReplacementKind::Required {
+                            login: kept_login,
+                            keep: Some(SessionOid(kept_session)),
+                        },
+                        keep_history: 0,
+                    },
+                )
+                .await
+                .unwrap();
+            assert_eq!(revoked, 1, "{request_type}");
+
+            let withdrawn = |oid: Uuid| {
+                format!(
+                    "SELECT count(*)::bigint n FROM client_authorization WHERE oid='{oid}' \
+                     AND (revoked_at IS NOT NULL OR data->>'_authority_withdrawn'='true')"
+                )
+            };
+            assert_eq!(scalar(&db, &withdrawn(kept_request)).await, 0, "{request_type}");
+            assert_eq!(scalar(&db, &withdrawn(other_request)).await, 1, "{request_type}");
+            assert_eq!(scalar(&db, &withdrawn(token)).await, 1, "{request_type}");
+            assert_eq!(
+                scalar(
+                    &db,
+                    &format!("SELECT count(*)::bigint n FROM \"user\" WHERE oid='{user}' AND password_change_required=false"),
+                )
+                .await,
+                1
+            );
+            assert_eq!(
+                scalar(
+                    &db,
+                    &format!("SELECT count(*)::bigint n FROM session WHERE oid='{kept_session}' AND status='active'"),
+                )
+                .await,
+                1
+            );
+            assert_eq!(
+                scalar(
+                    &db,
+                    &format!("SELECT count(*)::bigint n FROM session WHERE oid='{other_session}' AND status='revoked'"),
+                )
+                .await,
+                1
+            );
+        })
+        .await;
+    }
+}
+
+async fn user_mgmt_authority(
+    db: &DatabaseConnection,
+    request_id: &str,
+) -> identity_application::user::management::UserManagementAuthority {
+    use identity_application::user::management::UserManagementAuthority;
+    use identity_domain::authorization::ManagementScope;
+
+    let admin = client_management::administrator(db, &[ManagementScope::UsersWrite]).await;
+    let mut actor = admin.actor;
+    actor.request_id = RequestId::new(request_id).unwrap();
+    UserManagementAuthority::new(
+        actor,
+        admin.token_scopes,
+        admin.snapshot,
+        admin.client_oid,
+        admin.client_policy_version,
+    )
+}
+
+#[tokio::test]
+#[ignore = "requires explicitly configured PostgreSQL test database"]
+async fn password_rehash_preserves_age_and_temporary_password_skips_history() {
+    use identity_application::user::management::{
+        UserManagementMutationOutcome, UserManagementRepository, UserStateTransaction,
+    };
+    use identity_infrastructure::database::{
+        repository::user_management::UserManagementRepositoryImpl, seed,
+    };
+
+    common::isolated(|db| async move {
+        seed::run_all(&db).await.unwrap();
+        client_management::owner(&db).await;
+
+        let target = Uuid::new_v4();
+        let cred = Uuid::new_v4();
+        let p1 = password("P1");
+        let p1_rehash = password("P1-REHASH");
+        let temp = password("TEMP");
+        let temp_rehash = password("TEMP-REHASH");
+        let p2 = password("P2");
+        let p3 = password("P3");
+        let p4 = password("P4");
+        sql(&db, &format!(r#"
+            INSERT INTO "user" (oid,name,name_normalized,email,email_normalized)
+              VALUES ('{target}','policy-target','policy-target','policy-target@example.test','policy-target@example.test');
+            INSERT INTO user_credential (oid,user_id,type,data,created_at,updated_at)
+              SELECT '{cred}',id,'password','{}'::jsonb,now() - interval '60 days',NULL FROM "user" WHERE oid='{target}';
+        "#, serde_json::to_string(&p1).unwrap())).await;
+
+        let cred_repo = UserCredentialRepositoryImpl::new(db.clone());
+        let before_age = cred_repo.password_set_at(target.into()).await.unwrap().unwrap();
+        assert!(before_age < Utc::now() - ChronoDuration::days(59));
+
+        // Transparent Argon2 rehash must not reset password age.
+        cred_repo
+            .update_password_by_oid(cred.into(), &p1, &p1_rehash)
+            .await
+            .unwrap();
+        let after_age = cred_repo.password_set_at(target.into()).await.unwrap().unwrap();
+        assert!(after_age < Utc::now() - ChronoDuration::days(59));
+
+        // Admin reset archives the real password and marks the temporary one.
+        let users = UserManagementRepositoryImpl::new(db.clone());
+        let version: Uuid = db
+            .query_one_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                "SELECT version FROM \"user\" WHERE oid=$1",
+                [target.into()],
+            ))
+            .await
+            .unwrap()
+            .unwrap()
+            .try_get("", "version")
+            .unwrap();
+        let authority = user_mgmt_authority(&db, "policy-history-reset").await;
+        let outcome = users
+            .reset_user_password(
+                UserStateTransaction {
+                    user_oid: target.into(),
+                    expected_version: version,
+                    reason: String::new(),
+                    authority,
+                },
+                temp.clone(),
+                2,
+            )
+            .await
+            .unwrap();
+        assert!(matches!(outcome, UserManagementMutationOutcome::Success(_)));
+
+        let active_cred = cred_repo
+            .find_by_user_oid_and_type(target.into(), CredentialType::Password)
+            .await
+            .unwrap();
+        assert_eq!(active_cred.len(), 1);
+        assert_eq!(
+            scalar(
+                &db,
+                &format!("SELECT count(*)::bigint n FROM user_credential WHERE oid='{}' AND data->>'temporary'='true'", active_cred[0].oid.0),
+            )
+            .await,
+            1
+        );
+
+        // Rehash of a temporary password preserves the temporary marker.
+        cred_repo
+            .update_password_by_oid(active_cred[0].oid, &temp, &temp_rehash)
+            .await
+            .unwrap();
+        assert_eq!(
+            scalar(
+                &db,
+                &format!("SELECT count(*)::bigint n FROM user_credential WHERE oid='{}' AND data->>'temporary'='true'", active_cred[0].oid.0),
+            )
+            .await,
+            1
+        );
+
+        // Replacing the temporary password does not push it into history.
+        let login = Uuid::new_v4();
+        let client = Uuid::new_v4();
+        sql(&db, &format!(r#"
+            INSERT INTO client (oid,name,protocol) VALUES ('{client}','history-test','openid_connect');
+            INSERT INTO client_authorization (oid,client_id,type,data,expires_at)
+              SELECT gen_random_uuid(),id,'authorization_request','{{}}'::jsonb,now()+interval '1 hour' FROM client WHERE oid='{client}';
+            INSERT INTO login (oid,client_id,client_authorization_id,user_id,status,expires_at)
+              SELECT '{login}',c.id,a.id,u.id,'password_change_required',now()+interval '5 minutes'
+              FROM client c,client_authorization a,"user" u
+              WHERE c.oid='{client}' AND a.client_id=c.id AND u.oid='{target}';
+        "#)).await;
+
+        cred_repo
+            .replace_password(
+                target.into(),
+                active_cred[0].oid,
+                &temp_rehash,
+                &p2,
+                PasswordReplacement {
+                    kind: PasswordReplacementKind::Required {
+                        login,
+                        keep: None,
+                    },
+                    keep_history: 2,
+                },
+            )
+            .await
+            .unwrap();
+        let history = cred_repo.password_history(target.into(), 5).await.unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!(
+            serde_json::to_value(&history[0]).unwrap(),
+            serde_json::to_value(&p1_rehash).unwrap()
+        );
+
+        // Subsequent changes archive real passwords and prune past `keep_history = 2`.
+        for (expected, next) in [(&p2, &p3), (&p3, &p4)] {
+            let current = cred_repo
+                .find_by_user_oid_and_type(target.into(), CredentialType::Password)
+                .await
+                .unwrap();
+            cred_repo
+                .replace_password(
+                    target.into(),
+                    current[0].oid,
+                    expected,
+                    next,
+                    PasswordReplacement {
+                        kind: PasswordReplacementKind::Change { keep: None },
+                        keep_history: 2,
+                    },
+                )
+                .await
+                .unwrap();
+        }
+        let history = cred_repo.password_history(target.into(), 5).await.unwrap();
+        assert_eq!(history.len(), 2);
+        let hashes: Vec<_> = history
+            .iter()
+            .map(|p| match p {
+                Password::Argon2(a) => a.hash.as_str(),
+            })
+            .collect();
+        assert_eq!(hashes, vec!["P3", "P2"]);
+    })
+    .await;
+}
+
+#[tokio::test]
+#[ignore = "requires explicitly configured PostgreSQL test database"]
+async fn user_management_credential_and_delete_transactions() {
+    use identity_application::user::management::{
+        RevokeUserSessionsTransaction, UserManagementMutationOutcome, UserManagementRepository,
+        UserManagementRepositoryError, UserStateTransaction,
+    };
+    use identity_infrastructure::database::{
+        repository::user_management::UserManagementRepositoryImpl, seed,
+    };
+
+    common::isolated(|db| async move {
+        seed::run_all(&db).await.unwrap();
+        client_management::owner(&db).await;
+
+        let target = Uuid::new_v4();
+        let third = Uuid::new_v4();
+        let passwordless = Uuid::new_v4();
+        let client = Uuid::new_v4();
+        let s1 = Uuid::new_v4();
+        let s2 = Uuid::new_v4();
+        let t1 = Uuid::new_v4();
+        let t2 = Uuid::new_v4();
+        let role = Uuid::new_v4();
+        let group = Uuid::new_v4();
+
+        sql(&db, &format!(r#"
+            INSERT INTO "user" (oid,name,name_normalized,email,email_normalized) VALUES
+              ('{target}','target-user','target-user','target@example.test','target@example.test'),
+              ('{third}','third-user','third-user','third@example.test','third@example.test'),
+              ('{passwordless}','passkey-only','passkey-only','passkey-only@example.test','passkey-only@example.test');
+            INSERT INTO user_credential (oid,user_id,type,data)
+              SELECT gen_random_uuid(),u.id,k.kind,'{{}}'::jsonb
+              FROM "user" u, unnest(ARRAY['password','otp','recovery_code','passkey']) k(kind)
+              WHERE u.oid='{target}';
+            INSERT INTO user_credential (oid,user_id,type,data)
+              SELECT gen_random_uuid(),id,'passkey','{{}}'::jsonb FROM "user" WHERE oid='{passwordless}';
+            INSERT INTO client (oid,name,protocol) VALUES ('{client}','mgmt-test','openid_connect');
+            INSERT INTO session (oid,user_id,status,amr,last_active_at,authenticated_at,expires_at)
+              SELECT s,id,'active','["pwd"]',now(),now(),now()+interval '7 days'
+              FROM "user", unnest(ARRAY['{s1}'::uuid,'{s2}'::uuid]) s WHERE oid='{target}';
+            INSERT INTO client_authorization (oid,client_id,type,data,expires_at)
+              SELECT '{t1}',id,'access_token','{{"session_oid":"{s1}"}}',now()+interval '1 hour' FROM client WHERE oid='{client}';
+            INSERT INTO client_authorization (oid,client_id,type,data,expires_at)
+              SELECT '{t2}',id,'refresh_token','{{"session_oid":"{s2}"}}',now()+interval '1 day' FROM client WHERE oid='{client}';
+            INSERT INTO role (oid,name,names,enabled) VALUES ('{role}','Custom','{{"en-US":"Custom"}}',true);
+            INSERT INTO user_group (oid,name,names,descriptions,enabled) VALUES ('{group}','Team','{{"en-US":"Team"}}','{{}}',true);
+            INSERT INTO user_role (oid,user_id,role_id,granted_by_user_id,reason)
+              SELECT gen_random_uuid(),u.id,r.id,NULL,'' FROM "user" u,role r WHERE u.oid='{target}' AND r.oid='{role}';
+            INSERT INTO user_role (oid,user_id,role_id,granted_by_user_id,reason)
+              SELECT gen_random_uuid(),u.id,r.id,g.id,'' FROM "user" u,role r,"user" g WHERE u.oid='{third}' AND r.oid='{role}' AND g.oid='{target}';
+            INSERT INTO group_membership (oid,group_id,user_id,granted_by_user_id,reason)
+              SELECT gen_random_uuid(),gp.id,u.id,NULL,'' FROM user_group gp,"user" u WHERE gp.oid='{group}' AND u.oid='{target}';
+            INSERT INTO group_membership (oid,group_id,user_id,granted_by_user_id,reason)
+              SELECT gen_random_uuid(),gp.id,u.id,g.id,'' FROM user_group gp,"user" u,"user" g WHERE gp.oid='{group}' AND u.oid='{third}' AND g.oid='{target}';
+        "#)).await;
+
+        let users = UserManagementRepositoryImpl::new(db.clone());
+        let authority = user_mgmt_authority(&db, "user-mgmt-creds").await;
+
+        // Passwordless user refuses MFA clear.
+        let pwl_version = users.find_user(passwordless.into()).await.unwrap().unwrap().user.version;
+        let outcome = users
+            .reset_user_mfa(UserStateTransaction {
+                user_oid: passwordless.into(),
+                expected_version: pwl_version,
+                reason: String::new(),
+                authority: authority.clone(),
+            })
+            .await
+            .unwrap();
+        assert!(matches!(outcome, UserManagementMutationOutcome::NoPassword));
+
+        // Reset MFA removes otp/recovery/passkey, keeps password, revokes sessions/tokens.
+        let target_version = users.find_user(target.into()).await.unwrap().unwrap().user.version;
+        let outcome = users
+            .reset_user_mfa(UserStateTransaction {
+                user_oid: target.into(),
+                expected_version: target_version,
+                reason: String::new(),
+                authority: authority.clone(),
+            })
+            .await
+            .unwrap();
+        let UserManagementMutationOutcome::Success(record) = outcome else {
+            panic!("expected reset_user_mfa success");
+        };
+        assert_ne!(record.user.version, target_version);
+        assert_eq!(
+            scalar(&db, &format!("SELECT count(*)::bigint n FROM user_credential uc JOIN \"user\" u ON u.id=uc.user_id WHERE u.oid='{target}' AND uc.type IN ('otp','recovery_code','passkey')")).await,
+            0
+        );
+        assert_eq!(
+            scalar(&db, &format!("SELECT count(*)::bigint n FROM user_credential uc JOIN \"user\" u ON u.id=uc.user_id WHERE u.oid='{target}' AND uc.type='password'")).await,
+            1
+        );
+        assert_eq!(
+            scalar(&db, &format!("SELECT count(*)::bigint n FROM session s JOIN \"user\" u ON u.id=s.user_id WHERE u.oid='{target}' AND s.status='active'")).await,
+            0
+        );
+        assert_eq!(
+            scalar(&db, &format!("SELECT count(*)::bigint n FROM client_authorization WHERE oid IN ('{t1}','{t2}') AND revoked_at IS NOT NULL")).await,
+            2
+        );
+        assert_eq!(semantic_count_for_target(&db, target, Some(AuditAction::UserMfaReset)).await, 1);
+
+        // Revoke sessions: one by OID, then all remaining.
+        let s3 = Uuid::new_v4();
+        let s4 = Uuid::new_v4();
+        let t3 = Uuid::new_v4();
+        let t4 = Uuid::new_v4();
+        sql(&db, &format!(r#"
+            INSERT INTO session (oid,user_id,status,amr,last_active_at,authenticated_at,expires_at)
+              SELECT s,id,'active','["pwd"]',now(),now(),now()+interval '7 days'
+              FROM "user", unnest(ARRAY['{s3}'::uuid,'{s4}'::uuid]) s WHERE oid='{target}';
+            INSERT INTO client_authorization (oid,client_id,type,data,expires_at)
+              SELECT '{t3}',id,'access_token','{{"session_oid":"{s3}"}}',now()+interval '1 hour' FROM client WHERE oid='{client}';
+            INSERT INTO client_authorization (oid,client_id,type,data,expires_at)
+              SELECT '{t4}',id,'access_token','{{"session_oid":"{s4}"}}',now()+interval '1 hour' FROM client WHERE oid='{client}';
+        "#)).await;
+
+        let outcome = users
+            .revoke_user_sessions(RevokeUserSessionsTransaction {
+                user_oid: target.into(),
+                sessions: Some(vec![s3]),
+                reason: String::new(),
+                authority: authority.clone(),
+            })
+            .await
+            .unwrap();
+        assert!(matches!(outcome, UserManagementMutationOutcome::Success(_)));
+        assert_eq!(scalar(&db, &format!("SELECT count(*)::bigint n FROM session WHERE oid='{s3}' AND status='revoked'")).await, 1);
+        assert_eq!(scalar(&db, &format!("SELECT count(*)::bigint n FROM session WHERE oid='{s4}' AND status='active'")).await, 1);
+        assert_eq!(scalar(&db, &format!("SELECT count(*)::bigint n FROM client_authorization WHERE oid='{t3}' AND revoked_at IS NOT NULL")).await, 1);
+        assert_eq!(scalar(&db, &format!("SELECT count(*)::bigint n FROM client_authorization WHERE oid='{t4}' AND revoked_at IS NULL")).await, 1);
+
+        let outcome = users
+            .revoke_user_sessions(RevokeUserSessionsTransaction {
+                user_oid: target.into(),
+                sessions: None,
+                reason: String::new(),
+                authority: authority.clone(),
+            })
+            .await
+            .unwrap();
+        assert!(matches!(outcome, UserManagementMutationOutcome::Success(_)));
+        assert_eq!(scalar(&db, &format!("SELECT count(*)::bigint n FROM session WHERE oid='{s4}' AND status='revoked'")).await, 1);
+        assert_eq!(scalar(&db, &format!("SELECT count(*)::bigint n FROM client_authorization WHERE oid='{t4}' AND revoked_at IS NOT NULL")).await, 1);
+        assert_eq!(semantic_count_for_target(&db, target, Some(AuditAction::UserSessionRevoke)).await, 2);
+
+        // Delete requires disabled user; audit failure rolls back deletion.
+        let version = users.find_user(target.into()).await.unwrap().unwrap().user.version;
+        let outcome = users
+            .delete_user(UserStateTransaction {
+                user_oid: target.into(),
+                expected_version: version,
+                reason: String::new(),
+                authority: authority.clone(),
+            })
+            .await
+            .unwrap();
+        assert!(matches!(outcome, UserManagementMutationOutcome::NotDisabled));
+
+        let outcome = users
+            .set_user_enabled(
+                UserStateTransaction {
+                    user_oid: target.into(),
+                    expected_version: version,
+                    reason: String::new(),
+                    authority: authority.clone(),
+                },
+                false,
+            )
+            .await
+            .unwrap();
+        let UserManagementMutationOutcome::Success(disabled) = outcome else {
+            panic!("expected disable success");
+        };
+
+        let failing_request = "audit-fail-delete";
+        sql(
+            &db,
+            &format!(
+                "ALTER TABLE audit ADD CONSTRAINT user_delete_audit_failure CHECK (request_id IS DISTINCT FROM '{failing_request}') NOT VALID"
+            ),
+        )
+        .await;
+        let failing_authority = user_mgmt_authority(&db, failing_request).await;
+        let failed = users
+            .delete_user(UserStateTransaction {
+                user_oid: target.into(),
+                expected_version: disabled.user.version,
+                reason: String::new(),
+                authority: failing_authority,
+            })
+            .await
+            .unwrap_err();
+        assert!(matches!(failed, UserManagementRepositoryError::AuditFailed(_)));
+        assert_eq!(scalar(&db, &format!("SELECT count(*)::bigint n FROM \"user\" WHERE oid='{target}'")).await, 1);
+        sql(&db, "ALTER TABLE audit DROP CONSTRAINT user_delete_audit_failure").await;
+
+        let outcome = users
+            .delete_user(UserStateTransaction {
+                user_oid: target.into(),
+                expected_version: disabled.user.version,
+                reason: String::new(),
+                authority: authority.clone(),
+            })
+            .await
+            .unwrap();
+        assert!(matches!(outcome, UserManagementMutationOutcome::Success(_)));
+        assert_eq!(scalar(&db, &format!("SELECT count(*)::bigint n FROM \"user\" WHERE oid='{target}'")).await, 0);
+        assert_eq!(scalar(&db, &format!("SELECT count(*)::bigint n FROM user_role ur JOIN \"user\" u ON u.id=ur.user_id WHERE u.oid='{third}' AND ur.granted_by_user_id IS NULL")).await, 1);
+        assert_eq!(scalar(&db, &format!("SELECT count(*)::bigint n FROM group_membership gm JOIN \"user\" u ON u.id=gm.user_id WHERE u.oid='{third}' AND gm.granted_by_user_id IS NULL")).await, 1);
+        assert_eq!(semantic_count_for_target(&db, target, Some(AuditAction::UserDelete)).await, 1);
+
+        // Last recoverable authorization administrator cannot be disabled or deleted.
+        let owner_oid: Uuid = db
+            .query_one_raw(Statement::from_string(
+                DbBackend::Postgres,
+                r#"SELECT oid FROM "user" WHERE name='owner'"#.to_owned(),
+            ))
+            .await
+            .unwrap()
+            .unwrap()
+            .try_get("", "oid")
+            .unwrap();
+        let owner_version = users.find_user(owner_oid.into()).await.unwrap().unwrap().user.version;
+        let protected = users
+            .set_user_enabled(
+                UserStateTransaction {
+                    user_oid: owner_oid.into(),
+                    expected_version: owner_version,
+                    reason: String::new(),
+                    authority,
+                },
+                false,
+            )
+            .await
+            .unwrap();
+        assert!(matches!(protected, UserManagementMutationOutcome::LastOwnerProtected));
+    })
+    .await;
+}

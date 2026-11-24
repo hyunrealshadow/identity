@@ -33,14 +33,17 @@ pub enum UserManagementErrorCode {
     UserHasNoPassword = 16022,
     /// The session does not belong to the user.
     SessionNotFound = 16023,
+    /// Operators manage their own sign-in methods in the account center.
+    SelfCredentialActionNotAllowed = 16024,
 }
 
 impl AppErrorCode for UserManagementErrorCode {
     fn kind(self) -> ErrorKind {
         match self {
-            Self::VersionConflict | Self::UserNotDisabled | Self::UserHasNoPassword => {
-                ErrorKind::Conflict
-            }
+            Self::VersionConflict
+            | Self::UserNotDisabled
+            | Self::UserHasNoPassword
+            | Self::SelfCredentialActionNotAllowed => ErrorKind::Conflict,
             Self::SessionNotFound => ErrorKind::NotFound,
             Self::UserNotFound => ErrorKind::NotFound,
             Self::StorageFailed | Self::AccessInvalidationFailed => ErrorKind::Internal,
@@ -76,6 +79,7 @@ impl AppErrorCode for UserManagementErrorCode {
             Self::UserNotDisabled => 16021,
             Self::UserHasNoPassword => 16022,
             Self::SessionNotFound => 16023,
+            Self::SelfCredentialActionNotAllowed => 16024,
         }
     }
 }
@@ -225,6 +229,14 @@ pub const USER_MANAGEMENT_ERROR_INVENTORY: &[UserManagementErrorCodeDefinition] 
         UserManagementErrorCode::SessionNotFound,
         ErrorKind::NotFound,
         "E16023",
+        &[],
+        &[],
+        "user.management",
+    ),
+    entry(
+        UserManagementErrorCode::SelfCredentialActionNotAllowed,
+        ErrorKind::Conflict,
+        "E16024",
         &[],
         &[],
         "user.management",

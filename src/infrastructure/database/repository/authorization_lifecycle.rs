@@ -130,13 +130,33 @@ pub(crate) async fn withdraw_user_authority_in_txn(
 /// that requires the enrollment. The request is spared only while that login
 /// belongs to the user and is still in the enrollment phase. Every other
 /// artifact, including other pending interactions, is withdrawn as usual.
-#[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "withdraw_user_authority"))]
 pub(crate) async fn withdraw_user_authority_for_enrollment_in_txn(
     txn: &DatabaseTransaction,
     user_id: i64,
     enrolling_login: Option<Uuid>,
 ) -> Result<AuthorizationVersion, DbErr> {
+    withdraw_user_authority_for_login_in_txn(
+        txn,
+        user_id,
+        enrolling_login.map(|oid| (oid, "mfa_enrollment_required")),
+    )
+    .await
+}
+
+/// [`withdraw_user_authority_in_txn`] sparing the pending authorization or
+/// device request of one active `kept_login` when its flow continues after
+/// the credential change (enrollment, required password change, or reset).
+#[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "withdraw_user_authority"))]
+pub(crate) async fn withdraw_user_authority_for_login_in_txn(
+    txn: &DatabaseTransaction,
+    user_id: i64,
+    kept_login: Option<(Uuid, &str)>,
+) -> Result<AuthorizationVersion, DbErr> {
     let version = renew_user_version_in_txn(txn, user_id).await?;
+    let (kept_oid, kept_status) = match kept_login {
+        Some((oid, status)) => (Some(oid), Some(status.to_owned())),
+        None => (None, None),
+    };
     txn.execute_raw(Statement::from_sql_and_values(
         DbBackend::Postgres,
         r#"
@@ -171,15 +191,15 @@ WHERE subject.id = $1
       )
   )
   AND NOT EXISTS (
-      SELECT 1 FROM login enrolling
-      WHERE enrolling.oid = $2
-        AND enrolling.user_id = subject.id
-        AND enrolling.status = 'mfa_enrollment_required'
-        AND enrolling.client_authorization_id = artifact.id
+      SELECT 1 FROM login keeping
+      WHERE keeping.oid = $2
+        AND keeping.user_id = subject.id
+        AND keeping.status = $3
+        AND keeping.client_authorization_id = artifact.id
         AND artifact.type IN ('authorization_request', 'device_authorization_request')
   )
 "#,
-        [user_id.into(), enrolling_login.into()],
+        [user_id.into(), kept_oid.into(), kept_status.into()],
     ))
     .await?;
     Ok(version)

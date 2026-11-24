@@ -236,6 +236,8 @@ const zhCN = {
   usersStateDeletedToast: '用户已删除',
   usersSecurityMethodsTitle: '登录方式',
   usersSecurityMethodsDescription: '用户已设置的登录方式。重置密码或清除第二因素后，该用户会在所有设备上退出登录',
+  usersSecuritySelfMethodsDescription: '本人账号的登录方式请在账号中心管理',
+  usersSecuritySelfAccountCenter: '前往账号中心管理',
   usersSecurityMethodPassword: '密码',
   usersSecurityMethodAuthenticator: '身份验证器应用',
   usersSecurityMethodRecoveryCodes: '恢复码',

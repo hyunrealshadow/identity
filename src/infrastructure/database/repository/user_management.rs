@@ -1136,7 +1136,10 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
             Ok(locked) => locked,
             Err(outcome) => return Ok(outcome),
         };
-        let data = to_value(&password).map_err(storage_any)?;
+        let mut data = to_value(&password).map_err(storage_any)?;
+        if let Some(object) = data.as_object_mut() {
+            object.insert("temporary".to_owned(), json!(true));
+        }
         let current = txn
             .query_one_raw(Statement::from_sql_and_values(
                 DbBackend::Postgres,
@@ -1154,7 +1157,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
                         DbBackend::Postgres,
                         "INSERT INTO user_credential (oid, user_id, type, data, expires_at, created_at, updated_at) \
                          SELECT gen_random_uuid(), user_id, type, data, now(), created_at, updated_at \
-                         FROM user_credential WHERE oid = $1",
+                         FROM user_credential WHERE oid = $1 AND COALESCE(data->>'temporary', 'false') <> 'true'",
                         [oid.into()],
                     ))
                     .await
@@ -1163,7 +1166,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
                 // A new credential OID marks a semantic replacement.
                 txn.execute_raw(Statement::from_sql_and_values(
                     DbBackend::Postgres,
-                    "UPDATE user_credential SET oid = gen_random_uuid(), data = $1, updated_at = now() WHERE oid = $2",
+                    "UPDATE user_credential SET oid = gen_random_uuid(), data = $1::jsonb, updated_at = now() WHERE oid = $2",
                     [data.into(), oid.into()],
                 ))
                 .await
@@ -1172,7 +1175,7 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
             None => {
                 txn.execute_raw(Statement::from_sql_and_values(
                     DbBackend::Postgres,
-                    "INSERT INTO user_credential (oid, user_id, type, data) VALUES (gen_random_uuid(), $1, 'password', $2)",
+                    "INSERT INTO user_credential (oid, user_id, type, data) VALUES (gen_random_uuid(), $1, 'password', $2::jsonb)",
                     [model.id.into(), data.into()],
                 ))
                 .await
