@@ -14,6 +14,7 @@ const auditMessages = {
   auditQuickRange30d: '30d',
   auditSyntaxHelp: 'Supports field:value, AND, OR, NOT, wildcards (*, ?) and occurredAt:[now-24h TO now]',
   auditInvalidQueryFeedback: 'Fix the highlighted query error before searching',
+  auditInvalidQueryCount: '{count, plural, one {# error} other {# errors}}',
   auditColumnEvent: 'Event',
   auditColumnOccurredAt: 'Time',
   auditColumnOutcome: 'Result',

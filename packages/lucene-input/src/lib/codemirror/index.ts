@@ -1,11 +1,20 @@
-import { Compartment, EditorState, Prec, type Extension } from '@codemirror/state';
-import { EditorView, keymap, placeholder } from '@codemirror/view';
+import { Compartment, EditorState, Prec, type Extension } from '@identity/codemirror/state';
+import { EditorView, keymap, placeholder } from '@identity/codemirror/view';
 import { getLuceneCompletions } from './completion';
 import {
   LuceneCompletionDropdown,
   type LuceneCompletionDropdownState
 } from './completion-dropdown';
-import { luceneDiagnostics, refreshDiagnostics, setDiagnosticTooltip } from './diagnostics';
+import {
+  diagnosticsAt,
+  finishEditing,
+  luceneDiagnostics,
+  visibleDiagnostics,
+  refreshDiagnostics,
+  sameDiagnostic,
+  setShownDiagnostics
+} from './diagnostics';
+import { describeProblem, type LuceneProblemsState } from '../problems';
 import { luceneEditorTheme } from './theme';
 import { getLuceneDiagnostics } from '../diagnostics';
 import { localizeSyntaxCompletion } from '../i18n';
@@ -30,8 +39,10 @@ export type LuceneEditorConfig = {
   onSubmit?: (value: string) => void;
   onDiagnostics?: (diagnostics: ComponentDiagnostic[]) => void;
   onCompletionChange?: (state: LuceneCompletionDropdownState | null) => void;
-  /** Show diagnostics in a hover tooltip (default true). */
-  diagnosticTooltip?: boolean;
+  /** The problems the popover should explain, or null when there are none to show. */
+  onProblemsChange?: (state: LuceneProblemsState | null) => void;
+  /** Element id of the popover's problem list, for `aria-describedby`. */
+  problemsId?: string;
   /** Earlier queries, most recent first, cycled with Shift+Up and Shift+Down. */
   history?: readonly string[];
 };
@@ -48,7 +59,14 @@ export type LuceneEditorHandle = {
   setDisabled(disabled: boolean): void;
   setReadOnly(readOnly: boolean): void;
   setAriaLabel(ariaLabel: string | undefined): void;
-  setDiagnosticTooltip(enabled: boolean): void;
+  /** List every error, put the caret on the first, and return whether there were any. */
+  revealProblems(): boolean;
+  /** The pointer moved onto (index) or off (-1) a problem in the popover. */
+  hoverProblem(index: number): void;
+  /** Move the caret to a problem in the popover. */
+  selectProblem(index: number): void;
+  /** Whether the pointer is over the popover, which keeps hovered problems open. */
+  setPopoverHovered(hovered: boolean): void;
   setHistory(history: readonly string[]): void;
   hoverCompletion(index: number): void;
   selectCompletion(index: number): void;
@@ -72,31 +90,111 @@ export function createLuceneEditor(config: LuceneEditorConfig): LuceneEditorHand
 
   const initialValue = sanitizeSingleLineValue(config.value);
   const completionController = new FieldCompletionController(fields, locale, messages);
-  // The error tooltip and the completion menu both open below the text, so the
-  // tooltip only shows while the host allows it and no completion is open.
-  let hostTooltip = config.diagnosticTooltip ?? true;
-  let completionOpen = false;
   let destroyed = false;
   let editorView: EditorView | null = null;
-  const syncDiagnosticTooltip = () => {
-    // Completion changes arrive during an editor update; dispatch afterwards.
+
+  // What the popover explains: the errors listed by a rejected submit, else
+  // the marks under the pointer, else the marks at the caret.
+  let submitted = false;
+  let pointerProblems: ComponentDiagnostic[] = [];
+  let popoverHovered = false;
+  let pointerLeaveTimer: ReturnType<typeof setTimeout> | undefined;
+  let focusedProblem: ComponentDiagnostic | null = null;
+  let lastProblems: LuceneProblemsState | null = null;
+  let remarkPending = false;
+
+  const completionUi = new LuceneCompletionDropdown((state) => {
+    config.onCompletionChange?.(state);
+    syncProblems();
+  });
+
+  const currentDiagnostics = (view: EditorView) => view.state.field(diagnosticsField).diagnostics;
+  const shownDiagnostics = (view: EditorView) => visibleDiagnostics(view.state.field(diagnosticsField));
+
+  const computeProblems = (view: EditorView): LuceneProblemsState | null => {
+    const diagnostics = currentDiagnostics(view);
+    let shown: readonly ComponentDiagnostic[] = [];
+    let source: LuceneProblemsState['source'] = 'caret';
+    if (submitted && view.hasFocus) {
+      shown = diagnostics.filter((diagnostic) => diagnostic.severity === 'error');
+      source = 'submit';
+    }
+    if (shown.length === 0 && pointerProblems.length > 0) {
+      shown = pointerProblems;
+      source = 'pointer';
+    }
+    // Suggestions at the caret are themselves the way to fix what is there.
+    if (shown.length === 0 && view.hasFocus && !isDisabled && !completionUi.isOpen()) {
+      shown = diagnosticsAt(shownDiagnostics(view), view.state.selection.main.head);
+      source = 'caret';
+    }
+    if (shown.length === 0) {
+      return null;
+    }
+    const text = view.state.doc.toString();
+    const focusedIndex = focusedProblem
+      ? shown.findIndex((diagnostic) => sameDiagnostic(diagnostic, focusedProblem!))
+      : -1;
+    return {
+      problems: shown.map((diagnostic) => describeProblem(text, diagnostic)),
+      focusedIndex,
+      source
+    };
+  };
+
+  const sameProblems = (a: LuceneProblemsState | null, b: LuceneProblemsState | null) =>
+    a === b ||
+    (a !== null &&
+      b !== null &&
+      a.source === b.source &&
+      a.focusedIndex === b.focusedIndex &&
+      a.problems.length === b.problems.length &&
+      a.problems.every(
+        (problem, index) =>
+          sameDiagnostic(problem.diagnostic, b.problems[index].diagnostic) &&
+          problem.diagnostic.message === b.problems[index].diagnostic.message &&
+          problem.excerpt === b.problems[index].excerpt
+      ));
+
+  // Problems change during editor updates; publish and re-mark afterwards.
+  const syncProblems = () => {
     queueMicrotask(() => {
-      if (!destroyed && editorView) {
-        editorView.dispatch({
-          effects: setDiagnosticTooltip.of(hostTooltip && !completionOpen)
-        });
-      }
+      if (destroyed || !editorView) return;
+      const next = computeProblems(editorView);
+      if (!remarkPending && sameProblems(next, lastProblems)) return;
+      remarkPending = false;
+      lastProblems = next;
+      const shown = next?.problems.map((problem) => problem.diagnostic) ?? [];
+      const focused = next && next.focusedIndex >= 0 ? shown[next.focusedIndex] : null;
+      editorView.dispatch({
+        effects: [
+          setShownDiagnostics.of({ shown, focused }),
+          ariaCompartment.reconfigure(
+            buildContentAttributes(currentAriaLabel, isDisabled, next ? config.problemsId : undefined)
+          )
+        ]
+      });
+      config.onProblemsChange?.(next);
     });
   };
 
-  const completionUi = new LuceneCompletionDropdown((state) => {
-    const nextOpen = state !== null;
-    if (nextOpen !== completionOpen) {
-      completionOpen = nextOpen;
-      syncDiagnosticTooltip();
+  const { extension: diagnosticsExtension, field: diagnosticsField } = luceneDiagnostics(
+    (text) => computeDiagnostics(text),
+    (hovered) => {
+      clearTimeout(pointerLeaveTimer);
+      if (hovered.length > 0) {
+        pointerProblems = hovered;
+        syncProblems();
+        return;
+      }
+      // Leave time to move from the mark into the popover.
+      pointerLeaveTimer = setTimeout(() => {
+        if (popoverHovered) return;
+        pointerProblems = [];
+        syncProblems();
+      }, 200);
     }
-    config.onCompletionChange?.(state);
-  });
+  );
 
   const placeholderCompartment = new Compartment();
   const editableCompartment = new Compartment();
@@ -116,11 +214,20 @@ export function createLuceneEditor(config: LuceneEditorConfig): LuceneEditorHand
     notifyDiagnostics(view);
   };
 
-  const buildContentAttributes = (label: string | undefined, disabled: boolean) => {
+  let currentDescribedBy: string | undefined;
+  const buildContentAttributes = (
+    label: string | undefined,
+    disabled: boolean,
+    describedBy: string | undefined = currentDescribedBy
+  ) => {
+    currentDescribedBy = describedBy;
     const attrs: Record<string, string> = {
       role: 'combobox',
       'aria-autocomplete': 'list'
     };
+    if (describedBy) {
+      attrs['aria-describedby'] = describedBy;
+    }
     if (label) {
       attrs['aria-label'] = label;
     }
@@ -166,6 +273,31 @@ export function createLuceneEditor(config: LuceneEditorConfig): LuceneEditorHand
     readOnlyCompartment.of(EditorState.readOnly.of(isDisabled || isReadOnly)),
     ariaCompartment.of(buildContentAttributes(currentAriaLabel, isDisabled)),
     EditorView.updateListener.of((update) => {
+      if (update.docChanged || (update.focusChanged && !update.view.hasFocus)) {
+        // Editing or leaving the input ends the list of a rejected submit.
+        submitted = false;
+      }
+      if (
+        update.focusChanged &&
+        !update.view.hasFocus &&
+        update.state.field(diagnosticsField).editing
+      ) {
+        // Leaving the input reports what was being typed.
+        queueMicrotask(() => {
+          if (!destroyed) update.view.dispatch({ effects: finishEditing.of(null) });
+        });
+      }
+      const remarked =
+        update.docChanged ||
+        update.transactions.some((tr) => tr.effects.some((effect) => effect.is(refreshDiagnostics)));
+      if (remarked) {
+        // Recomputed marks start plain; mark the shown problems again.
+        remarkPending = true;
+      }
+      if (remarked || update.selectionSet || update.focusChanged) {
+        syncProblems();
+      }
+
       if (update.docChanged) {
         if (!browsingHistory) {
           historyIndex = -1;
@@ -200,7 +332,7 @@ export function createLuceneEditor(config: LuceneEditorConfig): LuceneEditorHand
         )
       );
     }),
-    luceneDiagnostics(computeDiagnostics, { tooltip: hostTooltip }),
+    diagnosticsExtension,
     luceneEditorTheme()
   ];
 
@@ -315,9 +447,41 @@ export function createLuceneEditor(config: LuceneEditorConfig): LuceneEditorHand
         effects: ariaCompartment.reconfigure(buildContentAttributes(currentAriaLabel, isDisabled))
       });
     },
-    setDiagnosticTooltip(enabled: boolean) {
-      hostTooltip = enabled;
-      syncDiagnosticTooltip();
+    revealProblems() {
+      const errors = currentDiagnostics(view).filter((diagnostic) => diagnostic.severity === 'error');
+      if (errors.length === 0) {
+        return false;
+      }
+      submitted = true;
+      completionUi.close();
+      view.focus();
+      view.dispatch({
+        selection: { anchor: errors[0].to },
+        effects: finishEditing.of(null),
+        scrollIntoView: true
+      });
+      syncProblems();
+      return true;
+    },
+    hoverProblem(index: number) {
+      focusedProblem = index >= 0 ? (lastProblems?.problems[index]?.diagnostic ?? null) : null;
+      syncProblems();
+    },
+    selectProblem(index: number) {
+      const diagnostic = lastProblems?.problems[index]?.diagnostic;
+      if (!diagnostic) {
+        return;
+      }
+      view.focus();
+      view.dispatch({ selection: { anchor: diagnostic.to }, scrollIntoView: true });
+    },
+    setPopoverHovered(hovered: boolean) {
+      popoverHovered = hovered;
+      if (!hovered && pointerProblems.length > 0) {
+        pointerProblems = [];
+        focusedProblem = null;
+        syncProblems();
+      }
     },
     setHistory(nextHistory: readonly string[]) {
       history = nextHistory;
@@ -334,6 +498,7 @@ export function createLuceneEditor(config: LuceneEditorConfig): LuceneEditorHand
     },
     destroy() {
       destroyed = true;
+      clearTimeout(pointerLeaveTimer);
       completionUi.destroy();
       view.destroy();
     }

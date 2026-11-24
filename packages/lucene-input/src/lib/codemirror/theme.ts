@@ -1,4 +1,4 @@
-import { EditorView } from '@codemirror/view';
+import { EditorView } from '@identity/codemirror/view';
 
 export function luceneEditorTheme() {
   return EditorView.theme({
@@ -33,7 +33,9 @@ export function luceneEditorTheme() {
       fontFamily:
         'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace',
       lineHeight: '1.25rem',
-      minHeight: '34px'
+      minHeight: '34px',
+      // A one-line field never scrolls; marks must not create a scrollbar.
+      overflow: 'hidden'
     },
     // Text entry: an I-beam across the whole field, including the placeholder.
     '.cm-scroller, .cm-content': {
@@ -43,7 +45,7 @@ export function luceneEditorTheme() {
       cursor: 'not-allowed'
     },
     '.cm-content': {
-      padding: '7px 10px',
+      padding: '7px calc(10px + var(--lucene-trailing-width, 0px)) 7px 10px',
       minHeight: '20px',
       caretColor: 'var(--foreground)'
     },
@@ -63,75 +65,6 @@ export function luceneEditorTheme() {
     },
     '.cm-gutters': {
       display: 'none'
-    },
-    // Diagnostic marks.
-    '.lucene-diagnostic-range': {
-      textDecorationLine: 'underline',
-      textDecorationStyle: 'wavy',
-      textDecorationColor: 'var(--destructive)',
-      textDecorationSkipInk: 'none',
-      textUnderlineOffset: '3px'
-    },
-    '.lucene-diagnostic-range.lucene-diagnostic-warning': {
-      textDecorationColor: '#d97706'
-    },
-    '.lucene-diagnostic-range.lucene-diagnostic-info': {
-      textDecorationColor: 'var(--primary)'
-    },
-    '.lucene-diagnostic-point': {
-      position: 'relative'
-    },
-    '.lucene-diagnostic-point::after': {
-      borderBottom: '4px solid var(--destructive)',
-      borderLeft: '4px solid transparent',
-      borderRight: '4px solid transparent',
-      bottom: '-4px',
-      content: '""',
-      height: '0',
-      left: '0',
-      position: 'absolute',
-      transform: 'translateX(-50%)',
-      width: '0'
-    },
-    '.lucene-diagnostic-point.lucene-diagnostic-warning::after': {
-      borderBottomColor: '#d97706'
-    },
-    '.lucene-diagnostic-point.lucene-diagnostic-info::after': {
-      borderBottomColor: 'var(--primary)'
-    },
-    // Hover explanation: matches the shared shadcn Tooltip (inverted, text-xs,
-    // rounded-md) and keeps CodeMirror's arrow on the side facing the text.
-    '.cm-tooltip.cm-tooltip-hover:has(.lucene-diagnostic-tooltip)': {
-      backgroundColor: 'var(--foreground)',
-      border: '0',
-      borderRadius: 'calc(var(--radius, 0.625rem) - 2px)',
-      color: 'var(--background)',
-      fontFamily: 'var(--font-sans, inherit)',
-      maxWidth: '20rem',
-      zIndex: '50'
-    },
-    // CodeMirror anchors to the text line; clear the input's border and padding.
-    '.cm-tooltip-below.cm-tooltip-hover:has(.lucene-diagnostic-tooltip)': {
-      marginTop: '6px'
-    },
-    '.cm-tooltip-above.cm-tooltip-hover:has(.lucene-diagnostic-tooltip)': {
-      marginTop: '-6px'
-    },
-    '.lucene-diagnostic-tooltip': {
-      display: 'grid',
-      gap: '2px',
-      fontSize: '0.75rem',
-      lineHeight: '1rem',
-      padding: '6px 12px'
-    },
-    '.cm-tooltip-below .cm-tooltip-arrow:before, .cm-tooltip-below .cm-tooltip-arrow:after': {
-      borderBottomColor: 'var(--foreground)'
-    },
-    '.cm-tooltip-above .cm-tooltip-arrow:before, .cm-tooltip-above .cm-tooltip-arrow:after': {
-      borderTopColor: 'var(--foreground)'
-    },
-    '.lucene-diagnostic-unknown-field': {
-      backgroundColor: 'color-mix(in oklab, var(--destructive) 12%, transparent)'
     }
   });
 }

@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { createRef } from 'react'
 import { describe, expect, it, vi } from 'vitest'
-import { LuceneInput } from './LuceneInput'
+import { LuceneInput, type LuceneInputHandle } from './LuceneInput'
 import type { LuceneField } from './lib/types'
 
 const fields: LuceneField[] = [
@@ -268,5 +269,79 @@ describe('LuceneInput (React)', () => {
     fireEvent.keyDown(editor, { key: 'ArrowDown', code: 'ArrowDown', shiftKey: true })
     fireEvent.keyDown(editor, { key: 'ArrowDown', code: 'ArrowDown', shiftKey: true })
     expect(onChange).toHaveBeenLastCalledWith('act')
+  })
+
+  describe('problems in the popover', () => {
+    const problemMessages = () =>
+      Array.from(document.querySelectorAll('.lucene-problem-message')).map((item) => item.textContent)
+
+    it('lists every error after a refused submit, links it to its mark and moves the caret', async () => {
+      const ref = createRef<LuceneInputHandle>()
+      render(
+        <LuceneInput
+          ref={ref}
+          value="occurredAt:yesterday AND action:"
+          onChange={vi.fn()}
+          fields={fields}
+          disallowUnknownFields
+          locale="en"
+          ariaLabel="Query"
+        />,
+      )
+      const editor = screen.getByRole('combobox', { name: 'Query' })
+
+      let revealed = false
+      await act(async () => {
+        revealed = ref.current?.revealProblems() ?? false
+      })
+
+      expect(revealed).toBe(true)
+      await waitFor(() => expect(problemMessages()).toHaveLength(2))
+      expect(document.querySelectorAll('.lucene-problem-excerpt')[0].textContent).toBe('yesterday')
+      expect(document.querySelector('.cm-content .lucene-diagnostic-shown')).toBeTruthy()
+      const list = document.querySelector('.lucene-problem-list')!
+      expect(editor.getAttribute('aria-describedby')).toBe(list.id)
+
+      // Pointing at a problem emphasizes its mark in the text.
+      await act(async () => {
+        fireEvent.mouseEnter(document.querySelectorAll('.lucene-problem')[0])
+      })
+      await waitFor(() =>
+        expect(document.querySelector('.cm-content .lucene-diagnostic-focused')?.textContent).toBe('yesterday'),
+      )
+    })
+
+    it('explains the error at the caret and drops it once fixed', async () => {
+      const onChange = vi.fn()
+      const props = { onChange, fields, locale: 'en', ariaLabel: 'Query' }
+      const view = render(<LuceneInput value="" {...props} />)
+      const editor = screen.getByRole('combobox', { name: 'Query' })
+      await act(async () => {
+        editor.focus()
+        fireEvent.focus(editor)
+      })
+      view.rerender(<LuceneInput value="occurredAt:yesterday" {...props} />)
+      await waitFor(() => expect(problemMessages()).toEqual([expect.stringContaining('occurredAt')]))
+
+      view.rerender(<LuceneInput value="occurredAt:now-5m" {...props} />)
+      await waitFor(() => expect(problemMessages()).toEqual([]))
+    })
+
+    it('leaves the caret problem to the suggestions that fix it', async () => {
+      await openCompletions('action:')
+      expect(screen.getAllByRole('option').length).toBeGreaterThan(0)
+      expect(problemMessages()).toEqual([])
+    })
+
+    it('reveals nothing when there is no error', async () => {
+      const ref = createRef<LuceneInputHandle>()
+      render(<LuceneInput ref={ref} value="action:user.create" onChange={vi.fn()} fields={fields} />)
+      let revealed = true
+      await act(async () => {
+        revealed = ref.current?.revealProblems() ?? true
+      })
+      expect(revealed).toBe(false)
+      expect(problemMessages()).toEqual([])
+    })
   })
 })

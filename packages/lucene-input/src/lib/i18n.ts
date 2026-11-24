@@ -94,7 +94,11 @@ const enSyntaxCompletions: SyntaxCompletionDictionary = {
   valuesSection: 'Values',
   addAction: 'Add',
   historyHint: 'to cycle through history',
-  historySection: 'Recent searches'
+  historySection: 'Recent searches',
+  problemsSection: 'Problems',
+  errorLabel: 'Error',
+  warningLabel: 'Warning',
+  infoLabel: 'Note'
 };
 
 const zhCNSyntaxCompletions: SyntaxCompletionDictionary = {
@@ -129,7 +133,11 @@ const zhCNSyntaxCompletions: SyntaxCompletionDictionary = {
   valuesSection: '可选值',
   addAction: '添加',
   historyHint: '浏览搜索历史',
-  historySection: '最近搜索'
+  historySection: '最近搜索',
+  problemsSection: '问题',
+  errorLabel: '错误',
+  warningLabel: '警告',
+  infoLabel: '提示'
 };
 
 const syntaxCompletionDictionaries: Record<string, SyntaxCompletionDictionary> = {

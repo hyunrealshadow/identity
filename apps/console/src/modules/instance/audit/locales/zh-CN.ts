@@ -14,6 +14,7 @@ const auditMessages = {
   auditQuickRange30d: '近 30 天',
   auditSyntaxHelp: '支持 field:value、AND、OR、NOT、通配符 (*, ?) 以及 occurredAt:[now-24h TO now]',
   auditInvalidQueryFeedback: '请先修正高亮的查询语法错误再执行查询',
+  auditInvalidQueryCount: '{count} 处错误',
   auditColumnEvent: '事件',
   auditColumnOccurredAt: '发生时间',
   auditColumnOutcome: '结果',

@@ -1,4 +1,4 @@
-export { LuceneInput, type LuceneInputProps } from './LuceneInput'
+export { LuceneInput, type LuceneInputHandle, type LuceneInputProps } from './LuceneInput'
 export { CompletionDropdown } from './CompletionDropdown'
 export {
   createLuceneEditor,
@@ -10,6 +10,7 @@ export type {
   CompletionAnchor
 } from './lib/codemirror/completion-dropdown'
 export { getLuceneDiagnostics } from './lib/diagnostics'
+export type { LuceneProblem, LuceneProblemsState } from './lib/problems'
 export { buildLuceneSyntaxTree } from './lib/syntax-tree'
 export { tokenizeLuceneQuery, type LuceneToken, type LuceneTokenType } from './lib/syntax-highlighting'
 export {

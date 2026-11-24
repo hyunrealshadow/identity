@@ -1,11 +1,29 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import {
+  useEffect,
+  useId,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type ReactNode,
+  type Ref,
+} from 'react'
 import { CompletionDropdown } from './CompletionDropdown'
 import type { LuceneCompletionDropdownState } from './lib/codemirror/completion-dropdown'
 import { createLuceneEditor, type LuceneEditorHandle } from './lib/codemirror'
 import { localizeSyntaxCompletion } from './lib/i18n'
+import type { LuceneProblemsState } from './lib/problems'
 import type { ComponentDiagnostic, LuceneField, LuceneInputMessages } from './lib/types'
 
+export type LuceneInputHandle = {
+  /**
+   * Explain every error in the popover and put the caret on the first, as
+   * when a submit is refused. Returns whether there were any.
+   */
+  revealProblems(): boolean
+}
+
 export type LuceneInputProps = {
+  ref?: Ref<LuceneInputHandle>
   value: string
   onChange: (value: string) => void
   onSubmit?: (value: string) => void
@@ -19,12 +37,16 @@ export type LuceneInputProps = {
   disabled?: boolean
   readOnly?: boolean
   ariaLabel?: string
-  /** Explain diagnostics in a hover tooltip; turn off while the host already shows them. */
-  diagnosticTooltip?: boolean
   /** Earlier queries, most recent first: offered on an empty input and cycled with Shift+Up/Down. */
   history?: readonly string[]
   /** Host content at the end of the suggestion panel footer, such as syntax help. */
   completionFooter?: ReactNode
+  /**
+   * Host controls inside the end of the field, such as a clear button. The
+   * text keeps clear of them, so showing or hiding one never moves the layout
+   * around the input.
+   */
+  trailing?: ReactNode
   id?: string
   className?: string
 }
@@ -32,6 +54,7 @@ export type LuceneInputProps = {
 const NO_HISTORY: readonly string[] = []
 
 export function LuceneInput({
+  ref,
   value,
   onChange,
   onSubmit,
@@ -45,9 +68,9 @@ export function LuceneInput({
   disabled = false,
   readOnly = false,
   ariaLabel,
-  diagnosticTooltip = true,
   history = NO_HISTORY,
   completionFooter,
+  trailing,
   id,
   className,
 }: LuceneInputProps) {
@@ -64,6 +87,32 @@ export function LuceneInput({
 
   const [completionState, setCompletionState] =
     useState<LuceneCompletionDropdownState | null>(null)
+  const [problems, setProblems] = useState<LuceneProblemsState | null>(null)
+  const problemsId = useId()
+  const rootRef = useRef<HTMLDivElement | null>(null)
+  const trailingRef = useRef<HTMLDivElement | null>(null)
+
+  // Reserve the trailing controls' width at the end of the text.
+  useEffect(() => {
+    const root = rootRef.current
+    const element = trailingRef.current
+    if (!root) return
+    if (!element) {
+      root.style.removeProperty('--lucene-trailing-width')
+      return
+    }
+    const update = () =>
+      root.style.setProperty('--lucene-trailing-width', `${element.offsetWidth}px`)
+    update()
+    if (typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(update)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [Boolean(trailing)])
+
+  useImperativeHandle(ref, () => ({
+    revealProblems: () => handleRef.current?.revealProblems() ?? false,
+  }), [])
 
   useEffect(() => {
     const parent = hostRef.current
@@ -83,12 +132,13 @@ export function LuceneInput({
       locale,
       timeZone,
       messages,
-      diagnosticTooltip,
       history,
+      problemsId,
       onChange: (nextValue) => onChangeRef.current(nextValue),
       onSubmit: (currentValue) => onSubmitRef.current?.(currentValue),
       onDiagnostics: (nextDiagnostics) => onDiagnosticsRef.current?.(nextDiagnostics),
       onCompletionChange: setCompletionState,
+      onProblemsChange: setProblems,
     })
 
     handleRef.current = handle
@@ -142,22 +192,38 @@ export function LuceneInput({
   }, [ariaLabel])
 
   useEffect(() => {
-    handleRef.current?.setDiagnosticTooltip(diagnosticTooltip)
-  }, [diagnosticTooltip])
-
-  useEffect(() => {
     handleRef.current?.setHistory(history)
   }, [history])
 
   return (
-    <div id={id} className={className ? `lucene-input-root ${className}` : 'lucene-input-root'}>
+    <div
+      ref={rootRef}
+      id={id}
+      className={className ? `lucene-input-root ${className}` : 'lucene-input-root'}
+    >
       <div ref={hostRef} className="lucene-input-editor" />
+      {trailing ? (
+        <div ref={trailingRef} className="lucene-input-trailing">
+          {trailing}
+        </div>
+      ) : null}
       <CompletionDropdown
         state={completionState}
         labels={{
           add: localizeSyntaxCompletion('addAction', locale, messages),
           historyHint: localizeSyntaxCompletion('historyHint', locale, messages),
+          problems: localizeSyntaxCompletion('problemsSection', locale, messages),
+          severity: {
+            error: localizeSyntaxCompletion('errorLabel', locale, messages),
+            warning: localizeSyntaxCompletion('warningLabel', locale, messages),
+            info: localizeSyntaxCompletion('infoLabel', locale, messages),
+          },
         }}
+        problems={problems}
+        problemsId={problemsId}
+        onProblemHover={(index) => handleRef.current?.hoverProblem(index)}
+        onProblemSelect={(index) => handleRef.current?.selectProblem(index)}
+        onPointerInside={(inside) => handleRef.current?.setPopoverHovered(inside)}
         showHistoryHint={history.length > 0}
         footer={completionFooter}
         onHover={(index) => handleRef.current?.hoverCompletion(index)}

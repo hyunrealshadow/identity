@@ -3,11 +3,12 @@ import {
   getLuceneDiagnostics,
   type ComponentDiagnostic,
   type LuceneField,
+  type LuceneInputHandle,
 } from '@identity/lucene-input'
 import { Alert, AlertDescription, AlertTitle } from '@identity/ui/components/alert'
 import { Button } from '@identity/ui/components/button'
 import { CircleAlert, Search, X } from 'lucide-react'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 
 import { ErrorDetails } from '#/components/error-details'
 import { RequestCorrelation } from '#/components/request-correlation'
@@ -62,9 +63,8 @@ export function AuditQueryBar({
   const [submitRejected, setSubmitRejected] = useState(false)
   const [history, setHistory] = useState(readAuditQueryHistory)
 
-  const blockingDiagnostic = diagnostics.find((item) => item.severity === 'error')
-  const syntaxError =
-    submitRejected && blockingDiagnostic ? blockingDiagnostic.message : appliedQueryError
+  const input = useRef<LuceneInputHandle>(null)
+  const errorCount = diagnostics.filter((item) => item.severity === 'error').length
 
   function submitValue(value: string) {
     const currentDiagnostics = getLuceneDiagnostics(value, fields, locale, undefined, {
@@ -72,7 +72,9 @@ export function AuditQueryBar({
     })
     setDiagnostics(currentDiagnostics)
     if (currentDiagnostics.some((item) => item.severity === 'error')) {
+      // The input's popover lists the errors and the caret goes to the first.
       setSubmitRejected(true)
+      input.current?.revealProblems()
       return
     }
     setSubmitRejected(false)
@@ -95,6 +97,7 @@ export function AuditQueryBar({
       >
         <div className="min-w-0 flex-1">
           <LuceneInput
+            ref={input}
             id="audit-lucene-query"
             value={draftQuery}
             onChange={(nextValue) => {
@@ -103,8 +106,6 @@ export function AuditQueryBar({
             }}
             onSubmit={(currentValue) => submitValue(currentValue)}
             onDiagnostics={setDiagnostics}
-            // The rejection alert below already explains the error.
-            diagnosticTooltip={!syntaxError}
             fields={fields}
             disallowUnknownFields
             locale={locale}
@@ -114,6 +115,40 @@ export function AuditQueryBar({
             disabled={disabled}
             history={history}
             completionFooter={t('auditSyntaxHelp')}
+            trailing={
+              draftQuery || (submitRejected && errorCount > 0) ? (
+                <>
+                  {submitRejected && errorCount > 0 ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="xs"
+                      className="text-destructive hover:text-destructive"
+                      onClick={() => input.current?.revealProblems()}
+                    >
+                      <CircleAlert aria-hidden="true" />
+                      <span role="status">{t('auditInvalidQueryCount', { count: errorCount })}</span>
+                    </Button>
+                  ) : null}
+                  {draftQuery ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={t('auditSearchClear')}
+                      title={t('auditSearchClear')}
+                      disabled={disabled}
+                      onClick={() => {
+                        setSubmitRejected(false)
+                        onClear()
+                      }}
+                    >
+                      <X aria-hidden="true" />
+                    </Button>
+                  ) : null}
+                </>
+              ) : null
+            }
           />
         </div>
         <div className="flex shrink-0 items-center gap-2">
@@ -121,20 +156,6 @@ export function AuditQueryBar({
             <Search className="size-4" aria-hidden="true" />
             {t('auditSearchSubmit')}
           </Button>
-          {draftQuery ? (
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={disabled}
-              onClick={() => {
-                setSubmitRejected(false)
-                onClear()
-              }}
-            >
-              <X className="size-4" aria-hidden="true" />
-              {t('auditSearchClear')}
-            </Button>
-          ) : null}
         </div>
       </form>
 
@@ -158,11 +179,11 @@ export function AuditQueryBar({
         ))}
       </div>
 
-      {syntaxError ? (
+      {appliedQueryError ? (
         <Alert variant="destructive">
           <CircleAlert aria-hidden="true" />
           <AlertTitle>{t('auditInvalidQueryFeedback')}</AlertTitle>
-          <AlertDescription>{syntaxError}</AlertDescription>
+          <AlertDescription>{appliedQueryError}</AlertDescription>
         </Alert>
       ) : null}
 

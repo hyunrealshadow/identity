@@ -1,4 +1,4 @@
-import { acceptCompletion } from '@codemirror/autocomplete';
+import { acceptCompletion } from '@identity/codemirror/autocomplete';
 import { describe, expect, it } from 'vitest';
 import { luceneCompletionKeymap } from './keyboard';
 

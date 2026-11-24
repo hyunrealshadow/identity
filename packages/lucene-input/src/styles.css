@@ -1,17 +1,11 @@
 .lucene-input-root {
   position: relative;
   width: 100%;
-  --lucene-token-field: #0b70db;
-  --lucene-token-operator: #7c3aed;
-  --lucene-token-string: #b45309;
-  --lucene-token-wildcard: #2563eb;
-}
-
-.dark .lucene-input-root {
-  --lucene-token-field: #60a5fa;
-  --lucene-token-operator: #c084fc;
-  --lucene-token-string: #fbbf24;
-  --lucene-token-wildcard: #93c5fd;
+  /* The shared code palette from @identity/codemirror/styles.css. */
+  --lucene-token-field: var(--code-tag, #0b70db);
+  --lucene-token-operator: var(--code-operator, #7c3aed);
+  --lucene-token-string: var(--code-string, #b45309);
+  --lucene-token-wildcard: var(--code-number, #2563eb);
 }
 
 .lucene-input-editor {
@@ -149,4 +143,151 @@
 
 .lucene-completion-footer-extra {
   min-width: 0;
+}
+
+/*
+ * Diagnostic marks, shared by the text and the popover's problem list so a
+ * problem is recognizable in both. A problem the popover explains is tinted;
+ * the one under the pointer is tinted more strongly.
+ */
+.lucene-input-root {
+  --lucene-diagnostic-error: var(--destructive);
+  --lucene-diagnostic-warning: #d97706;
+  --lucene-diagnostic-info: var(--primary);
+}
+
+.lucene-diagnostic-error { --lucene-mark: var(--lucene-diagnostic-error); }
+.lucene-diagnostic-warning { --lucene-mark: var(--lucene-diagnostic-warning); }
+.lucene-diagnostic-info { --lucene-mark: var(--lucene-diagnostic-info); }
+
+.lucene-diagnostic-range {
+  text-decoration-line: underline;
+  text-decoration-style: wavy;
+  text-decoration-skip-ink: none;
+  text-underline-offset: 3px;
+  border-radius: 2px;
+}
+
+.lucene-diagnostic-range.lucene-diagnostic-error { text-decoration-color: var(--lucene-diagnostic-error); }
+.lucene-diagnostic-range.lucene-diagnostic-warning { text-decoration-color: var(--lucene-diagnostic-warning); }
+.lucene-diagnostic-range.lucene-diagnostic-info { text-decoration-color: var(--lucene-diagnostic-info); }
+
+.lucene-diagnostic-unknown-field {
+  background-color: color-mix(in oklab, var(--lucene-diagnostic-error) 12%, transparent);
+}
+
+.lucene-diagnostic-point {
+  position: relative;
+  display: inline-block;
+  width: 0;
+}
+
+.lucene-diagnostic-point::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: -4px;
+  width: 0;
+  height: 0;
+  transform: translateX(-50%);
+  border-left: 4px solid transparent;
+  border-right: 4px solid transparent;
+  border-bottom: 4px solid var(--lucene-diagnostic-error);
+}
+
+.lucene-diagnostic-point.lucene-diagnostic-warning::after { border-bottom-color: var(--lucene-diagnostic-warning); }
+.lucene-diagnostic-point.lucene-diagnostic-info::after { border-bottom-color: var(--lucene-diagnostic-info); }
+
+.lucene-diagnostic-shown.lucene-diagnostic-range {
+  background-color: color-mix(in oklab, var(--lucene-mark) 10%, transparent);
+}
+
+.lucene-diagnostic-focused.lucene-diagnostic-range {
+  background-color: color-mix(in oklab, var(--lucene-mark) 22%, transparent);
+  text-decoration-thickness: 2px;
+}
+
+.lucene-diagnostic-shown.lucene-diagnostic-point::after {
+  border-left-width: 5px;
+  border-right-width: 5px;
+  border-bottom-width: 5px;
+}
+
+.lucene-diagnostic-focused.lucene-diagnostic-point::after {
+  border-left-width: 6px;
+  border-right-width: 6px;
+  border-bottom-width: 6px;
+}
+
+/* Problems the popover explains, above any suggestions. */
+.lucene-problems[data-has-options='true'] {
+  border-bottom: 1px solid var(--border);
+}
+
+.lucene-problem-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+}
+
+.lucene-problem {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: baseline;
+  gap: 8px;
+  border: 0;
+  border-radius: calc(var(--radius, 0.5rem) - 2px);
+  background: transparent;
+  padding: 6px 10px;
+  text-align: left;
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  color: var(--popover-foreground);
+  cursor: pointer;
+}
+
+.lucene-problem:hover,
+.lucene-problem[data-focused='true'] {
+  background-color: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.lucene-problem-icon {
+  flex-shrink: 0;
+  align-self: center;
+  width: 14px;
+  height: 14px;
+}
+
+.lucene-problem-icon-error { color: var(--lucene-diagnostic-error); }
+.lucene-problem-icon-warning { color: var(--lucene-diagnostic-warning); }
+.lucene-problem-icon-info { color: var(--lucene-diagnostic-info); }
+
+.lucene-problem-excerpt {
+  flex-shrink: 0;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: pre;
+  /* Room for a caret mark at the end, which the clipping would cut off. */
+  padding: 0 6px 5px 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.8125rem;
+}
+
+.lucene-problem-message {
+  min-width: 0;
+  color: inherit;
+}
+
+/* Host controls inside the field's end, such as clear and error count. */
+.lucene-input-trailing {
+  position: absolute;
+  top: 0;
+  right: 4px;
+  display: flex;
+  height: 36px;
+  align-items: center;
+  gap: 2px;
 }

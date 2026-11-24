@@ -80,6 +80,8 @@ function isUnaryOperator(token: LuceneToken): boolean {
 
 function canEndExpression(token: LuceneToken): boolean {
   return (
+    // A closed group or range: `(a) AND b`, `field:[x TO y] AND b`.
+    (token.type === 'punctuation' && /^[)\]}]$/.test(token.text)) ||
     token.type === 'term' ||
     token.type === 'date' ||
     token.type === 'string' ||
@@ -164,7 +166,7 @@ function getTypedFieldValueDiagnostics(value: string, fields: LuceneField[]): Co
     }
 
     const nextFieldStart = fieldStarts[index + 1]?.from;
-    const rawValue = value.slice(entry.valueFrom, nextFieldStart).trimEnd();
+    const rawValue = fieldValueText(value.slice(entry.valueFrom, nextFieldStart)).trimEnd();
     if (!rawValue.trim()) {
       continue;
     }
@@ -313,6 +315,31 @@ function isPartialDateValue(value: string): boolean {
   const day = match[3] === undefined ? 1 : Number(match[3]);
   const maxDay = new Date(Number(year), month, 0).getDate();
   return month >= 1 && month <= 12 && day >= 1 && day <= maxDay;
+}
+
+/**
+ * The text of one field value. A range ends at its closing bracket, so the
+ * clauses that follow it (`field:[x TO y] AND other`) are not read as part of
+ * the range.
+ */
+function fieldValueText(rawValue: string): string {
+  if (rawValue[0] !== '[') {
+    return rawValue;
+  }
+  let quote: string | undefined;
+  for (let index = 1; index < rawValue.length; index += 1) {
+    const char = rawValue[index];
+    if (char === '\\') {
+      index += 1;
+    } else if (quote) {
+      if (char === quote) quote = undefined;
+    } else if (char === '"' || char === "'") {
+      quote = char;
+    } else if (char === ']') {
+      return rawValue.slice(0, index + 1);
+    }
+  }
+  return rawValue;
 }
 
 function readToRange(

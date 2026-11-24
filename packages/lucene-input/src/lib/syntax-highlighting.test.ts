@@ -48,10 +48,19 @@ describe('lucene syntax highlighting tokenizer', () => {
       { type: 'fieldSeparator', from: 12, to: 13, text: ':' },
       { type: 'punctuation', from: 13, to: 14, text: '[' },
       { type: 'date', from: 14, to: 22, text: '09:00:00' },
-      { type: 'term', from: 23, to: 25, text: 'TO' },
+      { type: 'operator', from: 23, to: 25, text: 'TO' },
       { type: 'date', from: 26, to: 34, text: '18:30:00' },
       { type: 'punctuation', from: 34, to: 35, text: ']' }
     ]);
+  });
+
+  it('treats TO as an operator only inside a range', () => {
+    const types = (query: string) =>
+      tokenizeLuceneQuery(query)
+        .filter((token) => /^to$/i.test(token.text))
+        .map((token) => token.type);
+    expect(types('occurredAt:[now-15m to now]')).toEqual(['operator']);
+    expect(types('title:TO AND occurredAt:[now TO now] OR TO')).toEqual(['term', 'operator', 'term']);
   });
 
   it('keeps ISO datetime values together', () => {

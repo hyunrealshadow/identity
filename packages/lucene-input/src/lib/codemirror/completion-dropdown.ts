@@ -1,4 +1,4 @@
-import type { EditorView, KeyBinding } from '@codemirror/view';
+import type { EditorView, KeyBinding } from '@identity/codemirror/view';
 import type { LuceneCompletionResult } from './completion';
 
 export type CompletionAnchor = {
@@ -157,7 +157,8 @@ export class LuceneCompletionDropdown {
 
     view.dispatch({
       changes: { from, to, insert: option.apply },
-      selection: { anchor: from + option.apply.length }
+      selection: { anchor: from + option.apply.length },
+      userEvent: 'input.complete'
     });
     return true;
   }

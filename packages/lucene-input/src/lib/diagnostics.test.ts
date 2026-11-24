@@ -194,6 +194,24 @@ describe('lucene diagnostics', () => {
     expect(getLuceneDiagnostics(String.raw`created_at:2024-01-01\ 12:30:00`, fields)).toEqual([]);
   });
 
+  it('allows more clauses after a range', () => {
+    for (const query of [
+      'created_at:[now-15m TO now] AND author:john',
+      'created_at:[now-15m TO now] AND "x"',
+      'created_at:["2024-01-01 09:00:00" TO now] OR title:a',
+      'published_on:[2024-01-01 TO 2024-12-31] AND NOT title:a',
+      '(author:john OR author:jane) AND title:a'
+    ]) {
+      expect(getLuceneDiagnostics(query, fields), query).toEqual([]);
+    }
+  });
+
+  it('still checks a range that is followed by more clauses', () => {
+    expect(getLuceneDiagnostics('created_at:[yesterday TO now] AND title:a', fields)).toEqual([
+      expect.objectContaining({ code: 'invalidFieldValue', from: 11, params: expect.objectContaining({ field: 'created_at' }) })
+    ]);
+  });
+
   it('allows boolean operators after quoted datetime values', () => {
     expect(getLuceneDiagnostics('created_at:"2026-05-15 10:25:57" AND a', fields)).toEqual([]);
   });

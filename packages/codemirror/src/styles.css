@@ -1,0 +1,30 @@
+/*
+ * Colors shared by every code editor and code-like input, so HTML, template
+ * and query syntax read alike in the light and dark themes.
+ */
+:root {
+  --code-tag: oklch(0.5 0.17 255);
+  --code-attribute: oklch(0.52 0.15 300);
+  --code-string: oklch(0.5 0.13 150);
+  --code-keyword: oklch(0.55 0.16 25);
+  --code-number: oklch(0.55 0.13 60);
+  --code-operator: oklch(0.5 0.2 295);
+  --code-comment: var(--muted-foreground);
+  --code-template: oklch(0.52 0.14 200);
+  --code-template-variable: oklch(0.48 0.13 180);
+  --code-template-function: oklch(0.52 0.15 60);
+  --code-template-background: color-mix(in oklab, var(--code-template) 9%, transparent);
+}
+
+.dark {
+  --code-tag: oklch(0.75 0.12 250);
+  --code-attribute: oklch(0.78 0.11 305);
+  --code-string: oklch(0.78 0.12 150);
+  --code-keyword: oklch(0.75 0.13 25);
+  --code-number: oklch(0.8 0.11 70);
+  --code-operator: oklch(0.75 0.14 300);
+  --code-template: oklch(0.78 0.11 200);
+  --code-template-variable: oklch(0.82 0.1 180);
+  --code-template-function: oklch(0.82 0.12 75);
+  --code-template-background: color-mix(in oklab, var(--code-template) 14%, transparent);
+}

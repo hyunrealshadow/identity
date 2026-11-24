@@ -1,10 +1,14 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react'
 import type { LuceneCompletionDropdownState } from './lib/codemirror/completion-dropdown'
 import type { LuceneCompletionOption } from './lib/codemirror/completion'
+import type { LuceneProblem, LuceneProblemsState } from './lib/problems'
+import type { DiagnosticSeverity } from './lib/types'
 
 export type CompletionDropdownLabels = {
   add: string
   historyHint: string
+  problems?: string
+  severity?: Partial<Record<DiagnosticSeverity, string>>
 }
 
 type CompletionDropdownProps = {
@@ -14,8 +18,74 @@ type CompletionDropdownProps = {
   showHistoryHint?: boolean
   /** Host content at the end of the footer, such as a syntax help link. */
   footer?: ReactNode
+  /** Diagnostics to explain above the suggestions. */
+  problems?: LuceneProblemsState | null
+  /** Element id of the problem list, which the input refers to. */
+  problemsId?: string
   onHover: (index: number) => void
   onSelect: (index: number) => void
+  onProblemHover?: (index: number) => void
+  onProblemSelect?: (index: number) => void
+  /** The pointer entered or left the popover. */
+  onPointerInside?: (inside: boolean) => void
+}
+
+function SeverityIcon({ severity, label }: { severity: DiagnosticSeverity; label?: string }) {
+  return (
+    <svg
+      className={`lucene-problem-icon lucene-problem-icon-${severity}`}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      role={label ? 'img' : undefined}
+      aria-label={label}
+      aria-hidden={label ? undefined : true}
+    >
+      {severity === 'warning' ? (
+        <>
+          <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" />
+          <path d="M12 9v4" />
+          <path d="M12 17h.01" />
+        </>
+      ) : (
+        <>
+          <circle cx="12" cy="12" r="10" />
+          {severity === 'error' ? (
+            <>
+              <path d="M12 8v4" />
+              <path d="M12 16h.01" />
+            </>
+          ) : (
+            <>
+              <path d="M12 16v-4" />
+              <path d="M12 8h.01" />
+            </>
+          )}
+        </>
+      )}
+    </svg>
+  )
+}
+
+/** The marked text, drawn with the same underline or caret mark as the input. */
+function ProblemExcerpt({ problem }: { problem: LuceneProblem }) {
+  const severity = problem.diagnostic.severity
+  if (problem.point) {
+    return (
+      <code className="lucene-problem-excerpt">
+        {problem.excerpt}
+        <span className={`lucene-diagnostic-point lucene-diagnostic-${severity}`} aria-hidden="true" />
+      </code>
+    )
+  }
+  return (
+    <code className="lucene-problem-excerpt">
+      <span className={`lucene-diagnostic-range lucene-diagnostic-${severity}`}>{problem.excerpt}</span>
+    </code>
+  )
 }
 
 function FilterIcon() {
@@ -68,8 +138,13 @@ export function CompletionDropdown({
   labels,
   showHistoryHint = false,
   footer,
+  problems,
+  problemsId,
   onHover,
   onSelect,
+  onProblemHover,
+  onProblemSelect,
+  onPointerInside,
 }: CompletionDropdownProps) {
   const listboxId = useId()
   const activeOptionRef = useRef<HTMLButtonElement | null>(null)
@@ -78,19 +153,64 @@ export function CompletionDropdown({
     activeOptionRef.current?.scrollIntoView({ block: 'nearest' })
   }, [state?.selectedIndex, state?.result.from, state?.result.options.length])
 
-  if (!state || state.result.options.length === 0) {
+  const shownProblems = problems?.problems ?? []
+  const options = state?.result.options ?? []
+  if (shownProblems.length === 0 && options.length === 0) {
     return null
   }
 
-  const { result, selectedIndex } = state
-  const hasFooter = showHistoryHint || Boolean(footer)
+  const selectedIndex = state?.selectedIndex ?? -1
+  const hasFooter = options.length > 0 && (showHistoryHint || Boolean(footer))
 
   let currentSection = ''
 
   return (
-    <div className="lucene-completion-panel">
+    <div
+      className="lucene-completion-panel"
+      onMouseEnter={() => onPointerInside?.(true)}
+      onMouseLeave={() => {
+        onProblemHover?.(-1)
+        onPointerInside?.(false)
+      }}
+    >
+      {shownProblems.length > 0 ? (
+        <div
+          className="lucene-problems"
+          data-has-options={options.length > 0 ? 'true' : undefined}
+        >
+          {labels.problems ? (
+            <div className="lucene-completion-section" aria-hidden="true">
+              {labels.problems}
+            </div>
+          ) : null}
+          <ul id={problemsId} className="lucene-problem-list" aria-live="polite">
+            {shownProblems.map((problem, index) => (
+              <li key={`${problem.diagnostic.code}-${problem.diagnostic.from}-${problem.diagnostic.to}`}>
+                <button
+                  type="button"
+                  tabIndex={-1}
+                  className="lucene-problem"
+                  data-severity={problem.diagnostic.severity}
+                  data-focused={problems?.focusedIndex === index ? 'true' : undefined}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onMouseEnter={() => onProblemHover?.(index)}
+                  onClick={() => onProblemSelect?.(index)}
+                >
+                  <SeverityIcon
+                    severity={problem.diagnostic.severity}
+                    label={labels.severity?.[problem.diagnostic.severity]}
+                  />
+                  {problem.excerpt ? <ProblemExcerpt problem={problem} /> : null}
+                  <span className="lucene-problem-message">{problem.diagnostic.message}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {options.length > 0 ? (
       <ul id={listboxId} role="listbox" className="lucene-completion-list">
-        {result.options.map((option, index) => {
+        {options.map((option, index) => {
           const showSection = option.section !== currentSection
           if (showSection) {
             currentSection = option.section
@@ -131,6 +251,7 @@ export function CompletionDropdown({
           )
         })}
       </ul>
+      ) : null}
       {hasFooter ? (
         <div className="lucene-completion-footer">
           {showHistoryHint ? (

@@ -1,5 +1,5 @@
-import { EditorState, type Extension, type Transaction } from '@codemirror/state';
-import type { KeyBinding } from '@codemirror/view';
+import { EditorState, type Extension, type Transaction } from '@identity/codemirror/state';
+import type { KeyBinding } from '@identity/codemirror/view';
 
 export function sanitizeSingleLineValue(value: string): string {
   return value.replace(/\r?\n|\r/g, ' ');

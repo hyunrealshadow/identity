@@ -1,4 +1,4 @@
-import type { EditorView } from '@codemirror/view';
+import type { EditorView } from '@identity/codemirror/view';
 import {
   evaluateDateMath,
   formatDateMathValue,

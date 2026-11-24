@@ -1,5 +1,5 @@
-import { RangeSetBuilder, type Extension } from '@codemirror/state';
-import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
+import { RangeSetBuilder, type Extension } from '@identity/codemirror/state';
+import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate } from '@identity/codemirror/view';
 
 export type LuceneTokenType =
   | 'field'
@@ -34,6 +34,8 @@ const tokenDecorations: Record<LuceneTokenType, Decoration> = {
 export function tokenizeLuceneQuery(value: string): LuceneToken[] {
   const tokens: LuceneToken[] = [];
   let index = 0;
+  // `TO` is an operator only between the brackets of a range.
+  let rangeDepth = 0;
 
   while (index < value.length) {
     const char = value[index];
@@ -95,6 +97,8 @@ export function tokenizeLuceneQuery(value: string): LuceneToken[] {
     }
 
     if (char === ':' || char === '(' || char === ')' || char === '[' || char === ']') {
+      if (char === '[') rangeDepth += 1;
+      if (char === ']') rangeDepth = Math.max(0, rangeDepth - 1);
       const previous = tokens.at(-1);
       const type = char === ':' && previous?.type === 'field' ? 'fieldSeparator' : 'punctuation';
       tokens.push(createToken(type, value, index, index + 1));
@@ -109,7 +113,7 @@ export function tokenizeLuceneQuery(value: string): LuceneToken[] {
     const type =
       next === ':' && isFieldName(text)
         ? 'field'
-        : isOperatorWord(text)
+        : isOperatorWord(text) || (rangeDepth > 0 && /^to$/i.test(text))
           ? 'operator'
           : isDateLike(text)
             ? 'date'
