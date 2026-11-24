@@ -1,12 +1,14 @@
 import { localizeDiagnostics } from './i18n';
 import { isDateMathValue } from './date-math';
 import { tokenizeLuceneQuery, type LuceneToken } from './syntax-highlighting';
+import { buildLuceneSyntaxTree } from './syntax-tree';
 import type {
   ComponentDiagnostic,
   LuceneDiagnosticsOptions,
   LuceneField,
   LuceneFieldType,
-  LuceneInputMessages
+  LuceneInputMessages,
+  LuceneSyntaxFeature
 } from './types';
 
 export function getLuceneDiagnostics(
@@ -21,10 +23,77 @@ export function getLuceneDiagnostics(
     ...getTypedFieldValueDiagnostics(value, fields),
     ...getGroupDiagnostics(value),
     ...getMissingValueDiagnostics(value),
-    ...getBooleanOperatorDiagnostics(value)
+    ...getBooleanOperatorDiagnostics(value),
+    ...getDisabledSyntaxDiagnostics(value, options.disabledSyntax ?? [])
   ];
+  diagnostics.push(...getUnparsedDiagnostics(value, diagnostics));
 
   return localizeDiagnostics(diagnostics, locale, messages);
+}
+
+/** The syntax the host turned off, wherever it is written. */
+function getDisabledSyntaxDiagnostics(
+  value: string,
+  disabled: readonly LuceneSyntaxFeature[]
+): ComponentDiagnostic[] {
+  if (disabled.length === 0) {
+    return [];
+  }
+
+  const diagnostics: ComponentDiagnostic[] = [];
+  for (const token of tokenizeLuceneQuery(value)) {
+    const feature = syntaxFeature(token);
+    if (feature && disabled.includes(feature)) {
+      diagnostics.push({
+        code: 'unsupportedSyntax',
+        message: '',
+        severity: 'error',
+        from: token.from,
+        to: token.to,
+        params: { feature, token: token.text }
+      });
+    }
+  }
+  return diagnostics;
+}
+
+function syntaxFeature(token: LuceneToken): LuceneSyntaxFeature | null {
+  if (token.type === 'regex') return 'regex';
+  if (token.type === 'punctuation' && (token.text === '{' || token.text === '}')) return 'exclusiveRanges';
+  if (token.type !== 'operator') return null;
+  if (token.text === '+' || token.text === '-') return 'prefixOperators';
+  if (token.text.startsWith('~')) return 'fuzzy';
+  if (token.text.startsWith('^')) return 'boost';
+  return null;
+}
+
+/**
+ * Text the query grammar cannot place, such as a stray `)` or `:`, unless
+ * another error already covers where it starts.
+ */
+function getUnparsedDiagnostics(value: string, reported: ComponentDiagnostic[]): ComponentDiagnostic[] {
+  const unparsed = buildLuceneSyntaxTree(value).children?.find((child) => child.type === 'UnparsedTokens');
+  const first = unparsed?.children?.[0];
+  if (!first || first.from === undefined || first.to === undefined) {
+    return [];
+  }
+
+  const from = first.from;
+  const covered = reported.some(
+    (item) => item.severity === 'error' && item.from <= from && from < Math.max(item.to, item.from + 1)
+  );
+  return covered
+    ? []
+    : [
+        {
+          code: 'unexpectedToken',
+          message: '',
+          severity: 'error',
+          from,
+          to: first.to,
+          params: { token: first.value ?? '' }
+        }
+      ];
 }
 
 function getBooleanOperatorDiagnostics(value: string): ComponentDiagnostic[] {
@@ -75,13 +144,15 @@ function isBooleanOperator(token: LuceneToken): boolean {
 }
 
 function isUnaryOperator(token: LuceneToken): boolean {
-  return /^(!|NOT)$/i.test(token.text);
+  return /^(!|NOT|-|\+)$/i.test(token.text);
 }
 
 function canEndExpression(token: LuceneToken): boolean {
   return (
     // A closed group or range: `(a) AND b`, `field:[x TO y] AND b`.
     (token.type === 'punctuation' && /^[)\]}]$/.test(token.text)) ||
+    // A fuzzy or boost suffix: `a~2 AND b`.
+    (token.type === 'operator' && /^[~^]/.test(token.text)) ||
     token.type === 'term' ||
     token.type === 'date' ||
     token.type === 'string' ||
@@ -323,7 +394,7 @@ function isPartialDateValue(value: string): boolean {
  * the range.
  */
 function fieldValueText(rawValue: string): string {
-  if (rawValue[0] !== '[') {
+  if (rawValue[0] !== '[' && rawValue[0] !== '{') {
     return rawValue;
   }
   let quote: string | undefined;
@@ -335,7 +406,7 @@ function fieldValueText(rawValue: string): string {
       if (char === quote) quote = undefined;
     } else if (char === '"' || char === "'") {
       quote = char;
-    } else if (char === ']') {
+    } else if (char === ']' || char === '}') {
       return rawValue.slice(0, index + 1);
     }
   }
@@ -349,7 +420,7 @@ function readToRange(
 ): { start: { value: string; from: number; to: number }; end: { value: string; from: number; to: number } } | null {
   const valuePattern = getValuePattern(type);
   const endpointPattern = `(?:${valuePattern}|${getQuotedValuePattern()}|\\*)`;
-  const match = new RegExp(`^\\[\\s*(${endpointPattern})\\s+to\\s+(${endpointPattern})\\s*\\]$`, 'i').exec(
+  const match = new RegExp(`^[\\[{]\\s*(${endpointPattern})\\s+to\\s+(${endpointPattern})\\s*[\\]}]$`, 'i').exec(
     rawValue
   );
   if (!match) {

@@ -273,6 +273,17 @@ fn tokenize(src: &str) -> Result<Vec<Token>, AuditQueryError> {
             continue;
         }
 
+        // The input recognizes these; the audit query bar turns them off.
+        if matches!(ch, '+' | '-') && is_prefix_position(src, index, tokens.last()) {
+            return Err(syntax("prefix operators are not supported"));
+        }
+        match ch {
+            '{' | '}' => return Err(syntax("exclusive ranges are not supported")),
+            '~' => return Err(AuditQueryError::UnsupportedFuzzy),
+            '^' => return Err(AuditQueryError::UnsupportedBoost),
+            _ => {}
+        }
+
         if ch == '"' || ch == '\'' {
             let (value, end) = read_quoted(src, index, ch)?;
             tokens.push(Token::Quoted(value));
@@ -376,7 +387,10 @@ fn read_word(src: &str, from: usize, allow_colon: bool) -> usize {
     let mut chars = src[from..].chars();
     while let Some(ch) = chars.next() {
         let stops = ch.is_whitespace()
-            || matches!(ch, '(' | ')' | '[' | ']' | '!' | '&' | '|' | '<' | '>')
+            || matches!(
+                ch,
+                '(' | ')' | '[' | ']' | '{' | '}' | '!' | '&' | '|' | '<' | '>' | '~' | '^'
+            )
             || (ch == ':' && !allow_colon);
         if stops {
             break;
@@ -394,6 +408,25 @@ fn read_word(src: &str, from: usize, allow_colon: bool) -> usize {
     } else {
         index
     }
+}
+
+/// Whether a `+` or `-` starts a clause: it begins a word, something follows
+/// it, and no field, comparison, or range waits for a value.
+fn is_prefix_position(src: &str, index: usize, previous: Option<&Token>) -> bool {
+    let followed = src[index + 1..]
+        .chars()
+        .next()
+        .is_some_and(|ch| !ch.is_whitespace());
+    let starts_word = src[..index]
+        .chars()
+        .next_back()
+        .is_none_or(|ch| ch.is_whitespace() || ch == '(');
+    followed
+        && starts_word
+        && !matches!(
+            previous,
+            Some(Token::Colon | Token::Cmp(_) | Token::RangeOpen | Token::To)
+        )
 }
 
 fn digits(bytes: &[u8], from: usize, count: usize) -> bool {

@@ -264,6 +264,27 @@ describe('lucene syntax tree', () => {
       ]
     });
   });
+  it('reads prefix operators, exclusive ranges, fuzzy and boost suffixes', () => {
+    const tree = buildLuceneSyntaxTree('-a +b c~2 (d)^3 published_on:{now-1d TO now] title:-x');
+
+    expect(collect(tree, 'NotExpression').map((node) => node.operator)).toEqual(['-']);
+    expect(collect(tree, 'RequiredExpression').map((node) => node.operator)).toEqual(['+']);
+    expect(collect(tree, 'FuzzyExpression')).toMatchObject([
+      { operator: '~2', children: [{ type: 'SearchTerm', value: 'c' }] }
+    ]);
+    expect(collect(tree, 'BoostExpression')).toMatchObject([
+      { operator: '^3', children: [{ type: 'GroupExpression' }] }
+    ]);
+    expect(collect(tree, 'FieldRangeExpression')).toMatchObject([{ inclusive: [false, true] }]);
+    expect(collect(tree, 'SearchTerm').map((node) => node.value)).toContain('-x');
+    expect(collect(tree, 'UnparsedTokens')).toEqual([]);
+  });
+
+  it('keeps dashes inside values and date math', () => {
+    const tree = buildLuceneSyntaxTree('a-b published_on:[now-1d TO now]');
+    expect(collect(tree, 'NotExpression')).toEqual([]);
+    expect(collect(tree, 'SearchTerm').map((node) => node.value)).toContain('a-b');
+  });
 });
 
 function collect(tree: ReturnType<typeof buildLuceneSyntaxTree>, type: string): ReturnType<typeof buildLuceneSyntaxTree>[] {

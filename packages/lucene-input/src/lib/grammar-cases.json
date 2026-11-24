@@ -1,25 +1,76 @@
 {
-  "$comment": "Query grammar cases shared by the query input (syntax-tree.ts) and the server's audit query parser (src/domain/audit/query.rs). Both test suites read this file, so a grammar change on one side fails the other until it follows. A tree is {and: [...]}, {or: [...]}, {not: x}, {field, value} or {text}; cases without a tree only state that the query is valid.",
+  "$comment": "Query grammar cases shared by the query input (syntax-tree.ts) and the server's audit query parser (src/domain/audit/query.rs). Both test suites read this file, so a grammar change on one side fails the other until it follows. The input runs with disabledSyntax turned off, as the audit query bar does. A tree is {and: [...]}, {or: [...]}, {not: x}, {field, value} or {text}; cases without a tree only state that the query is valid.",
   "fields": [
-    { "name": "action" },
-    { "name": "outcome" },
-    { "name": "actorLabel" },
-    { "name": "targetLabel" },
-    { "name": "userAgent" },
-    { "name": "occurredAt", "type": "datetime" }
+    {
+      "name": "action"
+    },
+    {
+      "name": "outcome"
+    },
+    {
+      "name": "actorLabel"
+    },
+    {
+      "name": "targetLabel"
+    },
+    {
+      "name": "userAgent"
+    },
+    {
+      "name": "occurredAt",
+      "type": "datetime"
+    }
+  ],
+  "disabledSyntax": [
+    "prefixOperators",
+    "exclusiveRanges",
+    "regex",
+    "fuzzy",
+    "boost"
   ],
   "valid": [
-    { "query": "actorLabel:alice", "tree": { "field": "actorLabel", "value": "alice" } },
+    {
+      "query": "actorLabel:alice",
+      "tree": {
+        "field": "actorLabel",
+        "value": "alice"
+      }
+    },
     {
       "query": "actorLabel:a AND targetLabel:b",
-      "tree": { "and": [{ "field": "actorLabel", "value": "a" }, { "field": "targetLabel", "value": "b" }] }
+      "tree": {
+        "and": [
+          {
+            "field": "actorLabel",
+            "value": "a"
+          },
+          {
+            "field": "targetLabel",
+            "value": "b"
+          }
+        ]
+      }
     },
     {
       "query": "actorLabel:a and targetLabel:b Or userAgent:c",
       "tree": {
         "or": [
-          { "and": [{ "field": "actorLabel", "value": "a" }, { "field": "targetLabel", "value": "b" }] },
-          { "field": "userAgent", "value": "c" }
+          {
+            "and": [
+              {
+                "field": "actorLabel",
+                "value": "a"
+              },
+              {
+                "field": "targetLabel",
+                "value": "b"
+              }
+            ]
+          },
+          {
+            "field": "userAgent",
+            "value": "c"
+          }
         ]
       }
     },
@@ -27,8 +78,22 @@
       "query": "actorLabel:a targetLabel:b OR userAgent:c",
       "tree": {
         "and": [
-          { "field": "actorLabel", "value": "a" },
-          { "or": [{ "field": "targetLabel", "value": "b" }, { "field": "userAgent", "value": "c" }] }
+          {
+            "field": "actorLabel",
+            "value": "a"
+          },
+          {
+            "or": [
+              {
+                "field": "targetLabel",
+                "value": "b"
+              },
+              {
+                "field": "userAgent",
+                "value": "c"
+              }
+            ]
+          }
         ]
       }
     },
@@ -36,8 +101,22 @@
       "query": "actorLabel:a && targetLabel:b || userAgent:c",
       "tree": {
         "or": [
-          { "and": [{ "field": "actorLabel", "value": "a" }, { "field": "targetLabel", "value": "b" }] },
-          { "field": "userAgent", "value": "c" }
+          {
+            "and": [
+              {
+                "field": "actorLabel",
+                "value": "a"
+              },
+              {
+                "field": "targetLabel",
+                "value": "b"
+              }
+            ]
+          },
+          {
+            "field": "userAgent",
+            "value": "c"
+          }
         ]
       }
     },
@@ -45,59 +124,192 @@
       "query": "not actorLabel:a AND !targetLabel:b",
       "tree": {
         "and": [
-          { "not": { "field": "actorLabel", "value": "a" } },
-          { "not": { "field": "targetLabel", "value": "b" } }
+          {
+            "not": {
+              "field": "actorLabel",
+              "value": "a"
+            }
+          },
+          {
+            "not": {
+              "field": "targetLabel",
+              "value": "b"
+            }
+          }
         ]
       }
     },
     {
       "query": "actorLabel:NOT a",
-      "tree": { "not": { "field": "actorLabel", "value": "a" } }
+      "tree": {
+        "not": {
+          "field": "actorLabel",
+          "value": "a"
+        }
+      }
     },
     {
       "query": "actorLabel:(a OR b) userAgent:c",
       "tree": {
         "and": [
-          { "or": [{ "field": "actorLabel", "value": "a" }, { "field": "actorLabel", "value": "b" }] },
-          { "field": "userAgent", "value": "c" }
+          {
+            "or": [
+              {
+                "field": "actorLabel",
+                "value": "a"
+              },
+              {
+                "field": "actorLabel",
+                "value": "b"
+              }
+            ]
+          },
+          {
+            "field": "userAgent",
+            "value": "c"
+          }
         ]
       }
     },
     {
       "query": "actorLabel:(a targetLabel:b)",
-      "tree": { "and": [{ "field": "actorLabel", "value": "a" }, { "field": "targetLabel", "value": "b" }] }
+      "tree": {
+        "and": [
+          {
+            "field": "actorLabel",
+            "value": "a"
+          },
+          {
+            "field": "targetLabel",
+            "value": "b"
+          }
+        ]
+      }
     },
     {
       "query": "(actorLabel:a OR actorLabel:b) AND userAgent:c",
       "tree": {
         "and": [
-          { "or": [{ "field": "actorLabel", "value": "a" }, { "field": "actorLabel", "value": "b" }] },
-          { "field": "userAgent", "value": "c" }
+          {
+            "or": [
+              {
+                "field": "actorLabel",
+                "value": "a"
+              },
+              {
+                "field": "actorLabel",
+                "value": "b"
+              }
+            ]
+          },
+          {
+            "field": "userAgent",
+            "value": "c"
+          }
         ]
       }
     },
     {
       "query": "userAgent:\"Mozilla 5.0\" 'hello world'",
-      "tree": { "and": [{ "field": "userAgent", "value": "Mozilla 5.0" }, { "text": "hello world" }] }
+      "tree": {
+        "and": [
+          {
+            "field": "userAgent",
+            "value": "Mozilla 5.0"
+          },
+          {
+            "text": "hello world"
+          }
+        ]
+      }
     },
     {
       "query": "userAgent:\"say \\\"hi\\\"\"",
-      "tree": { "field": "userAgent", "value": "say \"hi\"" }
+      "tree": {
+        "field": "userAgent",
+        "value": "say \"hi\""
+      }
     },
     {
       "query": "actorLabel:\"and\" userAgent:a\\ b",
-      "tree": { "and": [{ "field": "actorLabel", "value": "and" }, { "field": "userAgent", "value": "a b" }] }
+      "tree": {
+        "and": [
+          {
+            "field": "actorLabel",
+            "value": "and"
+          },
+          {
+            "field": "userAgent",
+            "value": "a b"
+          }
+        ]
+      }
     },
-    { "query": "actorLabel:ali*", "tree": { "field": "actorLabel", "value": "ali*" } },
-    { "query": "actorLabel:*", "tree": { "field": "actorLabel", "value": "*" } },
-    { "query": "actorLabel : alice", "tree": { "field": "actorLabel", "value": "alice" } },
-    { "query": "userAgent:a:b", "tree": { "field": "userAgent", "value": "a:b" } },
-    { "query": "android", "tree": { "text": "android" } },
-    { "query": "occurredAt:[now-1d TO now]" },
-    { "query": "occurredAt:[now-1d to now] AND actorLabel:a" },
-    { "query": "occurredAt:[* TO 2026-11-19T00:00:00Z]" },
-    { "query": "occurredAt:>=now-7d occurredAt:<now" },
-    { "query": "occurredAt:\"2026-11-19 10:00:00\"" }
+    {
+      "query": "actorLabel:ali*",
+      "tree": {
+        "field": "actorLabel",
+        "value": "ali*"
+      }
+    },
+    {
+      "query": "actorLabel:*",
+      "tree": {
+        "field": "actorLabel",
+        "value": "*"
+      }
+    },
+    {
+      "query": "actorLabel : alice",
+      "tree": {
+        "field": "actorLabel",
+        "value": "alice"
+      }
+    },
+    {
+      "query": "userAgent:a:b",
+      "tree": {
+        "field": "userAgent",
+        "value": "a:b"
+      }
+    },
+    {
+      "query": "android",
+      "tree": {
+        "text": "android"
+      }
+    },
+    {
+      "query": "occurredAt:[now-1d TO now]"
+    },
+    {
+      "query": "occurredAt:[now-1d to now] AND actorLabel:a"
+    },
+    {
+      "query": "occurredAt:[* TO 2026-11-19T00:00:00Z]"
+    },
+    {
+      "query": "occurredAt:>=now-7d occurredAt:<now"
+    },
+    {
+      "query": "occurredAt:\"2026-11-19 10:00:00\""
+    },
+    {
+      "query": "actorLabel:-x",
+      "tree": {
+        "field": "actorLabel",
+        "value": "-x"
+      }
+    },
+    {
+      "query": "a-b",
+      "tree": {
+        "text": "a-b"
+      }
+    },
+    {
+      "query": "occurredAt:[now-1d TO now-1h]"
+    }
   ],
   "invalid": [
     "actorLabel:",
@@ -111,6 +323,14 @@
     "-actorLabel:a",
     ":a",
     "occurredAt:[now-1d TO now",
-    "occurredAt:{now-1d TO now}"
+    "occurredAt:{now-1d TO now}",
+    "+actorLabel:a",
+    "-android",
+    "actorLabel:a~",
+    "actorLabel:a~2",
+    "actorLabel:a^2",
+    "actorLabel:/re/",
+    "occurredAt:[now-1d TO now}",
+    "actorLabel:a)"
   ]
 }

@@ -4,7 +4,8 @@ export const diagnosticCodes = [
   'unclosedGroup',
   'unknownField',
   'invalidFieldValue',
-  'fieldValueSearchFailed'
+  'fieldValueSearchFailed',
+  'unsupportedSyntax'
 ] as const;
 
 export type LuceneDiagnosticCode = (typeof diagnosticCodes)[number];
@@ -107,12 +108,29 @@ export type LuceneSyntaxTree = {
   from?: number;
   to?: number;
   children?: LuceneSyntaxTree[];
+  /** Whether a range includes its start and its end. */
+  inclusive?: [boolean, boolean];
 };
 
 export type LuceneInputSyntaxTreeDetail = {
   syntaxTree: LuceneSyntaxTree;
 };
 
+/**
+ * Parts of the Lucene syntax a host can turn off when its backend does not
+ * support them; the input then marks them as errors.
+ *
+ * - `prefixOperators`: `+term` (must match) and `-term` (must not match)
+ * - `exclusiveRanges`: `{a TO b}` and the mixed `[a TO b}` / `{a TO b]`
+ * - `regex`: `/pattern/`
+ * - `fuzzy`: `term~` and `term~2`
+ * - `boost`: `term^2`
+ */
+export const luceneSyntaxFeatures = ['prefixOperators', 'exclusiveRanges', 'regex', 'fuzzy', 'boost'] as const;
+
+export type LuceneSyntaxFeature = (typeof luceneSyntaxFeatures)[number];
+
 export type LuceneDiagnosticsOptions = {
   disallowUnknownFields?: boolean;
+  disabledSyntax?: readonly LuceneSyntaxFeature[];
 };

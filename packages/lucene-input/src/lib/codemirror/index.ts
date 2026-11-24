@@ -21,7 +21,7 @@ import { localizeSyntaxCompletion } from '../i18n';
 import { FieldCompletionController } from '../field-completion';
 import { preventNewlineKeymap, sanitizeSingleLineValue, singleLineTransactions } from '../single-line';
 import { luceneSyntaxHighlighting } from '../syntax-highlighting';
-import type { ComponentDiagnostic, LuceneField, LuceneInputMessages } from '../types';
+import type { ComponentDiagnostic, LuceneField, LuceneInputMessages, LuceneSyntaxFeature } from '../types';
 
 export type LuceneEditorConfig = {
   parent: HTMLElement;
@@ -32,6 +32,8 @@ export type LuceneEditorConfig = {
   readOnly?: boolean;
   fields?: LuceneField[];
   disallowUnknownFields?: boolean;
+  /** Syntax the host does not support; the input marks it as an error. */
+  disabledSyntax?: readonly LuceneSyntaxFeature[];
   locale?: string;
   timeZone?: string;
   messages?: LuceneInputMessages;
@@ -52,6 +54,7 @@ export type LuceneEditorHandle = {
   setValue(value: string): void;
   setFields(fields: LuceneField[]): void;
   setDisallowUnknownFields(disallowUnknownFields: boolean): void;
+  setDisabledSyntax(disabledSyntax: readonly LuceneSyntaxFeature[]): void;
   setLocale(locale: string): void;
   setTimeZone(timeZone: string | undefined): void;
   setMessages(messages: LuceneInputMessages | undefined): void;
@@ -77,6 +80,7 @@ export type LuceneEditorHandle = {
 export function createLuceneEditor(config: LuceneEditorConfig): LuceneEditorHandle {
   let fields = config.fields ?? [];
   let disallowUnknownFields = config.disallowUnknownFields ?? false;
+  let disabledSyntax = config.disabledSyntax ?? [];
   let locale = config.locale ?? 'en';
   let timeZone = config.timeZone;
   let messages = config.messages;
@@ -202,7 +206,7 @@ export function createLuceneEditor(config: LuceneEditorConfig): LuceneEditorHand
   const ariaCompartment = new Compartment();
 
   const computeDiagnostics = (text: string) =>
-    getLuceneDiagnostics(text, fields, locale, messages, { disallowUnknownFields });
+    getLuceneDiagnostics(text, fields, locale, messages, { disallowUnknownFields, disabledSyntax });
 
   const notifyDiagnostics = (view: EditorView) => {
     config.onDiagnostics?.(computeDiagnostics(view.state.doc.toString()));
@@ -399,6 +403,10 @@ export function createLuceneEditor(config: LuceneEditorConfig): LuceneEditorHand
     },
     setDisallowUnknownFields(nextDisallowUnknownFields: boolean) {
       disallowUnknownFields = nextDisallowUnknownFields;
+      refreshMarks(view);
+    },
+    setDisabledSyntax(nextDisabledSyntax: readonly LuceneSyntaxFeature[]) {
+      disabledSyntax = nextDisabledSyntax;
       refreshMarks(view);
     },
     setLocale(nextLocale: string) {

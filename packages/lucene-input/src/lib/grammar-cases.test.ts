@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { getLuceneDiagnostics } from './diagnostics';
 import cases from './grammar-cases.json';
 import { buildLuceneSyntaxTree } from './syntax-tree';
-import type { LuceneField, LuceneSyntaxTree } from './types';
+import type { LuceneField, LuceneSyntaxFeature, LuceneSyntaxTree } from './types';
 
 /**
  * The cases the server's audit query parser also runs, so the input and the
@@ -17,6 +17,7 @@ type Shape =
   | { text: string };
 
 const fields = cases.fields as LuceneField[];
+const disabledSyntax = cases.disabledSyntax as LuceneSyntaxFeature[];
 
 /** The query's meaning, or null when the tree marks a missing or unparsed part. */
 function shape(query: string): Shape | null {
@@ -55,8 +56,8 @@ function toShape(node: LuceneSyntaxTree, field: string | undefined): Shape {
 }
 
 function valid(query: string): boolean {
-  const errors = getLuceneDiagnostics(query, fields).filter((item) => item.severity === 'error');
-  return shape(query) !== null && errors.length === 0;
+  const diagnostics = getLuceneDiagnostics(query, fields, 'en', undefined, { disabledSyntax });
+  return shape(query) !== null && diagnostics.every((item) => item.severity !== 'error');
 }
 
 describe('shared grammar cases', () => {

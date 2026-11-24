@@ -3,7 +3,8 @@ import type {
   LuceneDiagnosticCode,
   LuceneFieldType,
   LuceneInputMessages,
-  LuceneSyntaxCompletionCode
+  LuceneSyntaxCompletionCode,
+  LuceneSyntaxFeature
 } from './types';
 
 type DiagnosticDictionary = Record<LuceneDiagnosticCode, string>;
@@ -16,7 +17,8 @@ const en: DiagnosticDictionary = {
   unclosedGroup: 'Add a closing ")" to finish this group',
   unknownField: 'Cannot search with "{field}:"',
   invalidFieldValue: 'This value does not work for "{field}"',
-  fieldValueSearchFailed: 'Suggestions for "{field}" could not be loaded'
+  fieldValueSearchFailed: 'Suggestions for "{field}" could not be loaded',
+  unsupportedSyntax: '"{token}" is not supported here'
 };
 
 const zhCN: DiagnosticDictionary = {
@@ -25,7 +27,8 @@ const zhCN: DiagnosticDictionary = {
   unclosedGroup: '请添加 ")" 来结束这个分组',
   unknownField: '不能使用 "{field}:" 进行搜索',
   invalidFieldValue: '"{field}" 的这个值不可用',
-  fieldValueSearchFailed: '无法加载 "{field}" 的建议'
+  fieldValueSearchFailed: '无法加载 "{field}" 的建议',
+  unsupportedSyntax: '这里不支持 "{token}"'
 };
 
 const dictionaries: Record<string, DiagnosticDictionary> = {
@@ -160,7 +163,37 @@ export function localizeDiagnostic(
   };
 }
 
+const unsupportedSyntaxTemplates: Record<LuceneSyntaxFeature, { en: string; zh: string }> = {
+  prefixOperators: {
+    en: 'Prefix "{token}" is not supported; combine conditions with AND and NOT',
+    zh: '不支持前缀 "{token}"，请用 AND、NOT 组合条件'
+  },
+  exclusiveRanges: {
+    en: 'Ranges without their ends are not supported; use [a TO b], or > and <',
+    zh: '不支持不含端点的范围，请改用 [a TO b] 或 >、<'
+  },
+  regex: {
+    en: 'Regular expressions are not supported; use * and ? wildcards',
+    zh: '不支持正则表达式，可改用通配符 * 和 ?'
+  },
+  fuzzy: {
+    en: 'Fuzzy matching ("{token}") is not supported',
+    zh: '不支持模糊匹配 "{token}"'
+  },
+  boost: {
+    en: 'Boosting ("{token}") is not supported',
+    zh: '不支持权重 "{token}"'
+  }
+};
+
 function getBuiltInDiagnosticTemplate(diagnostic: ComponentDiagnostic, locale: string): string {
+  if (diagnostic.code === 'unsupportedSyntax') {
+    const template = unsupportedSyntaxTemplates[diagnostic.params?.feature as LuceneSyntaxFeature];
+    if (template) {
+      return locale.startsWith('zh') ? template.zh : template.en;
+    }
+  }
+
   if (diagnostic.code === 'missingToken') {
     const expected = diagnostic.params?.expected;
     if (expected === 'field value') {

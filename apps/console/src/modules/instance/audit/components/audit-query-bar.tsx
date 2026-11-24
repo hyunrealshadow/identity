@@ -14,7 +14,7 @@ import { ErrorDetails } from '#/components/error-details'
 import { RequestCorrelation } from '#/components/request-correlation'
 import type { GraphQLIssue } from '#/lib/graphql/transport'
 import { useTranslator } from '#/lib/i18n'
-import { applyTimeRangePreset } from '../lib/audit-fields'
+import { AUDIT_DIAGNOSTIC_OPTIONS, AUDIT_DISABLED_SYNTAX, applyTimeRangePreset } from '../lib/audit-fields'
 import {
   readAuditQueryHistory,
   withAuditQuery,
@@ -67,9 +67,13 @@ export function AuditQueryBar({
   const errorCount = diagnostics.filter((item) => item.severity === 'error').length
 
   function submitValue(value: string) {
-    const currentDiagnostics = getLuceneDiagnostics(value, fields, locale, undefined, {
-      disallowUnknownFields: true,
-    })
+    const currentDiagnostics = getLuceneDiagnostics(
+      value,
+      fields,
+      locale,
+      undefined,
+      AUDIT_DIAGNOSTIC_OPTIONS,
+    )
     setDiagnostics(currentDiagnostics)
     if (currentDiagnostics.some((item) => item.severity === 'error')) {
       // The input's popover lists the errors and the caret goes to the first.
@@ -108,6 +112,7 @@ export function AuditQueryBar({
             onDiagnostics={setDiagnostics}
             fields={fields}
             disallowUnknownFields
+            disabledSyntax={AUDIT_DISABLED_SYNTAX}
             locale={locale}
             timeZone={timeZone}
             placeholder={t('auditQueryPlaceholder')}

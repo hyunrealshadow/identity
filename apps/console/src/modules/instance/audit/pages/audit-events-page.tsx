@@ -24,7 +24,7 @@ import { AuditEventSentence, AuditOutcomeBadge } from '../components/audit-event
 import { AuditQueryBar } from '../components/audit-query-bar'
 import { useAuditEventDetail, useAuditEvents } from '../hooks/use-audit-events'
 import { AUDIT_QUERY_ERROR_CODES } from '../lib/audit-catalog'
-import { appendLuceneClause, buildAuditLuceneFields } from '../lib/audit-fields'
+import { AUDIT_DIAGNOSTIC_OPTIONS, appendLuceneClause, buildAuditLuceneFields } from '../lib/audit-fields'
 import { auditActionLabel } from '../lib/audit-presentation'
 import { auditScope } from '../lib/audit-scope'
 import {
@@ -106,9 +106,9 @@ export function AuditEventsPage({ search }: { search: AuditEventsSearch }) {
   const appliedSyntaxError = useMemo(
     () =>
       applied.q
-        ? getLuceneDiagnostics(applied.q, fields, locale, undefined, {
-            disallowUnknownFields: true,
-          }).find((item) => item.severity === 'error')?.message
+        ? getLuceneDiagnostics(applied.q, fields, locale, undefined, AUDIT_DIAGNOSTIC_OPTIONS).find(
+            (item) => item.severity === 'error',
+          )?.message
         : undefined,
     [applied.q, fields, locale],
   )

@@ -40,5 +40,7 @@ export type {
   LuceneInputMessages,
   LuceneInputSyntaxTreeDetail,
   LuceneSyntaxCompletionCode,
+  LuceneSyntaxFeature,
   LuceneSyntaxTree
 } from './lib/types'
+export { luceneSyntaxFeatures } from './lib/types'

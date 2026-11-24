@@ -45,6 +45,21 @@ export function tokenizeLuceneQuery(value: string): LuceneToken[] {
       continue;
     }
 
+    // `+term` and `-term`: required and prohibited clauses.
+    if ((char === '+' || char === '-') && isPrefixPosition(value, index, tokens)) {
+      tokens.push(createToken('operator', value, index, index + 1));
+      index += 1;
+      continue;
+    }
+
+    // `~` and `~2` (fuzzy) or `^2` (boost) after a term.
+    if (char === '~' || char === '^') {
+      const to = index + 1 + (/^\d+(?:\.\d+)?/.exec(value.slice(index + 1))?.[0].length ?? 0);
+      tokens.push(createToken('operator', value, index, to));
+      index = to;
+      continue;
+    }
+
     if (char === '"' || char === "'") {
       const to = readQuoted(value, index, char);
       const type = isQuotedDateLike(value.slice(index, to)) ? 'date' : 'string';
@@ -96,9 +111,9 @@ export function tokenizeLuceneQuery(value: string): LuceneToken[] {
       continue;
     }
 
-    if (char === ':' || char === '(' || char === ')' || char === '[' || char === ']') {
-      if (char === '[') rangeDepth += 1;
-      if (char === ']') rangeDepth = Math.max(0, rangeDepth - 1);
+    if (char === ':' || char === '(' || char === ')' || char === '[' || char === ']' || char === '{' || char === '}') {
+      if (char === '[' || char === '{') rangeDepth += 1;
+      if (char === ']' || char === '}') rangeDepth = Math.max(0, rangeDepth - 1);
       const previous = tokens.at(-1);
       const type = char === ':' && previous?.type === 'field' ? 'fieldSeparator' : 'punctuation';
       tokens.push(createToken(type, value, index, index + 1));
@@ -241,6 +256,7 @@ function shouldAllowColonInTerm(tokens: LuceneToken[]): boolean {
   return (
     previous.type === 'fieldSeparator' ||
     previous.text === '[' ||
+    previous.text === '{' ||
     /^(>=|<=|>|<)$/.test(previous.text) ||
     /^to$/i.test(previous.text)
   );
@@ -248,7 +264,7 @@ function shouldAllowColonInTerm(tokens: LuceneToken[]): boolean {
 
 function readWord(value: string, from: number, allowColon = false): number {
   let index = from;
-  const stopPattern = allowColon ? /[\s()[\]!*&|<>]/ : /[\s:()[\]!*&|<>]/;
+  const stopPattern = allowColon ? /[\s()[\]{}!*&|<>~^]/ : /[\s:()[\]{}!*&|<>~^]/;
   while (index < value.length && !stopPattern.test(value[index])) {
     if (value[index] === '\\') {
       index += 2;
@@ -289,6 +305,28 @@ function isDateLike(value: string): boolean {
     /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,3})?$/.test(value) ||
     /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:?\d{2})$/.test(value) ||
     /^now(?:[+-]\d+(?:ms|s|m|h|d|w|M|y))?(?:\/(?:s|m|h|d|w|M|y))?$/.test(value)
+  );
+}
+
+/**
+ * Whether a `+` or `-` here starts a clause rather than a value: it begins a
+ * word, something follows it, and no field, comparison, or range is waiting
+ * for a value (`actorLabel:-x` and `now-1d` keep their dash).
+ */
+function isPrefixPosition(value: string, index: number, tokens: LuceneToken[]): boolean {
+  const next = value[index + 1];
+  if (next === undefined || /\s/.test(next)) {
+    return false;
+  }
+  if (index > 0 && !/[\s(]/.test(value[index - 1])) {
+    return false;
+  }
+  const previous = tokens.at(-1);
+  return !(
+    previous &&
+    (previous.type === 'fieldSeparator' ||
+      /^(>=|<=|>|<|\[|\{)$/.test(previous.text) ||
+      (previous.type === 'operator' && /^to$/i.test(previous.text)))
   );
 }
 

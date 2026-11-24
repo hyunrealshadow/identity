@@ -362,4 +362,34 @@ describe('lucene diagnostics', () => {
       }
     ]);
   });
+  it('marks only the syntax a host disables', () => {
+    const query = '-a +b c~2 d^3 /e/ created_at:{now-1d TO now}';
+    expect(getLuceneDiagnostics(query, fields).filter((item) => item.severity === 'error')).toEqual([]);
+
+    const disabled = getLuceneDiagnostics(query, fields, 'zh-CN', undefined, {
+      disabledSyntax: ['prefixOperators', 'exclusiveRanges', 'regex', 'fuzzy', 'boost']
+    }).filter((item) => item.code === 'unsupportedSyntax');
+    expect(disabled.map((item) => [item.params?.feature, query.slice(item.from, item.to)])).toEqual([
+      ['prefixOperators', '-'],
+      ['prefixOperators', '+'],
+      ['fuzzy', '~2'],
+      ['boost', '^3'],
+      ['regex', '/e/'],
+      ['exclusiveRanges', '{'],
+      ['exclusiveRanges', '}']
+    ]);
+    expect(disabled[0].message).toBe('不支持前缀 "-"，请用 AND、NOT 组合条件');
+
+    const onlyRegex = getLuceneDiagnostics(query, fields, 'en', undefined, { disabledSyntax: ['regex'] });
+    expect(onlyRegex.filter((item) => item.code === 'unsupportedSyntax')).toHaveLength(1);
+  });
+
+  it('reports text the grammar cannot place', () => {
+    expect(getLuceneDiagnostics('author:a )', fields)).toMatchObject([
+      { code: 'unexpectedToken', severity: 'error', from: 9, to: 10, params: { token: ')' } }
+    ]);
+    expect(getLuceneDiagnostics(':a', fields)).toMatchObject([
+      { code: 'unexpectedToken', from: 0, to: 1, params: { token: ':' } }
+    ]);
+  });
 });

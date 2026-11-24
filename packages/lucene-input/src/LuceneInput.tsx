@@ -12,7 +12,7 @@ import type { LuceneCompletionDropdownState } from './lib/codemirror/completion-
 import { createLuceneEditor, type LuceneEditorHandle } from './lib/codemirror'
 import { localizeSyntaxCompletion } from './lib/i18n'
 import type { LuceneProblemsState } from './lib/problems'
-import type { ComponentDiagnostic, LuceneField, LuceneInputMessages } from './lib/types'
+import type { ComponentDiagnostic, LuceneField, LuceneInputMessages, LuceneSyntaxFeature } from './lib/types'
 
 export type LuceneInputHandle = {
   /**
@@ -30,6 +30,8 @@ export type LuceneInputProps = {
   onDiagnostics?: (diagnostics: ComponentDiagnostic[]) => void
   fields?: LuceneField[]
   disallowUnknownFields?: boolean
+  /** Syntax the backend does not support; the input marks it as an error. */
+  disabledSyntax?: readonly LuceneSyntaxFeature[]
   locale?: string
   timeZone?: string
   messages?: LuceneInputMessages
@@ -52,6 +54,7 @@ export type LuceneInputProps = {
 }
 
 const NO_HISTORY: readonly string[] = []
+const NO_SYNTAX: readonly LuceneSyntaxFeature[] = []
 
 export function LuceneInput({
   ref,
@@ -61,6 +64,7 @@ export function LuceneInput({
   onDiagnostics,
   fields = [],
   disallowUnknownFields = false,
+  disabledSyntax = NO_SYNTAX,
   locale = 'en',
   timeZone,
   messages,
@@ -129,6 +133,7 @@ export function LuceneInput({
       readOnly,
       fields,
       disallowUnknownFields,
+      disabledSyntax,
       locale,
       timeZone,
       messages,
@@ -162,6 +167,10 @@ export function LuceneInput({
   useEffect(() => {
     handleRef.current?.setDisallowUnknownFields(disallowUnknownFields)
   }, [disallowUnknownFields])
+
+  useEffect(() => {
+    handleRef.current?.setDisabledSyntax(disabledSyntax)
+  }, [disabledSyntax])
 
   useEffect(() => {
     handleRef.current?.setLocale(locale)

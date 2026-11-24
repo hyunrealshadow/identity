@@ -1,4 +1,4 @@
-import type { LuceneField } from '@identity/lucene-input'
+import type { LuceneField, LuceneSyntaxFeature } from '@identity/lucene-input'
 
 import type { MessageKey } from '#/lib/i18n'
 import { auditValueOptions, filterCatalogOptions } from './audit-catalog'
@@ -95,4 +95,18 @@ export function applyTimeRangePreset(currentQuery: string, rangeExpr: string): s
     return clause
   }
   return `${clause} AND ${stripped}`
+}
+
+/** Lucene syntax the audit query parser does not support. */
+export const AUDIT_DISABLED_SYNTAX = [
+  'prefixOperators',
+  'exclusiveRanges',
+  'regex',
+  'fuzzy',
+  'boost',
+] as const satisfies readonly LuceneSyntaxFeature[]
+
+export const AUDIT_DIAGNOSTIC_OPTIONS = {
+  disallowUnknownFields: true,
+  disabledSyntax: AUDIT_DISABLED_SYNTAX,
 }

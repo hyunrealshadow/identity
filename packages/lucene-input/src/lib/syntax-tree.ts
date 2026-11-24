@@ -91,7 +91,7 @@ class SyntaxTreeParser {
     if (this.isUnaryOperator(token)) {
       this.advance();
       return {
-        type: 'NotExpression',
+        type: token.text === '+' ? 'RequiredExpression' : 'NotExpression',
         operator: token.text,
         from: token.from,
         to: token.to,
@@ -100,7 +100,7 @@ class SyntaxTreeParser {
     }
 
     if (token.type === 'punctuation' && token.text === '(') {
-      return this.parseGroupExpression();
+      return this.withModifiers(this.parseGroupExpression());
     }
 
     if (token.type === 'field' && this.peek(1)?.text === ':') {
@@ -108,7 +108,7 @@ class SyntaxTreeParser {
     }
 
     if (this.isTerm(token)) {
-      return this.termNode(this.advanceTerm());
+      return this.withModifiers(this.termNode(this.advanceTerm()));
     }
 
     return undefined;
@@ -153,7 +153,7 @@ class SyntaxTreeParser {
     if (this.isUnaryOperator(token)) {
       this.advance();
       return {
-        type: 'FieldTermNotExpression',
+        type: token.text === '+' ? 'FieldTermRequiredExpression' : 'FieldTermNotExpression',
         operator: token.text,
         from: token.from,
         to: token.to,
@@ -162,19 +162,19 @@ class SyntaxTreeParser {
     }
 
     if (token.type === 'punctuation' && token.text === '(') {
-      return this.parseGroupExpression();
+      return this.withModifiers(this.parseGroupExpression());
     }
 
     if (this.isComparisonOperator(token)) {
       return this.parseFieldComparisonExpression(fieldType);
     }
 
-    if (token.type === 'punctuation' && token.text === '[') {
+    if (token.type === 'punctuation' && (token.text === '[' || token.text === '{')) {
       return this.parseFieldRangeExpression(fieldType);
     }
 
     if (this.isTerm(token)) {
-      return this.termNode(this.advanceTerm(), fieldType);
+      return this.withModifiers(this.termNode(this.advanceTerm(), fieldType));
     }
 
     return undefined;
@@ -195,13 +195,15 @@ class SyntaxTreeParser {
       endToken && this.isTerm(endToken)
         ? this.termNode(this.advanceTerm(), fieldType)
         : this.missingNode(operator?.to ?? start.to ?? open.to);
-    const close = this.peek()?.text === ']' ? this.advance() : undefined;
+    const closeText = this.peek()?.text;
+    const close = closeText === ']' || closeText === '}' ? this.advance() : undefined;
 
     return {
       type: 'FieldRangeExpression',
       operator: operator?.text,
       from: open.from,
       to: close?.to ?? end.to,
+      inclusive: [open.text === '[', close?.text !== '}'],
       children: [start, end]
     };
   }
@@ -227,7 +229,27 @@ class SyntaxTreeParser {
   }
 
   private isUnaryOperator(token: LuceneToken): boolean {
-    return token.type === 'operator' && /^(!|NOT)$/i.test(token.text);
+    return token.type === 'operator' && /^(!|NOT|-|\+)$/i.test(token.text);
+  }
+
+  /** Fuzzy (`~`, `~2`) and boost (`^2`) suffixes written right after a term or group. */
+  private withModifiers(node: LuceneSyntaxTree): LuceneSyntaxTree {
+    let result = node;
+    for (
+      let next = this.peek();
+      next && next.type === 'operator' && next.from === result.to && /^[~^]/.test(next.text);
+      next = this.peek()
+    ) {
+      this.advance();
+      result = {
+        type: next.text.startsWith('~') ? 'FuzzyExpression' : 'BoostExpression',
+        operator: next.text,
+        from: result.from,
+        to: next.to,
+        children: [result]
+      };
+    }
+    return result;
   }
 
   private isComparisonOperator(token: LuceneToken): boolean {
