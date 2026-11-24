@@ -87,6 +87,8 @@ pub struct UpdateUserTransaction {
     /// Mark the address verified or unverified. Without it, a changed
     /// address becomes unverified.
     pub email_verified: Option<bool>,
+    /// Require, or stop requiring, a password change at the next sign-in.
+    pub password_change_required: Option<bool>,
     pub profile: UserProfilePatch,
     pub expected_version: Uuid,
     pub reason: String,
@@ -102,15 +104,33 @@ pub struct UserStateTransaction {
     pub authority: UserManagementAuthority,
 }
 
+/// Sessions of one user to revoke: the listed ones, or all of them.
+#[derive(Debug, Clone)]
+pub struct RevokeUserSessionsTransaction {
+    pub user_oid: UserOid,
+    /// `None` revokes every active session.
+    pub sessions: Option<Vec<Uuid>>,
+    pub reason: String,
+    pub authority: UserManagementAuthority,
+}
+
 /// Business outcomes that are not infrastructure errors.
 #[derive(Debug, Clone)]
 pub enum UserManagementMutationOutcome {
     Success(Box<UserManagementRecord>),
     UserNotFound,
-    VersionConflict { current_version: Uuid },
+    VersionConflict {
+        current_version: Uuid,
+    },
     LastOwnerProtected,
     UsernameExists,
     EmailExists,
+    /// Only a disabled user may be deleted.
+    NotDisabled,
+    /// Second factors are cleared only while a password remains.
+    NoPassword,
+    /// A listed session is not an active session of the user.
+    SessionNotFound,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -163,6 +183,38 @@ pub trait UserManagementRepository: Send + Sync {
     ) -> Result<UserManagementMutationOutcome, UserManagementRepositoryError>;
 
     async fn unlock_user(
+        &self,
+        command: UserStateTransaction,
+    ) -> Result<UserManagementMutationOutcome, UserManagementRepositoryError>;
+
+    /// Replace (or add) the password with `password`, require a change at
+    /// the next sign-in, end a lockout from failed attempts, and revoke every
+    /// session with its grants. The replaced hash is kept for the history
+    /// check while `keep_history` allows.
+    async fn reset_user_password(
+        &self,
+        command: UserStateTransaction,
+        password: Password,
+        keep_history: u32,
+    ) -> Result<UserManagementMutationOutcome, UserManagementRepositoryError>;
+
+    /// Remove the authenticator app, recovery codes and passkeys, and revoke
+    /// every session with its grants. Refused while the user has no password.
+    async fn reset_user_mfa(
+        &self,
+        command: UserStateTransaction,
+    ) -> Result<UserManagementMutationOutcome, UserManagementRepositoryError>;
+
+    /// Revoke sessions of the user with the grants issued from them.
+    async fn revoke_user_sessions(
+        &self,
+        command: RevokeUserSessionsTransaction,
+    ) -> Result<UserManagementMutationOutcome, UserManagementRepositoryError>;
+
+    /// Delete a disabled user with its credentials, sessions, consents and
+    /// memberships. Grants it made to others keep their rows without it as
+    /// granter; the audit log keeps the history.
+    async fn delete_user(
         &self,
         command: UserStateTransaction,
     ) -> Result<UserManagementMutationOutcome, UserManagementRepositoryError>;

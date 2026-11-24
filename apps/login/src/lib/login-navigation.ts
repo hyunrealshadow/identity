@@ -50,6 +50,20 @@ export function loginPasswordResetDestination(
   return `${loginPasswordResetPath}?${search}`
 }
 
+export const loginPasswordChangePath = '/login/change-password'
+
+/** The step where a sign-in replaces the password its account must change. */
+export function loginPasswordChangeDestination(
+  loginId: string,
+  uiLocales?: string,
+  restart?: 'required' | 'unavailable',
+) {
+  const search = new URLSearchParams({ login_id: loginId })
+  if (uiLocales) search.set('ui_locales', uiLocales)
+  if (restart) search.set('restart', restart)
+  return `${loginPasswordChangePath}?${search}`
+}
+
 export const loginMfaSetupPath = '/login/mfa-setup'
 export const loginPasskeySetupPath = '/login/passkey-setup'
 

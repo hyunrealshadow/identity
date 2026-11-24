@@ -6,6 +6,7 @@ use identity_application::{
         ARGON2_MEMORY_COST_RANGE, ARGON2_PARALLELISM_RANGE, ARGON2_TIME_COST_RANGE,
         AuthenticationSettingsView, DEVICE_AUTHORIZATION_LIFETIME_RANGE,
         DEVICE_POLLING_INTERVAL_RANGE, GeneralSettingsView, InstanceSettingsView,
+        PASSWORD_HISTORY_COUNT_RANGE, PASSWORD_MAX_AGE_DAYS_RANGE,
         PUSHED_AUTHORIZATION_LIFETIME_RANGE, ProtocolSettingsView, SettingRange,
     },
 };
@@ -181,6 +182,26 @@ impl AuthenticationSettings {
         self.view.password_reset_enabled
     }
 
+    /// Days a password stays usable before the next sign-in must replace it.
+    /// `0` means passwords do not expire.
+    async fn password_max_age_days(&self) -> u32 {
+        self.view.password_max_age_days
+    }
+
+    async fn password_max_age_days_range(&self) -> IntRange {
+        PASSWORD_MAX_AGE_DAYS_RANGE.into()
+    }
+
+    /// How many recent passwords, the current one included, a new password
+    /// may not repeat. `0` turns the check off.
+    async fn password_history_count(&self) -> u32 {
+        self.view.password_history_count
+    }
+
+    async fn password_history_count_range(&self) -> IntRange {
+        PASSWORD_HISTORY_COUNT_RANGE.into()
+    }
+
     /// Argon2id cost for newly stored password hashes.
     async fn password_hashing(&self) -> PasswordHashing {
         let hashing = &self.view.password_hashing;
@@ -256,6 +277,8 @@ pub(crate) struct UpdateAuthenticationSettingsInput {
     pub identifier_enumeration_allowed: bool,
     pub email_sign_in_enabled: bool,
     pub password_reset_enabled: bool,
+    pub password_max_age_days: u32,
+    pub password_history_count: u32,
     pub password_hashing: PasswordHashingInput,
     pub expected_version: Uuid,
     #[graphql(validator(chars_max_length = 255))]

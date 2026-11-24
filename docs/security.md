@@ -32,6 +32,44 @@ operation. Explicitly setting it to `false` skips only that external check;
 local password validation and hashing still apply. See the
 [deployment guide](../deploy/README.md#password-security-checks) for configuration.
 
+Two authentication settings, both off by default:
+
+- `auth.password.max_age_days` (Console: *Password lifetime*, 0–3650, `0`
+  off): a password set longer ago than this must be replaced at the next
+  sign-in, after its factors are verified. Sessions already open are not cut
+  short.
+- `auth.password.history_count` (Console: *Passwords not reused*, 0–24, `0`
+  off): a new password may not repeat this many recent passwords, the current
+  one included. A replaced hash is kept as an expired `user_credential` row of
+  type `password`, which every credential read ignores; only as many as the
+  setting needs are kept, and lowering it drops the rest at the next change.
+
+### Administrator credential actions
+
+Each of these re-checks `management.user.write` for the target inside its
+transaction, compares the user `version`, writes its audit record in the same
+transaction, and ends every session of the user with its grants:
+
+- **Reset password** (`resetUserPassword`, audit `USER_PASSWORD_RESET`) stores a
+  generated temporary password (four groups of five characters without
+  look-alikes, about 115 bits), returns it once, requires a change at the next
+  sign-in, and ends a lockout from failed attempts. An account without a
+  password receives one.
+- **Require a password change** (`updateUser` with `passwordChangeRequired`)
+  sets or clears the same requirement without changing the password. Any
+  password change by the user clears it.
+- **Clear second factors** (`resetUserMfa`, audit `USER_MFA_RESET`) removes the
+  authenticator app, recovery codes and passkeys. It is refused while the user
+  has no password, so it cannot leave an account without a way to sign in.
+- **Revoke sessions** (`revokeUserSessions`, audit `USER_SESSION_REVOKE`) ends
+  the listed sessions, or all of them, with the codes and tokens issued from
+  them. `User.sessions` lists the active ones for `management.user.read`.
+- **Delete** (`deleteUser`, audit `USER_DELETE`) applies only to a disabled
+  user. Credentials, sessions, consents, group memberships and role
+  assignments go with it; roles or memberships it granted to others stay with
+  no granter recorded. The audit log keeps the history, and the recovery
+  protection below still applies.
+
 ### Account enumeration
 
 The setting `auth.login.identifier_enumeration_allowed` controls whether sign-in

@@ -131,12 +131,21 @@ impl LoginService {
                         ),
                 );
             }
-            Ok(ChallengeOutcome::MfaEnrollmentRequired { login }) => {
+            Ok(
+                ChallengeOutcome::MfaEnrollmentRequired { login }
+                | ChallengeOutcome::PasswordChangeRequired { login },
+            ) => {
+                let reason =
+                    if matches!(result, Ok(ChallengeOutcome::PasswordChangeRequired { .. })) {
+                        "password_change_required"
+                    } else {
+                        "mfa_enrollment_required"
+                    };
                 self.events.emit(
                     BusinessEvent::audit("authentication.result")
                         .attribute("login_oid", EventValue::Text(login_oid.to_string()))
                         .outcome("success")
-                        .reason("mfa_enrollment_required")
+                        .reason(reason)
                         .attribute("factor", EventValue::Text(factor.to_owned()))
                         .attribute(
                             "user_oid",

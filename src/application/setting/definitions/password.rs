@@ -18,6 +18,34 @@ impl SettingDefinition for BreachedPasswordCheckEnabledSetting {
     }
 }
 
+/// Days a password stays usable before the next sign-in must replace it.
+/// `0` turns expiry off.
+pub struct PasswordMaxAgeDaysSetting;
+
+impl SettingDefinition for PasswordMaxAgeDaysSetting {
+    type Value = u32;
+
+    const KEY: &'static str = "auth.password.max_age_days";
+
+    fn default_value() -> Self::Value {
+        0
+    }
+}
+
+/// How many of an account's most recent passwords, the current one included,
+/// a new password may not repeat. `0` turns the check off.
+pub struct PasswordHistoryCountSetting;
+
+impl SettingDefinition for PasswordHistoryCountSetting {
+    type Value = u32;
+
+    const KEY: &'static str = "auth.password.history_count";
+
+    fn default_value() -> Self::Value {
+        0
+    }
+}
+
 impl SettingDefinition for PasswordHashSetting {
     type Value = HashOptions;
 

@@ -48,6 +48,7 @@ fn from_user_creates_claims_from_user_model() {
         enabled: true,
         locked: false,
         locked_until: None,
+        password_change_required: false,
         created_at: Utc::now(),
         updated_at: Some(Utc::now()),
     };
@@ -359,6 +360,7 @@ fn full_profile_user() -> User {
         enabled: true,
         locked: false,
         locked_until: None,
+        password_change_required: false,
         created_at: Utc::now(),
         updated_at: None,
     }

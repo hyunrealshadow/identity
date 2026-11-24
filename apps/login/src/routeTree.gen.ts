@@ -30,6 +30,7 @@ import { Route as HealthLiveRouteImport } from './routes/health.live'
 import { Route as HealthMetricsRouteImport } from './routes/health.metrics'
 import { Route as HealthReadyRouteImport } from './routes/health.ready'
 import { Route as LoginMethodRouteImport } from './routes/login.$method'
+import { Route as LoginChangePasswordRouteImport } from './routes/login.change-password'
 import { Route as LoginMfaSetupRouteImport } from './routes/login.mfa-setup'
 import { Route as LoginPasskeySetupRouteImport } from './routes/login.passkey-setup'
 import { Route as LoginResetPasswordRouteImport } from './routes/login.reset-password'
@@ -141,6 +142,11 @@ const LoginMethodRoute = LoginMethodRouteImport.update({
   path: '/$method',
   getParentRoute: () => LoginRoute,
 } as any)
+const LoginChangePasswordRoute = LoginChangePasswordRouteImport.update({
+  id: '/change-password',
+  path: '/change-password',
+  getParentRoute: () => LoginRoute,
+} as any)
 const LoginMfaSetupRoute = LoginMfaSetupRouteImport.update({
   id: '/mfa-setup',
   path: '/mfa-setup',
@@ -188,6 +194,7 @@ export interface FileRoutesByFullPath {
   '/health/metrics': typeof HealthMetricsRoute
   '/health/ready': typeof HealthReadyRoute
   '/login/$method': typeof LoginMethodRoute
+  '/login/change-password': typeof LoginChangePasswordRoute
   '/login/mfa-setup': typeof LoginMfaSetupRoute
   '/login/passkey-setup': typeof LoginPasskeySetupRoute
   '/login/reset-password': typeof LoginResetPasswordRoute
@@ -215,6 +222,7 @@ export interface FileRoutesByTo {
   '/health/metrics': typeof HealthMetricsRoute
   '/health/ready': typeof HealthReadyRoute
   '/login/$method': typeof LoginMethodRoute
+  '/login/change-password': typeof LoginChangePasswordRoute
   '/login/mfa-setup': typeof LoginMfaSetupRoute
   '/login/passkey-setup': typeof LoginPasskeySetupRoute
   '/login/reset-password': typeof LoginResetPasswordRoute
@@ -244,6 +252,7 @@ export interface FileRoutesById {
   '/health/metrics': typeof HealthMetricsRoute
   '/health/ready': typeof HealthReadyRoute
   '/login/$method': typeof LoginMethodRoute
+  '/login/change-password': typeof LoginChangePasswordRoute
   '/login/mfa-setup': typeof LoginMfaSetupRoute
   '/login/passkey-setup': typeof LoginPasskeySetupRoute
   '/login/reset-password': typeof LoginResetPasswordRoute
@@ -274,6 +283,7 @@ export interface FileRouteTypes {
     | '/health/metrics'
     | '/health/ready'
     | '/login/$method'
+    | '/login/change-password'
     | '/login/mfa-setup'
     | '/login/passkey-setup'
     | '/login/reset-password'
@@ -301,6 +311,7 @@ export interface FileRouteTypes {
     | '/health/metrics'
     | '/health/ready'
     | '/login/$method'
+    | '/login/change-password'
     | '/login/mfa-setup'
     | '/login/passkey-setup'
     | '/login/reset-password'
@@ -329,6 +340,7 @@ export interface FileRouteTypes {
     | '/health/metrics'
     | '/health/ready'
     | '/login/$method'
+    | '/login/change-password'
     | '/login/mfa-setup'
     | '/login/passkey-setup'
     | '/login/reset-password'
@@ -505,6 +517,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginMethodRouteImport
       parentRoute: typeof LoginRoute
     }
+    '/login/change-password': {
+      id: '/login/change-password'
+      path: '/change-password'
+      fullPath: '/login/change-password'
+      preLoaderRoute: typeof LoginChangePasswordRouteImport
+      parentRoute: typeof LoginRoute
+    }
     '/login/mfa-setup': {
       id: '/login/mfa-setup'
       path: '/mfa-setup'
@@ -567,6 +586,7 @@ const AccountRouteRouteWithChildren = AccountRouteRoute._addFileChildren(
 
 interface LoginRouteChildren {
   LoginMethodRoute: typeof LoginMethodRoute
+  LoginChangePasswordRoute: typeof LoginChangePasswordRoute
   LoginMfaSetupRoute: typeof LoginMfaSetupRoute
   LoginPasskeySetupRoute: typeof LoginPasskeySetupRoute
   LoginResetPasswordRoute: typeof LoginResetPasswordRoute
@@ -574,6 +594,7 @@ interface LoginRouteChildren {
 
 const LoginRouteChildren: LoginRouteChildren = {
   LoginMethodRoute: LoginMethodRoute,
+  LoginChangePasswordRoute: LoginChangePasswordRoute,
   LoginMfaSetupRoute: LoginMfaSetupRoute,
   LoginPasskeySetupRoute: LoginPasskeySetupRoute,
   LoginResetPasswordRoute: LoginResetPasswordRoute,

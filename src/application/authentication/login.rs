@@ -101,6 +101,10 @@ pub enum ChallengeOutcome {
     /// user has no credential that meets it; authentication completes only by
     /// enrolling one (see [`enrollment_method`]).
     MfaEnrollmentRequired { login: Login },
+    /// Every factor is verified, but the account must replace its password
+    /// before a session is issued (see
+    /// [`LoginService::complete_required_password_change`]).
+    PasswordChangeRequired { login: Login },
 }
 
 // ─── LoginService ────────────────────────────────────────────────────────────

@@ -181,6 +181,7 @@ pub enum AuditField {
     Username,
     Email,
     EmailVerified,
+    PasswordChangeRequired,
     PhoneNumber,
     GivenName,
     FamilyName,
@@ -240,6 +241,10 @@ audit_actions! {
     UserEnable => Management, User;
     UserDisable => Management, User;
     UserUnlock => Management, User;
+    UserPasswordReset => Management, User;
+    UserMfaReset => Management, User;
+    UserSessionRevoke => Management, User;
+    UserDelete => Management, User;
     UserRoleGrant => Management, User;
     UserRoleRevoke => Management, User;
     GroupCreate => Management, Group;

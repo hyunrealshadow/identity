@@ -257,6 +257,14 @@ pub struct EmailCodeResponse {
     pub resend_available_at: DateTime<Utc>,
 }
 
+/// `POST /api/auth/login/password-change` request.
+#[derive(Debug, Deserialize)]
+pub struct RequiredPasswordChangeRequest {
+    /// Encrypted login.oid held at a required password change.
+    pub id: String,
+    pub new_password: String,
+}
+
 /// `POST /api/auth/login/password-reset/check` request.
 #[derive(Debug, Deserialize)]
 pub struct PasswordResetCheckRequest {
@@ -305,7 +313,8 @@ pub struct ChallengeRequest {
 pub struct ChallengeResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub preferred_credential_type: Option<CredentialType>,
-    /// `"authenticated"`, `"mfa_required"` or `"mfa_enrollment_required"`.
+    /// `"authenticated"`, `"mfa_required"`, `"mfa_enrollment_required"` or
+    /// `"password_change_required"` (then `continue_uri` leads to the change).
     pub status: LoginStatus,
     /// Credential to enroll; present only when `status ==
     /// "mfa_enrollment_required"`.

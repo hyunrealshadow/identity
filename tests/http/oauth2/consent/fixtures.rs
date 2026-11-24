@@ -200,6 +200,7 @@ async fn consent_test_state_for(
         enabled: true,
         locked: false,
         locked_until: None,
+        password_change_required: false,
         created_at: now.into(),
         updated_at: None,
     };

@@ -54,6 +54,10 @@ impl LoginService {
         acr: AuthenticationContextClass,
         amr: &[String],
     ) -> Result<ChallengeOutcome, AppError> {
+        if self.password_change_due(user_oid.into()).await? {
+            self.require_password_change(&login, acr, amr).await?;
+            return Ok(ChallengeOutcome::PasswordChangeRequired { login });
+        }
         let session = self
             .complete_session(&login, user_oid, ctx, acr, amr)
             .await?;

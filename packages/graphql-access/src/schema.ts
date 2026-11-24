@@ -743,6 +743,26 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "PasswordHashing",
           "policies": []
         },
+        "passwordHistoryCount": {
+          "name": "passwordHistoryCount",
+          "returnType": "Int",
+          "policies": []
+        },
+        "passwordHistoryCountRange": {
+          "name": "passwordHistoryCountRange",
+          "returnType": "IntRange",
+          "policies": []
+        },
+        "passwordMaxAgeDays": {
+          "name": "passwordMaxAgeDays",
+          "returnType": "Int",
+          "policies": []
+        },
+        "passwordMaxAgeDaysRange": {
+          "name": "passwordMaxAgeDaysRange",
+          "returnType": "IntRange",
+          "policies": []
+        },
         "passwordResetEnabled": {
           "name": "passwordResetEnabled",
           "returnType": "Boolean",
@@ -1588,6 +1608,23 @@ export const schemaMetadata: SchemaMetadata = {
         },
         "groupId": {
           "name": "groupId",
+          "returnType": "ID",
+          "policies": []
+        }
+      }
+    },
+    "DeleteUserPayload": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "clientMutationId": {
+          "name": "clientMutationId",
+          "returnType": "String",
+          "policies": []
+        },
+        "deletedUserId": {
+          "name": "deletedUserId",
           "returnType": "ID",
           "policies": []
         }
@@ -3381,6 +3418,20 @@ export const schemaMetadata: SchemaMetadata = {
             }
           ]
         },
+        "deleteUser": {
+          "name": "deleteUser",
+          "returnType": "DeleteUserPayload",
+          "policies": [
+            {
+              "scopes": [
+                "management.user.write"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
+        },
         "disableClient": {
           "name": "disableClient",
           "returnType": "ClientPayload",
@@ -3653,6 +3704,34 @@ export const schemaMetadata: SchemaMetadata = {
             }
           ]
         },
+        "resetUserMfa": {
+          "name": "resetUserMfa",
+          "returnType": "UserStatePayload",
+          "policies": [
+            {
+              "scopes": [
+                "management.user.write"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
+        },
+        "resetUserPassword": {
+          "name": "resetUserPassword",
+          "returnType": "ResetUserPasswordPayload",
+          "policies": [
+            {
+              "scopes": [
+                "management.user.write"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
+        },
         "revokeClientCredential": {
           "name": "revokeClientCredential",
           "returnType": "ClientCredentialPayload",
@@ -3723,6 +3802,20 @@ export const schemaMetadata: SchemaMetadata = {
               "userOnly": true,
               "runtime": true,
               "maxAge": 300
+            }
+          ]
+        },
+        "revokeUserSessions": {
+          "name": "revokeUserSessions",
+          "returnType": "UserStatePayload",
+          "policies": [
+            {
+              "scopes": [
+                "management.user.write"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
             }
           ]
         },
@@ -4766,6 +4859,38 @@ export const schemaMetadata: SchemaMetadata = {
         }
       }
     },
+    "ResetUserPasswordPayload": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "clientMutationId": {
+          "name": "clientMutationId",
+          "returnType": "String",
+          "policies": []
+        },
+        "temporaryPassword": {
+          "name": "temporaryPassword",
+          "returnType": "String",
+          "policies": []
+        },
+        "user": {
+          "name": "user",
+          "returnType": "User",
+          "policies": []
+        },
+        "userId": {
+          "name": "userId",
+          "returnType": "ID",
+          "policies": []
+        },
+        "version": {
+          "name": "version",
+          "returnType": "UUID",
+          "policies": []
+        }
+      }
+    },
     "Resource": {
       "kind": "OBJECT",
       "interfaces": [
@@ -5736,6 +5861,20 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "String",
           "policies": []
         },
+        "authenticationMethods": {
+          "name": "authenticationMethods",
+          "returnType": "UserAuthenticationMethods",
+          "policies": [
+            {
+              "scopes": [
+                "management.user.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
+        },
         "birthdate": {
           "name": "birthdate",
           "returnType": "String",
@@ -5883,6 +6022,20 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "String",
           "policies": []
         },
+        "passwordChangeRequired": {
+          "name": "passwordChangeRequired",
+          "returnType": "Boolean",
+          "policies": [
+            {
+              "scopes": [
+                "management.user.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
+        },
         "phoneNumber": {
           "name": "phoneNumber",
           "returnType": "String",
@@ -5918,6 +6071,20 @@ export const schemaMetadata: SchemaMetadata = {
             {
               "scopes": [
                 "management.role.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
+        },
+        "sessions": {
+          "name": "sessions",
+          "returnType": "SessionConnection",
+          "policies": [
+            {
+              "scopes": [
+                "management.user.read"
               ],
               "authentication": "AAL2",
               "userOnly": false,
@@ -5962,6 +6129,33 @@ export const schemaMetadata: SchemaMetadata = {
         "zoneInfo": {
           "name": "zoneInfo",
           "returnType": "String",
+          "policies": []
+        }
+      }
+    },
+    "UserAuthenticationMethods": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "authenticatorApp": {
+          "name": "authenticatorApp",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "passkey": {
+          "name": "passkey",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "password": {
+          "name": "password",
+          "returnType": "Boolean",
+          "policies": []
+        },
+        "recoveryCodes": {
+          "name": "recoveryCodes",
+          "returnType": "Boolean",
           "policies": []
         }
       }

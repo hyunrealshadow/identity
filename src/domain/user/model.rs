@@ -109,6 +109,8 @@ pub struct User {
     pub enabled: bool,
     pub locked: bool,
     pub locked_until: Option<DateTime<Utc>>,
+    /// The next sign-in must replace the password before a session is issued.
+    pub password_change_required: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
 }

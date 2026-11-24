@@ -147,6 +147,8 @@ pub struct UpdateUserCommand {
     pub email: Option<String>,
     /// Mark the address verified or unverified.
     pub email_verified: Option<bool>,
+    /// Require, or stop requiring, a password change at the next sign-in.
+    pub password_change_required: Option<bool>,
     pub profile: UserProfilePatch,
     pub expected_version: Uuid,
     pub reason: String,
@@ -160,6 +162,23 @@ pub struct UserStateCommand {
     pub expected_version: Uuid,
     pub reason: String,
     pub client_mutation_id: Option<String>,
+}
+
+/// Revoke the listed sessions of a user, or all of them.
+#[derive(Debug, Clone)]
+pub struct RevokeUserSessionsCommand {
+    pub user_oid: UserOid,
+    /// `None` revokes every active session.
+    pub sessions: Option<Vec<Uuid>>,
+    pub reason: String,
+    pub client_mutation_id: Option<String>,
+}
+
+/// A user whose password an administrator replaced, with the generated
+/// temporary password. The password is returned once and never stored.
+pub struct UserPasswordResetResult {
+    pub record: UserManagementRecord,
+    pub temporary_password: String,
 }
 
 /// List filter. All strings are free-form and treated literally, never as SQL

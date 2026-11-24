@@ -49,6 +49,7 @@ export function UserDetailLayout({
     | '/users/$userId/groups'
     | '/users/$userId/roles'
     | '/users/$userId/permissions'
+    | '/users/$userId/security'
   children: ReactNode
 }) {
   const t = useTranslator()
@@ -90,6 +91,10 @@ export function UserDetailLayout({
     requestId?: string,
     traceId?: string,
   ) {
+    if (action === 'delete') {
+      void navigate({ to: '/users' })
+      return
+    }
     if (action === 'disable' && isCurrentUser(payload.userId, claims?.sub)) {
       setAccessEnded(true)
       setNotice({
@@ -286,6 +291,7 @@ export function UserDetailLayout({
               <UserStateActions
                 user={stateMenuUser}
                 presentation="menu"
+                canDelete={scope.remove}
                 onCommitted={handleStateCommitted}
                 onReload={reloadAfterWrite}
               />

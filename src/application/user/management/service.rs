@@ -36,18 +36,19 @@ use crate::{
         },
     },
     observability::{BusinessEvent, EventSink, EventValue, NoopEventSink, error_outcome},
-    setting::{PasswordHashSetting, SettingsSource},
+    setting::{PasswordHashSetting, PasswordHistoryCountSetting, SettingsSource},
     user::management::{
         cursor::{NormalizedFilter, decode_cursor, encode_cursor},
         model::{
-            CreateUserCommand, UpdateUserCommand, UserFilter, UserManagementAuthority,
-            UserManagementPage, UserManagementPageItem, UserPageRequest, UserStateCommand,
-            domain_profile_patch,
+            CreateUserCommand, RevokeUserSessionsCommand, UpdateUserCommand, UserFilter,
+            UserManagementAuthority, UserManagementPage, UserManagementPageItem, UserPageRequest,
+            UserPasswordResetResult, UserStateCommand, domain_profile_patch,
         },
         repository::{
-            CreateUserTransaction, UpdateUserTransaction, UserIdentifierValue,
-            UserManagementMutationOutcome, UserManagementQuery, UserManagementRepository,
-            UserManagementRepositoryError, UserPageDirection, UserStateTransaction,
+            CreateUserTransaction, RevokeUserSessionsTransaction, UpdateUserTransaction,
+            UserIdentifierValue, UserManagementMutationOutcome, UserManagementQuery,
+            UserManagementRepository, UserManagementRepositoryError, UserPageDirection,
+            UserStateTransaction,
         },
     },
 };
@@ -223,6 +224,128 @@ impl UserManagementService {
         result
     }
 
+    /// Replace the user's password with a generated temporary one that must
+    /// be changed at the next sign-in, and sign the user out everywhere.
+    #[tracing::instrument(skip_all, name = "user.management.reset_password")]
+    pub async fn reset_user_password(
+        &self,
+        authority: &UserManagementAuthority,
+        command: UserStateCommand,
+    ) -> Result<UserPasswordResetResult, AppError> {
+        let result = async {
+            let transaction = self.state_transaction(authority, &command)?;
+            let temporary_password = temporary_password();
+            let snapshot = self.settings.snapshot();
+            let hash_options = snapshot.get::<PasswordHashSetting>();
+            let keep_history = snapshot
+                .get::<PasswordHistoryCountSetting>()
+                .saturating_sub(1);
+            let hasher = Arc::clone(&self.password_hasher);
+            let plain = temporary_password.clone();
+            let password = run_password_hashing(move || hasher.hash(&plain, &hash_options)).await?;
+            let outcome = self
+                .repository
+                .reset_user_password(transaction, password, keep_history)
+                .await
+                .map_err(map_repository_error)?;
+            Ok(UserPasswordResetResult {
+                record: map_mutation_outcome(outcome)?,
+                temporary_password,
+            })
+        }
+        .await;
+        self.emit_mutation_ref(
+            "user.management.reset_password",
+            result.as_ref().map(|result| &result.record),
+        );
+        result
+    }
+
+    /// Remove the user's authenticator app, recovery codes and passkeys, and
+    /// sign the user out everywhere.
+    #[tracing::instrument(skip_all, name = "user.management.reset_mfa")]
+    pub async fn reset_user_mfa(
+        &self,
+        authority: &UserManagementAuthority,
+        command: UserStateCommand,
+    ) -> Result<UserManagementRecord, AppError> {
+        let result = async {
+            let transaction = self.state_transaction(authority, &command)?;
+            let outcome = self
+                .repository
+                .reset_user_mfa(transaction)
+                .await
+                .map_err(map_repository_error)?;
+            map_mutation_outcome(outcome)
+        }
+        .await;
+        self.emit_mutation("user.management.reset_mfa", &result);
+        result
+    }
+
+    /// Revoke the listed sessions of the user, or all of them.
+    #[tracing::instrument(skip_all, name = "user.management.revoke_sessions")]
+    pub async fn revoke_user_sessions(
+        &self,
+        authority: &UserManagementAuthority,
+        command: RevokeUserSessionsCommand,
+    ) -> Result<UserManagementRecord, AppError> {
+        let result = async {
+            let reason = validate_reason(&command.reason)?;
+            validate_client_mutation_id(command.client_mutation_id.as_deref())?;
+            let outcome = self
+                .repository
+                .revoke_user_sessions(RevokeUserSessionsTransaction {
+                    user_oid: command.user_oid,
+                    sessions: command.sessions,
+                    reason,
+                    authority: (*authority).clone(),
+                })
+                .await
+                .map_err(map_repository_error)?;
+            map_mutation_outcome(outcome)
+        }
+        .await;
+        self.emit_mutation("user.management.revoke_sessions", &result);
+        result
+    }
+
+    /// Delete a disabled user.
+    #[tracing::instrument(skip_all, name = "user.management.delete")]
+    pub async fn delete_user(
+        &self,
+        authority: &UserManagementAuthority,
+        command: UserStateCommand,
+    ) -> Result<UserManagementRecord, AppError> {
+        let result = async {
+            let transaction = self.state_transaction(authority, &command)?;
+            let outcome = self
+                .repository
+                .delete_user(transaction)
+                .await
+                .map_err(map_repository_error)?;
+            map_mutation_outcome(outcome)
+        }
+        .await;
+        self.emit_mutation("user.management.delete", &result);
+        result
+    }
+
+    fn state_transaction(
+        &self,
+        authority: &UserManagementAuthority,
+        command: &UserStateCommand,
+    ) -> Result<UserStateTransaction, AppError> {
+        let reason = validate_reason(&command.reason)?;
+        validate_client_mutation_id(command.client_mutation_id.as_deref())?;
+        Ok(UserStateTransaction {
+            user_oid: command.user_oid,
+            expected_version: command.expected_version,
+            reason,
+            authority: (*authority).clone(),
+        })
+    }
+
     #[tracing::instrument(skip_all, name = "user.management.unlock")]
     pub async fn unlock_user(
         &self,
@@ -363,6 +486,7 @@ impl UserManagementService {
                 username,
                 email,
                 email_verified: command.email_verified,
+                password_change_required: command.password_change_required,
                 profile,
                 expected_version: command.expected_version,
                 reason,
@@ -420,6 +544,14 @@ impl UserManagementService {
     }
 
     fn emit_mutation(&self, name: &'static str, result: &Result<UserManagementRecord, AppError>) {
+        self.emit_mutation_ref(name, result.as_ref());
+    }
+
+    fn emit_mutation_ref(
+        &self,
+        name: &'static str,
+        result: Result<&UserManagementRecord, &AppError>,
+    ) {
         let mut event = BusinessEvent::business(name);
         match result {
             Ok(record) => {
@@ -598,7 +730,38 @@ fn map_mutation_outcome(
         UserManagementMutationOutcome::EmailExists => {
             Err(AppError::from_code(AccountErrorCode::EmailExists).with_field("email"))
         }
+        UserManagementMutationOutcome::NotDisabled => Err(AppError::from_code(
+            UserManagementErrorCode::UserNotDisabled,
+        )),
+        UserManagementMutationOutcome::NoPassword => Err(AppError::from_code(
+            UserManagementErrorCode::UserHasNoPassword,
+        )),
+        UserManagementMutationOutcome::SessionNotFound => Err(AppError::from_code(
+            UserManagementErrorCode::SessionNotFound,
+        )),
     }
+}
+
+/// Characters of a generated temporary password: no look-alikes such as
+/// `0`/`O` or `1`/`l`/`I`, so it can be read out or copied by hand.
+const TEMPORARY_PASSWORD_ALPHABET: &[u8] =
+    b"abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+/// Four groups of five, about 115 bits: `xxxxx-xxxxx-xxxxx-xxxxx`.
+fn temporary_password() -> String {
+    use rand::RngExt;
+    let mut rng = rand::rng();
+    (0..4)
+        .map(|_| {
+            (0..5)
+                .map(|_| {
+                    let index = rng.random_range(0..TEMPORARY_PASSWORD_ALPHABET.len());
+                    char::from(TEMPORARY_PASSWORD_ALPHABET[index])
+                })
+                .collect::<String>()
+        })
+        .collect::<Vec<_>>()
+        .join("-")
 }
 
 fn map_repository_error(error: UserManagementRepositoryError) -> AppError {
@@ -729,6 +892,48 @@ mod tests {
         }
 
         async fn unlock_user(
+            &self,
+            _command: UserStateTransaction,
+        ) -> Result<UserManagementMutationOutcome, UserManagementRepositoryError> {
+            Ok(self
+                .outcome
+                .clone()
+                .unwrap_or(UserManagementMutationOutcome::UserNotFound))
+        }
+
+        async fn reset_user_password(
+            &self,
+            _command: UserStateTransaction,
+            _password: crate::user::Password,
+            _keep_history: u32,
+        ) -> Result<UserManagementMutationOutcome, UserManagementRepositoryError> {
+            Ok(self
+                .outcome
+                .clone()
+                .unwrap_or(UserManagementMutationOutcome::UserNotFound))
+        }
+
+        async fn reset_user_mfa(
+            &self,
+            _command: UserStateTransaction,
+        ) -> Result<UserManagementMutationOutcome, UserManagementRepositoryError> {
+            Ok(self
+                .outcome
+                .clone()
+                .unwrap_or(UserManagementMutationOutcome::UserNotFound))
+        }
+
+        async fn revoke_user_sessions(
+            &self,
+            _command: crate::user::management::RevokeUserSessionsTransaction,
+        ) -> Result<UserManagementMutationOutcome, UserManagementRepositoryError> {
+            Ok(self
+                .outcome
+                .clone()
+                .unwrap_or(UserManagementMutationOutcome::UserNotFound))
+        }
+
+        async fn delete_user(
             &self,
             _command: UserStateTransaction,
         ) -> Result<UserManagementMutationOutcome, UserManagementRepositoryError> {
@@ -880,6 +1085,64 @@ mod tests {
         assert_eq!(error.code(), 16008);
         assert_eq!(error.kind(), ErrorKind::Conflict);
         assert!(error.params().get("current_version").is_some());
+    }
+
+    #[test]
+    fn temporary_passwords_are_long_unambiguous_and_distinct() {
+        let first = super::temporary_password();
+        let second = super::temporary_password();
+        assert_ne!(first, second);
+        assert_eq!(first.len(), 23);
+        assert!(first.split('-').all(|group| group.len() == 5));
+        assert!(
+            first
+                .chars()
+                .filter(|c| *c != '-')
+                .all(|c| super::TEMPORARY_PASSWORD_ALPHABET.contains(&(c as u8)))
+        );
+        assert!(!first.contains(['0', 'O', '1', 'l', 'I']));
+    }
+
+    #[tokio::test]
+    async fn refused_admin_operations_become_their_own_errors() {
+        let command = || model::UserStateCommand {
+            user_oid: UserOid(Uuid::new_v4()),
+            expected_version: Uuid::new_v4(),
+            reason: String::new(),
+            client_mutation_id: None,
+        };
+        let error = service(UserManagementMutationOutcome::NotDisabled)
+            .delete_user(&authority(), command())
+            .await
+            .unwrap_err();
+        assert_eq!(
+            error.code(),
+            crate::error::codes::user_management::UserManagementErrorCode::UserNotDisabled as u32
+        );
+        let error = service(UserManagementMutationOutcome::NoPassword)
+            .reset_user_mfa(&authority(), command())
+            .await
+            .unwrap_err();
+        assert_eq!(
+            error.code(),
+            crate::error::codes::user_management::UserManagementErrorCode::UserHasNoPassword as u32
+        );
+        let error = service(UserManagementMutationOutcome::SessionNotFound)
+            .revoke_user_sessions(
+                &authority(),
+                model::RevokeUserSessionsCommand {
+                    user_oid: UserOid(Uuid::new_v4()),
+                    sessions: Some(vec![Uuid::new_v4()]),
+                    reason: String::new(),
+                    client_mutation_id: None,
+                },
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(
+            error.code(),
+            crate::error::codes::user_management::UserManagementErrorCode::SessionNotFound as u32
+        );
     }
 
     #[tokio::test]

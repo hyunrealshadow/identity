@@ -45,9 +45,9 @@ use crate::{
         IdentifierResponse, LoginClientDisplay, LoginStatusResponse, MfaEnrollmentAlgorithmRequest,
         MfaEnrollmentConfirmRequest, MfaEnrollmentRequest, MfaEnrollmentResponse,
         PasskeyEnrollmentConfirmRequest, PasskeyEnrollmentResponse, PasswordResetCheckRequest,
-        PasswordResetConfirmRequest, PasswordResetStatusResponse, RestartLoginRequest,
-        RestartLoginResponse, SelectAccountRequest, SelectAccountResponse, SessionInfo,
-        SwitchLoginRequest, SwitchLoginResponse, UserDisplayInfo,
+        PasswordResetConfirmRequest, PasswordResetStatusResponse, RequiredPasswordChangeRequest,
+        RestartLoginRequest, RestartLoginResponse, SelectAccountRequest, SelectAccountResponse,
+        SessionInfo, SwitchLoginRequest, SwitchLoginResponse, UserDisplayInfo,
     },
 };
 
@@ -63,6 +63,7 @@ pub fn routes() -> Router {
         .push(Router::with_path("api/auth/login/challenge").post(challenge))
         .push(Router::with_path("api/auth/login/email-code").post(email_code))
         .push(Router::with_path("api/auth/login/password-reset").post(password_reset))
+        .push(Router::with_path("api/auth/login/password-change").post(required_password_change))
         .push(Router::with_path("api/auth/login/password-reset/check").post(check_password_reset))
         .push(
             Router::with_path("api/auth/login/password-reset/confirm").post(confirm_password_reset),
@@ -242,7 +243,9 @@ async fn login_status(
     let credential_types = login::challenge_credential_types(&login, &credential_types);
     let enrollment_method = (login.status == LoginStatus::MFA_ENROLLMENT_REQUIRED)
         .then(|| login::enrollment_method(&login));
-    let challenge_uri = if let Some(method) = enrollment_method.filter(|_| user.is_some()) {
+    let challenge_uri = if login.status == LoginStatus::PASSWORD_CHANGE_REQUIRED {
+        Some(login_password_change_uri(&id))
+    } else if let Some(method) = enrollment_method.filter(|_| user.is_some()) {
         Some(login_enrollment_uri(&id, method, ui_locales.as_deref()))
     } else if user.is_some()
         && (stored_request_has_prompt(Some(&prompt), PromptValue::Login)
@@ -789,8 +792,73 @@ async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> 
         ChallengeOutcome::Authenticated { session, .. } => {
             render_authenticated(&ctx, &headers, &body.id, &session, res).await?;
         }
+        ChallengeOutcome::PasswordChangeRequired { .. } => {
+            render_password_change_required(&body.id, res);
+        }
     }
     Ok(())
+}
+
+/// The login application page where a sign-in replaces the password its
+/// account must change.
+fn login_password_change_uri(login_id: &str) -> String {
+    let mut query = Serializer::new(String::new());
+    query.append_pair("login_id", login_id);
+    format!("/login/change-password?{}", query.finish())
+}
+
+/// Answer a sign-in held at a required password change. `continue_uri` leads
+/// to the change, so every step that follows it reaches the change unchanged.
+fn render_password_change_required(login_id: &str, res: &mut Response) {
+    render_json(
+        res,
+        StatusCode::OK,
+        ChallengeResponse {
+            preferred_credential_type: None,
+            status: LoginStatus::PasswordChangeRequired,
+            enrollment_method: None,
+            session: None,
+            acr: None,
+            continue_uri: Some(login_password_change_uri(login_id)),
+            sessions: None,
+        },
+    );
+}
+
+/// `POST /api/auth/login/password-change`
+///
+/// Replace the password a sign-in requires, then finish the sign-in.
+#[handler]
+async fn required_password_change(
+    depot: &mut Depot,
+    req: &mut Request,
+    res: &mut Response,
+) -> JsonWebResult<()> {
+    let ctx = app_state(depot)?;
+    let headers: HeaderMap = req.headers().clone();
+    let body: RequiredPasswordChangeRequest = parse_json(req).await?;
+    let mut session_ctx = build_session_context(&headers, resolved_client_ip(depot));
+    session_ctx.browser_session_oids = parse_session_header(&ctx, &headers)
+        .await
+        .into_iter()
+        .map(|entry| entry.session_oid)
+        .collect();
+    let login_oid = ctx
+        .services()
+        .oidc_authorize()
+        .decrypt_login_id(&body.id)
+        .await?;
+    match ctx
+        .services()
+        .login()
+        .complete_required_password_change(login_oid, &body.new_password, session_ctx)
+        .await?
+    {
+        ChallengeOutcome::Authenticated { session, .. } => {
+            render_authenticated(&ctx, &headers, &body.id, &session, res).await
+        }
+        _ => Err(AppError::from_code(AuthErrorCode::InvalidLoginState).into()),
+    }
 }
 
 /// Record the established session on the interaction and answer with where
@@ -955,6 +1023,10 @@ async fn confirm_mfa_enrollment(
     match outcome {
         ChallengeOutcome::Authenticated { session, .. } => {
             render_authenticated(&ctx, &headers, &body.id, &session, res).await
+        }
+        ChallengeOutcome::PasswordChangeRequired { .. } => {
+            render_password_change_required(&body.id, res);
+            Ok(())
         }
         ChallengeOutcome::MfaRequired { .. } | ChallengeOutcome::MfaEnrollmentRequired { .. } => {
             Err(AppError::from_code(AuthErrorCode::InvalidLoginState).into())

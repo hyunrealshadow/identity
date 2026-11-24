@@ -1,6 +1,7 @@
 //! Account security transition: all mutations commit or roll back together.
 use super::*;
-use identity_domain::auth::{LOGIN_EXPIRY, SessionOid};
+use identity_application::user::repository::PasswordReplacementKind;
+use identity_domain::auth::LOGIN_EXPIRY;
 use sea_orm::{ConnectionTrait, DbBackend, Statement};
 use user::Column as UserColumn;
 use user_credential::Column as UserCredentialColumn;
@@ -15,9 +16,15 @@ impl UserCredentialRepositoryImpl {
         credential: UserCredentialOid,
         expected: &Password,
         password: &Password,
-        keep: Option<SessionOid>,
-        reset_login: Option<UuidUuid>,
+        replacement: PasswordReplacement,
     ) -> Result<u32, UserCredentialRepositoryError> {
+        let (keep, kept_login, kept_status) = match replacement.kind {
+            PasswordReplacementKind::Change { keep } => (keep, None, ""),
+            PasswordReplacementKind::Reset { login } => (None, Some(login), "identifier_verified"),
+            PasswordReplacementKind::Required { login, keep } => {
+                (keep, Some(login), "password_change_required")
+            }
+        };
         let fail = |error| UserCredentialRepositoryError::UpdatePasswordFailed(Box::new(error));
         let txn = self.db.begin().await.map_err(fail)?;
         lock_user_credentials(&txn, user).await.map_err(fail)?;
@@ -41,6 +48,22 @@ impl UserCredentialRepositoryImpl {
         {
             return Err(UserCredentialRepositoryError::CredentialNotFound);
         }
+        // The replaced hash stays as an expired password credential for the
+        // history check: every credential read ignores expired rows.
+        if replacement.keep_history > 0 {
+            txn.execute_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                "INSERT INTO user_credential (oid, user_id, type, data, expires_at, created_at, updated_at) \
+                 SELECT gen_random_uuid(), user_id, type, data, now(), created_at, updated_at \
+                 FROM user_credential WHERE oid = $1 AND user_id = $2 AND type = 'password'",
+                [Uuid::from(credential).into(), owner.id.into()],
+            ))
+            .await
+            .map_err(fail)?;
+        }
+        prune_password_history(&txn, owner.id, replacement.keep_history)
+            .await
+            .map_err(fail)?;
         // A semantic password replacement receives a new stable credential OID
         // in the same transaction. Credential usage-only paths keep their OID.
         // The authority fingerprint hashes this OID, never password material.
@@ -80,14 +103,23 @@ impl UserCredentialRepositoryImpl {
             "UPDATE session SET status = 'revoked', revoked_at = now(), updated_at = now() WHERE user_id = $1 AND ($2::uuid IS NULL OR oid <> $2) AND status = 'active' AND revoked_at IS NULL",
             [owner.id.into(), keep_oid.into()])).await.map_err(fail)?;
         // Invalidating pending flows also closes an already-verified password/MFA race.
-        // A reset keeps the login it came from while that login has verified
-        // no factor yet, so the account can sign in with the new password.
+        // A reset or a required change keeps the login it came from, so the
+        // account can finish signing in with the new password.
         txn.execute_raw(Statement::from_sql_and_values(DbBackend::Postgres,
-            "UPDATE login SET status = 'failed', updated_at = now() WHERE user_id = $1 AND status IN ('created', 'identifier_verified', 'mfa_required', 'mfa_enrollment_required') AND NOT ($2::uuid IS NOT NULL AND oid = $2 AND status = 'identifier_verified')", [owner.id.into(), reset_login.into()])).await.map_err(fail)?;
-        if let Some(login) = reset_login {
+            "UPDATE login SET status = 'failed', updated_at = now() WHERE user_id = $1 AND status IN ('created', 'identifier_verified', 'mfa_required', 'mfa_enrollment_required', 'password_change_required') AND NOT ($2::uuid IS NOT NULL AND oid = $2 AND status = $3)", [owner.id.into(), kept_login.into(), kept_status.into()])).await.map_err(fail)?;
+        if let Some(login) = kept_login {
             txn.execute_raw(Statement::from_sql_and_values(DbBackend::Postgres,
-                "UPDATE login SET failed_attempts = 0, failure_reason = NULL, expires_at = GREATEST(expires_at, now() + make_interval(secs => $3)), updated_at = now() WHERE user_id = $1 AND oid = $2 AND status = 'identifier_verified'",
-                [owner.id.into(), login.into(), (LOGIN_EXPIRY.as_secs_f64()).into()])).await.map_err(fail)?;
+                "UPDATE login SET failed_attempts = 0, failure_reason = NULL, expires_at = GREATEST(expires_at, now() + make_interval(secs => $3)), updated_at = now() WHERE user_id = $1 AND oid = $2 AND status = $4",
+                [owner.id.into(), login.into(), (LOGIN_EXPIRY.as_secs_f64()).into(), kept_status.into()])).await.map_err(fail)?;
+        }
+        UserEntity::update_many()
+            .col_expr(UserColumn::PasswordChangeRequired, Expr::value(false))
+            .filter(UserColumn::Id.eq(owner.id))
+            .filter(UserColumn::PasswordChangeRequired.eq(true))
+            .exec(&txn)
+            .await
+            .map_err(fail)?;
+        if matches!(replacement.kind, PasswordReplacementKind::Reset { .. }) {
             // Proving the email address ends a lockout caused by wrong passwords.
             UserEntity::update_many()
                 .col_expr(UserColumn::FailedAttempts, Expr::value(0i32))
@@ -130,7 +162,7 @@ impl UserCredentialRepositoryImpl {
         audit::record(
             &txn,
             AuditRecord::success(
-                if reset_login.is_some() {
+                if matches!(replacement.kind, PasswordReplacementKind::Reset { .. }) {
                     AuditAction::AccountPasswordReset
                 } else {
                     AuditAction::AccountPasswordChange
@@ -147,4 +179,22 @@ impl UserCredentialRepositoryImpl {
         txn.commit().await.map_err(fail)?;
         Ok(u32::try_from(result.rows_affected()).unwrap_or(u32::MAX))
     }
+}
+
+/// Keep the `keep` most recently replaced password hashes of `user_id`.
+pub(crate) async fn prune_password_history<C: ConnectionTrait>(
+    txn: &C,
+    user_id: i64,
+    keep: u32,
+) -> Result<(), sea_orm::DbErr> {
+    txn.execute_raw(Statement::from_sql_and_values(
+        DbBackend::Postgres,
+        "DELETE FROM user_credential WHERE id IN ( \
+             SELECT id FROM user_credential \
+             WHERE user_id = $1 AND type = 'password' AND expires_at IS NOT NULL AND expires_at <= now() \
+             ORDER BY expires_at DESC, id DESC OFFSET $2)",
+        [user_id.into(), i64::from(keep).into()],
+    ))
+    .await
+    .map(|_| ())
 }

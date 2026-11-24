@@ -23,6 +23,9 @@ pub enum LoginStatus {
     /// has no credential that could meet it; the interaction may only continue
     /// by enrolling one (an authenticator app, or a passkey for `phr`).
     MfaEnrollmentRequired,
+    /// Every requested factor is verified, but the password must be replaced
+    /// before a session is issued: an administrator required it, or it expired.
+    PasswordChangeRequired,
     Authenticated,
     Expired,
     Failed,
@@ -38,6 +41,7 @@ impl LoginStatus {
     /// Password verified; awaiting MFA (TOTP) challenge.
     pub const MFA_REQUIRED: Self = Self::MfaRequired;
     pub const MFA_ENROLLMENT_REQUIRED: Self = Self::MfaEnrollmentRequired;
+    pub const PASSWORD_CHANGE_REQUIRED: Self = Self::PasswordChangeRequired;
     pub const AUTHENTICATED: Self = Self::Authenticated;
     pub const EXPIRED: Self = Self::Expired;
     pub const FAILED: Self = Self::Failed;
@@ -49,6 +53,7 @@ impl LoginStatus {
             Self::IdentifierVerified => "identifier_verified",
             Self::MfaRequired => "mfa_required",
             Self::MfaEnrollmentRequired => "mfa_enrollment_required",
+            Self::PasswordChangeRequired => "password_change_required",
             Self::Authenticated => "authenticated",
             Self::Expired => "expired",
             Self::Failed => "failed",
@@ -65,6 +70,7 @@ impl LoginStatus {
                         Self::IDENTIFIER_VERIFIED,
                         Self::MFA_REQUIRED
                             | Self::MFA_ENROLLMENT_REQUIRED
+                            | Self::PASSWORD_CHANGE_REQUIRED
                             | Self::AUTHENTICATED
                             | Self::EXPIRED
                             | Self::FAILED
@@ -74,6 +80,7 @@ impl LoginStatus {
                     | (
                         Self::MFA_REQUIRED,
                         Self::MFA_ENROLLMENT_REQUIRED
+                            | Self::PASSWORD_CHANGE_REQUIRED
                             | Self::AUTHENTICATED
                             | Self::EXPIRED
                             | Self::FAILED
@@ -81,7 +88,16 @@ impl LoginStatus {
                     // A factor enrolled elsewhere meanwhile is challenged instead.
                     | (
                         Self::MFA_ENROLLMENT_REQUIRED,
-                        Self::MFA_REQUIRED | Self::AUTHENTICATED | Self::EXPIRED | Self::FAILED
+                        Self::MFA_REQUIRED
+                            | Self::PASSWORD_CHANGE_REQUIRED
+                            | Self::AUTHENTICATED
+                            | Self::EXPIRED
+                            | Self::FAILED
+                    )
+                    // The replaced password lets the sign-in finish.
+                    | (
+                        Self::PASSWORD_CHANGE_REQUIRED,
+                        Self::AUTHENTICATED | Self::EXPIRED | Self::FAILED
                     )
             )
     }
@@ -102,6 +118,7 @@ impl FromStr for LoginStatus {
             "identifier_verified" => Ok(Self::IdentifierVerified),
             "mfa_required" => Ok(Self::MfaRequired),
             "mfa_enrollment_required" => Ok(Self::MfaEnrollmentRequired),
+            "password_change_required" => Ok(Self::PasswordChangeRequired),
             "authenticated" => Ok(Self::Authenticated),
             "expired" => Ok(Self::Expired),
             "failed" => Ok(Self::Failed),

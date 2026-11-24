@@ -23,6 +23,7 @@ const TERMINAL_LOGIN_ERROR_CODES = new Set([11004, 11005])
 const AUTHENTICATING_PATHS = new Set([
   '/api/auth/login/challenge',
   '/api/auth/login/mfa-enrollment/confirm',
+  '/api/auth/login/password-change',
 ])
 
 export class IdentityApiError extends Error {

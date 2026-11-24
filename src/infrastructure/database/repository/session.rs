@@ -628,6 +628,7 @@ mod tests {
             enabled: true,
             locked: false,
             locked_until: None,
+            password_change_required: false,
             created_at: now,
             updated_at: None,
         };

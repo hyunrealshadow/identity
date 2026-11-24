@@ -50,6 +50,13 @@ query ConsoleUser($id: ID!) {
     locked
     lockedUntil
     failedAttempts
+    passwordChangeRequired
+    authenticationMethods {
+      password
+      authenticatorApp
+      recoveryCodes
+      passkey
+    }
     version
     givenName
     familyName
@@ -146,5 +153,60 @@ query ConsoleUserGroups(
         }
       }
     }
+  }
+}
+
+query ConsoleUserSessions($userId: ID!, $first: Int, $after: String) {
+  user(id: $userId) {
+    id
+    sessions(first: $first, after: $after) {
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+      edges {
+        cursor
+        node {
+          id
+          deviceName
+          deviceType
+          osName
+          osVersion
+          browserName
+          browserVersion
+          ipAddress
+          lastActiveAt
+          createdAt
+        }
+      }
+    }
+  }
+}
+
+mutation ConsoleResetUserPassword($input: UserStateInput!) {
+  resetUserPassword(input: $input) {
+    userId
+    version
+    temporaryPassword
+  }
+}
+
+mutation ConsoleResetUserMfa($input: UserStateInput!) {
+  resetUserMfa(input: $input) {
+    userId
+    version
+  }
+}
+
+mutation ConsoleRevokeUserSessions($input: RevokeUserSessionsInput!) {
+  revokeUserSessions(input: $input) {
+    userId
+    version
+  }
+}
+
+mutation ConsoleDeleteUser($input: UserStateInput!) {
+  deleteUser(input: $input) {
+    deletedUserId
   }
 }

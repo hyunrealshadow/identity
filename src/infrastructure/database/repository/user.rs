@@ -73,6 +73,7 @@ pub(crate) fn to_domain(m: user::Model) -> Result<User, UserRepositoryError> {
         enabled: m.enabled,
         locked: m.locked,
         locked_until: m.locked_until.map(DateTime::<Utc>::from),
+        password_change_required: m.password_change_required,
         created_at: DateTime::<Utc>::from(m.created_at),
         updated_at: m.updated_at.map(DateTime::<Utc>::from),
     })
@@ -122,6 +123,11 @@ pub(crate) fn user_attribute_changes(
             AuditField::EmailVerified,
             &before.email_verified,
             &after.email_verified,
+        )
+        .diff(
+            AuditField::PasswordChangeRequired,
+            &before.password_change_required,
+            &after.password_change_required,
         )
         .diff(
             AuditField::PhoneNumber,
@@ -679,6 +685,7 @@ mod tests {
             enabled: true,
             locked: false,
             locked_until: None,
+            password_change_required: false,
             created_at: now,
             updated_at: None,
         }

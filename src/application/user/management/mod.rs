@@ -10,15 +10,16 @@ pub mod repository;
 pub mod service;
 
 pub use model::{
-    CreateUserCommand, UpdateUserCommand, UserFilter, UserManagementAuthority,
-    UserManagementMutationResult, UserManagementPage, UserManagementPageItem, UserOrder,
-    UserPageRequest, UserPassword, UserProfilePatch, UserRecord, UserStateCommand,
+    CreateUserCommand, RevokeUserSessionsCommand, UpdateUserCommand, UserFilter,
+    UserManagementAuthority, UserManagementMutationResult, UserManagementPage,
+    UserManagementPageItem, UserOrder, UserPageRequest, UserPassword, UserPasswordResetResult,
+    UserProfilePatch, UserRecord, UserStateCommand,
 };
 pub use repository::{
-    CreateUserTransaction, UpdateUserTransaction, UserIdentifierValue,
-    UserManagementMutationOutcome, UserManagementPageData, UserManagementPageEntry,
-    UserManagementQuery, UserManagementRepository, UserManagementRepositoryError,
-    UserPageDirection, UserSortKey, UserStateTransaction,
+    CreateUserTransaction, RevokeUserSessionsTransaction, UpdateUserTransaction,
+    UserIdentifierValue, UserManagementMutationOutcome, UserManagementPageData,
+    UserManagementPageEntry, UserManagementQuery, UserManagementRepository,
+    UserManagementRepositoryError, UserPageDirection, UserSortKey, UserStateTransaction,
 };
 pub use service::{
     DEFAULT_PAGE_SIZE, MAX_CLIENT_MUTATION_ID_LENGTH, MAX_EMAIL_FILTER_LENGTH, MAX_PAGE_SIZE,

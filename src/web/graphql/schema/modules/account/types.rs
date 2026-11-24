@@ -25,13 +25,16 @@ use super::super::{
             load_user_roles,
         },
     },
+    session::{SessionCursor, SessionNode, session_connection},
     user::access::ensure_user_management_read,
 };
 use crate::graphql::schema::{
     authorization::request_context, connection::ConnectionTotal, management_guard::ManagementGuard,
 };
 use identity_application::authorization::ManagementTarget;
+use identity_application::user::CredentialType;
 use identity_domain::{authorization::ManagementScope, user::UserOid};
+use identity_infrastructure::graphql::cursor::ProtectedCursor;
 
 pub(crate) use identity_domain::global_id::kind::User as UserGlobalId;
 
@@ -320,6 +323,72 @@ impl UserNode {
         self.ensure_management_metadata(ctx).await?;
         Ok(Some(self.user.failed_attempts))
     }
+
+    /// Whether the next sign-in must replace the password before a session is
+    /// issued, as an administrator required.
+    #[graphql(directive = access::apply(ManagementGuard::policy(ManagementScope::UsersRead)))]
+    async fn password_change_required(&self, ctx: &Context<'_>) -> GraphqlResult<Option<bool>> {
+        self.ensure_management_metadata(ctx).await?;
+        Ok(Some(self.user.password_change_required))
+    }
+
+    /// The ways the user can sign in. Never the credentials themselves.
+    #[graphql(directive = access::apply(ManagementGuard::policy(ManagementScope::UsersRead)))]
+    async fn authentication_methods(
+        &self,
+        ctx: &Context<'_>,
+    ) -> GraphqlResult<Option<UserAuthenticationMethods>> {
+        self.ensure_management_metadata(ctx).await?;
+        let request = request_context(ctx)?;
+        let types = request
+            .state
+            .services()
+            .login()
+            .credential_types(self.user.oid)
+            .await
+            .map_err(|error| crate::graphql::schema::error::app_error(ctx, error))?;
+        Ok(Some(UserAuthenticationMethods {
+            password: types.contains(&CredentialType::Password),
+            authenticator_app: types.contains(&CredentialType::Otp),
+            recovery_codes: types.contains(&CredentialType::RecoveryCode),
+            passkey: types.contains(&CredentialType::Passkey),
+        }))
+    }
+
+    /// The user's active sessions, most recently active first.
+    #[graphql(
+        directive = access::apply(ManagementGuard::policy(ManagementScope::UsersRead)),
+        complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
+    )]
+    async fn sessions(
+        &self,
+        ctx: &Context<'_>,
+        after: Option<String>,
+        before: Option<String>,
+        #[graphql(validator(minimum = 1))] first: Option<i32>,
+        #[graphql(validator(minimum = 1))] last: Option<i32>,
+    ) -> GraphqlResult<Connection<ProtectedCursor<SessionCursor>, SessionNode>> {
+        self.ensure_management_metadata(ctx).await?;
+        session_connection(
+            ctx,
+            Uuid::from(self.user.oid),
+            None,
+            after,
+            before,
+            first,
+            last,
+        )
+        .await
+    }
+}
+
+/// Which sign-in methods a user has set up.
+#[derive(async_graphql::SimpleObject)]
+pub(crate) struct UserAuthenticationMethods {
+    pub password: bool,
+    pub authenticator_app: bool,
+    pub recovery_codes: bool,
+    pub passkey: bool,
 }
 
 #[derive(Clone, InputObject)]

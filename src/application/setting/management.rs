@@ -24,7 +24,8 @@ use uuid::Uuid;
 use super::{
     AppSettings, BreachedPasswordCheckEnabledSetting, EmailDeliverySettings,
     EmailSignInEnabledSetting, IdentifierEnumerationAllowedSetting, InstallationSettings,
-    OpenIdConnectSettings, PasswordHashSetting, PasswordResetEnabledSetting, SettingChanges,
+    OpenIdConnectSettings, PasswordHashSetting, PasswordHistoryCountSetting,
+    PasswordMaxAgeDaysSetting, PasswordResetEnabledSetting, SettingChanges,
     email::{EmailManagementDependencies, EmailSettingsView},
     runtime::RefreshableSetting,
 };
@@ -73,6 +74,10 @@ pub const ARGON2_TIME_COST_RANGE: SettingRange = SettingRange::new(1, 10);
 /// KiB. The lower bound follows the commonly recommended Argon2id minimum.
 pub const ARGON2_MEMORY_COST_RANGE: SettingRange = SettingRange::new(19_456, 1_048_576);
 pub const ARGON2_PARALLELISM_RANGE: SettingRange = SettingRange::new(1, 16);
+/// Days; `0` turns password expiry off.
+pub const PASSWORD_MAX_AGE_DAYS_RANGE: SettingRange = SettingRange::new(0, 3_650);
+/// Recent passwords a new one may not repeat; `0` turns the check off.
+pub const PASSWORD_HISTORY_COUNT_RANGE: SettingRange = SettingRange::new(0, 24);
 
 /// One editable group of instance settings, written and versioned as a unit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -148,6 +153,8 @@ pub struct InstanceSettingsState {
     pub identifier_enumeration_allowed: bool,
     pub email_sign_in_enabled: bool,
     pub password_reset_enabled: bool,
+    pub password_max_age_days: u32,
+    pub password_history_count: u32,
     pub email_delivery: EmailDeliverySettings,
     pub email_templates: EmailTemplates,
 }
@@ -160,6 +167,8 @@ pub struct AuthenticationSectionValues<'a> {
     pub identifier_enumeration_allowed: bool,
     pub email_sign_in_enabled: bool,
     pub password_reset_enabled: bool,
+    pub password_max_age_days: u32,
+    pub password_history_count: u32,
 }
 
 impl InstanceSettingsState {
@@ -171,6 +180,8 @@ impl InstanceSettingsState {
             identifier_enumeration_allowed: self.identifier_enumeration_allowed,
             email_sign_in_enabled: self.email_sign_in_enabled,
             password_reset_enabled: self.password_reset_enabled,
+            password_max_age_days: self.password_max_age_days,
+            password_history_count: self.password_history_count,
         }
     }
 }
@@ -207,6 +218,8 @@ pub struct AuthenticationSettingsView {
     pub identifier_enumeration_allowed: bool,
     pub email_sign_in_enabled: bool,
     pub password_reset_enabled: bool,
+    pub password_max_age_days: u32,
+    pub password_history_count: u32,
     pub password_hashing: PasswordHashingView,
     pub version: Uuid,
 }
@@ -252,6 +265,8 @@ impl From<&InstanceSettingsState> for InstanceSettingsView {
                 identifier_enumeration_allowed: state.identifier_enumeration_allowed,
                 email_sign_in_enabled: state.email_sign_in_enabled,
                 password_reset_enabled: state.password_reset_enabled,
+                password_max_age_days: state.password_max_age_days,
+                password_history_count: state.password_history_count,
                 password_hashing: PasswordHashingView {
                     time_cost: argon2.time_cost,
                     memory_cost_kib: argon2.memory_cost,
@@ -282,6 +297,8 @@ pub struct UpdateAuthenticationSettingsCommand {
     pub identifier_enumeration_allowed: bool,
     pub email_sign_in_enabled: bool,
     pub password_reset_enabled: bool,
+    pub password_max_age_days: u32,
+    pub password_history_count: u32,
     pub password_hashing: PasswordHashingView,
     pub expected_version: Uuid,
     pub client_mutation_id: Option<String>,
@@ -444,6 +461,16 @@ impl InstanceSettingService {
                 memory_cost: hashing.memory_cost_kib,
                 parallelism: hashing.parallelism,
             });
+            PASSWORD_MAX_AGE_DAYS_RANGE.check(
+                i64::from(command.password_max_age_days),
+                "passwordMaxAgeDays",
+            )?;
+            PASSWORD_HISTORY_COUNT_RANGE.check(
+                i64::from(command.password_history_count),
+                "passwordHistoryCount",
+            )?;
+            let max_age_days = command.password_max_age_days;
+            let history_count = command.password_history_count;
             let breached = command.breached_password_check_enabled;
             let enumeration = command.identifier_enumeration_allowed;
             let email_sign_in = command.email_sign_in_enabled;
@@ -475,7 +502,9 @@ impl InstanceSettingService {
                     .set::<BreachedPasswordCheckEnabledSetting>(&breached)?
                     .set::<IdentifierEnumerationAllowedSetting>(&enumeration)?
                     .set::<EmailSignInEnabledSetting>(&email_sign_in)?
-                    .set::<PasswordResetEnabledSetting>(&password_reset)?)
+                    .set::<PasswordResetEnabledSetting>(&password_reset)?
+                    .set::<PasswordMaxAgeDaysSetting>(&max_age_days)?
+                    .set::<PasswordHistoryCountSetting>(&history_count)?)
             };
             self.write(
                 authority,
@@ -583,6 +612,8 @@ mod tests {
             identifier_enumeration_allowed: true,
             email_sign_in_enabled: false,
             password_reset_enabled: true,
+            password_max_age_days: 0,
+            password_history_count: 0,
             email_delivery: EmailDeliverySettings::default(),
             email_templates: EmailTemplates::new(),
         }

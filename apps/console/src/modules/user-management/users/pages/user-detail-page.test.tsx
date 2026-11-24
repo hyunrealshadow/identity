@@ -42,6 +42,8 @@ vi.mock('#/modules/user-management/users/hooks/use-user-detail', () => ({
       locked: false,
       lockedUntil: null,
       failedAttempts: 0,
+      passwordChangeRequired: false,
+      authenticationMethods: null,
       version: '5e7f4626-1618-4ef5-b227-703e5802d10d',
       givenName: null,
       familyName: null,

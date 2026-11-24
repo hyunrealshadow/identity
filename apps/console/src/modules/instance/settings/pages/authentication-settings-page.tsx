@@ -244,6 +244,17 @@ function AuthenticationSettingsForm({ settings }: { settings: AuthenticationSett
               />
             }
           />
+          {hashingRow(
+            'passwordMaxAgeDays',
+            'settingsPasswordMaxAge',
+            'settingsPasswordMaxAgeHint',
+            'settingsUnitDays',
+          )}
+          {hashingRow(
+            'passwordHistoryCount',
+            'settingsPasswordHistory',
+            'settingsPasswordHistoryHint',
+          )}
         </SettingsGroup>
 
         <SettingsGroup

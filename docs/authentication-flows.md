@@ -56,8 +56,9 @@ client, and the requested authentication context.
 
 ```text
 Created ─▶ IdentifierVerified ─▶ MfaRequired ─▶ Authenticated
-                 │                    │
+                 │                    │              ▲
                  ├─▶ MfaEnrollmentRequired ─▶ (enrollment) ─▶ Authenticated
+                 ├─▶ PasswordChangeRequired ─▶ (new password) ┘
                  └─▶ Expired / Failed (terminal until a restart)
 ```
 
@@ -67,6 +68,7 @@ Created ─▶ IdentifierVerified ─▶ MfaRequired ─▶ Authenticated
 | `IdentifierVerified` | User identified (or, while account existence is concealed, any identifier entered), first factor not yet accepted | Password, passkey, email code or link |
 | `MfaRequired` | First factor accepted, a second factor is still required | OTP, recovery code, passkey |
 | `MfaEnrollmentRequired` | The verified factors fall short of the requested class and the user has no credential that meets it | `aal2`: authenticator enrollment, then a completed session. `phr`: passkey registration, then a passkey challenge (an existing passkey may also be used) |
+| `PasswordChangeRequired` | Every requested factor is verified, but the account must replace its password first: an administrator required it, or it is older than the password lifetime | A new password, then a completed session |
 | `Authenticated` | Session established and bound to the interaction | Continue to consent or the protocol |
 | `Expired` | Interaction lifetime elapsed | Restart only |
 | `Failed` | Bounded failure such as a locked or disabled account | Nothing |
@@ -87,6 +89,14 @@ Rules that keep the stages honest:
   authorization or device request of that interaction is kept so the sign-in
   can complete; the user's other pending interactions and issued tokens are
   still withdrawn.
+- **A required password change comes last.** It is asked for only after every
+  requested factor succeeded, so a password alone never lets anyone set a new
+  one. The interaction keeps the established `acr` and `amr`; the challenge
+  answers `password_change_required` with a `continue_uri` to
+  `/login/change-password`. The new password follows the password policy,
+  including the recent-password check, ends the account's other sessions with
+  their grants, and then the session is issued. Accounts without a password
+  are never held here.
 - **Failures are bounded.** Challenge errors report `invalid_credential`,
   `too_many_attempts`, `account_locked`, `account_disabled`, `login_expired`, or
   `invalid_state`. They do not reveal whether an identifier exists.

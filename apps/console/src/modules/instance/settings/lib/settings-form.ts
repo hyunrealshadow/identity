@@ -112,12 +112,20 @@ export interface AuthenticationDraft {
   identifierEnumerationAllowed: boolean
   emailSignInEnabled: boolean
   passwordResetEnabled: boolean
+  passwordMaxAgeDays: string
+  passwordHistoryCount: string
   timeCost: string
   memoryCostKib: string
   parallelism: string
 }
 
-export type HashingField = 'timeCost' | 'memoryCostKib' | 'parallelism'
+/** Numeric authentication settings, each checked against its server range. */
+export type HashingField =
+  | 'timeCost'
+  | 'memoryCostKib'
+  | 'parallelism'
+  | 'passwordMaxAgeDays'
+  | 'passwordHistoryCount'
 
 export function authenticationDraft(settings: AuthenticationSettings): AuthenticationDraft {
   return {
@@ -125,6 +133,8 @@ export function authenticationDraft(settings: AuthenticationSettings): Authentic
     identifierEnumerationAllowed: settings.identifierEnumerationAllowed,
     emailSignInEnabled: settings.emailSignInEnabled,
     passwordResetEnabled: settings.passwordResetEnabled,
+    passwordMaxAgeDays: String(settings.passwordMaxAgeDays),
+    passwordHistoryCount: String(settings.passwordHistoryCount),
     timeCost: String(settings.passwordHashing.timeCost),
     memoryCostKib: String(settings.passwordHashing.memoryCostKib),
     parallelism: String(settings.passwordHashing.parallelism),
@@ -132,6 +142,8 @@ export function authenticationDraft(settings: AuthenticationSettings): Authentic
 }
 
 export function hashingRange(settings: AuthenticationSettings, field: HashingField): SettingRange {
+  if (field === 'passwordMaxAgeDays') return settings.passwordMaxAgeDaysRange
+  if (field === 'passwordHistoryCount') return settings.passwordHistoryCountRange
   const hashing = settings.passwordHashing
   return field === 'timeCost'
     ? hashing.timeCostRange
@@ -148,7 +160,13 @@ export function authenticationInput(
   | { errors: Partial<Record<HashingField, FieldError>> } {
   const errors: Partial<Record<HashingField, FieldError>> = {}
   const values: Partial<Record<HashingField, number>> = {}
-  for (const field of ['timeCost', 'memoryCostKib', 'parallelism'] as const) {
+  for (const field of [
+    'timeCost',
+    'memoryCostKib',
+    'parallelism',
+    'passwordMaxAgeDays',
+    'passwordHistoryCount',
+  ] as const) {
     const parsed = parseWholeNumber(draft[field], hashingRange(settings, field))
     if ('error' in parsed) errors[field] = parsed.error
     else values[field] = parsed.value
@@ -160,6 +178,8 @@ export function authenticationInput(
       identifierEnumerationAllowed: draft.identifierEnumerationAllowed,
       emailSignInEnabled: draft.emailSignInEnabled,
       passwordResetEnabled: draft.passwordResetEnabled,
+      passwordMaxAgeDays: values.passwordMaxAgeDays!,
+      passwordHistoryCount: values.passwordHistoryCount!,
       passwordHashing: {
         timeCost: values.timeCost!,
         memoryCostKib: values.memoryCostKib!,

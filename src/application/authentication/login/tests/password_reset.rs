@@ -152,7 +152,16 @@ impl ResetFlow {
     }
 
     fn resets(&self) -> Vec<(UserUserOid, Uuid)> {
-        self.credentials.resets.lock().unwrap().clone()
+        self.credentials
+            .resets
+            .lock()
+            .unwrap()
+            .iter()
+            .filter_map(|(user, replacement)| match replacement.kind {
+                PasswordReplacementKind::Reset { login } => Some((*user, login)),
+                _ => None,
+            })
+            .collect()
     }
 
     async fn offered(&self) -> bool {

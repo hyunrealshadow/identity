@@ -34,8 +34,8 @@ use crate::{
         RecoveryCodeCredentialData, UserCredential, UserCredentialOid, UserOid as UserUserOid,
         model::{Argon2Options, Argon2Password, Argon2Variant, Argon2Version, Password},
         repository::{
-            UserCredentialRepository, UserCredentialRepositoryError, UserIdentifierUpdate,
-            UserProfilePatch,
+            PasswordReplacement, PasswordReplacementKind, UserCredentialRepository,
+            UserCredentialRepositoryError, UserIdentifierUpdate, UserProfilePatch,
         },
     },
 };
@@ -153,6 +153,7 @@ fn test_user() -> User {
         enabled: true,
         locked: false,
         locked_until: None,
+        password_change_required: false,
         created_at: Utc::now(),
         updated_at: None,
     }
@@ -283,6 +284,7 @@ mod email;
 mod enrollment;
 mod passkey;
 mod password_change;
+mod password_policy;
 mod password_reset;
 mod priority;
 mod reauthentication;

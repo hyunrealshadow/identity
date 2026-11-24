@@ -49,6 +49,8 @@ pub enum AuthErrorCode {
     PasswordResetResendTooSoon,
     /// The password reset email could not be sent.
     PasswordResetDeliveryFailed,
+    /// The new password repeats one of the account's recent passwords.
+    PasswordReused,
 }
 
 impl AppErrorCode for AuthErrorCode {
@@ -58,6 +60,7 @@ impl AppErrorCode for AuthErrorCode {
             Self::SessionNotFound => &["session_id"],
             Self::PasskeyLimitReached => &["limit"],
             Self::EmailCodeResendTooSoon | Self::PasswordResetResendTooSoon => &["seconds"],
+            Self::PasswordReused => &["count"],
             _ => &[],
         }
     }
@@ -89,7 +92,8 @@ impl AppErrorCode for AuthErrorCode {
             | AuthErrorCode::InvalidTotpEnrollment
             | AuthErrorCode::InvalidMfaEnrollment
             | AuthErrorCode::PasswordResetUnavailable
-            | AuthErrorCode::PasswordResetLinkInvalid => ErrorKind::Validation,
+            | AuthErrorCode::PasswordResetLinkInvalid
+            | AuthErrorCode::PasswordReused => ErrorKind::Validation,
 
             AuthErrorCode::TooManyAttempts
             | AuthErrorCode::EmailCodeResendTooSoon
@@ -138,6 +142,7 @@ impl AppErrorCode for AuthErrorCode {
             AuthErrorCode::PasswordResetLinkInvalid => 11031,
             AuthErrorCode::PasswordResetResendTooSoon => 11032,
             AuthErrorCode::PasswordResetDeliveryFailed => 11033,
+            AuthErrorCode::PasswordReused => 11034,
         }
     }
 }

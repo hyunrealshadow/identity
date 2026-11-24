@@ -145,7 +145,8 @@ export interface SelectAccountResponse {
 
 export interface ChallengeResponse {
   preferred_credential_type?: string
-  status: 'authenticated' | 'mfa_required' | 'mfa_enrollment_required'
+  /** `password_change_required` leads to the change through `continue_uri`. */
+  status: 'authenticated' | 'mfa_required' | 'mfa_enrollment_required' | 'password_change_required'
   enrollment_method?: 'otp' | 'passkey'
   continue_uri?: string
   sessions?: Array<string>

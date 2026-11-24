@@ -56,6 +56,8 @@ pub struct Model {
     #[sea_orm(default_value = false)]
     pub locked: bool,
     pub locked_until: Option<DateTimeWithTimeZone>,
+    #[sea_orm(default_value = false)]
+    pub password_change_required: bool,
     #[sea_orm(default_expr = "Expr::current_timestamp()")]
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: Option<DateTimeWithTimeZone>,

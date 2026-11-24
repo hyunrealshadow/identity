@@ -9,6 +9,7 @@
 
 use async_trait::async_trait;
 use chrono::Utc;
+use identity_application::user::Password;
 use identity_application::{
     authorization::{
         CurrentManagementAuthority, DEFAULT_RECENT_AAL2_TTL, ManagementAuthorizationError,
@@ -19,9 +20,10 @@ use identity_application::{
         UserManagementMutationOutcome, UserManagementPageData, UserManagementPageEntry,
         UserManagementQuery, UserManagementRepository, UserManagementRepositoryError,
         UserOrder as ManagementUserOrder, UserPageDirection, UserSortKey, UserStateTransaction,
+        repository::RevokeUserSessionsTransaction,
     },
 };
-use identity_domain::audit::{AuditAction, AuditRecord};
+use identity_domain::audit::{AuditAction, AuditField, AuditRecord};
 use identity_domain::{
     authorization::{ActorPrincipal, ManagementScope, policy_fingerprint},
     user::{UserManagementRecord, UserOid, repository::UserRepositoryError},
@@ -45,6 +47,7 @@ use super::{
     session_security::lock_account_sessions,
     shared::lock_user_credentials,
     user::{to_domain, update_theme_preference, user_attribute_changes},
+    user_credential::prune_password_history,
 };
 use crate::database::{
     audit, client_authorization_boundary,
@@ -408,7 +411,7 @@ async fn invalidate_access_in_txn(
     txn.execute_raw(Statement::from_sql_and_values(
         DbBackend::Postgres,
         "UPDATE login SET status = 'failed', updated_at = now() \
-         WHERE user_id = $1 AND status IN ('created', 'identifier_verified', 'mfa_required', 'mfa_enrollment_required')",
+         WHERE user_id = $1 AND status IN ('created', 'identifier_verified', 'mfa_required', 'mfa_enrollment_required', 'password_change_required')",
         [user_id.into()],
     ))
     .await
@@ -465,6 +468,64 @@ fn filtered_users(filter: &UserFilter) -> sea_orm::Select<UserEntity> {
         select = select.filter(UserColumn::CreatedAt.lt(before.fixed_offset()));
     }
     select
+}
+
+fn storage_any(
+    error: impl std::error::Error + Send + Sync + 'static,
+) -> UserManagementRepositoryError {
+    UserManagementRepositoryError::Storage(Box::new(error))
+}
+
+impl UserManagementRepositoryImpl {
+    /// Open a user write: lifecycle, client, credential and user locks in the
+    /// documented order, live authority for the target, and the expected
+    /// version. A business outcome ends the write before any change.
+    async fn begin_user_write(
+        &self,
+        command: &UserStateTransaction,
+    ) -> Result<
+        Result<(DatabaseTransaction, user::Model), UserManagementMutationOutcome>,
+        UserManagementRepositoryError,
+    > {
+        let txn = self.db.begin().await.map_err(storage)?;
+        lock_owner_lifecycle(&txn).await.map_err(storage)?;
+        recheck_issuing_client(&txn, &command.authority).await?;
+        lock_user_credentials(&txn, command.user_oid)
+            .await
+            .map_err(storage)?;
+        let Some(model) = UserEntity::find()
+            .filter(UserColumn::Oid.eq(Uuid::from(command.user_oid)))
+            .lock_exclusive()
+            .one(&txn)
+            .await
+            .map_err(storage)?
+        else {
+            return Ok(Err(UserManagementMutationOutcome::UserNotFound));
+        };
+        recheck_authority(
+            &txn,
+            &command.authority,
+            ManagementScope::UsersWrite,
+            Some(command.user_oid),
+        )
+        .await?;
+        if model.version != command.expected_version {
+            return Ok(Err(UserManagementMutationOutcome::VersionConflict {
+                current_version: model.version,
+            }));
+        }
+        Ok(Ok((txn, model)))
+    }
+}
+
+async fn finish_user_write(
+    txn: DatabaseTransaction,
+    updated: user::Model,
+) -> Result<UserManagementMutationOutcome, UserManagementRepositoryError> {
+    let user = to_domain(updated).map_err(map_domain_user)?;
+    let record = UserManagementRecord::new(user);
+    txn.commit().await.map_err(storage)?;
+    Ok(UserManagementMutationOutcome::Success(Box::new(record)))
 }
 
 #[async_trait]
@@ -801,6 +862,9 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         if let Some(verified) = command.email_verified {
             active.email_verified = Set(verified);
         }
+        if let Some(required) = command.password_change_required {
+            active.password_change_required = Set(required);
+        }
         let mut preferences = model.preferences.clone();
         let mut preferences_changed = false;
         if let Some(theme) = command.profile.theme {
@@ -1059,6 +1123,311 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         let record = UserManagementRecord::new(user);
         txn.commit().await.map_err(storage)?;
         Ok(UserManagementMutationOutcome::Success(Box::new(record)))
+    }
+
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "user_management.reset_password"))]
+    async fn reset_user_password(
+        &self,
+        command: UserStateTransaction,
+        password: Password,
+        keep_history: u32,
+    ) -> Result<UserManagementMutationOutcome, UserManagementRepositoryError> {
+        let (txn, model) = match self.begin_user_write(&command).await? {
+            Ok(locked) => locked,
+            Err(outcome) => return Ok(outcome),
+        };
+        let data = to_value(&password).map_err(storage_any)?;
+        let current = txn
+            .query_one_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                "SELECT oid FROM user_credential WHERE user_id = $1 AND type = 'password' \
+                 AND (expires_at IS NULL OR expires_at > now()) ORDER BY id DESC LIMIT 1",
+                [model.id.into()],
+            ))
+            .await
+            .map_err(storage)?;
+        match current {
+            Some(row) => {
+                let oid: Uuid = row.try_get("", "oid").map_err(storage)?;
+                if keep_history > 0 {
+                    txn.execute_raw(Statement::from_sql_and_values(
+                        DbBackend::Postgres,
+                        "INSERT INTO user_credential (oid, user_id, type, data, expires_at, created_at, updated_at) \
+                         SELECT gen_random_uuid(), user_id, type, data, now(), created_at, updated_at \
+                         FROM user_credential WHERE oid = $1",
+                        [oid.into()],
+                    ))
+                    .await
+                    .map_err(storage)?;
+                }
+                // A new credential OID marks a semantic replacement.
+                txn.execute_raw(Statement::from_sql_and_values(
+                    DbBackend::Postgres,
+                    "UPDATE user_credential SET oid = gen_random_uuid(), data = $1, updated_at = now() WHERE oid = $2",
+                    [data.into(), oid.into()],
+                ))
+                .await
+                .map_err(storage)?;
+            }
+            None => {
+                txn.execute_raw(Statement::from_sql_and_values(
+                    DbBackend::Postgres,
+                    "INSERT INTO user_credential (oid, user_id, type, data) VALUES (gen_random_uuid(), $1, 'password', $2)",
+                    [model.id.into(), data.into()],
+                ))
+                .await
+                .map_err(storage)?;
+            }
+        }
+        prune_password_history(&txn, model.id, keep_history)
+            .await
+            .map_err(storage)?;
+        let mut active: user::ActiveModel = model.clone().into();
+        active.password_change_required = Set(true);
+        active.failed_attempts = Set(0);
+        if model.locked_until.is_some() {
+            active.locked = Set(false);
+            active.locked_until = Set(None);
+        }
+        active.updated_at = Set(Some(Utc::now().into()));
+        let mut updated = active.update(&txn).await.map_err(storage)?;
+        invalidate_access_in_txn(&txn, command.user_oid, updated.id).await?;
+        updated.version = stored_user_version(&txn, updated.id).await?;
+        append_semantic_audit(
+            &txn,
+            &command.authority,
+            AuditRecord::success(AuditAction::UserPasswordReset, Uuid::from(command.user_oid))
+                .with_changes(|changes| {
+                    changes.secret(AuditField::Password).diff(
+                        AuditField::PasswordChangeRequired,
+                        &model.password_change_required,
+                        &true,
+                    );
+                }),
+        )
+        .await?;
+        finish_user_write(txn, updated).await
+    }
+
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "user_management.reset_mfa"))]
+    async fn reset_user_mfa(
+        &self,
+        command: UserStateTransaction,
+    ) -> Result<UserManagementMutationOutcome, UserManagementRepositoryError> {
+        let (txn, model) = match self.begin_user_write(&command).await? {
+            Ok(locked) => locked,
+            Err(outcome) => return Ok(outcome),
+        };
+        let has_password = txn
+            .query_one_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                "SELECT 1 AS present FROM user_credential WHERE user_id = $1 AND type = 'password' \
+                 AND (expires_at IS NULL OR expires_at > now()) LIMIT 1",
+                [model.id.into()],
+            ))
+            .await
+            .map_err(storage)?
+            .is_some();
+        if !has_password {
+            return Ok(UserManagementMutationOutcome::NoPassword);
+        }
+        let removed = txn
+            .query_all_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                "DELETE FROM user_credential WHERE user_id = $1 AND type IN ('otp', 'recovery_code', 'passkey') RETURNING type",
+                [model.id.into()],
+            ))
+            .await
+            .map_err(storage)?
+            .into_iter()
+            .filter_map(|row| row.try_get::<String>("", "type").ok())
+            .collect::<Vec<_>>();
+        invalidate_access_in_txn(&txn, command.user_oid, model.id).await?;
+        if let Err(error) = ensure_recoverable_authorization_administrator(&txn).await {
+            if matches!(&error, DbErr::Custom(message) if message == "no recoverable authorization administrator remains")
+            {
+                return Ok(UserManagementMutationOutcome::LastOwnerProtected);
+            }
+            return Err(storage(error));
+        }
+        let mut updated = model.clone();
+        updated.version = stored_user_version(&txn, updated.id).await?;
+        append_semantic_audit(
+            &txn,
+            &command.authority,
+            AuditRecord::success(AuditAction::UserMfaReset, Uuid::from(command.user_oid))
+                .with_changes(|changes| {
+                    for (kind, field) in [
+                        ("otp", AuditField::Totp),
+                        ("recovery_code", AuditField::RecoveryCodes),
+                        ("passkey", AuditField::Passkey),
+                    ] {
+                        if removed.iter().any(|removed| removed == kind) {
+                            changes.secret(field);
+                        }
+                    }
+                }),
+        )
+        .await?;
+        finish_user_write(txn, updated).await
+    }
+
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "user_management.revoke_sessions"))]
+    async fn revoke_user_sessions(
+        &self,
+        command: RevokeUserSessionsTransaction,
+    ) -> Result<UserManagementMutationOutcome, UserManagementRepositoryError> {
+        let txn = self.db.begin().await.map_err(storage)?;
+        lock_owner_lifecycle(&txn).await.map_err(storage)?;
+        recheck_issuing_client(&txn, &command.authority).await?;
+        lock_user_credentials(&txn, command.user_oid)
+            .await
+            .map_err(storage)?;
+        let Some(model) = UserEntity::find()
+            .filter(UserColumn::Oid.eq(Uuid::from(command.user_oid)))
+            .lock_exclusive()
+            .one(&txn)
+            .await
+            .map_err(storage)?
+        else {
+            return Ok(UserManagementMutationOutcome::UserNotFound);
+        };
+        recheck_authority(
+            &txn,
+            &command.authority,
+            ManagementScope::UsersWrite,
+            Some(command.user_oid),
+        )
+        .await?;
+        lock_account_sessions(&txn, model.id)
+            .await
+            .map_err(storage)?;
+        let targets: Vec<Uuid> = match &command.sessions {
+            Some(sessions) => {
+                let rows = txn
+                    .query_all_raw(Statement::from_sql_and_values(
+                        DbBackend::Postgres,
+                        "SELECT oid FROM session WHERE user_id = $1 AND oid = ANY($2) \
+                         AND status = 'active' AND revoked_at IS NULL",
+                        [model.id.into(), sessions.clone().into()],
+                    ))
+                    .await
+                    .map_err(storage)?;
+                if rows.len() != sessions.len() {
+                    return Ok(UserManagementMutationOutcome::SessionNotFound);
+                }
+                sessions.clone()
+            }
+            None => txn
+                .query_all_raw(Statement::from_sql_and_values(
+                    DbBackend::Postgres,
+                    "SELECT oid FROM session WHERE user_id = $1 AND status = 'active' AND revoked_at IS NULL",
+                    [model.id.into()],
+                ))
+                .await
+                .map_err(storage)?
+                .into_iter()
+                .map(|row| row.try_get::<Uuid>("", "oid"))
+                .collect::<Result<_, _>>()
+                .map_err(storage)?,
+        };
+        if !targets.is_empty() {
+            txn.execute_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                "UPDATE session SET status = 'revoked', revoked_at = now(), updated_at = now() WHERE oid = ANY($1)",
+                [targets.clone().into()],
+            ))
+            .await
+            .map_err(storage)?;
+            txn.execute_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                "DELETE FROM authentication_challenge WHERE session_id IN (SELECT id FROM session WHERE oid = ANY($1))",
+                [targets.clone().into()],
+            ))
+            .await
+            .map_err(storage)?;
+            let texts: Vec<String> = targets.iter().map(Uuid::to_string).collect();
+            txn.execute_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                "UPDATE client_authorization SET revoked_at = now(), updated_at = now() \
+                 WHERE revoked_at IS NULL AND type IN ('authorization_code', 'access_token', 'refresh_token') \
+                 AND data->>'session_oid' = ANY($1)",
+                [texts.into()],
+            ))
+            .await
+            .map_err(storage)?;
+        }
+        append_semantic_audit(
+            &txn,
+            &command.authority,
+            AuditRecord::success(AuditAction::UserSessionRevoke, Uuid::from(command.user_oid))
+                .label(model.name.clone()),
+        )
+        .await?;
+        let user = to_domain(model).map_err(map_domain_user)?;
+        txn.commit().await.map_err(storage)?;
+        Ok(UserManagementMutationOutcome::Success(Box::new(
+            UserManagementRecord::new(user),
+        )))
+    }
+
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "user_management.delete"))]
+    async fn delete_user(
+        &self,
+        command: UserStateTransaction,
+    ) -> Result<UserManagementMutationOutcome, UserManagementRepositoryError> {
+        let (txn, model) = match self.begin_user_write(&command).await? {
+            Ok(locked) => locked,
+            Err(outcome) => return Ok(outcome),
+        };
+        if model.enabled {
+            return Ok(UserManagementMutationOutcome::NotDisabled);
+        }
+        invalidate_access_in_txn(&txn, command.user_oid, model.id).await?;
+        // Grants this user made to others stay; only the granter is dropped.
+        for table in ["user_role", "group_membership", "group_role"] {
+            txn.execute_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                format!(
+                    "UPDATE {table} SET granted_by_user_id = NULL WHERE granted_by_user_id = $1"
+                ),
+                [model.id.into()],
+            ))
+            .await
+            .map_err(storage)?;
+        }
+        for table in ["user_role", "group_membership"] {
+            txn.execute_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                format!("DELETE FROM {table} WHERE user_id = $1"),
+                [model.id.into()],
+            ))
+            .await
+            .map_err(storage)?;
+        }
+        append_semantic_audit(
+            &txn,
+            &command.authority,
+            AuditRecord::success(AuditAction::UserDelete, Uuid::from(command.user_oid))
+                .label(model.name.clone()),
+        )
+        .await?;
+        UserEntity::delete_by_id(model.id)
+            .exec(&txn)
+            .await
+            .map_err(storage)?;
+        if let Err(error) = ensure_recoverable_authorization_administrator(&txn).await {
+            if matches!(&error, DbErr::Custom(message) if message == "no recoverable authorization administrator remains")
+            {
+                return Ok(UserManagementMutationOutcome::LastOwnerProtected);
+            }
+            return Err(storage(error));
+        }
+        let user = to_domain(model).map_err(map_domain_user)?;
+        txn.commit().await.map_err(storage)?;
+        Ok(UserManagementMutationOutcome::Success(Box::new(
+            UserManagementRecord::new(user),
+        )))
     }
 }
 

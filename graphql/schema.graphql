@@ -185,6 +185,10 @@ enum AuditAction {
 	USER_ENABLE
 	USER_DISABLE
 	USER_UNLOCK
+	USER_PASSWORD_RESET
+	USER_MFA_RESET
+	USER_SESSION_REVOKE
+	USER_DELETE
 	USER_ROLE_GRANT
 	USER_ROLE_REVOKE
 	GROUP_CREATE
@@ -428,6 +432,7 @@ enum AuditField {
 	USERNAME
 	EMAIL
 	EMAIL_VERIFIED
+	PASSWORD_CHANGE_REQUIRED
 	PHONE_NUMBER
 	GIVEN_NAME
 	FAMILY_NAME
@@ -525,6 +530,18 @@ type AuthenticationSettings {
 	Offered only while email delivery is configured.
 	"""
 	passwordResetEnabled: Boolean!
+	"""
+	Days a password stays usable before the next sign-in must replace it.
+	`0` means passwords do not expire.
+	"""
+	passwordMaxAgeDays: Int!
+	passwordMaxAgeDaysRange: IntRange!
+	"""
+	How many recent passwords, the current one included, a new password
+	may not repeat. `0` turns the check off.
+	"""
+	passwordHistoryCount: Int!
+	passwordHistoryCountRange: IntRange!
 	"""
 	Argon2id cost for newly stored password hashes.
 	"""
@@ -1152,6 +1169,11 @@ type DeleteClientPayload {
 type DeleteGroupPayload {
 	groupId: ID!
 	deleted: Boolean!
+	clientMutationId: String
+}
+
+type DeleteUserPayload {
+	deletedUserId: ID!
 	clientMutationId: String
 }
 
@@ -1888,6 +1910,25 @@ type MutationRoot {
 	enableUser(input: UserStateInput!): UserStatePayload! @access(policy: {scopes: ["management.user.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	disableUser(input: UserStateInput!): UserStatePayload! @access(policy: {scopes: ["management.user.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	unlockUser(input: UnlockUserInput!): UserStatePayload! @access(policy: {scopes: ["management.user.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
+	Replace the user's password with a generated temporary one, require a
+	change at the next sign-in, and sign the user out everywhere.
+	"""
+	resetUserPassword(input: UserStateInput!): ResetUserPasswordPayload! @access(policy: {scopes: ["management.user.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
+	Remove the user's authenticator app, recovery codes and passkeys, and
+	sign the user out everywhere. The user keeps the password.
+	"""
+	resetUserMfa(input: UserStateInput!): UserStatePayload! @access(policy: {scopes: ["management.user.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
+	Revoke sessions of the user with the grants issued from them.
+	"""
+	revokeUserSessions(input: RevokeUserSessionsInput!): UserStatePayload! @access(policy: {scopes: ["management.user.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
+	Delete a disabled user with its credentials, sessions and memberships.
+	The audit log keeps its history.
+	"""
+	deleteUser(input: UserStateInput!): DeleteUserPayload! @access(policy: {scopes: ["management.user.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	createGroup(input: CreateGroupInput!): GroupPayload! @access(policy: {scopes: ["management.group.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true}) @access(policy: {scopes: [], authentication: RECENT_AAL2, maxAge: 3600, elevatedMaxAge: null, userOnly: true, runtime: false})
 	updateGroup(input: UpdateGroupInput!): GroupPayload! @access(policy: {scopes: ["management.group.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true}) @access(policy: {scopes: [], authentication: RECENT_AAL2, maxAge: 3600, elevatedMaxAge: null, userOnly: true, runtime: false})
 	setGroupEnabled(input: SetGroupEnabledInput!): GroupPayload! @access(policy: {scopes: ["management.group.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true}) @access(policy: {scopes: [], authentication: RECENT_AAL2, maxAge: 3600, elevatedMaxAge: null, userOnly: true, runtime: false})
@@ -2204,6 +2245,18 @@ input RemoveGroupMemberInput {
 	clientMutationId: String
 }
 
+type ResetUserPasswordPayload {
+	userId: ID!
+	version: UUID!
+	user: User
+	"""
+	The generated password, shown once: it is not stored and cannot be
+	read again. The user must replace it at the next sign-in.
+	"""
+	temporaryPassword: String!
+	clientMutationId: String
+}
+
 type Resource implements Node {
 	id: ID!
 	uri: String!
@@ -2305,6 +2358,19 @@ input RevokeUserRolesInput {
 	userId: ID!
 	roleIds: [ID!]!
 	expectedUserVersion: UUID!
+	reason: String! = ""
+	clientMutationId: String
+}
+
+"""
+Sessions of one user to revoke.
+"""
+input RevokeUserSessionsInput {
+	id: ID!
+	"""
+	Sessions to revoke; every active session when omitted.
+	"""
+	sessionIds: [ID!]
 	reason: String! = ""
 	clientMutationId: String
 }
@@ -2751,6 +2817,8 @@ input UpdateAuthenticationSettingsInput {
 	identifierEnumerationAllowed: Boolean!
 	emailSignInEnabled: Boolean!
 	passwordResetEnabled: Boolean!
+	passwordMaxAgeDays: Int!
+	passwordHistoryCount: Int!
 	passwordHashing: PasswordHashingInput!
 	expectedVersion: UUID!
 	clientMutationId: String
@@ -2901,6 +2969,10 @@ input UpdateUserInput {
 	address becomes unverified.
 	"""
 	emailVerified: Boolean
+	"""
+	Require, or stop requiring, a password change at the next sign-in.
+	"""
+	passwordChangeRequired: Boolean
 	profile: UserProfilePatchInput
 	expectedVersion: UUID!
 	reason: String! = ""
@@ -2966,6 +3038,29 @@ type User implements Node {
 	locked: Boolean @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	lockedUntil: DateTime @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	failedAttempts: Int @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
+	Whether the next sign-in must replace the password before a session is
+	issued, as an administrator required.
+	"""
+	passwordChangeRequired: Boolean @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
+	The ways the user can sign in. Never the credentials themselves.
+	"""
+	authenticationMethods: UserAuthenticationMethods @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
+	The user's active sessions, most recently active first.
+	"""
+	sessions(after: String, before: String, first: Int, last: Int): SessionConnection! @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+}
+
+"""
+Which sign-in methods a user has set up.
+"""
+type UserAuthenticationMethods {
+	password: Boolean!
+	authenticatorApp: Boolean!
+	recoveryCodes: Boolean!
+	passkey: Boolean!
 }
 
 type UserConnection {

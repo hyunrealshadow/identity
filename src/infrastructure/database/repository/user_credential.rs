@@ -10,15 +10,16 @@ use identity_application::{
         UserCredential, UserCredentialOid, UserOid,
         credential::{MAX_PASSKEYS_PER_USER, PasskeyCredentialData, StoredPasskey},
         repository::{
-            PasskeyCredentialRepository, UserCredentialRepository, UserCredentialRepositoryError,
+            PasskeyCredentialRepository, PasswordReplacement, UserCredentialRepository,
+            UserCredentialRepositoryError,
         },
     },
 };
 use identity_domain::audit::{AuditAction, AuditActor, AuditChanges, AuditField, AuditRecord};
-use identity_domain::{auth::SessionOid, authorization::owner::OwnerProtectionError};
+use identity_domain::authorization::owner::OwnerProtectionError;
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, Condition, DatabaseConnection, DbErr, EntityTrait, QueryFilter,
-    QuerySelect, Set, TransactionTrait,
+    ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, DbBackend,
+    DbErr, EntityTrait, QueryFilter, QuerySelect, Set, Statement, TransactionTrait,
     sea_query::{Expr, ExprTrait, Func},
 };
 use serde_json::{from_value, to_value};
@@ -44,6 +45,7 @@ use crate::database::{
 
 mod mfa;
 mod password_change;
+pub(crate) use password_change::prune_password_history;
 
 pub struct UserCredentialRepositoryImpl {
     db: DatabaseConnection,
@@ -161,28 +163,71 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         Ok(())
     }
 
-    async fn change_password_and_revoke(
+    async fn replace_password(
         &self,
         user: UserOid,
         credential: UserCredentialOid,
         expected: &Password,
         password: &Password,
-        keep: Option<SessionOid>,
+        replacement: PasswordReplacement,
     ) -> Result<u32, UserCredentialRepositoryError> {
-        self.change_password_transaction(user, credential, expected, password, keep, None)
+        self.change_password_transaction(user, credential, expected, password, replacement)
             .await
     }
 
-    async fn reset_password_and_revoke(
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "password_history"))]
+    async fn password_history(
         &self,
         user: UserOid,
-        credential: UserCredentialOid,
-        expected: &Password,
-        password: &Password,
-        login: Uuid,
-    ) -> Result<u32, UserCredentialRepositoryError> {
-        self.change_password_transaction(user, credential, expected, password, None, Some(login))
+        limit: u32,
+    ) -> Result<Vec<Password>, UserCredentialRepositoryError> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+        let fail = |error| UserCredentialRepositoryError::QueryFailed(Box::new(error));
+        let rows = self
+            .db
+            .query_all_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                "SELECT uc.data FROM user_credential uc JOIN \"user\" u ON u.id = uc.user_id \
+                 WHERE u.oid = $1 AND uc.type = 'password' AND uc.expires_at IS NOT NULL AND uc.expires_at <= now() \
+                 ORDER BY uc.expires_at DESC, uc.id DESC LIMIT $2",
+                [Uuid::from(user).into(), i64::from(limit).into()],
+            ))
             .await
+            .map_err(fail)?;
+        rows.into_iter()
+            .map(|row| {
+                let data: serde_json::Value = row.try_get("", "data").map_err(fail)?;
+                from_value(data).map_err(UserCredentialRepositoryError::Deserialization)
+            })
+            .collect()
+    }
+
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "password_set_at"))]
+    async fn password_set_at(
+        &self,
+        user: UserOid,
+    ) -> Result<Option<chrono::DateTime<Utc>>, UserCredentialRepositoryError> {
+        let fail = |error| UserCredentialRepositoryError::QueryFailed(Box::new(error));
+        let row = self
+            .db
+            .query_one_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                "SELECT COALESCE(uc.updated_at, uc.created_at) AS set_at FROM user_credential uc \
+                 JOIN \"user\" u ON u.id = uc.user_id \
+                 WHERE u.oid = $1 AND uc.type = 'password' AND (uc.expires_at IS NULL OR uc.expires_at > now()) \
+                 ORDER BY uc.id DESC LIMIT 1",
+                [Uuid::from(user).into()],
+            ))
+            .await
+            .map_err(fail)?;
+        row.map(|row| {
+            row.try_get::<chrono::DateTime<chrono::FixedOffset>>("", "set_at")
+                .map(chrono::DateTime::<Utc>::from)
+                .map_err(fail)
+        })
+        .transpose()
     }
 
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "consume_totp_counter"))]

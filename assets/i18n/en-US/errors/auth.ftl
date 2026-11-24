@@ -40,3 +40,4 @@ E11030 = This account's password cannot be reset by email. Contact your administ
 E11031 = The reset link is invalid or has expired. Request a new one.
 E11032 = A reset email was sent recently. You can request another in { $seconds } seconds.
 E11033 = The reset email could not be sent. Try again later.
+E11034 = The new password cannot repeat any of your last { $count } passwords.

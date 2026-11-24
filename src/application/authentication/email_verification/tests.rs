@@ -65,6 +65,7 @@ fn user(email: &str, verified: bool) -> User {
         enabled: true,
         locked: false,
         locked_until: None,
+        password_change_required: false,
         created_at: Utc::now(),
         updated_at: None,
     }

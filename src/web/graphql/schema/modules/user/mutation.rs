@@ -5,13 +5,16 @@ use identity_application::{
     error::{codes::graphql::GraphqlErrorCode, params::ErrorParams},
     user::management::UpdateUserCommand,
 };
-use identity_domain::{authorization::ManagementScope, user::UserOid};
+use identity_domain::{authorization::ManagementScope, global_id::GlobalId, user::UserOid};
+
+use crate::graphql::schema::modules::session::SessionGlobalId;
 
 use super::{
     integration,
     query::decode_user_oid,
     types::{
-        CreateUserInput, CreateUserPayload, UnlockUserInput, UpdateUserInput, UpdateUserPayload,
+        CreateUserInput, CreateUserPayload, DeleteUserPayload, ResetUserPasswordPayload,
+        RevokeUserSessionsInput, UnlockUserInput, UpdateUserInput, UpdateUserPayload,
         UserProfilePatchInput, UserStateInput, UserStatePayload, normalize_reason,
         optional_identifier,
     },
@@ -77,6 +80,7 @@ impl UserManagementMutation {
             username,
             email,
             email_verified,
+            password_change_required,
             profile,
             expected_version,
             reason,
@@ -104,6 +108,7 @@ impl UserManagementMutation {
                 username,
                 email,
                 email_verified,
+                password_change_required,
                 profile,
                 expected_version,
                 reason,
@@ -218,6 +223,174 @@ impl UserManagementMutation {
         .await
         .map_err(|error| app_error(ctx, error))?;
         Ok(UserStatePayload::new(user, client_mutation_id))
+    }
+
+    /// Replace the user's password with a generated temporary one, require a
+    /// change at the next sign-in, and sign the user out everywhere.
+    #[graphql(
+        guard = "ManagementGuard::new(ManagementScope::UsersWrite, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::UsersWrite))
+    )]
+    async fn reset_user_password(
+        &self,
+        ctx: &Context<'_>,
+        input: UserStateInput,
+    ) -> Result<ResetUserPasswordPayload> {
+        let UserStateInput {
+            id,
+            expected_version,
+            reason,
+            client_mutation_id,
+        } = input;
+        let (user, reason) = state_fields(ctx, &id, &reason)?;
+        let request = request_context(ctx)?;
+        ManagementGuard::new(
+            ManagementScope::UsersWrite,
+            ManagementTarget::user(user, false),
+        )
+        .check(ctx)
+        .await?;
+        let (user, temporary_password) = integration::reset_user_password(
+            request,
+            user,
+            expected_version,
+            reason,
+            client_mutation_id.clone(),
+        )
+        .await
+        .map_err(|error| app_error(ctx, error))?;
+        Ok(ResetUserPasswordPayload::new(
+            user,
+            temporary_password,
+            client_mutation_id,
+        ))
+    }
+
+    /// Remove the user's authenticator app, recovery codes and passkeys, and
+    /// sign the user out everywhere. The user keeps the password.
+    #[graphql(
+        guard = "ManagementGuard::new(ManagementScope::UsersWrite, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::UsersWrite))
+    )]
+    async fn reset_user_mfa(
+        &self,
+        ctx: &Context<'_>,
+        input: UserStateInput,
+    ) -> Result<UserStatePayload> {
+        let UserStateInput {
+            id,
+            expected_version,
+            reason,
+            client_mutation_id,
+        } = input;
+        let (user, reason) = state_fields(ctx, &id, &reason)?;
+        let request = request_context(ctx)?;
+        ManagementGuard::new(
+            ManagementScope::UsersWrite,
+            ManagementTarget::user(user, false),
+        )
+        .check(ctx)
+        .await?;
+        let user = integration::reset_user_mfa(
+            request,
+            user,
+            expected_version,
+            reason,
+            client_mutation_id.clone(),
+        )
+        .await
+        .map_err(|error| app_error(ctx, error))?;
+        Ok(UserStatePayload::new(user, client_mutation_id))
+    }
+
+    /// Revoke sessions of the user with the grants issued from them.
+    #[graphql(
+        guard = "ManagementGuard::new(ManagementScope::UsersWrite, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::UsersWrite))
+    )]
+    async fn revoke_user_sessions(
+        &self,
+        ctx: &Context<'_>,
+        input: RevokeUserSessionsInput,
+    ) -> Result<UserStatePayload> {
+        let RevokeUserSessionsInput {
+            id,
+            session_ids,
+            reason,
+            client_mutation_id,
+        } = input;
+        let (user, reason) = state_fields(ctx, &id, &reason)?;
+        let sessions = session_ids
+            .map(|ids| {
+                ids.iter()
+                    .map(|id| {
+                        GlobalId::<SessionGlobalId>::decode(id.as_str())
+                            .map(|id| id.oid())
+                            .map_err(|_| {
+                                coded_error(
+                                    ctx,
+                                    GraphqlErrorCode::InvalidSessionId,
+                                    ErrorParams::new(),
+                                )
+                            })
+                    })
+                    .collect::<Result<Vec<_>>>()
+            })
+            .transpose()?;
+        let request = request_context(ctx)?;
+        ManagementGuard::new(
+            ManagementScope::UsersWrite,
+            ManagementTarget::user(user, false),
+        )
+        .check(ctx)
+        .await?;
+        let user = integration::revoke_user_sessions(
+            request,
+            user,
+            sessions,
+            reason,
+            client_mutation_id.clone(),
+        )
+        .await
+        .map_err(|error| app_error(ctx, error))?;
+        Ok(UserStatePayload::new(user, client_mutation_id))
+    }
+
+    /// Delete a disabled user with its credentials, sessions and memberships.
+    /// The audit log keeps its history.
+    #[graphql(
+        guard = "ManagementGuard::new(ManagementScope::UsersWrite, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::UsersWrite))
+    )]
+    async fn delete_user(
+        &self,
+        ctx: &Context<'_>,
+        input: UserStateInput,
+    ) -> Result<DeleteUserPayload> {
+        let UserStateInput {
+            id,
+            expected_version,
+            reason,
+            client_mutation_id,
+        } = input;
+        let (user, reason) = state_fields(ctx, &id, &reason)?;
+        let request = request_context(ctx)?;
+        ManagementGuard::new(
+            ManagementScope::UsersWrite,
+            ManagementTarget::user(user, false),
+        )
+        .check(ctx)
+        .await?;
+        let user = integration::delete_user(
+            request,
+            user,
+            expected_version,
+            reason,
+            client_mutation_id.clone(),
+        )
+        .await
+        .map_err(|error| app_error(ctx, error))?;
+        Ok(DeleteUserPayload::new(&user, client_mutation_id))
     }
 }
 

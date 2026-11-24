@@ -18,7 +18,10 @@ pub use openid_connect::{
     DeviceAuthorizationSettings, DynamicRegistrationSettings, OpenIdConnectSettings,
     PushedAuthorizationSettings,
 };
-pub use password::{BreachedPasswordCheckEnabledSetting, PasswordHashSetting};
+pub use password::{
+    BreachedPasswordCheckEnabledSetting, PasswordHashSetting, PasswordHistoryCountSetting,
+    PasswordMaxAgeDaysSetting,
+};
 pub use sign_in::{
     EmailSignInEnabledSetting, IdentifierEnumerationAllowedSetting, PasswordResetEnabledSetting,
 };

@@ -43,7 +43,7 @@ use crate::{
     setting::{
         EmailDeliverySettings, EmailTemplatesSetting, PasswordResetEnabledSetting, SettingsSnapshot,
     },
-    user::{CredentialType, UserOid},
+    user::{CredentialType, UserOid, repository::PasswordReplacementKind},
 };
 
 /// A request to email a password reset link for one login.
@@ -354,8 +354,7 @@ impl LoginService {
         if !self.account_accepts_reset(user_oid).await? {
             return Err(unavailable());
         }
-        let (credential, expected, password) =
-            self.prepare_password_change(user_oid, new_password).await?;
+        let prepared = self.prepare_password_change(user_oid, new_password).await?;
         // Use the link up before the password changes, so it works only once.
         if dependencies
             .challenges
@@ -365,10 +364,12 @@ impl LoginService {
         {
             return Err(link_invalid());
         }
-        Ok(self
-            .credential_repo
-            .reset_password_and_revoke(user_oid, credential, &expected, &password, login.oid)
-            .await?)
+        self.replace_prepared_password(
+            user_oid,
+            &prepared,
+            PasswordReplacementKind::Reset { login: login.oid },
+        )
+        .await
     }
 
     /// The login, account and challenge of a reset link that is still valid.

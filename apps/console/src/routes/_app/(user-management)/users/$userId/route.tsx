@@ -23,7 +23,9 @@ function UserDetailLayout() {
       ? '/users/$userId/roles'
       : pathname.endsWith('/permissions')
         ? '/users/$userId/permissions'
-        : '/users/$userId'
+        : pathname.endsWith('/security')
+          ? '/users/$userId/security'
+          : '/users/$userId'
   return (
     <SharedUserDetailLayout key={userId} userId={userId} current={tab}>
       <Outlet />

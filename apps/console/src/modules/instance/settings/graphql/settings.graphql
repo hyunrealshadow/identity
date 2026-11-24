@@ -31,6 +31,16 @@ fragment ConsoleInstanceSettingsFields on InstanceSettings {
     identifierEnumerationAllowed
     emailSignInEnabled
     passwordResetEnabled
+    passwordMaxAgeDays
+    passwordMaxAgeDaysRange {
+      min
+      max
+    }
+    passwordHistoryCount
+    passwordHistoryCountRange {
+      min
+      max
+    }
     passwordHashing {
       timeCost
       timeCostRange {

@@ -14,7 +14,7 @@ import {
   DropdownMenuTrigger,
 } from '@identity/ui/components/dropdown-menu'
 import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
-import { Ellipsis, LockOpen, Power, PowerOff, TriangleAlert } from 'lucide-react'
+import { Ellipsis, LockOpen, Power, PowerOff, Trash2, TriangleAlert } from 'lucide-react'
 import { useRef, useState } from 'react'
 
 import { toast } from '#/lib/toast'
@@ -31,7 +31,7 @@ import type {
 } from '#/lib/graphql/transport'
 import { useTranslator, type MessageKey } from '#/lib/i18n'
 
-export type UserStateAction = 'enable' | 'disable' | 'unlock'
+export type UserStateAction = 'enable' | 'disable' | 'unlock' | 'delete'
 
 type OverlayState = ReturnType<typeof useOverlayState>
 
@@ -61,6 +61,12 @@ const ACTION_META: Record<UserStateAction, ActionMeta> = {
     confirm: 'usersStateConfirmUnlock',
     toast: 'usersStateUnlockedToast',
   },
+  delete: {
+    title: 'usersDeleteTitle',
+    description: 'usersDeleteDescription',
+    confirm: 'usersStateConfirmDelete',
+    toast: 'usersStateDeletedToast',
+  },
 }
 
 interface StateResultShape {
@@ -78,6 +84,7 @@ export function UserStateActions({
   onCommitted,
   onReload,
   presentation = 'buttons',
+  canDelete = false,
 }: {
   user: ProjectedUser
   onCommitted: (
@@ -89,16 +96,20 @@ export function UserStateActions({
   ) => void
   onReload: () => Promise<boolean>
   presentation?: 'buttons' | 'menu'
+  /** Offer deletion; only a disabled user can be deleted. */
+  canDelete?: boolean
 }) {
   const t = useTranslator()
   const enableState = useOverlayState()
   const disableState = useOverlayState()
   const unlockState = useOverlayState()
+  const deleteState = useOverlayState()
   const versionReady = Boolean(user.version)
   const showEnable = user.enabled === false
   const showDisable = user.enabled === true
   const showUnlock = user.locked === true
-  const hasAction = showEnable || showDisable || showUnlock
+  const showDelete = canDelete && user.enabled === false
+  const hasAction = showEnable || showDisable || showUnlock || showDelete
 
   const dialogs = (
     <>
@@ -122,6 +133,14 @@ export function UserStateActions({
         key={`unlock:${user.id}`}
         state={unlockState}
         action="unlock"
+        user={user}
+        onCommitted={onCommitted}
+        onReload={onReload}
+      />
+      <UserStateDialog
+        key={`delete:${user.id}`}
+        state={deleteState}
+        action="delete"
         user={user}
         onCommitted={onCommitted}
         onReload={onReload}
@@ -182,6 +201,16 @@ export function UserStateActions({
                     aria-hidden="true"
                   />
                   {t('usersUnlockAction')}
+                </DropdownMenuItem>
+              ) : null}
+              {showDelete ? (
+                <DropdownMenuItem
+                  variant="destructive"
+                  disabled={!versionReady}
+                  onClick={deleteState.open}
+                >
+                  <Trash2 className="size-4" aria-hidden="true" />
+                  {t('usersDeleteAction')}
                 </DropdownMenuItem>
               ) : null}
             </DropdownMenuContent>
@@ -335,6 +364,12 @@ export function UserStateDialog({
         finish(result.data?.disableUser ?? null, result)
         return
       }
+      if (action === 'delete') {
+        const result = await mutations.remove(input)
+        const deleted = result.data?.deleteUser
+        finish(deleted ? { userId: deleted.deletedUserId, version: '' } : null, result)
+        return
+      }
       const result = await mutations.unlock(input)
       finish(result.data?.unlockUser ?? null, result)
     } catch {
@@ -426,7 +461,7 @@ export function UserStateDialog({
           </Button>
           <Button
             type="button"
-            variant={action === 'disable' ? 'destructive' : 'default'}
+            variant={action === 'disable' || action === 'delete' ? 'destructive' : 'default'}
             disabled={busy || !versionAvailable}
             loading={pending}
             onClick={() => void submit()}

@@ -66,8 +66,12 @@ impl UserRepository for TestUserRepo {
 
 pub(super) struct TestCredentialRepo {
     pub(super) credentials: Mutex<Vec<UserCredential>>,
-    /// Accounts and logins of each password reset.
-    pub(super) resets: Mutex<Vec<(UserOid, Uuid)>>,
+    /// Accounts and kinds of each password replacement.
+    pub(super) resets: Mutex<Vec<(UserOid, PasswordReplacement)>>,
+    /// Replaced password hashes, newest first.
+    pub(super) history: Mutex<Vec<Password>>,
+    /// When the current password was set; a day ago unless replaced.
+    pub(super) password_set_at: Mutex<DateTime<Utc>>,
 }
 
 impl TestCredentialRepo {
@@ -75,6 +79,8 @@ impl TestCredentialRepo {
         Self {
             credentials: Mutex::new(credentials),
             resets: Mutex::new(Vec::new()),
+            history: Mutex::new(Vec::new()),
+            password_set_at: Mutex::new(Utc::now() - Duration::days(1)),
         }
     }
 }
@@ -105,27 +111,38 @@ impl UserCredentialRepository for TestCredentialRepo {
         Ok(())
     }
 
-    async fn change_password_and_revoke(
-        &self,
-        _user: UserOid,
-        _credential: UserCredentialOid,
-        _expected: &Password,
-        _password: &Password,
-        _keep: Option<SessionOid>,
-    ) -> Result<u32, UserCredentialRepositoryError> {
-        Ok(2)
-    }
-
-    async fn reset_password_and_revoke(
+    async fn replace_password(
         &self,
         user: UserOid,
         _credential: UserCredentialOid,
         _expected: &Password,
         _password: &Password,
-        login: Uuid,
+        replacement: PasswordReplacement,
     ) -> Result<u32, UserCredentialRepositoryError> {
-        self.resets.lock().unwrap().push((user, login));
-        Ok(3)
+        self.resets.lock().unwrap().push((user, replacement));
+        Ok(2)
+    }
+
+    async fn password_history(
+        &self,
+        _user: UserOid,
+        limit: u32,
+    ) -> Result<Vec<Password>, UserCredentialRepositoryError> {
+        let history = self.history.lock().unwrap();
+        Ok(history.iter().take(limit as usize).cloned().collect())
+    }
+
+    async fn password_set_at(
+        &self,
+        _user: UserOid,
+    ) -> Result<Option<DateTime<Utc>>, UserCredentialRepositoryError> {
+        let has_password = self
+            .credentials
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|credential| credential.r#type == CredentialType::Password);
+        Ok(has_password.then(|| *self.password_set_at.lock().unwrap()))
     }
 
     async fn consume_totp_counter(
@@ -394,12 +411,15 @@ impl LoginRepository for TestLoginRepo {
         login_oid: Uuid,
         status: LoginStatus,
         _session_oid: Option<SessionOid>,
-        _acr: Option<AuthenticationContextClass>,
+        acr: Option<AuthenticationContextClass>,
     ) -> Result<(), LoginRepositoryError> {
         let mut state = self.state.lock().unwrap();
         state.update_status_calls.push((login_oid, status));
         if let Some(login) = state.logins.iter_mut().find(|login| login.oid == login_oid) {
             login.status = status;
+            if acr.is_some() {
+                login.acr = acr;
+            }
         }
         Ok(())
     }

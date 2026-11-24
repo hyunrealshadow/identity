@@ -51,7 +51,7 @@ it('refuses mismatched passwords before calling the identity API', async () => {
 
 it('shows a rejected new password on its field and keeps the link', async () => {
   vi.mocked(identityJson).mockRejectedValue(
-    new IdentityApiError('Invalid', 400, 10002, [{ field: 'newPassword', message: '密码太短' }]),
+    new IdentityApiError('Invalid', 400, 10002, [{ field: 'newPassword', message: '密码太短', code: 11013 }]),
   )
   const response = await submit({ intent: 'reset', token: 'link', new_password: 'short', confirm_password: 'short' })
   expect(response.headers.get('location')).toBe('/login/reset-password?login_id=login&ui_locales=zh-CN&token=link')

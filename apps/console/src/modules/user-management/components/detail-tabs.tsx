@@ -1,6 +1,6 @@
 import { Link } from '@tanstack/react-router'
 import type { LucideIcon } from 'lucide-react'
-import { Info, KeyRound, Shield, UserRound, UsersRound } from 'lucide-react'
+import { Info, KeyRound, LockKeyhole, Shield, UserRound, UsersRound } from 'lucide-react'
 
 import { useTranslator, type MessageKey } from '#/lib/i18n'
 
@@ -11,6 +11,7 @@ interface DetailTab {
     | '/users/$userId/groups'
     | '/users/$userId/roles'
     | '/users/$userId/permissions'
+    | '/users/$userId/security'
     | '/roles/$roleId'
     | '/roles/$roleId/permissions'
     | '/roles/$roleId/users'
@@ -76,6 +77,7 @@ export function UserDetailTabs({
     | '/users/$userId/groups'
     | '/users/$userId/roles'
     | '/users/$userId/permissions'
+    | '/users/$userId/security'
 }) {
   const t = useTranslator()
 
@@ -101,6 +103,11 @@ export function UserDetailTabs({
       label: 'userDetailsTabPermissions',
       to: '/users/$userId/permissions',
       icon: KeyRound,
+    },
+    {
+      label: 'userDetailsTabSecurity',
+      to: '/users/$userId/security',
+      icon: LockKeyhole,
     },
   ]
 

@@ -2,10 +2,36 @@ use std::{error::Error as StdError, io::Error as IoError};
 
 use crate::{error::AppError, user::credential::StoredPasskey};
 use async_trait::async_trait;
+use chrono::{DateTime, Utc};
 use identity_domain::auth::SessionOid;
 use serde_json::Error as SerdeJsonError;
 use thiserror::Error;
 use uuid::Uuid;
+
+/// What a password replacement keeps of the interaction it came from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PasswordReplacementKind {
+    /// Account self-service, keeping `keep` when given.
+    Change { keep: Option<SessionOid> },
+    /// An emailed reset from a login at its first factor. The login stays
+    /// open with its failed attempts cleared, and a lockout from failed
+    /// attempts ends.
+    Reset { login: Uuid },
+    /// A change the sign-in of `login` requires. The login stays open to
+    /// finish, keeping the session it reauthenticates.
+    Required {
+        login: Uuid,
+        keep: Option<SessionOid>,
+    },
+}
+
+/// A password replacement and how many replaced hashes to keep.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PasswordReplacement {
+    pub kind: PasswordReplacementKind,
+    /// Replaced hashes kept for the history check; `0` keeps none.
+    pub keep_history: u32,
+}
 
 use crate::user::{
     CredentialData, CredentialType, OtpCredentialData, Password, RecoveryCodeCredentialData,
@@ -77,37 +103,42 @@ pub trait UserCredentialRepository: Send + Sync {
     ) -> Result<(), UserCredentialRepositoryError>;
 
     /// Compare-and-swap the password and revoke sessions, their grants, device
-    /// relations and pending logins in one transaction. Failure changes nothing.
-    async fn change_password_and_revoke(
+    /// relations and pending logins in one transaction. The replaced hash is
+    /// kept as an expired password credential while `keep_history` allows,
+    /// older ones are removed, and a required password change is cleared.
+    /// Failure changes nothing.
+    async fn replace_password(
         &self,
         user: UserOid,
         credential: UserCredentialOid,
         expected: &Password,
         password: &Password,
-        keep: Option<SessionOid>,
+        replacement: PasswordReplacement,
     ) -> Result<u32, UserCredentialRepositoryError> {
-        let _ = (user, credential, expected, password, keep);
+        let _ = (user, credential, expected, password, replacement);
         Err(UserCredentialRepositoryError::UpdatePasswordFailed(
             Box::new(IoError::other("atomic password changes are not configured")),
         ))
     }
 
-    /// Like [`Self::change_password_and_revoke`] keeping no session, for a
-    /// password replaced through an emailed reset link. The login the reset
-    /// came from stays open while it has verified no factor, with its failed
-    /// attempts cleared; a lockout from failed attempts ends.
-    async fn reset_password_and_revoke(
+    /// Hashes of the account's earlier passwords, newest first, at most
+    /// `limit`.
+    async fn password_history(
         &self,
         user: UserOid,
-        credential: UserCredentialOid,
-        expected: &Password,
-        password: &Password,
-        login: Uuid,
-    ) -> Result<u32, UserCredentialRepositoryError> {
-        let _ = (user, credential, expected, password, login);
-        Err(UserCredentialRepositoryError::UpdatePasswordFailed(
-            Box::new(IoError::other("password resets are not configured")),
-        ))
+        limit: u32,
+    ) -> Result<Vec<Password>, UserCredentialRepositoryError> {
+        let _ = (user, limit);
+        Ok(Vec::new())
+    }
+
+    /// When the current password was set, if the account has one.
+    async fn password_set_at(
+        &self,
+        user: UserOid,
+    ) -> Result<Option<DateTime<Utc>>, UserCredentialRepositoryError> {
+        let _ = user;
+        Ok(None)
     }
 
     /// Atomically stores `counter` in the OTP credential's JSONB data only if

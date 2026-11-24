@@ -87,6 +87,10 @@ export const AUDIT_ACTION_LABELS: Readonly<Record<AuditAction, MessageKey>> = {
   USER_ROLE_GRANT: 'auditActionUserRoleGrant',
   USER_ROLE_REVOKE: 'auditActionUserRoleRevoke',
   USER_UNLOCK: 'auditActionUserUnlock',
+  USER_PASSWORD_RESET: 'auditActionUserPasswordReset',
+  USER_MFA_RESET: 'auditActionUserMfaReset',
+  USER_SESSION_REVOKE: 'auditActionUserSessionRevoke',
+  USER_DELETE: 'auditActionUserDelete',
   USER_UPDATE: 'auditActionUserUpdate',
 }
 
@@ -147,6 +151,7 @@ export const AUDIT_FIELD_LABELS: Readonly<Record<AuditField, MessageKey>> = {
   DESCRIPTIONS: 'auditFieldDescriptions',
   EMAIL: 'auditFieldEmail',
   EMAIL_VERIFIED: 'auditFieldEmailVerified',
+  PASSWORD_CHANGE_REQUIRED: 'auditFieldPasswordChangeRequired',
   ENABLED: 'auditFieldEnabled',
   FAMILY_NAME: 'auditFieldFamilyName',
   GENDER: 'auditFieldGender',
@@ -250,6 +255,10 @@ export const AUDIT_SENTENCE_LABELS: Readonly<Record<AuditAction, MessageKey>> = 
   USER_ROLE_GRANT: 'auditSentenceUserRoleGrant',
   USER_ROLE_REVOKE: 'auditSentenceUserRoleRevoke',
   USER_UNLOCK: 'auditSentenceUserUnlock',
+  USER_PASSWORD_RESET: 'auditSentenceUserPasswordReset',
+  USER_MFA_RESET: 'auditSentenceUserMfaReset',
+  USER_SESSION_REVOKE: 'auditSentenceUserSessionRevoke',
+  USER_DELETE: 'auditSentenceUserDelete',
   USER_UPDATE: 'auditSentenceUserUpdate',
 }
 

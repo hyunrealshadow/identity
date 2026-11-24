@@ -292,6 +292,7 @@ pub(super) async fn authorize_first_hop_state() -> (AppState, Uuid) {
         enabled: true,
         locked: false,
         locked_until: None,
+        password_change_required: false,
         created_at: now.into(),
         updated_at: None,
     };

@@ -15,9 +15,10 @@
 use identity_application::{
     error::AppError,
     user::management::{
-        CreateUserCommand, UpdateUserCommand, UserFilter as ManagementFilter,
-        UserManagementAuthority, UserManagementMutationResult, UserOrder as ManagementOrder,
-        UserPageRequest, UserPassword, UserProfilePatch, UserStateCommand,
+        CreateUserCommand, RevokeUserSessionsCommand, UpdateUserCommand,
+        UserFilter as ManagementFilter, UserManagementAuthority, UserManagementMutationResult,
+        UserOrder as ManagementOrder, UserPageRequest, UserPassword, UserProfilePatch,
+        UserStateCommand,
     },
 };
 use identity_domain::user::{User, UserOid};
@@ -259,6 +260,105 @@ pub(super) async fn unlock_user(
                 reason,
                 client_mutation_id,
             },
+        )
+        .await?;
+    Ok(record_parts(record))
+}
+
+fn state_command(
+    user: UserOid,
+    expected_version: uuid::Uuid,
+    reason: String,
+    client_mutation_id: Option<String>,
+) -> UserStateCommand {
+    UserStateCommand {
+        user_oid: user,
+        expected_version,
+        reason,
+        client_mutation_id,
+    }
+}
+
+pub(super) async fn reset_user_password(
+    request: &RequestContext,
+    user: UserOid,
+    expected_version: uuid::Uuid,
+    reason: String,
+    client_mutation_id: Option<String>,
+) -> Result<(User, String), AppError> {
+    let authority = authority(request).await?;
+    let result = request
+        .state
+        .services()
+        .user_management()
+        .reset_user_password(
+            &authority,
+            state_command(user, expected_version, reason, client_mutation_id),
+        )
+        .await?;
+    Ok((record_parts(result.record), result.temporary_password))
+}
+
+pub(super) async fn reset_user_mfa(
+    request: &RequestContext,
+    user: UserOid,
+    expected_version: uuid::Uuid,
+    reason: String,
+    client_mutation_id: Option<String>,
+) -> Result<User, AppError> {
+    let authority = authority(request).await?;
+    let record = request
+        .state
+        .services()
+        .user_management()
+        .reset_user_mfa(
+            &authority,
+            state_command(user, expected_version, reason, client_mutation_id),
+        )
+        .await?;
+    Ok(record_parts(record))
+}
+
+pub(super) async fn revoke_user_sessions(
+    request: &RequestContext,
+    user: UserOid,
+    sessions: Option<Vec<uuid::Uuid>>,
+    reason: String,
+    client_mutation_id: Option<String>,
+) -> Result<User, AppError> {
+    let authority = authority(request).await?;
+    let record = request
+        .state
+        .services()
+        .user_management()
+        .revoke_user_sessions(
+            &authority,
+            RevokeUserSessionsCommand {
+                user_oid: user,
+                sessions,
+                reason,
+                client_mutation_id,
+            },
+        )
+        .await?;
+    Ok(record_parts(record))
+}
+
+pub(super) async fn delete_user(
+    request: &RequestContext,
+    user: UserOid,
+    expected_version: uuid::Uuid,
+    reason: String,
+    client_mutation_id: Option<String>,
+) -> Result<User, AppError> {
+    let authority = authority(request).await?;
+    let record = request
+        .state
+        .services()
+        .user_management()
+        .delete_user(
+            &authority,
+            state_command(user, expected_version, reason, client_mutation_id),
         )
         .await?;
     Ok(record_parts(record))

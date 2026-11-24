@@ -48,6 +48,10 @@ describe('settings form', () => {
         identifierEnumerationAllowed: true,
         emailSignInEnabled: false,
         passwordResetEnabled: true,
+        passwordMaxAgeDays: 0,
+        passwordMaxAgeDaysRange: { min: 0, max: 3650 },
+        passwordHistoryCount: 0,
+        passwordHistoryCountRange: { min: 0, max: 24 },
         passwordHashing: {
           timeCost: 3,
           timeCostRange: { min: 1, max: 10 },
@@ -58,7 +62,7 @@ describe('settings form', () => {
         },
         version: 'v2',
       },
-      { breachedPasswordCheckEnabled: true, identifierEnumerationAllowed: true, emailSignInEnabled: false, passwordResetEnabled: true, timeCost: '0', memoryCostKib: '1024', parallelism: '4' },
+      { breachedPasswordCheckEnabled: true, identifierEnumerationAllowed: true, emailSignInEnabled: false, passwordResetEnabled: true, passwordMaxAgeDays: '0', passwordHistoryCount: '0', timeCost: '0', memoryCostKib: '1024', parallelism: '4' },
     )
     expect(result).toEqual({
       errors: {

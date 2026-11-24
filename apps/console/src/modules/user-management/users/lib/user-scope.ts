@@ -8,8 +8,21 @@ export function userManagementScope(
   const create = fieldAffordance(permissions, 'mutation', 'createUser')
   const update = fieldAffordance(permissions, 'mutation', 'updateUser')
   const state = fieldAffordance(permissions, 'mutation', 'disableUser')
+  const credentials = fieldAffordance(permissions, 'mutation', 'resetUserPassword')
+  const sessions = fieldAffordance(permissions, 'mutation', 'revokeUserSessions')
+  const remove = fieldAffordance(permissions, 'mutation', 'deleteUser')
   const canWrite = create || update || state
-  return { read, create, update, state, canWrite, hasAny: read || canWrite }
+  return {
+    read,
+    create,
+    update,
+    state,
+    credentials,
+    sessions,
+    remove,
+    canWrite,
+    hasAny: read || canWrite,
+  }
 }
 
 export type UserManagementScope = ReturnType<typeof userManagementScope>

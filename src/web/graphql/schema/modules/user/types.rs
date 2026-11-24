@@ -154,6 +154,8 @@ pub(super) struct UpdateUserInput {
     /// Mark the email address verified or unverified. Without it, a changed
     /// address becomes unverified.
     pub email_verified: Option<bool>,
+    /// Require, or stop requiring, a password change at the next sign-in.
+    pub password_change_required: Option<bool>,
     pub profile: Option<UserProfilePatchInput>,
     pub expected_version: Uuid,
     #[graphql(default, validator(chars_max_length = 1000))]
@@ -406,5 +408,86 @@ mod tests {
             optional_identifier(MaybeUndefined::Value("ada".to_owned())),
             Ok(Some("ada".to_owned()))
         );
+    }
+}
+
+/// Sessions of one user to revoke.
+#[derive(Clone, InputObject)]
+pub(super) struct RevokeUserSessionsInput {
+    pub id: ID,
+    /// Sessions to revoke; every active session when omitted.
+    #[graphql(validator(max_items = 100))]
+    pub session_ids: Option<Vec<ID>>,
+    #[graphql(default, validator(chars_max_length = 1000))]
+    pub reason: String,
+    #[graphql(validator(chars_max_length = 255))]
+    pub client_mutation_id: Option<String>,
+}
+
+pub(super) struct ResetUserPasswordPayload {
+    state: UserStatePayload,
+    temporary_password: String,
+}
+
+impl ResetUserPasswordPayload {
+    pub(super) fn new(
+        user: User,
+        temporary_password: String,
+        client_mutation_id: Option<String>,
+    ) -> Self {
+        Self {
+            state: UserStatePayload::new(user, client_mutation_id),
+            temporary_password,
+        }
+    }
+}
+
+#[Object]
+impl ResetUserPasswordPayload {
+    async fn user_id(&self) -> &ID {
+        &self.state.user_id
+    }
+
+    async fn version(&self) -> Uuid {
+        self.state.version
+    }
+
+    async fn user(&self, ctx: &Context<'_>) -> GraphqlResult<Option<&UserNode>> {
+        payload_user(ctx, &self.state.user).await
+    }
+
+    /// The generated password, shown once: it is not stored and cannot be
+    /// read again. The user must replace it at the next sign-in.
+    async fn temporary_password(&self) -> &str {
+        &self.temporary_password
+    }
+
+    async fn client_mutation_id(&self) -> Option<&str> {
+        self.state.client_mutation_id.as_deref()
+    }
+}
+
+pub(super) struct DeleteUserPayload {
+    deleted_user_id: ID,
+    client_mutation_id: Option<String>,
+}
+
+impl DeleteUserPayload {
+    pub(super) fn new(user: &User, client_mutation_id: Option<String>) -> Self {
+        Self {
+            deleted_user_id: account::user_global_id(user),
+            client_mutation_id,
+        }
+    }
+}
+
+#[Object]
+impl DeleteUserPayload {
+    async fn deleted_user_id(&self) -> &ID {
+        &self.deleted_user_id
+    }
+
+    async fn client_mutation_id(&self) -> Option<&str> {
+        self.client_mutation_id.as_deref()
     }
 }

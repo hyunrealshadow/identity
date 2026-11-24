@@ -370,6 +370,16 @@
     "module": "auth"
   },
   {
+    "code": 11034,
+    "kind": "validation",
+    "fluentKey": "E11034",
+    "requiredParams": [
+      "count"
+    ],
+    "optionalParams": [],
+    "module": "auth"
+  },
+  {
     "code": 15000,
     "kind": "validation",
     "fluentKey": "E15000",
@@ -2549,6 +2559,30 @@
     "code": 16020,
     "kind": "internal",
     "fluentKey": "E16020",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "user.management"
+  },
+  {
+    "code": 16021,
+    "kind": "conflict",
+    "fluentKey": "E16021",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "user.management"
+  },
+  {
+    "code": 16022,
+    "kind": "conflict",
+    "fluentKey": "E16022",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "user.management"
+  },
+  {
+    "code": 16023,
+    "kind": "not_found",
+    "fluentKey": "E16023",
     "requiredParams": [],
     "optionalParams": [],
     "module": "user.management"

@@ -6,7 +6,7 @@ const VERSION: u8 = 2;
 const PLAINTEXT_SIZE: usize = 17;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(super) struct SessionCursor {
+pub(crate) struct SessionCursor {
     last_active_micros: i64,
     id: i64,
 }

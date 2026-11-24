@@ -57,6 +57,7 @@ import { Route as AppuserManagementUsersUserIdEditRouteImport } from './routes/_
 import { Route as AppuserManagementUsersUserIdGroupsRouteImport } from './routes/_app/(user-management)/users/$userId/groups'
 import { Route as AppuserManagementUsersUserIdPermissionsRouteImport } from './routes/_app/(user-management)/users/$userId/permissions'
 import { Route as AppuserManagementUsersUserIdRolesRouteImport } from './routes/_app/(user-management)/users/$userId/roles'
+import { Route as AppuserManagementUsersUserIdSecurityRouteImport } from './routes/_app/(user-management)/users/$userId/security'
 import { Route as AppclientManagementResourcesResourceIdPermissionsIndexRouteImport } from './routes/_app/(client-management)/resources/$resourceId/permissions/index'
 import { Route as AppclientManagementResourcesResourceIdPermissionsPermissionIdRouteImport } from './routes/_app/(client-management)/resources/$resourceId/permissions/$permissionId'
 import { Route as AppclientManagementResourcesResourceIdPermissionsNewRouteImport } from './routes/_app/(client-management)/resources/$resourceId/permissions/new'
@@ -342,6 +343,12 @@ const AppuserManagementUsersUserIdRolesRoute =
     path: '/roles',
     getParentRoute: () => AppuserManagementUsersUserIdRouteRoute,
   } as any)
+const AppuserManagementUsersUserIdSecurityRoute =
+  AppuserManagementUsersUserIdSecurityRouteImport.update({
+    id: '/security',
+    path: '/security',
+    getParentRoute: () => AppuserManagementUsersUserIdRouteRoute,
+  } as any)
 const AppclientManagementResourcesResourceIdPermissionsIndexRoute =
   AppclientManagementResourcesResourceIdPermissionsIndexRouteImport.update({
     id: '/permissions/',
@@ -405,6 +412,7 @@ export interface FileRoutesByFullPath {
   '/users/$userId/groups': typeof AppuserManagementUsersUserIdGroupsRoute
   '/users/$userId/permissions': typeof AppuserManagementUsersUserIdPermissionsRoute
   '/users/$userId/roles': typeof AppuserManagementUsersUserIdRolesRoute
+  '/users/$userId/security': typeof AppuserManagementUsersUserIdSecurityRoute
   '/clients/$clientId/': typeof AppclientManagementClientsClientIdIndexRoute
   '/resources/$resourceId/': typeof AppclientManagementResourcesResourceIdIndexRoute
   '/email/templates/': typeof AppinstanceEmailTemplatesIndexRoute
@@ -450,6 +458,7 @@ export interface FileRoutesByTo {
   '/users/$userId/groups': typeof AppuserManagementUsersUserIdGroupsRoute
   '/users/$userId/permissions': typeof AppuserManagementUsersUserIdPermissionsRoute
   '/users/$userId/roles': typeof AppuserManagementUsersUserIdRolesRoute
+  '/users/$userId/security': typeof AppuserManagementUsersUserIdSecurityRoute
   '/clients/$clientId': typeof AppclientManagementClientsClientIdIndexRoute
   '/resources/$resourceId': typeof AppclientManagementResourcesResourceIdIndexRoute
   '/email/templates': typeof AppinstanceEmailTemplatesIndexRoute
@@ -504,6 +513,7 @@ export interface FileRoutesById {
   '/_app/(user-management)/users/$userId/groups': typeof AppuserManagementUsersUserIdGroupsRoute
   '/_app/(user-management)/users/$userId/permissions': typeof AppuserManagementUsersUserIdPermissionsRoute
   '/_app/(user-management)/users/$userId/roles': typeof AppuserManagementUsersUserIdRolesRoute
+  '/_app/(user-management)/users/$userId/security': typeof AppuserManagementUsersUserIdSecurityRoute
   '/_app/(client-management)/clients/$clientId/': typeof AppclientManagementClientsClientIdIndexRoute
   '/_app/(client-management)/resources/$resourceId/': typeof AppclientManagementResourcesResourceIdIndexRoute
   '/_app/(instance)/email/templates/': typeof AppinstanceEmailTemplatesIndexRoute
@@ -558,6 +568,7 @@ export interface FileRouteTypes {
     | '/users/$userId/groups'
     | '/users/$userId/permissions'
     | '/users/$userId/roles'
+    | '/users/$userId/security'
     | '/clients/$clientId/'
     | '/resources/$resourceId/'
     | '/email/templates/'
@@ -603,6 +614,7 @@ export interface FileRouteTypes {
     | '/users/$userId/groups'
     | '/users/$userId/permissions'
     | '/users/$userId/roles'
+    | '/users/$userId/security'
     | '/clients/$clientId'
     | '/resources/$resourceId'
     | '/email/templates'
@@ -656,6 +668,7 @@ export interface FileRouteTypes {
     | '/_app/(user-management)/users/$userId/groups'
     | '/_app/(user-management)/users/$userId/permissions'
     | '/_app/(user-management)/users/$userId/roles'
+    | '/_app/(user-management)/users/$userId/security'
     | '/_app/(client-management)/clients/$clientId/'
     | '/_app/(client-management)/resources/$resourceId/'
     | '/_app/(instance)/email/templates/'
@@ -1011,6 +1024,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppuserManagementUsersUserIdRolesRouteImport
       parentRoute: typeof AppuserManagementUsersUserIdRouteRoute
     }
+    '/_app/(user-management)/users/$userId/security': {
+      id: '/_app/(user-management)/users/$userId/security'
+      path: '/security'
+      fullPath: '/users/$userId/security'
+      preLoaderRoute: typeof AppuserManagementUsersUserIdSecurityRouteImport
+      parentRoute: typeof AppuserManagementUsersUserIdRouteRoute
+    }
     '/_app/(client-management)/resources/$resourceId/permissions/': {
       id: '/_app/(client-management)/resources/$resourceId/permissions/'
       path: '/permissions'
@@ -1180,6 +1200,7 @@ interface AppuserManagementUsersUserIdRouteRouteChildren {
   AppuserManagementUsersUserIdGroupsRoute: typeof AppuserManagementUsersUserIdGroupsRoute
   AppuserManagementUsersUserIdPermissionsRoute: typeof AppuserManagementUsersUserIdPermissionsRoute
   AppuserManagementUsersUserIdRolesRoute: typeof AppuserManagementUsersUserIdRolesRoute
+  AppuserManagementUsersUserIdSecurityRoute: typeof AppuserManagementUsersUserIdSecurityRoute
   AppuserManagementUsersUserIdIndexRoute: typeof AppuserManagementUsersUserIdIndexRoute
 }
 
@@ -1193,6 +1214,8 @@ const AppuserManagementUsersUserIdRouteRouteChildren: AppuserManagementUsersUser
       AppuserManagementUsersUserIdPermissionsRoute,
     AppuserManagementUsersUserIdRolesRoute:
       AppuserManagementUsersUserIdRolesRoute,
+    AppuserManagementUsersUserIdSecurityRoute:
+      AppuserManagementUsersUserIdSecurityRoute,
     AppuserManagementUsersUserIdIndexRoute:
       AppuserManagementUsersUserIdIndexRoute,
   }

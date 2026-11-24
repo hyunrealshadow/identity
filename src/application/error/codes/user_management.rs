@@ -26,12 +26,22 @@ pub enum UserManagementErrorCode {
     InvalidClientMutationId = 16018,
     StorageFailed = 16019,
     AccessInvalidationFailed = 16020,
+    /// Only a disabled user may be deleted.
+    UserNotDisabled = 16021,
+    /// Second factors are cleared only from an account that still has a
+    /// password to sign in with.
+    UserHasNoPassword = 16022,
+    /// The session does not belong to the user.
+    SessionNotFound = 16023,
 }
 
 impl AppErrorCode for UserManagementErrorCode {
     fn kind(self) -> ErrorKind {
         match self {
-            Self::VersionConflict => ErrorKind::Conflict,
+            Self::VersionConflict | Self::UserNotDisabled | Self::UserHasNoPassword => {
+                ErrorKind::Conflict
+            }
+            Self::SessionNotFound => ErrorKind::NotFound,
             Self::UserNotFound => ErrorKind::NotFound,
             Self::StorageFailed | Self::AccessInvalidationFailed => ErrorKind::Internal,
             Self::ValidationFailed
@@ -63,6 +73,9 @@ impl AppErrorCode for UserManagementErrorCode {
             Self::InvalidClientMutationId => 16018,
             Self::StorageFailed => 16019,
             Self::AccessInvalidationFailed => 16020,
+            Self::UserNotDisabled => 16021,
+            Self::UserHasNoPassword => 16022,
+            Self::SessionNotFound => 16023,
         }
     }
 }
@@ -188,6 +201,30 @@ pub const USER_MANAGEMENT_ERROR_INVENTORY: &[UserManagementErrorCodeDefinition] 
         UserManagementErrorCode::AccessInvalidationFailed,
         ErrorKind::Internal,
         "E16020",
+        &[],
+        &[],
+        "user.management",
+    ),
+    entry(
+        UserManagementErrorCode::UserNotDisabled,
+        ErrorKind::Conflict,
+        "E16021",
+        &[],
+        &[],
+        "user.management",
+    ),
+    entry(
+        UserManagementErrorCode::UserHasNoPassword,
+        ErrorKind::Conflict,
+        "E16022",
+        &[],
+        &[],
+        "user.management",
+    ),
+    entry(
+        UserManagementErrorCode::SessionNotFound,
+        ErrorKind::NotFound,
+        "E16023",
         &[],
         &[],
         "user.management",

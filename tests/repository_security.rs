@@ -7,6 +7,7 @@ mod email_verification;
 #[path = "repository_security/instance_management.rs"]
 mod instance_management;
 use chrono::{Duration as ChronoDuration, Utc};
+use identity_application::user::repository::{PasswordReplacement, PasswordReplacementKind};
 use identity_application::user::{
     CredentialData, CredentialType,
     model::{Argon2Options, Argon2Password, Argon2Variant, Argon2Version, Password},
@@ -291,13 +292,13 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
     assert_eq!(semantic_count_for_target(&db, login.oid, None).await, 0);
 
     assert!(
-        repo.change_password_and_revoke(
-            user.into(),
-            credential.into(),
-            &old,
-            &new,
-            Some(SessionOid(Uuid::new_v4()))
-        )
+        repo.replace_password(
+user.into(),
+credential.into(),
+&old,
+&new,
+PasswordReplacement { kind: PasswordReplacementKind::Change { keep: Some(SessionOid(Uuid::new_v4())) }, keep_history: 0 },
+)
         .await
         .is_err()
     );
@@ -322,13 +323,13 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
     );
     let audit_failed = audit::with_actor(
         actor,
-        repo.change_password_and_revoke(
-            user.into(),
-            credential.into(),
-            &old,
-            &new,
-            Some(SessionOid(keep)),
-        ),
+        repo.replace_password(
+user.into(),
+credential.into(),
+&old,
+&new,
+PasswordReplacement { kind: PasswordReplacementKind::Change { keep: Some(SessionOid(keep)) }, keep_history: 0 },
+),
     )
     .await;
     assert!(audit_failed.is_err());
@@ -369,13 +370,13 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
     );
     let late_failed = audit::with_actor(
         actor,
-        repo.change_password_and_revoke(
-            user.into(),
-            credential.into(),
-            &old,
-            &new,
-            Some(SessionOid(keep)),
-        ),
+        repo.replace_password(
+user.into(),
+credential.into(),
+&old,
+&new,
+PasswordReplacement { kind: PasswordReplacementKind::Change { keep: Some(SessionOid(keep)) }, keep_history: 0 },
+),
     )
     .await;
     assert!(late_failed.is_err());
@@ -410,13 +411,13 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
         let old = old.clone();
         let new = new.clone();
         async move {
-            repo.change_password_and_revoke(
-                user.into(),
-                credential.into(),
-                &old,
-                &new,
-                Some(SessionOid(keep)),
-            )
+            repo.replace_password(
+user.into(),
+credential.into(),
+&old,
+&new,
+PasswordReplacement { kind: PasswordReplacementKind::Change { keep: Some(SessionOid(keep)) }, keep_history: 0 },
+)
             .await
         }
     });
@@ -469,13 +470,13 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
             .is_err()
     );
     assert!(
-        repo.change_password_and_revoke(
-            user.into(),
-            credential.into(),
-            &old,
-            &new,
-            Some(SessionOid(keep))
-        )
+        repo.replace_password(
+user.into(),
+credential.into(),
+&old,
+&new,
+PasswordReplacement { kind: PasswordReplacementKind::Change { keep: Some(SessionOid(keep)) }, keep_history: 0 },
+)
         .await
         .is_err()
     );
