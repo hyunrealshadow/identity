@@ -664,6 +664,8 @@ export type SendTestEmailInput = {
   /** Language of the message. */
   locale: string;
   recipient: string;
+  /** Template draft to render instead of the generic delivery test message. */
+  template?: EmailTemplatePreviewInput | null | undefined;
 };
 
 export type SetClientScopesInput = {

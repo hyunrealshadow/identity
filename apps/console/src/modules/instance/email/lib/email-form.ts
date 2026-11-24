@@ -84,6 +84,15 @@ function optional(value: string) {
   return trimmed ? trimmed : null
 }
 
+/**
+ * While delivery is off, its fields are collapsed and not applied; only turning
+ * an active delivery off is an unsaved change.
+ */
+export function emailDeliveryDirty(delivery: EmailDelivery, draft: EmailDeliveryDraft): boolean {
+  if (!draft.enabled) return delivery.enabled
+  return JSON.stringify(draft) !== JSON.stringify(emailDeliveryDraft(delivery))
+}
+
 /** The mutation input for `draft`, or the fields that need attention. */
 export function emailDeliveryInput(
   delivery: EmailDelivery,
@@ -91,18 +100,49 @@ export function emailDeliveryInput(
 ):
   | { input: Omit<UpdateEmailDeliverySettingsInput, 'clientMutationId'> }
   | { errors: Partial<Record<EmailDeliveryField, FieldError>> } {
+  if (!draft.enabled) {
+    const auth = delivery.authentication
+    return {
+      input: {
+        enabled: false,
+        host: delivery.host,
+        port: delivery.port,
+        security: delivery.security,
+        senderAddress: delivery.senderAddress,
+        senderName: delivery.senderName,
+        authentication:
+          auth.method === 'NONE'
+            ? { method: 'NONE' }
+            : auth.method === 'PASSWORD'
+              ? {
+                  method: 'PASSWORD',
+                  username: auth.username ?? '',
+                  password: null,
+                }
+              : {
+                  method: 'XOAUTH2',
+                  username: auth.username ?? '',
+                  tokenEndpoint: auth.tokenEndpoint ?? '',
+                  clientId: auth.clientId ?? '',
+                  clientSecret: null,
+                  grant: auth.grant ?? 'REFRESH_TOKEN',
+                  refreshToken: null,
+                  scope: auth.scope,
+                },
+        expectedVersion: delivery.version,
+      },
+    }
+  }
   const errors: Partial<Record<EmailDeliveryField, FieldError>> = {}
   const required = (field: EmailDeliveryField, value: string) => {
     if (!value.trim()) errors[field] = { key: 'settingsEmailRequired' }
   }
   const port = parseWholeNumber(draft.port, delivery.portRange)
   if ('error' in port) errors.port = port.error
-  if (draft.enabled || draft.host.trim()) required('host', draft.host)
-  if (draft.enabled || draft.senderAddress.trim()) {
-    required('senderAddress', draft.senderAddress)
-    if (draft.senderAddress.trim() && !/^[^\s@]+@[^\s@]+$/u.test(draft.senderAddress.trim())) {
-      errors.senderAddress = { key: 'settingsEmailInvalidAddress' }
-    }
+  required('host', draft.host)
+  required('senderAddress', draft.senderAddress)
+  if (draft.senderAddress.trim() && !/^[^\s@]+@[^\s@]+$/u.test(draft.senderAddress.trim())) {
+    errors.senderAddress = { key: 'settingsEmailInvalidAddress' }
   }
   if (draft.method !== 'NONE') required('username', draft.username)
   if (draft.method === 'PASSWORD' && !storedSecret(delivery, draft, 'password')) {
@@ -119,7 +159,7 @@ export function emailDeliveryInput(
   const secret = (value: string) => (value ? value : null)
   return {
     input: {
-      enabled: draft.enabled,
+      enabled: true,
       host: draft.host.trim(),
       port: 'value' in port ? port.value : 0,
       security: draft.security,

@@ -2,7 +2,10 @@ use async_graphql::{Context, Object, Result};
 use identity_application::{
     authorization::ManagementTarget,
     setting::{
-        email::{SendTestEmailCommand, UpdateEmailDeliveryCommand, UpdateEmailTemplateCommand},
+        email::{
+            SendTestEmailCommand, SendTestEmailTemplate, UpdateEmailDeliveryCommand,
+            UpdateEmailTemplateCommand,
+        },
         management::{
             PasswordHashingView, UpdateAuthenticationSettingsCommand, UpdateProtocolSettingsCommand,
         },
@@ -210,6 +213,11 @@ impl SettingMutation {
             .send_test_email(SendTestEmailCommand {
                 recipient: input.recipient,
                 locale: input.locale,
+                template: input.template.map(|template| SendTestEmailTemplate {
+                    kind: template.kind.into(),
+                    locale: template.locale,
+                    content: template.content.into(),
+                }),
             })
             .await
             .map_err(|error| app_error(ctx, error))?;

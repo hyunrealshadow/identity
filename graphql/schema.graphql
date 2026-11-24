@@ -2486,6 +2486,10 @@ input SendTestEmailInput {
 	Language of the message.
 	"""
 	locale: String!
+	"""
+	Template draft to render instead of the generic delivery test message.
+	"""
+	template: EmailTemplatePreviewInput
 	clientMutationId: String
 }
 

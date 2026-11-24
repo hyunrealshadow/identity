@@ -1,4 +1,5 @@
 import { Link } from '@tanstack/react-router'
+import type { LucideIcon } from 'lucide-react'
 
 import { useTranslator, type MessageKey } from '#/lib/i18n'
 
@@ -15,6 +16,7 @@ export type SectionPath =
 export interface SectionTab<Path extends SectionPath = SectionPath> {
   to: Path
   label: MessageKey
+  icon?: LucideIcon
 }
 
 /**
@@ -49,27 +51,35 @@ export function SectionTabs<Tab extends SectionTab>({
   const t = useTranslator()
   const current = activeSectionTab<SectionPath>(tabs, pathname)
   return (
-    <nav aria-label={label} className="mb-6 border-b border-border">
-      <div className="flex gap-1 overflow-x-auto">
+    <nav
+      aria-label={label}
+      className="mb-6 overflow-x-auto overflow-y-hidden border-b border-border"
+    >
+      <ul className="flex min-w-max items-center gap-1">
         {tabs
           .filter((tab) => tab.to === current || visible(tab))
           .map((tab) => {
+            const Icon = tab.icon
             const active = tab.to === current
             return (
-              <Link
-                key={tab.to}
-                to={tab.to}
-                className={
-                  'shrink-0 border-b-2 px-3 py-2.5 text-sm ' +
-                  (active ? 'border-primary font-semibold' : 'border-transparent text-muted-foreground')
-                }
-                aria-current={active ? 'page' : undefined}
-              >
-                {t(tab.label)}
-              </Link>
+              <li key={tab.to}>
+                <Link
+                  to={tab.to}
+                  className={
+                    '-mb-px inline-flex items-center gap-2 border-b-2 px-3 py-2.5 text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring ' +
+                    (active
+                      ? 'border-primary font-semibold text-foreground'
+                      : 'border-transparent text-muted-foreground hover:border-border hover:text-foreground')
+                  }
+                  aria-current={active ? 'page' : undefined}
+                >
+                  {Icon ? <Icon className="size-4" aria-hidden="true" /> : null}
+                  {t(tab.label)}
+                </Link>
+              </li>
             )
           })}
-      </div>
+      </ul>
     </nav>
   )
 }

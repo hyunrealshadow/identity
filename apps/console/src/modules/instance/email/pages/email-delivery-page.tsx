@@ -1,5 +1,6 @@
 import { Button } from '@identity/ui/components/button'
 import { Input } from '@identity/ui/components/input'
+import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
 import { Send } from 'lucide-react'
 import { useId, useState } from 'react'
 
@@ -12,7 +13,7 @@ import {
   SettingsSwitch,
 } from '#/components/settings-section'
 import { fieldErrorMap } from '#/lib/graphql/transport'
-import { useLocale, useTranslator, type MessageKey } from '#/lib/i18n'
+import { useTranslator, type MessageKey } from '#/lib/i18n'
 import { toast } from '#/lib/toast'
 import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
 import type { RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
@@ -22,10 +23,12 @@ import {
   useSettingsBlocker,
   useSettingsDraft,
 } from '../../settings/components/instance-settings-context'
+import { SendTestEmailDialog } from '../components/send-test-email-dialog'
 import { useEmailMutations } from '../hooks/email-mutations'
 import { useEmailScope } from '../lib/email-scope'
 import {
   SMTP_DEFAULT_PORTS,
+  emailDeliveryDirty,
   emailDeliveryDraft,
   emailDeliveryInput,
   storedSecret,
@@ -43,18 +46,13 @@ export function EmailDeliveryPage() {
   if (!settings) {
     return (
       <div className="space-y-6" aria-busy="true">
-        <SettingsGroupSkeleton rows={['switch', 'control', 'control', 'control']} />
+        <SettingsGroupSkeleton rows={['switch']} />
+        <SettingsGroupSkeleton rows={['control', 'control', 'control']} />
         <SettingsGroupSkeleton rows={['control', 'control']} />
-        <SettingsGroupSkeleton rows={['control']} description />
       </div>
     )
   }
-  return (
-    <div className="space-y-6">
-      <EmailDeliveryForm key={settings.email.delivery.version} delivery={settings.email.delivery} />
-      <TestEmailGroup delivery={settings.email.delivery} />
-    </div>
-  )
+  return <EmailDeliveryForm key={settings.email.delivery.version} delivery={settings.email.delivery} />
 }
 
 /** A single-line text control at the end of a settings row. */
@@ -104,8 +102,8 @@ function EmailDeliveryForm({ delivery }: { delivery: EmailDelivery }) {
   const { query } = useInstanceSettings()
   const scope = useEmailScope()
   const mutations = useEmailMutations()
+  const testDialog = useOverlayState()
   const errorPrefix = useId()
-  const initial = emailDeliveryDraft(delivery)
   const [draft, setDraft, resetDraft] = useSettingsDraft<EmailDeliveryDraft>(
     'email',
     delivery.version,
@@ -117,7 +115,7 @@ function EmailDeliveryForm({ delivery }: { delivery: EmailDelivery }) {
   const [pending, setPending] = useState(false)
   const editable = scope.deliveryWrite
   const disabled = pending || !editable
-  const dirty = JSON.stringify(draft) !== JSON.stringify(initial)
+  const dirty = emailDeliveryDirty(delivery, draft)
 
   function change<K extends EmailDeliveryField>(field: K, value: EmailDeliveryDraft[K]) {
     setDraft((current) => {
@@ -213,6 +211,31 @@ function EmailDeliveryForm({ delivery }: { delivery: EmailDelivery }) {
 
   const portError = message('port')
   const portErrorId = `${errorPrefix}-port`
+  const toggleDescription: MessageKey = draft.enabled
+    ? 'settingsEmailEnabledHint'
+    : delivery.host.trim() || draft.host.trim()
+      ? 'settingsEmailDisabledSavedHint'
+      : 'settingsEmailDisabledHint'
+
+  const testButton =
+    scope.testEmail && (draft.enabled || delivery.configured) ? (
+      <Button
+        type="button"
+        variant="outline"
+        disabled={pending || !delivery.configured || dirty}
+        title={
+          dirty
+            ? t('settingsEmailTestSaveFirst')
+            : !delivery.configured
+              ? t('settingsEmailTestUnavailable')
+              : undefined
+        }
+        onClick={testDialog.open}
+      >
+        <Send className="size-4" aria-hidden="true" />
+        {t('settingsEmailTestAction')}
+      </Button>
+    ) : null
 
   return (
     <div className="space-y-6">
@@ -234,10 +257,10 @@ function EmailDeliveryForm({ delivery }: { delivery: EmailDelivery }) {
           void save()
         }}
       >
-        <SettingsGroup title={t('settingsEmailDeliverySection')}>
+        <SettingsGroup>
           <SettingsRow
             label={t('settingsEmailEnabled')}
-            description={t('settingsEmailEnabledHint')}
+            description={t(toggleDescription)}
             action={
               <SettingsSwitch
                 label={t('settingsEmailEnabled')}
@@ -247,117 +270,125 @@ function EmailDeliveryForm({ delivery }: { delivery: EmailDelivery }) {
               />
             }
           />
-          {textRow('host', 'settingsEmailHost', 'settingsEmailHostHint', {
-            placeholder: 'smtp.example.com',
-          })}
-          <SettingsRow
-            label={t('settingsEmailSecurity')}
-            description={t('settingsEmailSecurityHint')}
-            action={
-              <SettingsSelect
-                label={t('settingsEmailSecurity')}
-                value={draft.security}
-                onChange={(value) => change('security', value as EmailDeliveryDraft['security'])}
-                options={[
-                  { id: 'START_TLS', label: t('settingsEmailSecurityStartTls') },
-                  { id: 'TLS', label: t('settingsEmailSecurityTls') },
-                  { id: 'NONE', label: t('settingsEmailSecurityNone') },
-                ]}
-                isDisabled={disabled}
-              />
-            }
-          />
-          <SettingsRow
-            label={t('settingsEmailPort')}
-            description={t('settingsEmailPortHint')}
-            action={
-              <SettingsNumberInput
-                name="port"
-                label={t('settingsEmailPort')}
-                value={draft.port}
-                onChange={(value) => change('port', value)}
-                min={delivery.portRange.min}
-                max={delivery.portRange.max}
-                invalid={Boolean(portError)}
-                errorId={portErrorId}
-                isDisabled={disabled}
-              />
-            }
-          >
-            {portError ? <SettingsFieldError id={portErrorId} message={portError} /> : null}
-          </SettingsRow>
         </SettingsGroup>
 
-        <SettingsGroup title={t('settingsEmailSenderSection')}>
-          {textRow('senderAddress', 'settingsEmailSenderAddress', 'settingsEmailSenderAddressHint', {
-            type: 'email',
-            placeholder: 'no-reply@example.com',
-          })}
-          {textRow('senderName', 'settingsEmailSenderName', 'settingsEmailSenderNameHint')}
-        </SettingsGroup>
-
-        <SettingsGroup
-          title={t('settingsEmailAuthenticationSection')}
-          description={t('settingsEmailAuthenticationSectionHint')}
-        >
-          <SettingsRow
-            label={t('settingsEmailAuthenticationMethod')}
-            action={
-              <SettingsSelect
-                label={t('settingsEmailAuthenticationMethod')}
-                value={draft.method}
-                onChange={(value) => change('method', value as EmailDeliveryDraft['method'])}
-                options={[
-                  { id: 'PASSWORD', label: t('settingsEmailMethodPassword') },
-                  { id: 'XOAUTH2', label: t('settingsEmailMethodXoauth2') },
-                  { id: 'NONE', label: t('settingsEmailMethodNone') },
-                ]}
-                isDisabled={disabled}
-              />
-            }
-          />
-          {draft.method !== 'NONE'
-            ? textRow('username', 'settingsEmailUsername', draft.method === 'XOAUTH2'
-                ? 'settingsEmailXoauth2UsernameHint'
-                : null)
-            : null}
-          {draft.method === 'PASSWORD' ? secretRow('password', 'settingsEmailPassword') : null}
-          {draft.method === 'XOAUTH2' ? (
-            <>
-              {textRow('tokenEndpoint', 'settingsEmailTokenEndpoint', 'settingsEmailTokenEndpointHint', {
-                type: 'url',
-                placeholder: 'https://oauth2.example.com/token',
+        {draft.enabled ? (
+          <>
+            <SettingsGroup title={t('settingsEmailDeliverySection')}>
+              {textRow('host', 'settingsEmailHost', 'settingsEmailHostHint', {
+                placeholder: 'smtp.example.com',
               })}
-              {textRow('clientId', 'settingsEmailClientId', null)}
-              {secretRow('clientSecret', 'settingsEmailClientSecret', true)}
               <SettingsRow
-                label={t('settingsEmailGrant')}
-                description={t('settingsEmailGrantHint')}
+                label={t('settingsEmailSecurity')}
+                description={t('settingsEmailSecurityHint')}
                 action={
                   <SettingsSelect
-                    label={t('settingsEmailGrant')}
-                    value={draft.grant}
-                    onChange={(value) => change('grant', value as EmailDeliveryDraft['grant'])}
+                    label={t('settingsEmailSecurity')}
+                    value={draft.security}
+                    onChange={(value) => change('security', value as EmailDeliveryDraft['security'])}
                     options={[
-                      { id: 'REFRESH_TOKEN', label: t('settingsEmailGrantRefreshToken') },
-                      { id: 'CLIENT_CREDENTIALS', label: t('settingsEmailGrantClientCredentials') },
+                      { id: 'START_TLS', label: t('settingsEmailSecurityStartTls') },
+                      { id: 'TLS', label: t('settingsEmailSecurityTls') },
+                      { id: 'NONE', label: t('settingsEmailSecurityNone') },
                     ]}
                     isDisabled={disabled}
                   />
                 }
               />
-              {draft.grant === 'REFRESH_TOKEN'
-                ? secretRow('refreshToken', 'settingsEmailRefreshToken')
+              <SettingsRow
+                label={t('settingsEmailPort')}
+                description={t('settingsEmailPortHint')}
+                action={
+                  <SettingsNumberInput
+                    name="port"
+                    label={t('settingsEmailPort')}
+                    value={draft.port}
+                    onChange={(value) => change('port', value)}
+                    min={delivery.portRange.min}
+                    max={delivery.portRange.max}
+                    invalid={Boolean(portError)}
+                    errorId={portErrorId}
+                    isDisabled={disabled}
+                  />
+                }
+              >
+                {portError ? <SettingsFieldError id={portErrorId} message={portError} /> : null}
+              </SettingsRow>
+            </SettingsGroup>
+
+            <SettingsGroup title={t('settingsEmailSenderSection')}>
+              {textRow('senderAddress', 'settingsEmailSenderAddress', 'settingsEmailSenderAddressHint', {
+                type: 'email',
+                placeholder: 'no-reply@example.com',
+              })}
+              {textRow('senderName', 'settingsEmailSenderName', 'settingsEmailSenderNameHint')}
+            </SettingsGroup>
+
+            <SettingsGroup
+              title={t('settingsEmailAuthenticationSection')}
+              description={t('settingsEmailAuthenticationSectionHint')}
+            >
+              <SettingsRow
+                label={t('settingsEmailAuthenticationMethod')}
+                action={
+                  <SettingsSelect
+                    label={t('settingsEmailAuthenticationMethod')}
+                    value={draft.method}
+                    onChange={(value) => change('method', value as EmailDeliveryDraft['method'])}
+                    options={[
+                      { id: 'PASSWORD', label: t('settingsEmailMethodPassword') },
+                      { id: 'XOAUTH2', label: t('settingsEmailMethodXoauth2') },
+                      { id: 'NONE', label: t('settingsEmailMethodNone') },
+                    ]}
+                    isDisabled={disabled}
+                  />
+                }
+              />
+              {draft.method !== 'NONE'
+                ? textRow('username', 'settingsEmailUsername', draft.method === 'XOAUTH2'
+                    ? 'settingsEmailXoauth2UsernameHint'
+                    : null)
                 : null}
-              {textRow('scope', 'settingsEmailScope', 'settingsEmailScopeHint')}
-            </>
-          ) : null}
-        </SettingsGroup>
+              {draft.method === 'PASSWORD' ? secretRow('password', 'settingsEmailPassword') : null}
+              {draft.method === 'XOAUTH2' ? (
+                <>
+                  {textRow('tokenEndpoint', 'settingsEmailTokenEndpoint', 'settingsEmailTokenEndpointHint', {
+                    type: 'url',
+                    placeholder: 'https://oauth2.example.com/token',
+                  })}
+                  {textRow('clientId', 'settingsEmailClientId', null)}
+                  {secretRow('clientSecret', 'settingsEmailClientSecret', true)}
+                  <SettingsRow
+                    label={t('settingsEmailGrant')}
+                    description={t('settingsEmailGrantHint')}
+                    action={
+                      <SettingsSelect
+                        label={t('settingsEmailGrant')}
+                        value={draft.grant}
+                        onChange={(value) => change('grant', value as EmailDeliveryDraft['grant'])}
+                        options={[
+                          { id: 'REFRESH_TOKEN', label: t('settingsEmailGrantRefreshToken') },
+                          { id: 'CLIENT_CREDENTIALS', label: t('settingsEmailGrantClientCredentials') },
+                        ]}
+                        isDisabled={disabled}
+                      />
+                    }
+                  />
+                  {draft.grant === 'REFRESH_TOKEN'
+                    ? secretRow('refreshToken', 'settingsEmailRefreshToken')
+                    : null}
+                  {textRow('scope', 'settingsEmailScope', 'settingsEmailScopeHint')}
+                </>
+              ) : null}
+            </SettingsGroup>
+          </>
+        ) : null}
 
         {editable ? (
           <SettingsFormFooter
             dirty={dirty}
             pending={pending}
+            leading={testButton}
             onDiscard={() => {
               resetDraft()
               setErrors({})
@@ -365,8 +396,11 @@ function EmailDeliveryForm({ delivery }: { delivery: EmailDelivery }) {
               setFeedback(null)
             }}
           />
+        ) : testButton ? (
+          <div className="flex flex-wrap items-center gap-3">{testButton}</div>
         ) : null}
       </form>
+      {scope.testEmail ? <SendTestEmailDialog state={testDialog} /> : null}
     </div>
   )
 }
@@ -379,91 +413,4 @@ function serverFieldErrors(fields: Record<string, string>): Record<string, strin
     if (key && !result[key]) result[key] = value
   }
   return result
-}
-
-function TestEmailGroup({ delivery }: { delivery: EmailDelivery }) {
-  const t = useTranslator()
-  const { locale } = useLocale()
-  const scope = useEmailScope()
-  const mutations = useEmailMutations()
-  const errorId = useId()
-  const [recipient, setRecipient] = useState('')
-  const [error, setError] = useState<string>()
-  const [feedback, setFeedback] = useState<RbacFeedbackState | null>(null)
-  const [pending, setPending] = useState(false)
-  if (!scope.testEmail) return null
-  const disabled = pending || !delivery.configured
-
-  async function send() {
-    if (pending) return
-    const trimmed = recipient.trim()
-    if (!/^[^\s@]+@[^\s@]+$/u.test(trimmed)) {
-      setError(t('settingsEmailInvalidAddress'))
-      return
-    }
-    setPending(true)
-    setFeedback(null)
-    try {
-      const result = await mutations.sendTestEmail({ recipient: trimmed, locale })
-      if (!result.data?.sendTestEmail?.sent) {
-        const fields = fieldErrorMap(result.errors)
-        if (fields.recipient) setError(fields.recipient)
-        else setFeedback(mutationFeedback(result, 'missing_send_test_email_payload'))
-        return
-      }
-      toast.success(t('settingsEmailTestSent', { recipient: trimmed }))
-    } catch {
-      setFeedback(networkFeedback('send_test_email_request_failed'))
-    } finally {
-      setPending(false)
-    }
-  }
-
-  return (
-    <div className="space-y-3">
-      {feedback ? <RbacMutationFeedback feedback={feedback} /> : null}
-      <SettingsGroup
-        title={t('settingsEmailTestSection')}
-        description={t(delivery.configured ? 'settingsEmailTestHint' : 'settingsEmailTestUnavailable')}
-      >
-        <form
-          noValidate
-          aria-busy={pending}
-          onSubmit={(event) => {
-            event.preventDefault()
-            void send()
-          }}
-        >
-          <SettingsRow
-            label={t('settingsEmailTestRecipient')}
-            action={
-              <div className="flex items-center gap-2">
-                <TextControl
-                  name="recipient"
-                  label={t('settingsEmailTestRecipient')}
-                  value={recipient}
-                  onChange={(value) => {
-                    setRecipient(value)
-                    setError(undefined)
-                  }}
-                  type="email"
-                  placeholder="you@example.com"
-                  autoComplete="email"
-                  invalid={Boolean(error)}
-                  errorId={errorId}
-                  disabled={disabled}
-                />
-                <Button type="submit" variant="outline" disabled={!delivery.configured} loading={pending}>
-                  {pending ? null : <Send className="size-4" aria-hidden="true" />}
-                  {t('settingsEmailTestSend')}
-                </Button>
-              </div>
-            }
-          >
-            {error ? <SettingsFieldError id={errorId} message={error} /> : null}
-          </SettingsRow>
-        </form>
-      </SettingsGroup>
-    </div>
-  )
 }

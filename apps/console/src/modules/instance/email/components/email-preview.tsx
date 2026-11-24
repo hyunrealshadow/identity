@@ -1,7 +1,7 @@
 import { Skeleton } from '@identity/ui/components/skeleton'
 import { Spinner } from '@identity/ui/components/spinner'
 import { CircleAlert } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 
 import {
   ConsoleEmailTemplatePreviewDocument,
@@ -33,12 +33,14 @@ export function EmailPreview({
   locale,
   content,
   enabled,
+  action,
 }: {
   kind: EmailTemplateKind
   /** The language previewed; `null` previews the default content. */
   locale: string | null
   content: EmailTemplateContentDraft
   enabled: boolean
+  action?: ReactNode
 }) {
   const t = useTranslator()
   const request = useGraphQL()
@@ -96,14 +98,15 @@ export function EmailPreview({
       : undefined
 
   return (
-    <section aria-label={t('settingsEmailPreview')} className="xl:sticky xl:top-4">
+    <section aria-label={t('settingsEmailPreview')} className="xl:sticky xl:top-20">
       <div className="mb-2 flex min-h-8 items-center justify-between gap-3 px-1">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold">{t('settingsEmailPreview')}</h3>
+          <h2 className="text-sm font-semibold">{t('settingsEmailPreview')}</h2>
           {enabled && state.status === 'loading' && rendered ? (
             <Spinner className="size-3.5 text-muted-foreground" aria-label={t('settingsEmailPreviewUpdating')} />
           ) : null}
         </div>
+        {action}
       </div>
       <div className="console-card overflow-hidden rounded-xl border border-border bg-card">
         {!enabled ? (

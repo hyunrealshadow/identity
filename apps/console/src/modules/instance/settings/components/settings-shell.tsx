@@ -1,4 +1,5 @@
 import { Outlet, useRouterState } from '@tanstack/react-router'
+import { Globe, KeyRound, LockKeyhole, ShieldCheck, SlidersHorizontal } from 'lucide-react'
 
 import { PageHeader } from '#/components/page-header'
 import { useTranslator } from '#/lib/i18n'
@@ -19,11 +20,21 @@ const tabs: ReadonlyArray<
     read: 'settings' | 'keys'
   }
 > = [
-  { to: '/settings', label: 'settingsTabGeneral', read: 'settings' },
-  { to: '/settings/protocol', label: 'settingsTabProtocol', read: 'settings' },
-  { to: '/settings/authentication', label: 'settingsTabAuthentication', read: 'settings' },
-  { to: '/settings/signing-keys', label: 'settingsTabSigningKeys', read: 'keys' },
-  { to: '/settings/encryption-keys', label: 'settingsTabEncryptionKeys', read: 'keys' },
+  { to: '/settings', label: 'settingsTabGeneral', icon: SlidersHorizontal, read: 'settings' },
+  { to: '/settings/protocol', label: 'settingsTabProtocol', icon: Globe, read: 'settings' },
+  {
+    to: '/settings/authentication',
+    label: 'settingsTabAuthentication',
+    icon: ShieldCheck,
+    read: 'settings',
+  },
+  { to: '/settings/signing-keys', label: 'settingsTabSigningKeys', icon: KeyRound, read: 'keys' },
+  {
+    to: '/settings/encryption-keys',
+    label: 'settingsTabEncryptionKeys',
+    icon: LockKeyhole,
+    read: 'keys',
+  },
 ]
 
 export function SettingsShell() {

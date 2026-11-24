@@ -9,10 +9,12 @@ import {
   SelectValue,
 } from '@identity/ui/components/select'
 import { Skeleton } from '@identity/ui/components/skeleton'
-import { Link } from '@tanstack/react-router'
-import { ArrowLeft, Plus, Undo2, X } from 'lucide-react'
+import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
+import { useNavigate } from '@tanstack/react-router'
+import { ArrowLeft, Plus, Send, Undo2, X } from 'lucide-react'
 import { useId, useRef, useState } from 'react'
 
+import { AsyncState } from '#/components/async-state'
 import { useBreadcrumbLabel } from '#/components/app-breadcrumbs'
 import { SettingsGroup, SettingsGroupSkeleton, SettingsRow, SettingsSwitch } from '#/components/settings-section'
 import { TranslationLanguagePicker } from '#/components/translation-language-picker'
@@ -31,7 +33,9 @@ import {
 } from '../../settings/components/instance-settings-context'
 import { mutationFeedback, networkFeedback } from '../../settings/lib/feedback'
 import { EmailPreview } from '../components/email-preview'
+import { EmailTemplateStatusChip } from '../components/email-template-status'
 import { HtmlCodeEditor } from '../components/html-code-editor'
+import { SendTestEmailDialog } from '../components/send-test-email-dialog'
 import { useEmailMutations } from '../hooks/email-mutations'
 import {
   addTemplateTranslation,
@@ -59,45 +63,70 @@ const DEFAULT_LANGUAGE = '@default'
 
 export function EmailTemplatePage({ slug }: { slug: string }) {
   const t = useTranslator()
+  const navigate = useNavigate()
   const { settings } = useInstanceSettings()
   const blocked = useSettingsBlocker()
   const kind = emailTemplateKind(slug)
-  useBreadcrumbLabel(`/email/templates/${slug}`, kind ? t(emailTemplateLabels[kind].title) : undefined)
-  if (blocked) return blocked
-  const back = (
-    <Link to="/email/templates" className="mb-4 inline-flex items-center gap-1.5 text-sm text-link">
-      <ArrowLeft className="size-4" aria-hidden="true" />
-      {t('emailAllTemplates')}
-    </Link>
-  )
-  if (!settings) {
-    return (
-      <div aria-busy="true">
-        {back}
-        <div className="grid gap-6 xl:grid-cols-2">
-          <SettingsGroupSkeleton rows={['switch', 'control', 'textarea']} />
-          <div className="space-y-2" aria-hidden="true">
-            <Skeleton className="h-4 w-24 rounded-lg" />
-            <Skeleton className="h-[28rem] w-full rounded-xl" />
-          </div>
-        </div>
-      </div>
-    )
-  }
-  const template = settings.email.templates.find((entry) => entry.kind === kind)
-  if (!template) {
-    return (
-      <div>
-        {back}
-        <p className="text-sm text-muted-foreground">{t('settingsEmailTemplateMissing')}</p>
-      </div>
-    )
-  }
+  const labels = kind ? emailTemplateLabels[kind] : undefined
+  useBreadcrumbLabel(`/email/templates/${slug}`, labels ? t(labels.title) : undefined)
+  const template = settings?.email.templates.find((entry) => entry.kind === kind)
+
   return (
-    <div>
-      {back}
-      <EmailTemplateForm key={template.version} template={template} />
-    </div>
+    <>
+      <header className="mb-6 space-y-5">
+        <Button
+          variant="ghost"
+          size="sm"
+          className="-ml-2"
+          onClick={() => void navigate({ to: '/email/templates' })}
+        >
+          <ArrowLeft className="size-4" aria-hidden="true" />
+          {t('emailBackToTemplates')}
+        </Button>
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-3">
+            <h1 className="text-2xl font-semibold tracking-tight">
+              {labels ? t(labels.title) : t('settingsEmailTemplateCrumb')}
+            </h1>
+            {template ? (
+              <EmailTemplateStatusChip customized={template.customized} />
+            ) : !blocked && !settings && labels ? (
+              <Skeleton className="h-5 w-14 rounded-4xl" />
+            ) : null}
+          </div>
+          {labels ? (
+            <p className="max-w-3xl text-sm text-muted-foreground">{t(labels.description)}</p>
+          ) : null}
+        </div>
+      </header>
+      {blocked ? (
+        blocked
+      ) : !settings ? (
+        <div className="grid items-start gap-6 xl:grid-cols-2" aria-busy="true">
+          <SettingsGroupSkeleton rows={['switch', 'control', 'textarea', 'value']} />
+          <section aria-hidden="true">
+            <div className="mb-2 flex min-h-8 items-center px-1">
+              <Skeleton className="h-4 w-16 rounded-lg" />
+            </div>
+            <div className="console-card overflow-hidden rounded-xl border border-border bg-card">
+              <div className="border-b border-border px-5 py-3">
+                <Skeleton className="h-3 w-12 rounded-lg" />
+                <Skeleton className="mt-1.5 h-4 w-2/3 rounded-lg" />
+              </div>
+              <Skeleton className="h-[32rem] w-full rounded-none" />
+            </div>
+          </section>
+        </div>
+      ) : !template ? (
+        <AsyncState
+          kind="notFound"
+          title={t('notFoundTitle')}
+          description={t('settingsEmailTemplateMissing')}
+        />
+      ) : (
+        <EmailTemplateForm key={template.version} template={template} />
+      )}
+    </>
   )
 }
 
@@ -106,9 +135,11 @@ type PartErrors = Partial<Record<keyof EmailTemplateContentDraft | 'locale', str
 function EmailTemplateForm({ template }: { template: EmailTemplate }) {
   const t = useTranslator()
   const { locale: uiLocale } = useLocale()
-  const { query } = useInstanceSettings()
+  const { query, settings } = useInstanceSettings()
   const scope = useEmailScope()
   const mutations = useEmailMutations()
+  const testDialog = useOverlayState()
+  const deliveryConfigured = settings?.email.delivery.configured ?? false
   const fieldId = useId()
   const addPanelId = useId()
   const addButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -128,7 +159,6 @@ function EmailTemplateForm({ template }: { template: EmailTemplate }) {
   const disabled = pending || !editable
   const readOnly = !draft.customized
   const dirty = JSON.stringify(draft) !== JSON.stringify(initial)
-  const labels = emailTemplateLabels[template.kind]
   const shown = effectiveEmailTemplate(template, draft)
   const content = templateContent(shown, language) ?? shown.default
   const activeLanguage = templateContent(shown, language) ? language : null
@@ -256,10 +286,6 @@ function EmailTemplateForm({ template }: { template: EmailTemplate }) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-base font-semibold">{t(labels.title)}</h2>
-        <p className="mt-0.5 text-sm text-muted-foreground">{t(labels.description)}</p>
-      </div>
       {feedback ? (
         <RbacMutationFeedback
           feedback={feedback}
@@ -280,7 +306,7 @@ function EmailTemplateForm({ template }: { template: EmailTemplate }) {
         }}
       >
         <div className="grid items-start gap-6 xl:grid-cols-2">
-          <SettingsGroup>
+          <SettingsGroup title={t('settingsEmailTemplateContentSection')}>
             <SettingsRow
               label={t('settingsEmailTemplateCustomize')}
               description={t(
@@ -452,6 +478,21 @@ function EmailTemplateForm({ template }: { template: EmailTemplate }) {
             locale={activeLanguage}
             content={content}
             enabled={scope.preview}
+            action={
+              scope.testEmail ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={!deliveryConfigured || pending}
+                  title={deliveryConfigured ? undefined : t('settingsEmailTestUnavailable')}
+                  onClick={testDialog.open}
+                >
+                  <Send className="size-3.5" aria-hidden="true" />
+                  {t('settingsEmailTestAction')}
+                </Button>
+              ) : undefined
+            }
           />
         </div>
 
@@ -470,6 +511,14 @@ function EmailTemplateForm({ template }: { template: EmailTemplate }) {
           />
         ) : null}
       </form>
+      {scope.testEmail ? (
+        <SendTestEmailDialog
+          state={testDialog}
+          template={{ kind: template.kind, locale: activeLanguage, content }}
+          title={t('settingsEmailTemplateTestTitle')}
+          description={t('settingsEmailTemplateTestHint')}
+        />
+      ) : null}
     </div>
   )
 }

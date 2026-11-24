@@ -1,4 +1,3 @@
-import { Badge } from '@identity/ui/components/badge'
 import { Link } from '@tanstack/react-router'
 import { ChevronRight } from 'lucide-react'
 
@@ -8,6 +7,7 @@ import {
   useInstanceSettings,
   useSettingsBlocker,
 } from '../../settings/components/instance-settings-context'
+import { EmailTemplateStatusChip } from '../components/email-template-status'
 import { emailTemplateLabels, emailTemplateSlug } from '../lib/email-form'
 
 export function EmailTemplatesPage() {
@@ -46,11 +46,7 @@ export function EmailTemplatesPage() {
                 count: template.content.translations.length,
               })}
             </span>
-            <Badge variant={template.customized ? 'secondary' : 'outline'}>
-              {template.customized
-                ? t('settingsEmailTemplateCustomized')
-                : t('settingsEmailTemplateBuiltIn')}
-            </Badge>
+            <EmailTemplateStatusChip customized={template.customized} />
             <ChevronRight
               className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5"
               aria-hidden="true"

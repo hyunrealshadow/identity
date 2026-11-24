@@ -438,6 +438,8 @@ pub(crate) struct SendTestEmailInput {
     /// Language of the message.
     #[graphql(validator(chars_max_length = 35))]
     pub locale: String,
+    /// Template draft to render instead of the generic delivery test message.
+    pub template: Option<EmailTemplatePreviewInput>,
     #[graphql(validator(chars_max_length = 255))]
     pub client_mutation_id: Option<String>,
 }

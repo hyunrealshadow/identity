@@ -289,9 +289,17 @@ pub struct EmailTemplateDraft {
 }
 
 #[derive(Debug, Clone)]
+pub struct SendTestEmailTemplate {
+    pub kind: EmailTemplateKind,
+    pub locale: Option<String>,
+    pub content: EmailTemplateContent,
+}
+
+#[derive(Debug, Clone)]
 pub struct SendTestEmailCommand {
     pub recipient: String,
     pub locale: String,
+    pub template: Option<SendTestEmailTemplate>,
 }
 
 fn invalid(code: InstanceErrorCode, field: &str) -> AppError {
@@ -605,9 +613,11 @@ impl InstanceSettingService {
             .map_err(|check| check.into_error("content."))
     }
 
-    /// Send a short message with the stored delivery settings.
+    /// Send a short message, or a rendered template draft, with the stored
+    /// delivery settings.
     #[tracing::instrument(skip_all, name = "setting.email.test")]
     pub async fn send_test_email(&self, command: SendTestEmailCommand) -> Result<(), AppError> {
+        let template_kind = command.template.as_ref().map(|template| template.kind);
         let result = async {
             let dependencies = self.email_dependencies()?;
             let recipient = trimmed(&command.recipient);
@@ -620,14 +630,15 @@ impl InstanceSettingService {
                     InstanceErrorCode::EmailDeliveryNotConfigured,
                 ));
             }
-            let locale = if command.locale.trim().starts_with("zh") {
-                "zh-CN"
-            } else {
-                "en-US"
-            };
+            let message = prepare_test_message(
+                dependencies.renderer.as_ref(),
+                recipient,
+                &command.locale,
+                command.template,
+            )?;
             dependencies
                 .sender
-                .send(&state.email_delivery, test_message(recipient, locale))
+                .send(&state.email_delivery, message)
                 .await
                 .map_err(|error| {
                     AppError::from_code(InstanceErrorCode::TestEmailFailed)
@@ -640,6 +651,9 @@ impl InstanceSettingService {
         }
         .await;
         let mut event = BusinessEvent::business("setting.email.test");
+        if let Some(kind) = template_kind {
+            event = event.attribute("email.template", EventValue::Text(kind.as_str().to_owned()));
+        }
         event = match &result {
             Ok(()) => event.outcome("success"),
             Err(error) => event
@@ -649,6 +663,39 @@ impl InstanceSettingService {
         self.events.emit(event);
         result
     }
+}
+
+fn prepare_test_message(
+    renderer: &dyn EmailTemplateRenderer,
+    recipient: String,
+    locale: &str,
+    template: Option<SendTestEmailTemplate>,
+) -> Result<EmailMessage, AppError> {
+    let Some(template) = template else {
+        let locale = if locale.trim().starts_with("zh") {
+            "zh-CN"
+        } else {
+            "en-US"
+        };
+        return Ok(test_message(recipient, locale));
+    };
+    let template_locale = match template.locale {
+        Some(locale) => Some(canonical_locale(&locale, "template.locale")?),
+        None => None,
+    };
+    let rendered = check_template(
+        renderer,
+        template.kind,
+        template_locale.as_deref(),
+        &template.content,
+    )
+    .map_err(|check| check.into_error("template.content."))?;
+    Ok(EmailMessage {
+        to_address: recipient,
+        to_name: None,
+        subject: rendered.subject,
+        html: rendered.html,
+    })
 }
 
 /// Why a template cannot be saved, tied to the part it concerns.
@@ -953,5 +1000,61 @@ mod tests {
         )
         .unwrap_err();
         assert_eq!(field(&empty), "default.html");
+    }
+
+    #[test]
+    fn prepare_test_message_uses_generic_message_without_template() {
+        let message =
+            prepare_test_message(&EchoRenderer, "to@example.com".to_owned(), "zh-Hans", None)
+                .unwrap();
+        assert_eq!(message.to_address, "to@example.com");
+        assert_eq!(message.subject, "测试邮件");
+        assert!(message.html.contains("lang=\"zh-CN\""));
+    }
+
+    #[test]
+    fn prepare_test_message_renders_template_draft_and_prefixes_errors() {
+        let message = prepare_test_message(
+            &EchoRenderer,
+            "to@example.com".to_owned(),
+            "en-US",
+            Some(SendTestEmailTemplate {
+                kind: EmailTemplateKind::SignInCode,
+                locale: Some("zh_cn".to_owned()),
+                content: EmailTemplateContent {
+                    subject: "Code".to_owned(),
+                    html: "<p>Hi</p>".to_owned(),
+                },
+            }),
+        )
+        .unwrap();
+        assert_eq!(message.subject, "Code");
+        assert_eq!(message.html, "<p>Hi</p>");
+
+        let broken = prepare_test_message(
+            &EchoRenderer,
+            "to@example.com".to_owned(),
+            "en-US",
+            Some(SendTestEmailTemplate {
+                kind: EmailTemplateKind::SignInCode,
+                locale: None,
+                content: page("{% broken %}"),
+            }),
+        )
+        .unwrap_err();
+        assert_eq!(field(&broken), "template.content.html");
+
+        let invalid_locale = prepare_test_message(
+            &EchoRenderer,
+            "to@example.com".to_owned(),
+            "en-US",
+            Some(SendTestEmailTemplate {
+                kind: EmailTemplateKind::SignInCode,
+                locale: Some("not a locale".to_owned()),
+                content: page("<p>Hi</p>"),
+            }),
+        )
+        .unwrap_err();
+        assert_eq!(field(&invalid_locale), "template.locale");
     }
 }

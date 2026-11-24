@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   addTemplateTranslation,
   customizeEmailTemplate,
+  emailDeliveryDirty,
   emailDeliveryDraft,
   emailDeliveryInput,
   emailTemplateInput,
@@ -42,6 +43,7 @@ describe('email delivery form', () => {
     const result = emailDeliveryInput(delivery, emailDeliveryDraft(delivery))
     expect(result).toMatchObject({
       input: {
+        enabled: true,
         authentication: { method: 'PASSWORD', username: 'mailer', password: null },
         expectedVersion: 'v1',
       },
@@ -80,10 +82,43 @@ describe('email delivery form', () => {
     })
   })
 
-  it('requires a server and sender only while sending is on', () => {
-    const off = { ...emailDeliveryDraft(delivery), enabled: false, host: '', senderAddress: '' }
-    expect('input' in emailDeliveryInput(delivery, off)).toBe(true)
-    expect(emailDeliveryInput(delivery, { ...off, enabled: true })).toEqual({
+  it('preserves stored configuration when turning delivery off and ignores hidden edits', () => {
+    const disabledDraft = {
+      ...emailDeliveryDraft(delivery),
+      enabled: false,
+      host: '',
+      senderAddress: 'invalid',
+      port: '0',
+    }
+    expect(emailDeliveryDirty(delivery, disabledDraft)).toBe(true)
+    expect(emailDeliveryDirty({ ...delivery, enabled: false }, disabledDraft)).toBe(false)
+    expect(emailDeliveryInput(delivery, disabledDraft)).toEqual({
+      input: {
+        enabled: false,
+        host: 'smtp.example.com',
+        port: 587,
+        security: 'START_TLS',
+        senderAddress: 'identity@example.com',
+        senderName: null,
+        authentication: {
+          method: 'PASSWORD',
+          username: 'mailer',
+          password: null,
+        },
+        expectedVersion: 'v1',
+      },
+    })
+  })
+
+  it('requires a server and sender when enabling delivery', () => {
+    const emptyEnabled = {
+      ...emailDeliveryDraft(delivery),
+      enabled: true,
+      host: '',
+      senderAddress: '',
+      method: 'NONE' as const,
+    }
+    expect(emailDeliveryInput(delivery, emptyEnabled)).toEqual({
       errors: {
         host: { key: 'settingsEmailRequired' },
         senderAddress: { key: 'settingsEmailRequired' },
