@@ -11,9 +11,9 @@ members = [
 resolver = "3"
 
 [workspace.dependencies]
-apalis = { version = "0.7.4" }
-apalis-cron = { version = "0.7.4" }
-apalis-sql = { version = "0.7.4", features = ["postgres", "tokio-comp"] }
+apalis = { version = "1.2.0" }
+apalis-cron = { version = "1.2.0" }
+apalis-postgres = { version = "1.2.0" }
 anyhow = { version = "1.0.104" }
 async-trait = { version = "0.1.92" }
 async-graphql = { version = "7.2.1", default-features = false, features = ["chrono", "graphiql", "url", "uuid"] }
@@ -21,6 +21,7 @@ base64 = { version = "0.23.1" }
 chacha20poly1305 = { version = "0.11.0" }
 chrono = { version = "0.4.45", features = ["serde"] }
 chrono-tz = { version = "0.10.4", features = ["case-insensitive"] }
+cron = { version = "0.17.0" }
 http = "1.5.0"
 idna = { version = "1.1.0" }
 ipnet = { version = "2.12.2", features = ["serde"] }

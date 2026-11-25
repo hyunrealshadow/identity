@@ -13,7 +13,8 @@ path = "mod.rs"
 strum = { workspace = true }
 apalis = { workspace = true }
 apalis-cron = { workspace = true }
-apalis-sql = { workspace = true }
+apalis-postgres = { workspace = true }
+cron = { workspace = true }
 argon2 = { version = "0.6.0" }
 async-graphql = { workspace = true }
 async-trait = { workspace = true }
@@ -72,5 +73,6 @@ oidc-conformance = []
 test-support = []
 
 [dev-dependencies]
+tokio = { workspace = true, features = ["test-util"] }
 serial_test = { workspace = true }
 migration = { workspace = true }

@@ -1,58 +1,38 @@
-use std::{str::FromStr, time::Duration};
-
-use apalis::prelude::{
-    BoxDynError, Data, Request, Storage, TaskId, WorkerBuilder, WorkerFactoryFn,
-};
-use apalis_cron::{CronContext, CronStream, Schedule};
-use apalis_sql::{
-    Config,
-    postgres::PostgresStorage,
-    sqlx::{Error, PgPool},
-};
-use chrono::{DateTime, Utc};
+use apalis::prelude::{BoxDynError, Data, TaskBuilder, TaskSink, WorkerBuilder};
+use apalis_cron::{CronScheduler, Tick};
+use apalis_postgres::{Config, Error, PostgresStorage};
 use identity_application::observability::{BusinessEvent, EventValue, event_sink};
+use sea_orm::sqlx::PgPool;
 use serde::{Deserialize, Serialize};
-use tokio::{select, spawn};
 use tracing::{error, info};
-use ulid::Ulid;
 use uuid::Uuid;
 
+use super::{already_queued, period_key, schedule, spawn_until_shutdown};
 use crate::state::AppState;
-
-#[derive(Debug, Clone, Default)]
-struct RotationTick;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 struct RotationJob;
 
-const ROTATION_JOB_ID_SUFFIX: u128 = 0x524F_5441_5449_4F4E;
-const ROTATION_JOB_NAMESPACE: &str = "identity.credential_rotation";
+pub(super) const ROTATION_QUEUE: &str = "identity.credential_rotation";
+const ROTATION_PERIOD_SECONDS: u64 = 3_600;
 
-fn rotation_task_id(timestamp: DateTime<Utc>) -> TaskId {
-    let hour_start_millis = timestamp.timestamp_millis().div_euclid(3_600_000) * 3_600_000;
-    let hour_start_millis =
-        u64::try_from(hour_start_millis).expect("rotation schedule must be after Unix epoch");
-    Ulid::from_parts(hour_start_millis, ROTATION_JOB_ID_SUFFIX)
-        .to_string()
-        .parse()
-        .expect("generated ULID must be a valid task ID")
-}
-
+/// Queue the rotation run of the hour containing `timestamp_seconds`, once
+/// across all instances.
 async fn enqueue_rotation(
     storage: &mut PostgresStorage<RotationJob>,
-    timestamp: DateTime<Utc>,
-) -> Result<(), Error> {
-    let mut request = Request::new(RotationJob);
-    request.parts.task_id = rotation_task_id(timestamp);
-    match storage.push_request(request).await {
-        Ok(_) => Ok(()),
-        Err(Error::Database(error))
-            if error.code().as_deref() == Some("23505")
-                && error.constraint() == Some("unique_job_id") =>
-        {
-            Ok(())
-        }
-        Err(error) => Err(error),
+    timestamp_seconds: u64,
+) -> Result<(), BoxDynError> {
+    let task = TaskBuilder::new(RotationJob)
+        .idempotency_key(period_key(
+            ROTATION_QUEUE,
+            timestamp_seconds,
+            ROTATION_PERIOD_SECONDS,
+        ))
+        .build();
+    match storage.push_task(task).await {
+        Ok(()) => Ok(()),
+        Err(error) if already_queued(&error) => Ok(()),
+        Err(error) => Err(Box::new(error)),
     }
 }
 
@@ -100,76 +80,43 @@ async fn maintain_rotation(state: &AppState) -> Result<(), BoxDynError> {
 }
 
 async fn handle_rotation_tick(
-    _: RotationTick,
-    context: CronContext<Utc>,
+    tick: Tick,
     storage: Data<PostgresStorage<RotationJob>>,
 ) -> Result<(), BoxDynError> {
     let mut storage = (*storage).clone();
-    enqueue_rotation(&mut storage, *context.get_timestamp())
+    enqueue_rotation(&mut storage, tick.get_timestamp())
         .await
-        .map_err(|error| {
-            error!(error = %error, "failed to enqueue rotation job");
-            Box::new(error) as BoxDynError
-        })
+        .inspect_err(|error| error!(error = %error, "failed to enqueue rotation job"))
 }
 
-async fn handle_rotation_job(_: RotationJob, data: Data<AppState>) -> Result<(), BoxDynError> {
-    maintain_rotation(&data).await
+async fn handle_rotation_job(_: RotationJob, state: Data<AppState>) -> Result<(), BoxDynError> {
+    maintain_rotation(&state).await
 }
 
 pub(super) async fn spawn_rotation_workers(state: AppState, pool: PgPool) -> Result<(), Error> {
-    let storage = PostgresStorage::<RotationJob>::new_with_config(
-        pool,
-        Config::new(ROTATION_JOB_NAMESPACE).set_poll_interval(Duration::from_secs(30)),
-    );
-    enqueue_rotation(&mut storage.clone(), Utc::now()).await?;
+    let storage = PostgresStorage::<RotationJob>::new(&pool)
+        .with_config(Config::default().queue(ROTATION_QUEUE));
+    let now = u64::try_from(chrono::Utc::now().timestamp()).unwrap_or_default();
+    if let Err(error) = enqueue_rotation(&mut storage.clone(), now).await {
+        error!(error = %error, "failed to enqueue the initial rotation job");
+    }
 
-    let job_state = state.clone();
-    let job_storage = storage.clone();
-    spawn(async move {
-        let mut shutdown = job_state.lifecycle().subscribe_shutdown();
-        let worker = WorkerBuilder::new(format!("credential-rotation-{}", Uuid::new_v4()))
-            .data(job_state)
-            .backend(job_storage)
-            .build_fn(handle_rotation_job);
-        select! {
-            () = worker.run() => error!("rotation job worker stopped"),
-            _ = async {
-                while shutdown.changed().await.is_ok() && !*shutdown.borrow() {}
-            } => {}
-        }
+    let worker_storage = storage.clone();
+    let worker_state = state.clone();
+    spawn_until_shutdown(&state, "credential-rotation", move || {
+        WorkerBuilder::new(format!("credential-rotation-{}", Uuid::new_v4()))
+            .backend(worker_storage.clone())
+            .data(worker_state.clone())
+            .build(handle_rotation_job)
+            .run()
     });
 
-    spawn(async move {
-        let mut shutdown = state.lifecycle().subscribe_shutdown();
-        let schedule = Schedule::from_str("@hourly").expect("valid rotation schedule");
-        let worker = WorkerBuilder::new("credential-rotation-scheduler")
-            .data(storage)
-            .backend(CronStream::new(schedule))
-            .build_fn(handle_rotation_tick);
-        select! {
-            () = worker.run() => error!("rotation scheduler stopped"),
-            _ = async {
-                while shutdown.changed().await.is_ok() && !*shutdown.borrow() {}
-            } => {}
-        }
+    spawn_until_shutdown(&state, "credential-rotation-scheduler", move || {
+        WorkerBuilder::new(format!("credential-rotation-scheduler-{}", Uuid::new_v4()))
+            .backend(CronScheduler::new(schedule("@hourly")))
+            .data(storage.clone())
+            .build(handle_rotation_tick)
+            .run()
     });
     Ok(())
-}
-
-#[cfg(test)]
-mod tests {
-    use chrono::{TimeZone as _, Utc};
-
-    use super::rotation_task_id;
-
-    #[test]
-    fn rotation_job_id_is_shared_by_instances_for_one_hour() {
-        let first = Utc.with_ymd_and_hms(2026, 9, 28, 10, 0, 0).unwrap();
-        let same_hour = Utc.with_ymd_and_hms(2026, 9, 28, 10, 59, 59).unwrap();
-        let next_hour = Utc.with_ymd_and_hms(2026, 9, 28, 11, 0, 0).unwrap();
-
-        assert_eq!(rotation_task_id(first), rotation_task_id(same_hour));
-        assert_ne!(rotation_task_id(first), rotation_task_id(next_hour));
-    }
 }
