@@ -183,7 +183,7 @@ characters, nesting depth 16, and 64 leaf clauses) over fields named after
 (`action:role_update`, `action:ROLE_*`), and unknown values are rejected.
 The grammar is the Console query input's (`packages/lucene-input`): `AND`/`&&`,
 `OR`/`||`, `NOT`/`!` and a range's `TO` match in any letter case; clauses side
-by side must all match and bind more loosely than `OR` (`a b OR c` is
+by side (separated by whitespace) must all match and bind more loosely than `OR` (`a b OR c` is
 `a AND (b OR c)`); field groups (`occurredAt:(>=now-7d AND <now)`) also carry
 comparisons and ranges; ranges are inclusive `[from TO to]`; phrases take `"` or
 `'`, and a backslash makes the next character literal (`a\*`). The input

@@ -307,6 +307,22 @@ describe('lucene syntax tree', () => {
     expect(collect(groupedRange, 'FieldRangeExpression')).toHaveLength(1);
     expect(collect(groupedRange, 'UnparsedTokens')).toEqual([]);
   });
+
+  it('requires whitespace for implicit conjunction and restricts fuzzy modifiers', () => {
+    expect(collect(buildLuceneSyntaxTree('foo"bar"'), 'UnparsedTokens')).toHaveLength(1);
+    expect(collect(buildLuceneSyntaxTree('(a)(b)'), 'UnparsedTokens')).toHaveLength(1);
+    expect(collect(buildLuceneSyntaxTree('a!b'), 'UnparsedTokens')).toHaveLength(1);
+    expect(collect(buildLuceneSyntaxTree('author:a(b)'), 'UnparsedTokens')).toHaveLength(1);
+
+    const separated = buildLuceneSyntaxTree('foo "bar" !baz');
+    expect(collect(separated, 'UnparsedTokens')).toEqual([]);
+    expect(collect(separated, 'BinaryExpression').map((node) => node.operator)).toEqual(['IMPLICIT', 'IMPLICIT']);
+
+    expect(collect(buildLuceneSyntaxTree('"hello world"~10'), 'FuzzyExpression')).toHaveLength(1);
+    expect(collect(buildLuceneSyntaxTree('"hello world"~0.5'), 'UnparsedTokens')).toHaveLength(1);
+    expect(collect(buildLuceneSyntaxTree('foo*~1'), 'UnparsedTokens')).toHaveLength(1);
+    expect(collect(buildLuceneSyntaxTree('(a OR b)~2'), 'UnparsedTokens')).toHaveLength(1);
+  });
 });
 
 function collect(tree: ReturnType<typeof buildLuceneSyntaxTree>, type: string): ReturnType<typeof buildLuceneSyntaxTree>[] {

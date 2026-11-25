@@ -183,7 +183,7 @@ pub enum AuditQueryError {
 ///
 /// ```text
 /// query      := implicit?
-/// implicit   := or or*                       (juxtaposition, lowest precedence)
+/// implicit   := or (WS or)*                  (juxtaposition, lowest precedence)
 /// or         := and (("OR" | "||") and)*
 /// and        := primary (("AND" | "&&") primary)*
 /// primary    := ("NOT" | "!") primary | "(" implicit ")" | field ":" fieldTerm | term
@@ -194,6 +194,7 @@ pub enum AuditQueryError {
 /// ```
 ///
 /// Keywords match in any letter case; `TO` is a keyword only inside a range.
+/// Adjacent implicit clauses require at least one separating whitespace character.
 pub fn parse_audit_query(
     raw: &str,
     reference_now: DateTime<Utc>,
@@ -258,25 +259,35 @@ enum Token {
     Word(String),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct SpannedToken {
+    token: Token,
+    separated: bool,
+}
+
 fn syntax(detail: &'static str) -> AuditQueryError {
     AuditQueryError::SyntaxError { detail }
 }
 
 /// Split a query into tokens the way the query input's tokenizer does.
-fn tokenize(src: &str) -> Result<Vec<Token>, AuditQueryError> {
-    let mut tokens = Vec::new();
+fn tokenize(src: &str) -> Result<Vec<SpannedToken>, AuditQueryError> {
+    let mut tokens: Vec<SpannedToken> = Vec::new();
     let mut index = 0;
     let mut range_depth = 0usize;
+    let mut separated = false;
 
     while let Some(ch) = src[index..].chars().next() {
         let rest = &src[index..];
         if ch.is_whitespace() {
+            separated = true;
             index += ch.len_utf8();
             continue;
         }
 
         // The input recognizes these; the audit query bar turns them off.
-        if matches!(ch, '+' | '-') && is_prefix_position(src, index, tokens.last()) {
+        if matches!(ch, '+' | '-')
+            && is_prefix_position(src, index, tokens.last().map(|item| &item.token))
+        {
             return Err(syntax("prefix operators are not supported"));
         }
         match ch {
@@ -288,7 +299,11 @@ fn tokenize(src: &str) -> Result<Vec<Token>, AuditQueryError> {
 
         if ch == '"' || ch == '\'' {
             let (value, end) = read_quoted(src, index, ch)?;
-            tokens.push(Token::Quoted(value));
+            tokens.push(SpannedToken {
+                token: Token::Quoted(value),
+                separated,
+            });
+            separated = false;
             index = end;
             continue;
         }
@@ -318,24 +333,27 @@ fn tokenize(src: &str) -> Result<Vec<Token>, AuditQueryError> {
                 Token::RangeClose => range_depth = range_depth.saturating_sub(1),
                 _ => {}
             }
-            tokens.push(token);
+            tokens.push(SpannedToken { token, separated });
+            separated = false;
             index += text.len();
             continue;
         }
 
         if ch == ':' {
-            tokens.push(if matches!(tokens.last(), Some(Token::Field(_))) {
+            let token = if matches!(tokens.last().map(|item| &item.token), Some(Token::Field(_))) {
                 Token::Colon
             } else {
                 Token::StrayColon
-            });
+            };
+            tokens.push(SpannedToken { token, separated });
+            separated = false;
             index += 1;
             continue;
         }
 
         // A value may contain colons, as in `ipAddress:::1`.
         let allow_colon = matches!(
-            tokens.last(),
+            tokens.last().map(|item| &item.token),
             Some(Token::Colon | Token::RangeOpen | Token::Cmp(_) | Token::To)
         );
         let end = read_date_time(rest)
@@ -355,7 +373,8 @@ fn tokenize(src: &str) -> Result<Vec<Token>, AuditQueryError> {
         } else {
             Token::Word(text.to_owned())
         };
-        tokens.push(token);
+        tokens.push(SpannedToken { token, separated });
+        separated = false;
         index = end;
     }
 
@@ -391,7 +410,20 @@ fn read_word(src: &str, from: usize, allow_colon: bool) -> usize {
         let stops = ch.is_whitespace()
             || matches!(
                 ch,
-                '(' | ')' | '[' | ']' | '{' | '}' | '!' | '&' | '|' | '<' | '>' | '~' | '^'
+                '(' | ')'
+                    | '['
+                    | ']'
+                    | '{'
+                    | '}'
+                    | '!'
+                    | '&'
+                    | '|'
+                    | '<'
+                    | '>'
+                    | '~'
+                    | '^'
+                    | '"'
+                    | '\''
             )
             || (ch == ':' && !allow_colon);
         if stops {
@@ -612,7 +644,7 @@ fn wildcard_pieces(raw: &str) -> Vec<Piece> {
 }
 
 struct Parser {
-    tokens: Vec<Token>,
+    tokens: Vec<SpannedToken>,
     pos: usize,
     clauses: usize,
     reference_now: DateTime<Utc>,
@@ -621,11 +653,15 @@ struct Parser {
 
 impl Parser {
     fn peek(&self) -> Option<&Token> {
-        self.tokens.get(self.pos)
+        self.tokens.get(self.pos).map(|item| &item.token)
+    }
+
+    fn peek_separated(&self) -> bool {
+        self.tokens.get(self.pos).is_some_and(|item| item.separated)
     }
 
     fn advance(&mut self) -> Option<Token> {
-        let token = self.tokens.get(self.pos).cloned();
+        let token = self.tokens.get(self.pos).map(|item| item.token.clone());
         self.pos += 1;
         token
     }
@@ -669,7 +705,7 @@ impl Parser {
         depth: usize,
     ) -> Result<AuditQueryExpr, AuditQueryError> {
         let mut items = vec![self.parse_or(field, depth)?];
-        while self.starts_primary(field.is_some()) {
+        while self.peek_separated() && self.starts_primary(field.is_some()) {
             items.push(self.parse_or(field, depth)?);
         }
         Ok(join(items, false))
@@ -1903,5 +1939,42 @@ mod tests {
             parse_audit_query("occurredAt:2026-11-25T10:30:00Zfoo", now, utc()).unwrap_err(),
             AuditQueryError::InvalidDateValue { .. }
         ));
+    }
+
+    #[test]
+    fn implicit_clauses_require_separating_whitespace() {
+        let now = Utc.with_ymd_and_hms(2026, 11, 20, 10, 30, 45).unwrap();
+        let valid = parse_audit_query("occurredAt:(>=now-7d <now)", now, utc()).unwrap();
+        assert_eq!(
+            valid,
+            AuditQueryExpr::And(vec![
+                AuditQueryExpr::OccurredAtRange {
+                    min: Some(AuditTimeBound {
+                        instant: now - Duration::days(7),
+                        inclusive: true,
+                    }),
+                    max: None,
+                },
+                AuditQueryExpr::OccurredAtRange {
+                    min: None,
+                    max: Some(AuditTimeBound {
+                        instant: now,
+                        inclusive: false,
+                    }),
+                },
+            ])
+        );
+
+        for invalid in [
+            "occurredAt:(>=now-7d<now)",
+            r#"foo"bar""#,
+            "(actorLabel:a)(targetLabel:b)",
+            "actorLabel:a!targetLabel:b",
+        ] {
+            assert!(
+                parse_audit_query(invalid, now, utc()).is_err(),
+                "{invalid:?} should be rejected"
+            );
+        }
     }
 }

@@ -320,6 +320,16 @@
       "query": "occurredAt:now-1d+2h/d"
     },
     {
+      "query": "occurredAt:(>=now-7d <now)"
+    },
+    {
+      "query": "actorLabel:2026-11-25*",
+      "tree": {
+        "field": "actorLabel",
+        "value": "2026-11-25*"
+      }
+    },
+    {
       "query": "actorLabel:(a AND b AND c)",
       "tree": {
         "and": [
@@ -457,6 +467,14 @@
     "occurredAt:> >=now",
     "occurredAt:> [now-1d TO now]",
     "occurredAt:2026-11-25T10:30:00Zfoo",
-    "occurredAt:NOT"
+    "occurredAt:NOT",
+    "foo\"bar\"",
+    "\"foo\"bar",
+    "\"foo\"\"bar\"",
+    "(actorLabel:a)(targetLabel:b)",
+    "actorLabel:a(targetLabel:b)",
+    "actorLabel:a!targetLabel:b",
+    "occurredAt:[now-1d TO now]actorLabel:a",
+    "occurredAt:(>=now-7d<now)"
   ]
 }

@@ -1,5 +1,7 @@
 // Reference Langium grammar corresponding to `src/lib/syntax-tree.ts`,
 // `src/domain/audit/query.rs`, and `src/lib/grammar-cases.json`.
+// Implicit-AND whitespace separation and tight modifier attachment are
+// enforced via token/CST offsets.
 grammar LuceneQuery
 
 entry Query:
@@ -11,11 +13,11 @@ DefaultExpression:
 ;
 
 OrExpression:
-  AndExpression ({infer BinaryExpression.left=current} operator=OR right=AndExpression)*
+  AndExpression ({infer BinaryExpression.left=current} operator=(OR | OR_SYMBOL) right=AndExpression)*
 ;
 
 AndExpression:
-  PrimaryExpression ({infer BinaryExpression.left=current} operator=AND right=PrimaryExpression)*
+  PrimaryExpression ({infer BinaryExpression.left=current} operator=(AND | AND_SYMBOL) right=PrimaryExpression)*
 ;
 
 PrimaryExpression:
@@ -44,11 +46,11 @@ FieldTermDefaultExpression:
 ;
 
 FieldTermOrExpression:
-  FieldTermAndExpression ({infer FieldTermBinaryExpression.left=current} operator=OR right=FieldTermAndExpression)*
+  FieldTermAndExpression ({infer FieldTermBinaryExpression.left=current} operator=(OR | OR_SYMBOL) right=FieldTermAndExpression)*
 ;
 
 FieldTermAndExpression:
-  FieldTermPrimaryExpression ({infer FieldTermBinaryExpression.left=current} operator=AND right=FieldTermPrimaryExpression)*
+  FieldTermPrimaryExpression ({infer FieldTermBinaryExpression.left=current} operator=(AND | AND_SYMBOL) right=FieldTermPrimaryExpression)*
 ;
 
 FieldTermPrimaryExpression:
@@ -78,11 +80,7 @@ Node:
 ;
 
 Field:
-  value=FieldName
-;
-
-FieldName returns string:
-  NORMAL_TERM | TO | DATE_MATH_TERM
+  value=NORMAL_TERM
 ;
 
 Term:
@@ -123,7 +121,8 @@ TimeTerm:
 ;
 
 SearchTerm:
-  value=(Word | QUOTED_TERM) fuzzy=FUZZY? boost=BOOST?
+  value=Word fuzzy=(PROXIMITY | FUZZY)? boost=BOOST? |
+  value=QUOTED_TERM proximity=PROXIMITY? boost=BOOST?
 ;
 
 Word returns string:
@@ -149,17 +148,20 @@ terminal RBRACKET: ']';
 terminal LBRACE: '{';
 terminal RBRACE: '}';
 
-terminal NOT: /[nN][oO][tT](?![^\s:()[\]{}^~"'!&|<>\/])/;
+terminal NOT: /[nN][oO][tT](?![^\s:()[\]{}^~"'!&|<>\/]|\s*:)/;
 terminal NOT_SYMBOL: '!';
 
-terminal TO: /[tT][oO](?![^\s:()[\]{}^~"'!&|<>\/])/;
+terminal TO: /[tT][oO](?![^\s:()[\]{}^~"'!&|<>\/]|\s*:)/;
 
 terminal COMPARISON: '>=' | '<=' | '>' | '<';
 
-terminal AND: /(?:[aA][nN][dD](?![^\s:()[\]{}^~"'!&|<>\/]))|&&/;
-terminal OR: /(?:[oO][rR](?![^\s:()[\]{}^~"'!&|<>\/]))|\|\|/;
+terminal AND: /[aA][nN][dD](?![^\s:()[\]{}^~"'!&|<>\/]|\s*:)/;
+terminal AND_SYMBOL: '&&';
+terminal OR: /[oO][rR](?![^\s:()[\]{}^~"'!&|<>\/]|\s*:)/;
+terminal OR_SYMBOL: '||';
 
-terminal FUZZY returns string: /~(?:\d+(?:\.\d+)?)?/;
+terminal PROXIMITY returns string: /~\d+(?!\.\d)/;
+terminal FUZZY returns string: /~(?:\d+\.\d+)?/;
 terminal BOOST returns string: /\^\d+(?:\.\d+)?/;
 
 terminal DATETIME_TERM returns string:
@@ -167,7 +169,7 @@ terminal DATETIME_TERM returns string:
 ;
 
 terminal DATE_MATH_TERM returns string:
-  /now(?:[+-]\d+(?:ms|s|m|h|d|w|M|y))*(?:\/(?:s|m|h|d|w|M|y))?(?![^\s:()[\]{}^~"'!&|<>])/
+  /now(?:[+-]\d+(?:ms|s|m|h|d|w|M|y))*(?:\/(?:s|m|h|d|w|M|y))?(?![^\s:()[\]{}^~"'!&|<>]|\s*:)/
 ;
 
 terminal DATE_TERM returns string:

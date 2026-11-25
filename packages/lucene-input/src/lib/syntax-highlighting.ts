@@ -264,7 +264,7 @@ function shouldAllowColonInTerm(tokens: LuceneToken[]): boolean {
 
 function readWord(value: string, from: number, allowColon = false): number {
   let index = from;
-  const stopPattern = allowColon ? /[\s()[\]{}!*?&|<>~^]/ : /[\s:()[\]{}!*?&|<>~^]/;
+  const stopPattern = allowColon ? /[\s()[\]{}!*?&|<>~^"']/ : /[\s:()[\]{}!*?&|<>~^"']/;
   while (index < value.length && !stopPattern.test(value[index])) {
     if (value[index] === '\\') {
       index += 2;

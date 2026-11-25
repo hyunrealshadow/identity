@@ -470,4 +470,22 @@ describe('lucene diagnostics', () => {
       })
     ]);
   });
+
+  it('requires whitespace between adjacent implicit clauses while allowing tight explicit operators', () => {
+    for (const valid of ['foo "bar"', '(author:a) (title:b)', 'a !b', 'a&&b', '!(author:a)', 'author:!c']) {
+      expect(getLuceneDiagnostics(valid, fields), valid).toEqual([]);
+    }
+
+    for (const invalid of ['foo"bar"', '(author:a)(title:b)', 'a!b', 'author:a(b)']) {
+      expect(getLuceneDiagnostics(invalid, fields).some((item) => item.severity === 'error'), invalid).toBe(true);
+    }
+  });
+
+  it('allows integer proximity on quoted phrases and rejects invalid fuzzy modifiers', () => {
+    expect(getLuceneDiagnostics('"hello world"~10', fields)).toEqual([]);
+
+    for (const invalid of ['"hello world"~0.5', 'foo*~1', '(author:a OR title:b)~2']) {
+      expect(getLuceneDiagnostics(invalid, fields).some((item) => item.severity === 'error'), invalid).toBe(true);
+    }
+  });
 });

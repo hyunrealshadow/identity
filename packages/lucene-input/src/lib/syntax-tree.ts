@@ -44,7 +44,11 @@ class SyntaxTreeParser {
       return undefined;
     }
 
-    while (this.startsPrimary(this.peek(), inFieldGroup)) {
+    for (
+      let next = this.peek();
+      next && left.to !== undefined && next.from > left.to && this.startsPrimary(next, inFieldGroup);
+      next = this.peek()
+    ) {
       const right = this.parseOrExpression(fieldType, inFieldGroup);
       if (!right) {
         break;
@@ -94,17 +98,18 @@ class SyntaxTreeParser {
 
     if (this.isUnaryOperator(token)) {
       this.advance();
+      const child = this.parsePrimaryExpression(fieldType, inFieldGroup) ?? this.missingNode(token.to);
       return {
         type: token.text === '+' ? 'RequiredExpression' : 'NotExpression',
         operator: token.text,
         from: token.from,
-        to: token.to,
-        children: [this.parsePrimaryExpression(fieldType, inFieldGroup) ?? this.missingNode(token.to)]
+        to: child.to ?? token.to,
+        children: [child]
       };
     }
 
     if (token.type === 'punctuation' && token.text === '(') {
-      return this.withModifiers(this.parseGroupExpression(fieldType, inFieldGroup));
+      return this.withModifiers(this.parseGroupExpression(fieldType, inFieldGroup), 'boostOnly');
     }
 
     if (inFieldGroup && this.isComparisonOperator(token)) {
@@ -120,7 +125,9 @@ class SyntaxTreeParser {
     }
 
     if (this.isTerm(token)) {
-      return this.withModifiers(this.termNode(this.advanceTerm(), fieldType));
+      const termToken = this.advanceTerm();
+      const node = this.termNode(termToken, fieldType);
+      return this.withModifiers(node, this.modifierMode(termToken, node));
     }
 
     return undefined;
@@ -165,17 +172,18 @@ class SyntaxTreeParser {
 
     if (this.isUnaryOperator(token)) {
       this.advance();
+      const child = this.parseFieldTerm(fieldType) ?? this.missingNode(token.to);
       return {
         type: token.text === '+' ? 'FieldTermRequiredExpression' : 'FieldTermNotExpression',
         operator: token.text,
         from: token.from,
-        to: token.to,
-        children: [this.parseFieldTerm(fieldType) ?? this.missingNode(token.to)]
+        to: child.to ?? token.to,
+        children: [child]
       };
     }
 
     if (token.type === 'punctuation' && token.text === '(') {
-      return this.withModifiers(this.parseGroupExpression(fieldType, true));
+      return this.withModifiers(this.parseGroupExpression(fieldType, true), 'boostOnly');
     }
 
     if (this.isComparisonOperator(token)) {
@@ -187,7 +195,9 @@ class SyntaxTreeParser {
     }
 
     if (this.isTerm(token)) {
-      return this.withModifiers(this.termNode(this.advanceTerm(), fieldType));
+      const termToken = this.advanceTerm();
+      const node = this.termNode(termToken, fieldType);
+      return this.withModifiers(node, this.modifierMode(termToken, node));
     }
 
     return undefined;
@@ -263,12 +273,34 @@ class SyntaxTreeParser {
     return token.type === 'operator' && /^(!|NOT|-|\+)$/i.test(token.text);
   }
 
+  private modifierMode(token: LuceneToken, node: LuceneSyntaxTree): 'word' | 'quoted' | 'boostOnly' {
+    if (node.type === 'WildcardTerm') {
+      return 'boostOnly';
+    }
+
+    return token.type === 'string' || (token.type === 'date' && (token.text[0] === '"' || token.text[0] === "'"))
+      ? 'quoted'
+      : 'word';
+  }
+
+  private allowsModifier(text: string, mode: 'word' | 'quoted' | 'boostOnly'): boolean {
+    if (text.startsWith('^')) {
+      return true;
+    }
+
+    if (!text.startsWith('~') || mode === 'boostOnly') {
+      return false;
+    }
+
+    return mode === 'quoted' ? /^~\d+$/.test(text) : true;
+  }
+
   /** Fuzzy (`~`, `~2`) and boost (`^2`) suffixes written right after a term or group. */
-  private withModifiers(node: LuceneSyntaxTree): LuceneSyntaxTree {
+  private withModifiers(node: LuceneSyntaxTree, mode: 'word' | 'quoted' | 'boostOnly'): LuceneSyntaxTree {
     let result = node;
     for (
       let next = this.peek();
-      next && next.type === 'operator' && next.from === result.to && /^[~^]/.test(next.text);
+      next && next.type === 'operator' && next.from === result.to && this.allowsModifier(next.text, mode);
       next = this.peek()
     ) {
       this.advance();
@@ -290,10 +322,14 @@ class SyntaxTreeParser {
   private parseFieldComparisonExpression(fieldType: LuceneFieldType | undefined): LuceneSyntaxTree {
     const operator = this.advance();
     const token = this.peek();
-    const term =
-      token && this.isComparisonValue(token)
-        ? this.withModifiers(this.termNode(this.advanceTerm(), fieldType))
-        : this.missingNode(operator.to);
+    let term: LuceneSyntaxTree;
+    if (token && this.isComparisonValue(token)) {
+      const termToken = this.advanceTerm();
+      const node = this.termNode(termToken, fieldType);
+      term = this.withModifiers(node, this.modifierMode(termToken, node));
+    } else {
+      term = this.missingNode(operator.to);
+    }
 
     return {
       type: 'FieldComparisonExpression',
