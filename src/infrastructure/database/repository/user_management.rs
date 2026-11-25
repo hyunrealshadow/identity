@@ -9,17 +9,21 @@
 
 use async_trait::async_trait;
 use chrono::Utc;
-use identity_application::user::Password;
+use identity_application::user::{
+    Password,
+    invitation::{USER_INVITATION_DELIVERY, UserInvitationStatus},
+};
 use identity_application::{
     authorization::{
         CurrentManagementAuthority, DEFAULT_RECENT_AAL2_TTL, ManagementAuthorizationError,
         ManagementAuthorizationRequest, ManagementTarget, evaluate_management_authority,
     },
     user::management::{
-        CreateUserTransaction, UpdateUserTransaction, UserFilter, UserManagementAuthority,
-        UserManagementMutationOutcome, UserManagementPageData, UserManagementPageEntry,
-        UserManagementQuery, UserManagementRepository, UserManagementRepositoryError,
-        UserOrder as ManagementUserOrder, UserPageDirection, UserSortKey, UserStateTransaction,
+        CreateUserTransaction, SendUserInvitationTransaction, UpdateUserTransaction, UserFilter,
+        UserInvitationOutcome, UserManagementAuthority, UserManagementMutationOutcome,
+        UserManagementPageData, UserManagementPageEntry, UserManagementQuery,
+        UserManagementRepository, UserManagementRepositoryError, UserOrder as ManagementUserOrder,
+        UserPageDirection, UserSortKey, UserStateTransaction,
         repository::RevokeUserSessionsTransaction,
     },
 };
@@ -51,6 +55,7 @@ use super::{
         user_attribute_changes,
     },
     user_credential::prune_password_history,
+    user_invitation::{discard_invitation_in_txn, has_password, issue_in_txn},
 };
 use crate::database::{
     audit, client_authorization_boundary,
@@ -421,7 +426,10 @@ async fn invalidate_access_in_txn(
     .map_err(storage)?;
     txn.execute_raw(Statement::from_sql_and_values(
         DbBackend::Postgres,
-        "DELETE FROM authentication_challenge WHERE user_id = $1",
+        // Challenges of the account's logins and sessions; an email
+        // verification or invitation followed without either stays.
+        "DELETE FROM authentication_challenge WHERE user_id = $1 \
+         AND (login_id IS NOT NULL OR session_id IS NOT NULL)",
         [user_id.into()],
     ))
     .await
@@ -763,20 +771,22 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
             }
         };
 
-        let data = to_value(&command.password)
-            .map_err(|error| UserManagementRepositoryError::Storage(Box::new(error)))?;
-        user_credential::ActiveModel {
-            oid: Set(Uuid::new_v4()),
-            user_id: Set(model.id),
-            r#type: Set("password".to_owned()),
-            data: Set(data),
-            expires_at: Set(None),
-            created_at: Set(now.into()),
-            ..Default::default()
+        if let Some(password) = &command.password {
+            let data = to_value(password)
+                .map_err(|error| UserManagementRepositoryError::Storage(Box::new(error)))?;
+            user_credential::ActiveModel {
+                oid: Set(Uuid::new_v4()),
+                user_id: Set(model.id),
+                r#type: Set("password".to_owned()),
+                data: Set(data),
+                expires_at: Set(None),
+                created_at: Set(now.into()),
+                ..Default::default()
+            }
+            .insert(&txn)
+            .await
+            .map_err(storage)?;
         }
-        .insert(&txn)
-        .await
-        .map_err(storage)?;
 
         append_semantic_audit(
             &txn,
@@ -784,6 +794,24 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
             AuditRecord::success(AuditAction::UserCreate, user_oid),
         )
         .await?;
+        if let Some(invitation) = &command.invitation {
+            // A new account has no earlier invitation to wait for.
+            let _ = issue_in_txn(
+                &txn,
+                model.id,
+                &model.email_normalized,
+                invitation,
+                USER_INVITATION_DELIVERY,
+            )
+            .await
+            .map_err(storage)?;
+            append_semantic_audit(
+                &txn,
+                &command.authority,
+                AuditRecord::success(AuditAction::UserInvite, user_oid),
+            )
+            .await?;
+        }
         let user = to_domain(model).map_err(map_domain_user)?;
         let record = UserManagementRecord::new(user);
         txn.commit().await.map_err(storage)?;
@@ -1188,6 +1216,10 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         prune_password_history(&txn, model.id, keep_history)
             .await
             .map_err(storage)?;
+        // A password replaces any outstanding invitation to set one.
+        discard_invitation_in_txn(&txn, model.id)
+            .await
+            .map_err(storage)?;
         let mut required_actions =
             stored_required_actions(&model.required_actions).map_err(map_domain_user)?;
         let newly_required = required_actions.insert(RequiredAction::ChangePassword);
@@ -1381,6 +1413,65 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         Ok(UserManagementMutationOutcome::Success(Box::new(
             UserManagementRecord::new(user),
         )))
+    }
+
+    #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "user_management.send_invitation"))]
+    async fn send_user_invitation(
+        &self,
+        command: SendUserInvitationTransaction,
+    ) -> Result<UserInvitationOutcome, UserManagementRepositoryError> {
+        let txn = self.db.begin().await.map_err(storage)?;
+        lock_owner_lifecycle(&txn).await.map_err(storage)?;
+        recheck_issuing_client(&txn, &command.authority).await?;
+        lock_user_credentials(&txn, command.user_oid)
+            .await
+            .map_err(storage)?;
+        let Some(model) = UserEntity::find()
+            .filter(UserColumn::Oid.eq(Uuid::from(command.user_oid)))
+            .lock_exclusive()
+            .one(&txn)
+            .await
+            .map_err(storage)?
+        else {
+            return Ok(UserInvitationOutcome::UserNotFound);
+        };
+        recheck_authority(
+            &txn,
+            &command.authority,
+            ManagementScope::UsersWrite,
+            Some(command.user_oid),
+        )
+        .await?;
+        if has_password(&txn, model.id).await.map_err(storage)? {
+            return Ok(UserInvitationOutcome::HasPassword);
+        }
+        if let Err(available_at) = issue_in_txn(
+            &txn,
+            model.id,
+            &model.email_normalized,
+            &command.invitation,
+            command.delivery,
+        )
+        .await
+        .map_err(storage)?
+        {
+            return Ok(UserInvitationOutcome::TooSoon { available_at });
+        }
+        append_semantic_audit(
+            &txn,
+            &command.authority,
+            AuditRecord::success(AuditAction::UserInvite, Uuid::from(command.user_oid)),
+        )
+        .await?;
+        let user = to_domain(model).map_err(map_domain_user)?;
+        txn.commit().await.map_err(storage)?;
+        Ok(UserInvitationOutcome::Sent {
+            record: Box::new(UserManagementRecord::new(user)),
+            invitation: UserInvitationStatus {
+                sent_at: command.invitation.sent_at,
+                expires_at: command.invitation.expires_at,
+            },
+        })
     }
 
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "user_management.delete"))]

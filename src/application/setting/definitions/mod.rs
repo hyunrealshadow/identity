@@ -24,4 +24,5 @@ pub use password::{
 };
 pub use sign_in::{
     EmailSignInEnabledSetting, IdentifierEnumerationAllowedSetting, PasswordResetEnabledSetting,
+    RegistrationEnabledSetting,
 };

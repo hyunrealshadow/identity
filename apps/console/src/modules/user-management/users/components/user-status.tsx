@@ -5,6 +5,8 @@ import { useTranslator } from '#/lib/i18n'
 export interface UserStatusSource {
   enabled: boolean | null
   locked: boolean | null
+  /** Present while the user has not accepted an invitation yet. */
+  invitation?: { expiresAt: string } | null
 }
 
 function badgeSizeClass(size: 'sm' | 'md' | 'lg'): string | undefined {
@@ -48,6 +50,15 @@ export function UserStatusBadges({
       {user.locked ? (
         <Badge variant="destructive" className={badgeClassName(size)}>
           {t('usersLocked')}
+        </Badge>
+      ) : null}
+      {user.invitation ? (
+        <Badge variant="outline" className={badgeClassName(size)}>
+          {t(
+            new Date(user.invitation.expiresAt).getTime() <= Date.now()
+              ? 'usersInvitationExpiredBadge'
+              : 'usersInvitationPendingBadge',
+          )}
         </Badge>
       ) : null}
     </div>

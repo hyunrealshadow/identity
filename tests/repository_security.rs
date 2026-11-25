@@ -6,6 +6,8 @@ mod common;
 mod email_verification;
 #[path = "repository_security/instance_management.rs"]
 mod instance_management;
+#[path = "repository_security/onboarding.rs"]
+mod onboarding;
 use chrono::{Duration as ChronoDuration, Utc};
 use identity_application::user::repository::{PasswordReplacement, PasswordReplacementKind};
 use identity_application::user::{
@@ -1028,7 +1030,7 @@ async fn concealed_identifier_binding_persists_without_an_account_and_resets() {
 async fn email_code_admission_is_atomic_and_independent_of_the_account() {
     use identity_application::auth::challenge::ChallengeRepository;
     use identity_domain::auth::{
-        AMR_EMAIL, EMAIL_CODE_RESEND_INTERVAL, MAX_EMAIL_CODE_SENDS,
+        AMR_EMAIL, LOGIN_EMAIL_DELIVERY, MAX_EMAIL_CODE_SENDS,
         challenge::{
             ChallengeBinding, ChallengeContext, ChallengeMethod, ChallengePurpose,
             DeliveryChallengeAdmission, DeliveryChallengeContext, DeliveryChallengeRequest,
@@ -1063,8 +1065,7 @@ async fn email_code_admission_is_atomic_and_independent_of_the_account() {
             |now: chrono::DateTime<Utc>, code_expires_at: chrono::DateTime<Utc>| {
             DeliveryChallengeRequest {
                 now,
-                resend_interval: EMAIL_CODE_RESEND_INTERVAL,
-                max_sends: MAX_EMAIL_CODE_SENDS,
+                policy: LOGIN_EMAIL_DELIVERY,
                 code_expires_at,
                 required_login_status: Some(LoginStatus::IDENTIFIER_VERIFIED),
                 verifier: None,

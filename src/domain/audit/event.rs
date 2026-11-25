@@ -237,6 +237,8 @@ macro_rules! audit_actions {
 
 audit_actions! {
     UserCreate => Management, User;
+    // An invitation to set a first password was emailed to the user.
+    UserInvite => Management, User;
     UserUpdate => Management, User;
     UserEnable => Management, User;
     UserDisable => Management, User;
@@ -294,6 +296,10 @@ audit_actions! {
     AccountEmailVerify => Account, User;
     AccountPasswordChange => Account, User;
     AccountPasswordReset => Account, User;
+    // Someone created their own account from the sign-in flow.
+    AccountRegister => Account, User;
+    // An invited user set their first password.
+    AccountInvitationAccept => Account, User;
     AccountCredentialReplace => Account, User;
     AccountTotpEnable => Account, User;
     AccountTotpDisable => Account, User;

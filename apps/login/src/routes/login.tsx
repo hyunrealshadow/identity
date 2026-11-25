@@ -39,7 +39,7 @@ import {
 import { translate } from '#/lib/i18n'
 import { withUiLocales } from '#/lib/ui-locale'
 import { formLocale, requestLocale } from '#/lib/i18n.server'
-import { loginChallengeDestination } from '#/lib/login-navigation'
+import { loginChallengeDestination, loginRegisterDestination } from '#/lib/login-navigation'
 
 interface LoginSearch {
   login_id?: string
@@ -78,6 +78,7 @@ const loadLoginPage = createServerFn({ method: 'GET' })
         loginHint: undefined,
         challengeUri: undefined,
         client: undefined,
+        registrationAvailable: false,
       }
     }
 
@@ -104,6 +105,7 @@ const loadLoginPage = createServerFn({ method: 'GET' })
         loginHint: status.login_hint,
         challengeUri: status.challenge_uri,
         client: status.client,
+        registrationAvailable: status.registration_available ?? false,
       }
     } catch (error) {
       const locale = requestLocale(uiLocales.split(' '))
@@ -119,6 +121,7 @@ const loadLoginPage = createServerFn({ method: 'GET' })
         loginHint: undefined,
         challengeUri: undefined,
         client: undefined,
+        registrationAvailable: false,
       }
     }
   })
@@ -346,6 +349,17 @@ function LoginPage() {
           ) : null}
         </ProgressiveForm>
       )}
+      {!showAccounts && data.registrationAvailable ? (
+        <p className="mt-6 text-center text-sm text-muted-foreground">
+          {t('createAccountPrompt')}{' '}
+          <a
+            href={loginRegisterDestination(loginId, data.uiLocales || undefined)}
+            className="text-link font-semibold text-foreground"
+          >
+            {t('createAccount')}
+          </a>
+        </p>
+      ) : null}
     </AuthShell>
   )
 }

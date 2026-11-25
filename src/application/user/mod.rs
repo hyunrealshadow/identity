@@ -1,4 +1,5 @@
 pub mod credential;
+pub mod invitation;
 pub mod management;
 pub mod model;
 pub mod otp;

@@ -53,6 +53,11 @@ administrator cannot reset their own password, clear their own second factors,
 or require a password change on their own account through user management;
 self-service sign-in methods belong in the account center.
 
+- **Invite** (`createUser` with `sendInvitation`, or `sendUserInvitation`,
+  audit `USER_INVITE`) emails a seven-day link with which a user who has no
+  password yet sets their own; see
+  [Invitations](authentication-flows.md#invitations). It does not end sessions,
+  since such a user has none.
 - **Reset password** (`resetUserPassword`, audit `USER_PASSWORD_RESET`) stores a
   generated temporary password (16 characters mixing uppercase, lowercase,
   digits, and symbols without look-alikes), returns it once, requires a change
@@ -76,6 +81,14 @@ self-service sign-in methods belong in the account center.
   assignments go with it; roles or memberships it granted to others stay with
   no granter recorded. The audit log keeps the history, and the recovery
   protection below still applies.
+
+### Self-registration
+
+Self-registration (`auth.login.registration_enabled`) is off by default. When
+it is on, the address is verified before the account exists and the
+registration page answers the same for every address; see
+[Self-registration](authentication-flows.md#self-registration). A username
+that is already taken is reported when the account is created.
 
 ### Account enumeration
 

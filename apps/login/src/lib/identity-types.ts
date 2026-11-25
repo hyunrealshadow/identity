@@ -106,7 +106,32 @@ export interface LoginStatusResponse {
   email_code_resend_available_at?: string
   password_reset_available?: boolean
   password_reset_resend_available_at?: string
+  /** Whether the identifier step offers creating an account. */
+  registration_available?: boolean
+  registration_resend_available_at?: string
   continue_uri?: string
+}
+
+/** From `/api/auth/login/registration/check`. */
+export interface RegistrationCheckResponse {
+  status: 'valid'
+  /** The address the link verifies. */
+  email: string
+}
+
+export interface RegistrationStatusResponse {
+  status: 'registered'
+}
+
+/** From `/internal/invitation/check`. */
+export interface InvitationCheckResponse {
+  status: 'valid'
+  username: string
+  email: string
+}
+
+export interface InvitationAcceptResponse {
+  status: 'accepted'
 }
 
 /** From `/api/auth/login/email-code`; the same whether or not an account matched. */

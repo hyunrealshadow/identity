@@ -8,6 +8,8 @@
 //!    (optional first factor)
 //!    `POST /api/auth/login/password-reset[/check|/confirm]` – email a link
 //!    that replaces a forgotten password, then set the new one
+//!    `POST /api/auth/login/registration[/check|/confirm]` – email a link
+//!    that verifies the address of a new account, then create it
 //! 5. `POST /api/auth/login/challenge`  – verify credential, create session
 //! 6. `POST /api/auth/login/mfa-enrollment[/confirm]` – enroll a missing
 //!    second factor when the request requires `aal2`
@@ -45,7 +47,9 @@ use crate::{
         IdentifierResponse, LoginClientDisplay, LoginStatusResponse, MfaEnrollmentAlgorithmRequest,
         MfaEnrollmentConfirmRequest, MfaEnrollmentRequest, MfaEnrollmentResponse,
         PasskeyEnrollmentConfirmRequest, PasskeyEnrollmentResponse, PasswordResetCheckRequest,
-        PasswordResetConfirmRequest, PasswordResetStatusResponse, RequiredPasswordChangeRequest,
+        PasswordResetConfirmRequest, PasswordResetStatusResponse, RegistrationCheckRequest,
+        RegistrationCheckResponse, RegistrationConfirmRequest,
+        RegistrationRequest as RegistrationRequestBody, RequiredPasswordChangeRequest,
         RestartLoginRequest, RestartLoginResponse, SelectAccountRequest, SelectAccountResponse,
         SessionInfo, SwitchLoginRequest, SwitchLoginResponse, UserDisplayInfo,
     },
@@ -68,6 +72,9 @@ pub fn routes() -> Router {
         .push(
             Router::with_path("api/auth/login/password-reset/confirm").post(confirm_password_reset),
         )
+        .push(Router::with_path("api/auth/login/registration").post(registration))
+        .push(Router::with_path("api/auth/login/registration/check").post(check_registration))
+        .push(Router::with_path("api/auth/login/registration/confirm").post(confirm_registration))
         .push(Router::with_path("api/auth/login/passkey/options").post(passkey_options))
         .push(Router::with_path("api/auth/login/restart").post(restart_login))
         .push(Router::with_path("api/auth/login/switch").post(switch_login))
@@ -238,6 +245,12 @@ async fn login_status(
         .login()
         .password_reset_resend_available_at(&login)
         .await?;
+    let registration_available = ctx.services().login().registration_offered(&login);
+    let registration_resend_available_at = ctx
+        .services()
+        .login()
+        .registration_resend_available_at(&login)
+        .await?;
     let preferred_credential_type =
         login::preferred_credential_type(&login, &credential_types, mfa_preference);
     let credential_types = login::challenge_credential_types(&login, &credential_types);
@@ -286,6 +299,8 @@ async fn login_status(
             email_code_resend_available_at,
             password_reset_available,
             password_reset_resend_available_at,
+            registration_available,
+            registration_resend_available_at,
             continue_uri,
         },
     );
@@ -649,6 +664,125 @@ async fn password_reset(
             status: "sent",
             expires_at: sent.expires_at,
             resend_available_at: sent.resend_available_at,
+        },
+    );
+    Ok(())
+}
+
+/// `POST /api/auth/login/registration`
+///
+/// Email a link that continues creating an account, for a login at its
+/// identifier step. An address that already has an account receives a
+/// notice instead; the answer is the same either way.
+#[handler]
+async fn registration(
+    depot: &mut Depot,
+    req: &mut Request,
+    res: &mut Response,
+) -> JsonWebResult<()> {
+    let ctx = app_state(depot)?;
+    let body: RegistrationRequestBody = parse_json(req).await?;
+    let login_oid = ctx
+        .services()
+        .oidc_authorize()
+        .decrypt_login_id(&body.id)
+        .await?;
+    let (application_name, ui_locales) = match ctx
+        .services()
+        .oidc_authorize()
+        .load_continue_context_by_login(&body.id)
+        .await
+    {
+        Ok(context) => (
+            Some(context.client.client().name.clone()),
+            context.stored.request.ui_locales,
+        ),
+        Err(_) => (None, None),
+    };
+    let link_prefix = login_link_prefix(&ctx, "login/register", &body.id, ui_locales.as_deref())?;
+    let mut locales = ui_locales.unwrap_or_default();
+    locales.extend(body.locales);
+    let sent = ctx
+        .services()
+        .login()
+        .send_registration(login::RegistrationRequest {
+            login_oid,
+            email: body.email,
+            locales,
+            application_name,
+            link_prefix,
+        })
+        .await?;
+    render_json(
+        res,
+        StatusCode::OK,
+        EmailCodeResponse {
+            status: "sent",
+            expires_at: sent.expires_at,
+            resend_available_at: sent.resend_available_at,
+        },
+    );
+    Ok(())
+}
+
+/// `POST /api/auth/login/registration/check`
+///
+/// The address a registration link verifies, without using the link.
+#[handler]
+async fn check_registration(
+    depot: &mut Depot,
+    req: &mut Request,
+    res: &mut Response,
+) -> JsonWebResult<()> {
+    let ctx = app_state(depot)?;
+    let body: RegistrationCheckRequest = parse_json(req).await?;
+    let login_oid = ctx
+        .services()
+        .oidc_authorize()
+        .decrypt_login_id(&body.id)
+        .await?;
+    let link = ctx
+        .services()
+        .login()
+        .check_registration_link(login_oid, &body.token)
+        .await?;
+    render_json(
+        res,
+        StatusCode::OK,
+        RegistrationCheckResponse {
+            status: "valid",
+            email: link.email,
+        },
+    );
+    Ok(())
+}
+
+/// `POST /api/auth/login/registration/confirm`
+///
+/// Create the account of a registration link. The login continues at its
+/// password step with the new account.
+#[handler]
+async fn confirm_registration(
+    depot: &mut Depot,
+    req: &mut Request,
+    res: &mut Response,
+) -> JsonWebResult<()> {
+    let ctx = app_state(depot)?;
+    let body: RegistrationConfirmRequest = parse_json(req).await?;
+    let login_oid = ctx
+        .services()
+        .oidc_authorize()
+        .decrypt_login_id(&body.id)
+        .await?;
+    ctx.services()
+        .login()
+        .complete_registration(login_oid, &body.token, &body.username, &body.new_password)
+        .await?;
+    render_json(
+        res,
+        StatusCode::OK,
+        PasswordResetStatusResponse {
+            status: "registered",
         },
     );
     Ok(())

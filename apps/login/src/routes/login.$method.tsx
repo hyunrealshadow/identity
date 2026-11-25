@@ -286,10 +286,10 @@ function ChallengePage() {
 
       {visibleError && !restartRequired ? (
         <ErrorAlert className="mb-5" title={t('verificationFailed')} message={visibleError} />
-      ) : search.notice === 'password_reset' && !restartRequired && credentialType === 'password' ? (
+      ) : (search.notice === 'password_reset' || search.notice === 'registered') && !restartRequired && credentialType === 'password' ? (
         <p className="mb-5 flex items-start gap-2 rounded-lg bg-muted/60 px-3 py-2.5 text-sm text-muted-foreground" role="status">
           <CircleCheck className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          {t('passwordResetDone')}
+          {t(search.notice === 'registered' ? 'registrationDone' : 'passwordResetDone')}
         </p>
       ) : null}
 

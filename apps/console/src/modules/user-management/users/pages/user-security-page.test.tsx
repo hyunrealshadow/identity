@@ -92,6 +92,7 @@ function makeUser(overrides: Partial<ProjectedUser> = {}): ProjectedUser {
     locked: false,
     lockedUntil: null,
     failedAttempts: 0,
+    invitation: null,
     requiredActions: [],
     authenticationMethods: {
       password: true,

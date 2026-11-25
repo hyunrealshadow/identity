@@ -194,6 +194,8 @@ const templateSlugs: Record<EmailTemplateKind, string> = {
   SIGN_IN_CODE: 'sign-in-code',
   EMAIL_VERIFICATION: 'email-verification',
   PASSWORD_RESET: 'password-reset',
+  USER_INVITATION: 'user-invitation',
+  REGISTRATION: 'registration',
 }
 
 export function emailTemplateSlug(kind: EmailTemplateKind) {
@@ -221,6 +223,14 @@ export const emailTemplateLabels: Record<
   PASSWORD_RESET: {
     title: 'settingsEmailTemplatePasswordReset',
     description: 'settingsEmailTemplatePasswordResetHint',
+  },
+  USER_INVITATION: {
+    title: 'settingsEmailTemplateUserInvitation',
+    description: 'settingsEmailTemplateUserInvitationHint',
+  },
+  REGISTRATION: {
+    title: 'settingsEmailTemplateRegistration',
+    description: 'settingsEmailTemplateRegistrationHint',
   },
 }
 

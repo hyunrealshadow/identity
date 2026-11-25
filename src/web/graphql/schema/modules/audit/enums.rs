@@ -115,6 +115,7 @@ pub(crate) enum AuditField {
 #[graphql(name = "AuditAction", remote = "domain::AuditAction")]
 pub(crate) enum AuditAction {
     UserCreate,
+    UserInvite,
     UserUpdate,
     UserEnable,
     UserDisable,
@@ -172,6 +173,8 @@ pub(crate) enum AuditAction {
     AccountEmailVerify,
     AccountPasswordChange,
     AccountPasswordReset,
+    AccountRegister,
+    AccountInvitationAccept,
     AccountCredentialReplace,
     AccountTotpEnable,
     AccountTotpDisable,

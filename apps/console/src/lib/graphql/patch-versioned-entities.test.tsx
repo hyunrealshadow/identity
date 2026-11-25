@@ -27,6 +27,7 @@ function userResult(version: string): GraphQLResult<ConsoleUserQuery> {
         locked: false,
         lockedUntil: null,
         failedAttempts: 0,
+        invitation: null,
         requiredActions: [],
         authenticationMethods: null,
         version,

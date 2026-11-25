@@ -192,6 +192,12 @@ pub struct LoginStatusResponse {
     /// sent for this login.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub password_reset_resend_available_at: Option<DateTime<Utc>>,
+    /// Whether the identifier step offers creating an account.
+    pub registration_available: bool,
+    /// When another registration email may be requested, once one has been
+    /// sent for this login.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub registration_resend_available_at: Option<DateTime<Utc>>,
     /// Absolute OP `/oauth2/continue?login_id=X` URI, present only when authenticated.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub continue_uri: Option<String>,
@@ -281,6 +287,46 @@ pub struct PasswordResetConfirmRequest {
     pub id: String,
     /// The token of the emailed reset link.
     pub token: String,
+    pub new_password: String,
+}
+
+/// `POST /api/auth/login/registration` request.
+#[derive(Debug, Deserialize)]
+pub struct RegistrationRequest {
+    /// Encrypted login.oid of the identifier step.
+    pub id: String,
+    pub email: String,
+    /// Locales of the page that asked, most preferred first.
+    #[serde(default)]
+    pub locales: Vec<String>,
+}
+
+/// `POST /api/auth/login/registration/check` request.
+#[derive(Debug, Deserialize)]
+pub struct RegistrationCheckRequest {
+    /// Encrypted login.oid the registration link belongs to.
+    pub id: String,
+    /// The token of the emailed registration link.
+    pub token: String,
+}
+
+/// `POST /api/auth/login/registration/check` response.
+#[derive(Debug, Serialize)]
+pub struct RegistrationCheckResponse {
+    pub status: &'static str,
+    /// The address the link verifies.
+    pub email: String,
+}
+
+/// `POST /api/auth/login/registration/confirm` request. Not `Debug`: it
+/// carries the new password.
+#[derive(Deserialize)]
+pub struct RegistrationConfirmRequest {
+    /// Encrypted login.oid the registration link belongs to.
+    pub id: String,
+    /// The token of the emailed registration link.
+    pub token: String,
+    pub username: String,
     pub new_password: String,
 }
 

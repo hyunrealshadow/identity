@@ -50,6 +50,22 @@ export function loginPasswordResetDestination(
   return `${loginPasswordResetPath}?${search}`
 }
 
+export const loginRegisterPath = '/login/register'
+
+/** The page that emails a link for creating an account, or creates it when
+    `token` is the link's. */
+export function loginRegisterDestination(
+  loginId: string,
+  uiLocales?: string,
+  options: { token?: string; restart?: 'required' | 'unavailable' } = {},
+) {
+  const search = new URLSearchParams({ login_id: loginId })
+  if (uiLocales) search.set('ui_locales', uiLocales)
+  if (options.token) search.set('token', options.token)
+  if (options.restart) search.set('restart', options.restart)
+  return `${loginRegisterPath}?${search}`
+}
+
 export const loginPasswordChangePath = '/login/change-password'
 
 /** The step where a sign-in replaces the password its account must change. */

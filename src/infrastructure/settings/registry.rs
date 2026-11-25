@@ -3,7 +3,8 @@ use identity_application::setting::{
     DomainSetting, EmailDeliverySettings, EmailSignInEnabledSetting, EmailTemplatesSetting,
     IdentifierEnumerationAllowedSetting, InstallationSettings, LoginClientIdSetting,
     LoginDomainSetting, OpenIdConnectSettings, PasswordHashSetting, PasswordHistoryCountSetting,
-    PasswordMaxAgeDaysSetting, PasswordResetEnabledSetting, SettingRegistry,
+    PasswordMaxAgeDaysSetting, PasswordResetEnabledSetting, RegistrationEnabledSetting,
+    SettingRegistry,
 };
 
 /// Settings persisted by this application, shared by the runtime loader and
@@ -15,6 +16,7 @@ pub(crate) fn setting_registry() -> SettingRegistry {
         .register::<IdentifierEnumerationAllowedSetting>()
         .register::<EmailSignInEnabledSetting>()
         .register::<PasswordResetEnabledSetting>()
+        .register::<RegistrationEnabledSetting>()
         .register::<PasswordMaxAgeDaysSetting>()
         .register::<PasswordHistoryCountSetting>()
         .register::<EmailTemplatesSetting>()

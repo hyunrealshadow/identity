@@ -35,15 +35,36 @@ pub enum UserManagementErrorCode {
     SessionNotFound = 16023,
     /// Operators manage their own sign-in methods in the account center.
     SelfCredentialActionNotAllowed = 16024,
+    /// An invitation needs email delivery to be configured.
+    InvitationUnavailable = 16025,
+    /// The user has no outstanding invitation, or has already accepted it.
+    InvitationNotPending = 16026,
+    /// Another invitation email was sent before the resend interval passed.
+    InvitationResendTooSoon = 16027,
+    /// The invitation email could not be sent.
+    InvitationDeliveryFailed = 16028,
+    /// A new user needs either an initial password or an invitation.
+    CredentialChoiceRequired = 16029,
 }
 
 impl AppErrorCode for UserManagementErrorCode {
+    fn required_params(self) -> &'static [&'static str] {
+        match self {
+            Self::InvitationResendTooSoon => &["seconds"],
+            _ => &[],
+        }
+    }
+
     fn kind(self) -> ErrorKind {
         match self {
             Self::VersionConflict
             | Self::UserNotDisabled
             | Self::UserHasNoPassword
-            | Self::SelfCredentialActionNotAllowed => ErrorKind::Conflict,
+            | Self::SelfCredentialActionNotAllowed
+            | Self::InvitationNotPending => ErrorKind::Conflict,
+            Self::InvitationUnavailable => ErrorKind::Forbidden,
+            Self::InvitationResendTooSoon => ErrorKind::RateLimit,
+            Self::InvitationDeliveryFailed => ErrorKind::Internal,
             Self::SessionNotFound => ErrorKind::NotFound,
             Self::UserNotFound => ErrorKind::NotFound,
             Self::StorageFailed | Self::AccessInvalidationFailed => ErrorKind::Internal,
@@ -56,7 +77,8 @@ impl AppErrorCode for UserManagementErrorCode {
             | Self::InvalidDateRange
             | Self::InvalidCursor
             | Self::InvalidTheme
-            | Self::InvalidClientMutationId => ErrorKind::Validation,
+            | Self::InvalidClientMutationId
+            | Self::CredentialChoiceRequired => ErrorKind::Validation,
         }
     }
 
@@ -80,6 +102,11 @@ impl AppErrorCode for UserManagementErrorCode {
             Self::UserHasNoPassword => 16022,
             Self::SessionNotFound => 16023,
             Self::SelfCredentialActionNotAllowed => 16024,
+            Self::InvitationUnavailable => 16025,
+            Self::InvitationNotPending => 16026,
+            Self::InvitationResendTooSoon => 16027,
+            Self::InvitationDeliveryFailed => 16028,
+            Self::CredentialChoiceRequired => 16029,
         }
     }
 }
@@ -237,6 +264,46 @@ pub const USER_MANAGEMENT_ERROR_INVENTORY: &[UserManagementErrorCodeDefinition] 
         UserManagementErrorCode::SelfCredentialActionNotAllowed,
         ErrorKind::Conflict,
         "E16024",
+        &[],
+        &[],
+        "user.management",
+    ),
+    entry(
+        UserManagementErrorCode::InvitationUnavailable,
+        ErrorKind::Forbidden,
+        "E16025",
+        &[],
+        &[],
+        "user.management",
+    ),
+    entry(
+        UserManagementErrorCode::InvitationNotPending,
+        ErrorKind::Conflict,
+        "E16026",
+        &[],
+        &[],
+        "user.management",
+    ),
+    entry(
+        UserManagementErrorCode::InvitationResendTooSoon,
+        ErrorKind::RateLimit,
+        "E16027",
+        &["seconds"],
+        &[],
+        "user.management",
+    ),
+    entry(
+        UserManagementErrorCode::InvitationDeliveryFailed,
+        ErrorKind::Internal,
+        "E16028",
+        &[],
+        &[],
+        "user.management",
+    ),
+    entry(
+        UserManagementErrorCode::CredentialChoiceRequired,
+        ErrorKind::Validation,
+        "E16029",
         &[],
         &[],
         "user.management",

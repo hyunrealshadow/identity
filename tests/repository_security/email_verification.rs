@@ -74,8 +74,8 @@ async fn stored_email(db: &DatabaseConnection, user: UserOid) -> (String, bool, 
 async fn age_last_send(db: &DatabaseConnection, user: UserOid) {
     db.execute_raw(Statement::from_sql_and_values(
         DbBackend::Postgres,
-        "UPDATE email_verification SET sent_at = sent_at - interval '2 minutes' \
-         WHERE user_id = (SELECT id FROM \"user\" WHERE oid=$1)",
+        "UPDATE authentication_challenge SET sent_at = sent_at - interval '2 minutes' \
+         WHERE purpose = 'email_verification' AND user_id = (SELECT id FROM \"user\" WHERE oid=$1)",
         [Uuid::from(user).into()],
     ))
     .await

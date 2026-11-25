@@ -8,7 +8,6 @@
 
 use std::sync::Arc;
 
-use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Duration, Utc};
 use identity_domain::user::{
     User, UserOid,
@@ -19,16 +18,15 @@ use identity_domain::user::{
     },
     repository::UserIdentifierUpdate,
 };
-use rand::RngExt;
 use serde_json::json;
-use sha2::{Digest, Sha256};
 use tracing::warn;
 use uuid::Uuid;
 
 use super::account::{AccountService, map_identifier_error, validate_email};
 use crate::{
     email::{
-        EmailMessage, EmailSender, EmailTemplateKind, EmailTemplateRenderer, effective_template,
+        EmailRecipient, EmailSender, EmailTemplateKind, EmailTemplateRenderer, LinkToken,
+        link_digest, login_link_prefix, plausible_link_token, send_templated_email,
     },
     error::{
         AppError,
@@ -85,26 +83,6 @@ pub struct VerifiedEmail {
 
 fn duration(value: std::time::Duration) -> Duration {
     Duration::from_std(value).unwrap_or(Duration::MAX)
-}
-
-/// SHA-256 of a link token, base64url. Only this is stored.
-#[must_use]
-pub fn token_digest(token: &str) -> String {
-    URL_SAFE_NO_PAD.encode(Sha256::digest(token.as_bytes()))
-}
-
-fn new_token() -> String {
-    let mut bytes = [0u8; 32];
-    rand::rng().fill(&mut bytes);
-    URL_SAFE_NO_PAD.encode(bytes)
-}
-
-/// Whether `token` has the shape of a link token, checked before any lookup.
-fn plausible_token(token: &str) -> bool {
-    (32..=128).contains(&token.len())
-        && token
-            .bytes()
-            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
 }
 
 impl AccountService {
@@ -257,14 +235,14 @@ impl AccountService {
                 AccountErrorCode::EmailVerificationInvalid,
             ));
         };
-        if !plausible_token(token) {
+        if !plausible_link_token(token) {
             return Err(AppError::from_code(
                 AccountErrorCode::EmailVerificationInvalid,
             ));
         }
         match dependencies
             .repository
-            .confirm(&token_digest(token), Utc::now())
+            .confirm(&link_digest(token), Utc::now())
             .await
             .map_err(AppError::internal)?
         {
@@ -328,7 +306,7 @@ impl AccountService {
         };
         let snapshot = dependencies.settings.snapshot();
         let link_prefix = verification_link_prefix(&snapshot.section::<AppSettings>())?;
-        let token = new_token();
+        let LinkToken { token, digest } = LinkToken::generate();
         let now = Utc::now();
         let admission = dependencies
             .repository
@@ -336,7 +314,7 @@ impl AccountService {
                 user_oid: user.oid,
                 email,
                 email_normalized,
-                token_digest: token_digest(&token),
+                token_digest: digest,
                 now,
             })
             .await
@@ -372,77 +350,51 @@ impl AccountService {
             }
         };
 
-        let candidates: Vec<&str> = user
+        let locales: Vec<&str> = user
             .locale
             .as_deref()
             .into_iter()
             .chain(locales.iter().map(String::as_str))
             .collect();
-        let templates = snapshot.get::<EmailTemplatesSetting>();
-        let (template, _) = effective_template(&templates, EmailTemplateKind::EmailVerification);
-        let (content, translation) = template.localize(candidates.iter().copied());
-        let locale = translation
-            .or_else(|| candidates.first().copied())
-            .unwrap_or("en")
-            .to_owned();
-        let context = json!({
-            "link": format!("{link_prefix}{token}"),
-            "email": sent.verification.email,
-            "changes_email": sent.verification.changes_email,
-            "expires_in_hours": duration(EMAIL_VERIFICATION_TTL).num_hours(),
-            "user": { "name": user.name, "email": user.email },
-            "locale": locale,
-        });
-        let rendered = dependencies
-            .renderer
-            .render(content, &context)
-            .map_err(|error| {
-                AppError::from_code(AccountErrorCode::EmailVerificationDeliveryFailed)
-                    .with_source(error)
-            })?;
-        dependencies
-            .sender
-            .send(
-                &snapshot.section::<EmailDeliverySettings>(),
-                EmailMessage {
-                    to_address: sent.verification.email.clone(),
-                    to_name: Some(user.name.clone()),
-                    subject: rendered.subject,
-                    html: rendered.html,
-                },
-            )
-            .await
-            .map_err(|error| {
-                warn!(
-                    reason = error.reason(),
-                    "verification email was not delivered"
-                );
-                AppError::from_code(AccountErrorCode::EmailVerificationDeliveryFailed)
-                    .with_source(error)
-            })?;
+        send_templated_email(
+            dependencies.sender.as_ref(),
+            dependencies.renderer.as_ref(),
+            &snapshot.section::<EmailDeliverySettings>(),
+            &snapshot.get::<EmailTemplatesSetting>(),
+            EmailTemplateKind::EmailVerification,
+            EmailRecipient {
+                address: &sent.verification.email,
+                name: Some(&user.name),
+                locales: &locales,
+            },
+            |locale| {
+                json!({
+                    "link": format!("{link_prefix}{token}"),
+                    "email": sent.verification.email,
+                    "changes_email": sent.verification.changes_email,
+                    "expires_in_hours": duration(EMAIL_VERIFICATION_TTL).num_hours(),
+                    "user": { "name": user.name, "email": user.email },
+                    "locale": locale,
+                })
+            },
+        )
+        .await
+        .map_err(|error| {
+            warn!(
+                reason = error.reason(),
+                "verification email was not delivered"
+            );
+            AppError::from_code(AccountErrorCode::EmailVerificationDeliveryFailed)
+                .with_source(error)
+        })?;
         Ok(sent)
     }
 }
 
 /// The Login page that confirms a link, ending where the token is appended.
 fn verification_link_prefix(app: &AppSettings) -> Result<String, AppError> {
-    let unavailable = || AppError::from_code(AccountErrorCode::EmailVerificationUnavailable);
-    let login_domain = app
-        .login_domain
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .ok_or_else(unavailable)?;
-    let base = if login_domain.ends_with('/') {
-        login_domain.to_owned()
-    } else {
-        format!("{login_domain}/")
-    };
-    let url = url::Url::parse(&base)
-        .and_then(|base| base.join(VERIFY_EMAIL_ROUTE))
-        .map_err(|error| unavailable().with_source(error))?;
-    // The token is base64url, so it needs no further encoding.
-    Ok(format!("{url}?token="))
+    login_link_prefix(app, VERIFY_EMAIL_ROUTE)
+        .ok_or_else(|| AppError::from_code(AccountErrorCode::EmailVerificationUnavailable))
 }
 
 #[cfg(test)]

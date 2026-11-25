@@ -14,11 +14,11 @@
 
 use identity_application::{
     error::AppError,
+    user::invitation::UserInvitationStatus,
     user::management::{
-        CreateUserCommand, RevokeUserSessionsCommand, UpdateUserCommand,
+        CreateUserCommand, RevokeUserSessionsCommand, SendUserInvitationCommand, UpdateUserCommand,
         UserFilter as ManagementFilter, UserManagementAuthority, UserManagementMutationResult,
-        UserOrder as ManagementOrder, UserPageRequest, UserPassword, UserProfilePatch,
-        UserStateCommand,
+        UserOrder as ManagementOrder, UserPageRequest, UserStateCommand,
     },
 };
 use identity_domain::user::{User, UserOid};
@@ -149,31 +149,39 @@ pub(super) async fn list_users(
 
 pub(super) async fn create_user(
     request: &RequestContext,
-    username: String,
-    email: String,
-    password: String,
-    profile: UserProfilePatch,
-    reason: String,
-    client_mutation_id: Option<String>,
-) -> Result<User, AppError> {
+    command: CreateUserCommand,
+) -> Result<(User, Option<bool>), AppError> {
     let authority = authority(request).await?;
-    let record = request
+    let created = request
         .state
         .services()
         .user_management()
-        .create_user(
+        .create_user(&authority, command)
+        .await?;
+    Ok((record_parts(created.record), created.invitation_sent))
+}
+
+pub(super) async fn send_user_invitation(
+    request: &RequestContext,
+    user: UserOid,
+    reason: String,
+    client_mutation_id: Option<String>,
+) -> Result<(User, UserInvitationStatus), AppError> {
+    let authority = authority(request).await?;
+    let (record, invitation) = request
+        .state
+        .services()
+        .user_management()
+        .send_user_invitation(
             &authority,
-            CreateUserCommand {
-                username,
-                email,
-                password: UserPassword::new(password),
-                profile,
+            SendUserInvitationCommand {
+                user_oid: user,
                 reason,
                 client_mutation_id,
             },
         )
         .await?;
-    Ok(record_parts(record))
+    Ok((record_parts(record), invitation))
 }
 
 pub(super) async fn update_user(

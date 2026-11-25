@@ -7,6 +7,10 @@ import {
   ConsoleResetUserMfaDocument,
   ConsoleResetUserPasswordDocument,
   ConsoleRevokeUserSessionsDocument,
+  ConsoleSendUserInvitationDocument,
+  type ConsoleSendUserInvitationMutation,
+  type ConsoleSendUserInvitationMutationVariables,
+  type SendUserInvitationInput,
   ConsoleUserSessionsDocument,
   type ConsoleDeleteUserMutation,
   type ConsoleDeleteUserMutationVariables,
@@ -88,6 +92,9 @@ export interface UserMutations {
   remove: (
     input: UserStateInput,
   ) => Promise<GraphQLResult<ConsoleDeleteUserMutation>>
+  sendInvitation: (
+    input: SendUserInvitationInput,
+  ) => Promise<GraphQLResult<ConsoleSendUserInvitationMutation>>
 }
 
 /**
@@ -170,6 +177,15 @@ export function useUserMutations(): UserMutations {
           ConsoleDeleteUserMutation,
           ConsoleDeleteUserMutationVariables
         >(ConsoleDeleteUserDocument, variables, [ConsoleUsersDocument])
+      },
+      sendInvitation(input) {
+        const variables: ConsoleSendUserInvitationMutationVariables = {
+          input: { ...input, clientMutationId: nextClientMutationId() },
+        }
+        return request<
+          ConsoleSendUserInvitationMutation,
+          ConsoleSendUserInvitationMutationVariables
+        >(ConsoleSendUserInvitationDocument, variables, [ConsoleUserDocument, ConsoleUsersDocument])
       },
       unlock(input) {
         const variables: ConsoleUnlockUserMutationVariables = {

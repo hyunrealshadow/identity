@@ -1,0 +1,1 @@
+{% if account_exists %}你已经有账号了{% else %}完成账号注册{% endif %}

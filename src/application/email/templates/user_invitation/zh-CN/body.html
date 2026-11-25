@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="{{ locale }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>设置你的账号</title>
+</head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,'PingFang SC','Microsoft YaHei',sans-serif;color:#18181b;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f4f5;padding:32px 16px;">
+<tr><td align="center">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border:1px solid #e4e4e7;border-radius:12px;">
+<tr><td style="padding:32px 32px 8px;">
+<p style="margin:0 0 16px;font-size:15px;line-height:24px;">{{ user.name }}，你好：</p>
+<p style="margin:0 0 24px;font-size:15px;line-height:24px;">管理员为你创建了账号，用户名为 <strong>{{ user.name }}</strong>。请通过下面的链接设置密码，之后即可使用：</p>
+<p style="margin:0 0 24px;text-align:center;"><a href="{{ link }}" style="display:inline-block;padding:10px 20px;background:#18181b;color:#ffffff;border-radius:8px;font-size:14px;font-weight:600;text-decoration:none;">设置密码</a></p>
+<p style="margin:0 0 8px;font-size:13px;line-height:20px;color:#52525b;">链接将在 {{ expires_in_days }} 天后失效，且只能使用一次。设置密码的同时会验证此邮箱地址。</p>
+<p style="margin:0 0 24px;font-size:13px;line-height:20px;color:#52525b;">如果你没有预期收到这份邀请，请忽略此邮件。</p>
+</td></tr>
+<tr><td style="padding:16px 32px 24px;border-top:1px solid #e4e4e7;font-size:12px;line-height:18px;color:#71717a;word-break:break-all;">如果按钮无法使用，请打开此链接：<br><a href="{{ link }}" style="color:#52525b;">{{ link }}</a></td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>

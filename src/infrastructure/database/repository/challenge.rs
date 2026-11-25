@@ -1,6 +1,6 @@
 //! Shared challenge persistence; cryptographic and OTP verification stay in use cases.
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 use identity_application::{
     auth::challenge::ChallengeRepository,
     error::{AppError, codes::auth::AuthErrorCode},
@@ -10,7 +10,8 @@ use identity_domain::auth::{
     challenge::{
         AuthenticationChallenge, ChallengeBinding, ChallengeContext, ChallengeMethod,
         ChallengePurpose, DeliveryChallengeAdmission, DeliveryChallengeContext,
-        DeliveryChallengeRequest, DeliveryChallengeState, DeliveryChallengeStatus,
+        DeliveryChallengeRequest, DeliveryChallengeState, DeliveryChallengeStatus, DeliveryCounter,
+        DeliveryDecision,
     },
 };
 use sea_orm::{ConnectionTrait, DatabaseConnection, DbBackend, DbErr, Statement, TransactionTrait};
@@ -81,6 +82,7 @@ impl ChallengeRepository for ChallengeRepositoryImpl {
             ), expired AS (
                 DELETE FROM authentication_challenge WHERE id IN (
                     SELECT id FROM authentication_challenge WHERE expires_at <= now()
+                      AND (login_id IS NOT NULL OR session_id IS NOT NULL)
                     ORDER BY expires_at LIMIT 100 FOR UPDATE SKIP LOCKED
                 )
             )
@@ -214,7 +216,7 @@ impl ChallengeRepository for ChallengeRepositoryImpl {
                 DbBackend::Postgres,
                 format!(
                     r#"
-                    SELECT id, state
+                    SELECT id, sent_at, send_count, window_started_at
                     FROM authentication_challenge
                     WHERE {column} = $1 AND method = $2 AND purpose = $3
                     ORDER BY created_at DESC, id DESC
@@ -231,31 +233,33 @@ impl ChallengeRepository for ChallengeRepositoryImpl {
             .await
             .map_err(AppError::internal)?;
 
-        let interval =
-            Duration::from_std(request.resend_interval).unwrap_or_else(|_| Duration::seconds(60));
-        let (existing_id, prev_send_count) = if let Some(row) = existing {
-            let existing_id: i64 = row.try_get("", "id").map_err(AppError::internal)?;
-            let state_json: serde_json::Value =
-                row.try_get("", "state").map_err(AppError::internal)?;
-            let state: DeliveryChallengeState =
-                serde_json::from_value(state_json).map_err(AppError::internal)?;
-            if state.send_count >= request.max_sends {
-                return Ok(DeliveryChallengeAdmission::LimitReached);
+        let (existing_id, previous) = match existing {
+            Some(row) => {
+                let existing_id: i64 = row.try_get("", "id").map_err(AppError::internal)?;
+                let sent_at: Option<DateTime<chrono::FixedOffset>> =
+                    row.try_get("", "sent_at").map_err(AppError::internal)?;
+                let send_count: i32 = row.try_get("", "send_count").map_err(AppError::internal)?;
+                let window_started_at: Option<DateTime<chrono::FixedOffset>> = row
+                    .try_get("", "window_started_at")
+                    .map_err(AppError::internal)?;
+                let previous = sent_at.map(|sent_at| DeliveryCounter {
+                    sent_at: sent_at.into(),
+                    send_count,
+                    window_started_at: window_started_at.unwrap_or(sent_at).into(),
+                });
+                (Some(existing_id), previous)
             }
-            let available_at = state.sent_at + interval;
-            if available_at > request.now {
+            None => (None, None),
+        };
+        let counter = match request.policy.admit(previous.as_ref(), request.now) {
+            DeliveryDecision::Admit(counter) => counter,
+            DeliveryDecision::TooSoon { available_at } => {
                 return Ok(DeliveryChallengeAdmission::TooSoon { available_at });
             }
-            (Some(existing_id), state.send_count)
-        } else {
-            (None, 0)
+            DeliveryDecision::LimitReached => return Ok(DeliveryChallengeAdmission::LimitReached),
         };
-
-        let send_count = prev_send_count + 1;
-        let resend_available_at = request.now + interval;
+        let resend_available_at = request.policy.resend_available_at(&counter);
         let new_state = serde_json::to_value(DeliveryChallengeState {
-            sent_at: request.now,
-            send_count,
             code_expires_at: request.code_expires_at,
             verifier: request.verifier,
         })
@@ -285,8 +289,9 @@ impl ChallengeRepository for ChallengeRepositoryImpl {
                 DbBackend::Postgres,
                 r#"
                 UPDATE authentication_challenge
-                SET oid = $1, user_id = $2, state = $3, expires_at = $4, created_at = $5
-                WHERE id = $6
+                SET oid = $1, user_id = $2, state = $3, expires_at = $4, created_at = $5,
+                    sent_at = $6, send_count = $7, window_started_at = $8
+                WHERE id = $9
             "#,
                 [
                     new_oid.into(),
@@ -294,6 +299,9 @@ impl ChallengeRepository for ChallengeRepositoryImpl {
                     new_state.into(),
                     row_expires_at.fixed_offset().into(),
                     request.now.fixed_offset().into(),
+                    counter.sent_at.fixed_offset().into(),
+                    counter.send_count.into(),
+                    counter.window_started_at.fixed_offset().into(),
                     existing_id.into(),
                 ],
             ))
@@ -307,12 +315,14 @@ impl ChallengeRepository for ChallengeRepositoryImpl {
                     WITH expired AS (
                         DELETE FROM authentication_challenge WHERE id IN (
                             SELECT id FROM authentication_challenge WHERE expires_at <= now()
+                              AND (login_id IS NOT NULL OR session_id IS NOT NULL)
                             ORDER BY expires_at LIMIT 100 FOR UPDATE SKIP LOCKED
                         )
                     )
                     INSERT INTO authentication_challenge
-                        (oid, user_id, {column}, method, purpose, state, expires_at, created_at)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+                        (oid, user_id, {column}, method, purpose, state, expires_at, created_at,
+                         sent_at, send_count, window_started_at)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
                 "#
                 ),
                 [
@@ -324,6 +334,9 @@ impl ChallengeRepository for ChallengeRepositoryImpl {
                     new_state.into(),
                     row_expires_at.fixed_offset().into(),
                     request.now.fixed_offset().into(),
+                    counter.sent_at.fixed_offset().into(),
+                    counter.send_count.into(),
+                    counter.window_started_at.fixed_offset().into(),
                 ],
             ))
             .await
@@ -332,8 +345,8 @@ impl ChallengeRepository for ChallengeRepositoryImpl {
 
         txn.commit().await.map_err(AppError::internal)?;
         Ok(DeliveryChallengeAdmission::Admitted {
-            sent_at: request.now,
-            send_count,
+            sent_at: counter.sent_at,
+            send_count: counter.send_count,
             resend_available_at,
         })
     }
@@ -344,18 +357,28 @@ impl ChallengeRepository for ChallengeRepositoryImpl {
         method: ChallengeMethod,
         purpose: ChallengePurpose,
     ) -> Result<Option<DeliveryChallengeStatus>, AppError> {
-        let (table, column, active, binding_oid) = location(binding);
+        // Any live interaction, including a login still at its identifier
+        // step, which is where a registration link is sent.
+        let (table, column, active, binding_oid) = match binding {
+            ChallengeBinding::Login(id) => (
+                "login",
+                "login_id",
+                "status IN ('created', 'identifier_verified', 'mfa_required', 'mfa_enrollment_required') AND expires_at > now()",
+                id,
+            ),
+            ChallengeBinding::Session(_) => location(binding),
+        };
         let sql = format!(
             r#"
             WITH owner AS MATERIALIZED (
                 SELECT id FROM "{table}"
                 WHERE oid = $1 AND {active}
             )
-            SELECT challenge.state
+            SELECT challenge.sent_at, challenge.send_count
             FROM authentication_challenge AS challenge JOIN owner
               ON challenge.{column} = owner.id
             WHERE challenge.method = $2 AND challenge.purpose = $3
-              AND challenge.expires_at > now()
+              AND challenge.expires_at > now() AND challenge.sent_at IS NOT NULL
             ORDER BY challenge.created_at DESC, challenge.id DESC
             LIMIT 1
         "#
@@ -376,12 +399,11 @@ impl ChallengeRepository for ChallengeRepositoryImpl {
         else {
             return Ok(None);
         };
-        let state_json: serde_json::Value = row.try_get("", "state").map_err(AppError::internal)?;
-        let state: DeliveryChallengeState =
-            serde_json::from_value(state_json).map_err(AppError::internal)?;
+        let sent_at: DateTime<chrono::FixedOffset> =
+            row.try_get("", "sent_at").map_err(AppError::internal)?;
         Ok(Some(DeliveryChallengeStatus {
-            sent_at: state.sent_at,
-            send_count: state.send_count,
+            sent_at: sent_at.into(),
+            send_count: row.try_get("", "send_count").map_err(AppError::internal)?,
         }))
     }
 

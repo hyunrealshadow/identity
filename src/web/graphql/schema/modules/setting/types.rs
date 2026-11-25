@@ -182,6 +182,13 @@ impl AuthenticationSettings {
         self.view.password_reset_enabled
     }
 
+    /// Whether someone without an account may create one from the sign-in
+    /// flow after verifying their email address. Offered only while email
+    /// delivery is configured.
+    async fn registration_enabled(&self) -> bool {
+        self.view.registration_enabled
+    }
+
     /// Days a password stays usable before the next sign-in must replace it.
     /// `0` means passwords do not expire.
     async fn password_max_age_days(&self) -> u32 {
@@ -277,6 +284,7 @@ pub(crate) struct UpdateAuthenticationSettingsInput {
     pub identifier_enumeration_allowed: bool,
     pub email_sign_in_enabled: bool,
     pub password_reset_enabled: bool,
+    pub registration_enabled: bool,
     pub password_max_age_days: u32,
     pub password_history_count: u32,
     pub password_hashing: PasswordHashingInput,

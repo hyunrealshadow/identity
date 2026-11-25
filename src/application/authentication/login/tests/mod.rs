@@ -288,6 +288,7 @@ mod password_policy;
 mod password_reset;
 mod priority;
 mod reauthentication;
+mod registration;
 mod sessions;
 
 mod repositories;

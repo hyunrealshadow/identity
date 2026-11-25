@@ -51,6 +51,16 @@ pub enum AuthErrorCode {
     PasswordResetDeliveryFailed,
     /// The new password repeats one of the account's recent passwords.
     PasswordReused,
+    /// Self-registration is off or email cannot be sent.
+    RegistrationUnavailable,
+    /// The registration link is wrong, used, or expired.
+    RegistrationLinkInvalid,
+    /// Another registration email was requested before the resend interval
+    /// passed.
+    RegistrationResendTooSoon,
+    /// The invitation link is wrong, used, expired, or no longer matches the
+    /// account.
+    InvitationLinkInvalid,
 }
 
 impl AppErrorCode for AuthErrorCode {
@@ -59,7 +69,9 @@ impl AppErrorCode for AuthErrorCode {
             Self::CredentialTypeUnsupported => &["credential_type"],
             Self::SessionNotFound => &["session_id"],
             Self::PasskeyLimitReached => &["limit"],
-            Self::EmailCodeResendTooSoon | Self::PasswordResetResendTooSoon => &["seconds"],
+            Self::EmailCodeResendTooSoon
+            | Self::PasswordResetResendTooSoon
+            | Self::RegistrationResendTooSoon => &["seconds"],
             Self::PasswordReused => &["count"],
             _ => &[],
         }
@@ -93,11 +105,15 @@ impl AppErrorCode for AuthErrorCode {
             | AuthErrorCode::InvalidMfaEnrollment
             | AuthErrorCode::PasswordResetUnavailable
             | AuthErrorCode::PasswordResetLinkInvalid
-            | AuthErrorCode::PasswordReused => ErrorKind::Validation,
+            | AuthErrorCode::PasswordReused
+            | AuthErrorCode::RegistrationUnavailable
+            | AuthErrorCode::RegistrationLinkInvalid
+            | AuthErrorCode::InvitationLinkInvalid => ErrorKind::Validation,
 
             AuthErrorCode::TooManyAttempts
             | AuthErrorCode::EmailCodeResendTooSoon
-            | AuthErrorCode::PasswordResetResendTooSoon => ErrorKind::RateLimit,
+            | AuthErrorCode::PasswordResetResendTooSoon
+            | AuthErrorCode::RegistrationResendTooSoon => ErrorKind::RateLimit,
 
             AuthErrorCode::DeviceAuthorizationRevocationFailed
             | AuthErrorCode::PasswordCheckUnavailable
@@ -143,6 +159,10 @@ impl AppErrorCode for AuthErrorCode {
             AuthErrorCode::PasswordResetResendTooSoon => 11032,
             AuthErrorCode::PasswordResetDeliveryFailed => 11033,
             AuthErrorCode::PasswordReused => 11034,
+            AuthErrorCode::RegistrationUnavailable => 11035,
+            AuthErrorCode::RegistrationLinkInvalid => 11036,
+            AuthErrorCode::RegistrationResendTooSoon => 11037,
+            AuthErrorCode::InvitationLinkInvalid => 11038,
         }
     }
 }

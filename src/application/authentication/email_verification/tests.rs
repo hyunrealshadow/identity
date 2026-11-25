@@ -324,7 +324,7 @@ async fn a_new_address_is_verified_before_it_replaces_the_current_one() {
         .expect("link points at the Login confirmation page");
     let admitted = f.verifications.admitted.lock().unwrap()[0].clone();
     assert_eq!(admitted.email_normalized, "ada.new@example.com");
-    assert_eq!(admitted.token_digest, token_digest(token));
+    assert_eq!(admitted.token_digest, link_digest(token));
     assert_ne!(admitted.token_digest, token);
 }
 
@@ -507,7 +507,7 @@ async fn a_link_is_confirmed_by_the_digest_of_its_token() {
         email: "ada.new@example.com".to_owned(),
         changed: true,
     });
-    let token = new_token();
+    let token = LinkToken::generate().token;
 
     let verified = f.service.confirm_email_verification(&token).await.unwrap();
 
@@ -515,7 +515,7 @@ async fn a_link_is_confirmed_by_the_digest_of_its_token() {
     assert_eq!(verified.email, "ada.new@example.com");
     assert_eq!(
         f.verifications.confirmed.lock().unwrap().as_slice(),
-        [token_digest(&token)]
+        [link_digest(&token)]
     );
 }
 
@@ -543,7 +543,7 @@ async fn unusable_links_are_rejected() {
 
     let error = f
         .service
-        .confirm_email_verification(&new_token())
+        .confirm_email_verification(&LinkToken::generate().token)
         .await
         .unwrap_err();
     assert_eq!(
@@ -554,7 +554,7 @@ async fn unusable_links_are_rejected() {
     *f.verifications.outcome.lock().unwrap() = Some(EmailVerificationOutcome::EmailExists);
     let error = f
         .service
-        .confirm_email_verification(&new_token())
+        .confirm_email_verification(&LinkToken::generate().token)
         .await
         .unwrap_err();
     assert_eq!(

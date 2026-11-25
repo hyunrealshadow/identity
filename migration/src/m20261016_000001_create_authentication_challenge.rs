@@ -5,7 +5,10 @@ use sea_orm_migration::{
         Alias, ColumnDef, ConditionalStatement, DbErr, DeriveIden, DeriveMigrationName, Expr,
         ExprTrait, ForeignKey, ForeignKeyAction, Func, Index, MigrationTrait, SchemaManager, Table,
     },
-    schema::{big_integer_null, json_binary, pk_auto, timestamp_with_time_zone, uuid_uniq},
+    schema::{
+        big_integer_null, integer, json_binary, pk_auto, string_null, timestamp_with_time_zone,
+        timestamp_with_time_zone_null, uuid_uniq,
+    },
     sea_orm::sea_query::{Check, extension::postgres::PgExpr},
 };
 
@@ -28,6 +31,10 @@ enum AuthenticationChallenge {
     Method,
     Purpose,
     State,
+    TokenDigest,
+    SentAt,
+    SendCount,
+    WindowStartedAt,
     ExpiresAt,
     CreatedAt,
 }
@@ -58,6 +65,17 @@ impl MigrationTrait for Migration {
                             .not_null(),
                     )
                     .col(json_binary(AuthenticationChallenge::State))
+                    // SHA-256 of an emailed link token, base64url, for links
+                    // that are followed without an interaction.
+                    .col(string_null(AuthenticationChallenge::TokenDigest))
+                    // What an outbound challenge has sent so far.
+                    .col(timestamp_with_time_zone_null(
+                        AuthenticationChallenge::SentAt,
+                    ))
+                    .col(integer(AuthenticationChallenge::SendCount).default(0))
+                    .col(timestamp_with_time_zone_null(
+                        AuthenticationChallenge::WindowStartedAt,
+                    ))
                     .col(timestamp_with_time_zone(AuthenticationChallenge::ExpiresAt))
                     .col(
                         timestamp_with_time_zone(AuthenticationChallenge::CreatedAt)
@@ -93,13 +111,23 @@ impl MigrationTrait for Migration {
                             .to(Session::Table, Session::Id)
                             .on_delete(ForeignKeyAction::Cascade),
                     )
+                    // A challenge belongs to a login, a session, or, when it
+                    // is followed without either, to its account alone.
                     .check(Check::named(
                         "authentication_challenge_one_binding",
                         Expr::from(Func::cust(Alias::new("num_nonnulls")).args([
                             Expr::col(AuthenticationChallenge::LoginId),
                             Expr::col(AuthenticationChallenge::SessionId),
                         ]))
-                        .eq(1),
+                        .lte(1)
+                        .and(
+                            Expr::from(Func::cust(Alias::new("num_nonnulls")).args([
+                                Expr::col(AuthenticationChallenge::LoginId),
+                                Expr::col(AuthenticationChallenge::SessionId),
+                                Expr::col(AuthenticationChallenge::UserId),
+                            ]))
+                            .gte(1),
+                        ),
                     ))
                     .to_owned(),
             )
@@ -133,6 +161,36 @@ impl MigrationTrait for Migration {
                 )
                 .await?;
         }
+
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_authentication_challenge_token_digest_unique")
+                    .table(AuthenticationChallenge::Table)
+                    .unique()
+                    .col(AuthenticationChallenge::TokenDigest)
+                    .and_where(Expr::col(AuthenticationChallenge::TokenDigest).is_not_null())
+                    .to_owned(),
+            )
+            .await?;
+        // An account has at most one outstanding challenge of each purpose
+        // that is bound to it alone, such as an email verification.
+        manager
+            .create_index(
+                Index::create()
+                    .name("idx_authentication_challenge_account_purpose_unique")
+                    .table(AuthenticationChallenge::Table)
+                    .unique()
+                    .col(AuthenticationChallenge::UserId)
+                    .col(AuthenticationChallenge::Purpose)
+                    .and_where(
+                        Expr::col(AuthenticationChallenge::LoginId)
+                            .is_null()
+                            .and(Expr::col(AuthenticationChallenge::SessionId).is_null()),
+                    )
+                    .to_owned(),
+            )
+            .await?;
 
         manager
             .create_index(

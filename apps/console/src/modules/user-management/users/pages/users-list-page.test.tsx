@@ -66,6 +66,7 @@ function user(id: string, username: string, overrides: Partial<UserSummary> = {}
     locked: false,
     lockedUntil: null,
     failedAttempts: 0,
+    invitation: null,
     version: '00000000-0000-0000-0000-000000000001',
     createdAt: '2026-11-01T00:00:00Z',
     updatedAt: '2026-11-01T00:00:00Z',

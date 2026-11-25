@@ -1,6 +1,5 @@
 //! Password reset: a link sent to the verified address replaces a forgotten
 //! password from the password step of a login.
-use identity_domain::auth::challenge::DeliveryChallengeState;
 use serde_json::Value;
 
 use super::{
@@ -172,13 +171,8 @@ impl ResetFlow {
     /// Allow the next send without waiting for the resend interval.
     fn forget_last_send(&self) {
         let mut stored = self.challenges.stored.lock().unwrap();
-        for item in stored.values_mut() {
-            if let Ok(mut state) =
-                serde_json::from_value::<DeliveryChallengeState>(item.state.clone())
-            {
-                state.sent_at -= Duration::minutes(2);
-                item.state = serde_json::to_value(state).unwrap();
-            }
+        for counter in stored.values_mut().filter_map(|item| item.counter.as_mut()) {
+            counter.sent_at -= Duration::minutes(2);
         }
     }
 }

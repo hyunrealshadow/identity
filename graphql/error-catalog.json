@@ -380,6 +380,40 @@
     "module": "auth"
   },
   {
+    "code": 11035,
+    "kind": "validation",
+    "fluentKey": "E11035",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "auth"
+  },
+  {
+    "code": 11036,
+    "kind": "validation",
+    "fluentKey": "E11036",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "auth"
+  },
+  {
+    "code": 11037,
+    "kind": "rate_limit",
+    "fluentKey": "E11037",
+    "requiredParams": [
+      "seconds"
+    ],
+    "optionalParams": [],
+    "module": "auth"
+  },
+  {
+    "code": 11038,
+    "kind": "validation",
+    "fluentKey": "E11038",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "auth"
+  },
+  {
     "code": 15000,
     "kind": "validation",
     "fluentKey": "E15000",
@@ -2591,6 +2625,48 @@
     "code": 16024,
     "kind": "conflict",
     "fluentKey": "E16024",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "user.management"
+  },
+  {
+    "code": 16025,
+    "kind": "forbidden",
+    "fluentKey": "E16025",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "user.management"
+  },
+  {
+    "code": 16026,
+    "kind": "conflict",
+    "fluentKey": "E16026",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "user.management"
+  },
+  {
+    "code": 16027,
+    "kind": "rate_limit",
+    "fluentKey": "E16027",
+    "requiredParams": [
+      "seconds"
+    ],
+    "optionalParams": [],
+    "module": "user.management"
+  },
+  {
+    "code": 16028,
+    "kind": "internal",
+    "fluentKey": "E16028",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "user.management"
+  },
+  {
+    "code": 16029,
+    "kind": "validation",
+    "fluentKey": "E16029",
     "requiredParams": [],
     "optionalParams": [],
     "module": "user.management"

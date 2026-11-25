@@ -16,6 +16,7 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use super::UserOid;
+use crate::auth::challenge::DeliveryPolicy;
 
 /// How long an emailed verification link stays valid.
 pub const EMAIL_VERIFICATION_TTL: Duration = Duration::from_secs(24 * 60 * 60);
@@ -27,6 +28,14 @@ pub const MAX_EMAIL_VERIFICATION_SENDS: i32 = 5;
 /// The window over which [`MAX_EMAIL_VERIFICATION_SENDS`] is counted. It
 /// starts with the first email and restarts after it has passed.
 pub const EMAIL_VERIFICATION_SEND_WINDOW: Duration = Duration::from_secs(24 * 60 * 60);
+
+/// How often one account may be sent a verification email, whichever
+/// address each one went to.
+pub const EMAIL_VERIFICATION_DELIVERY: DeliveryPolicy = DeliveryPolicy {
+    resend_interval: EMAIL_VERIFICATION_RESEND_INTERVAL,
+    max_sends: Some(MAX_EMAIL_VERIFICATION_SENDS),
+    window: Some(EMAIL_VERIFICATION_SEND_WINDOW),
+};
 
 /// An outstanding verification as shown to its account.
 #[derive(Debug, Clone, PartialEq, Eq)]

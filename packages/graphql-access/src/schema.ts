@@ -768,6 +768,11 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "Boolean",
           "policies": []
         },
+        "registrationEnabled": {
+          "name": "registrationEnabled",
+          "returnType": "Boolean",
+          "policies": []
+        },
         "version": {
           "name": "version",
           "returnType": "UUID",
@@ -1550,6 +1555,11 @@ export const schemaMetadata: SchemaMetadata = {
         "clientMutationId": {
           "name": "clientMutationId",
           "returnType": "String",
+          "policies": []
+        },
+        "invitationSent": {
+          "name": "invitationSent",
+          "returnType": "Boolean",
           "policies": []
         },
         "user": {
@@ -3894,6 +3904,20 @@ export const schemaMetadata: SchemaMetadata = {
             }
           ]
         },
+        "sendUserInvitation": {
+          "name": "sendUserInvitation",
+          "returnType": "SendUserInvitationPayload",
+          "policies": [
+            {
+              "scopes": [
+                "management.user.write"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
+        },
         "setClientScopes": {
           "name": "setClientScopes",
           "returnType": "ClientScopeSetPayload",
@@ -4809,6 +4833,20 @@ export const schemaMetadata: SchemaMetadata = {
             }
           ]
         },
+        "userInvitationsAvailable": {
+          "name": "userInvitationsAvailable",
+          "returnType": "Boolean",
+          "policies": [
+            {
+              "scopes": [
+                "management.user.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
+        },
         "users": {
           "name": "users",
           "returnType": "UserConnection",
@@ -5606,6 +5644,33 @@ export const schemaMetadata: SchemaMetadata = {
         }
       }
     },
+    "SendUserInvitationPayload": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "clientMutationId": {
+          "name": "clientMutationId",
+          "returnType": "String",
+          "policies": []
+        },
+        "invitation": {
+          "name": "invitation",
+          "returnType": "UserInvitation",
+          "policies": []
+        },
+        "user": {
+          "name": "user",
+          "returnType": "User",
+          "policies": []
+        },
+        "userId": {
+          "name": "userId",
+          "returnType": "ID",
+          "policies": []
+        }
+      }
+    },
     "Session": {
       "kind": "OBJECT",
       "interfaces": [
@@ -5979,6 +6044,20 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "ID",
           "policies": []
         },
+        "invitation": {
+          "name": "invitation",
+          "returnType": "UserInvitation",
+          "policies": [
+            {
+              "scopes": [
+                "management.user.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
+        },
         "locale": {
           "name": "locale",
           "returnType": "String",
@@ -6200,6 +6279,23 @@ export const schemaMetadata: SchemaMetadata = {
         "node": {
           "name": "node",
           "returnType": "User",
+          "policies": []
+        }
+      }
+    },
+    "UserInvitation": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "expiresAt": {
+          "name": "expiresAt",
+          "returnType": "DateTime",
+          "policies": []
+        },
+        "sentAt": {
+          "name": "sentAt",
+          "returnType": "DateTime",
           "policies": []
         }
       }

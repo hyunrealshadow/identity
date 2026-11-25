@@ -10,18 +10,20 @@ pub mod repository;
 pub mod service;
 
 pub use model::{
-    CreateUserCommand, RevokeUserSessionsCommand, UpdateUserCommand, UserFilter,
-    UserManagementAuthority, UserManagementMutationResult, UserManagementPage,
-    UserManagementPageItem, UserOrder, UserPageRequest, UserPassword, UserPasswordResetResult,
-    UserProfilePatch, UserRecord, UserStateCommand,
+    CreateUserCommand, CreatedUser, RevokeUserSessionsCommand, SendUserInvitationCommand,
+    UpdateUserCommand, UserFilter, UserManagementAuthority, UserManagementMutationResult,
+    UserManagementPage, UserManagementPageItem, UserOrder, UserPageRequest, UserPassword,
+    UserPasswordResetResult, UserProfilePatch, UserRecord, UserStateCommand,
 };
 pub use repository::{
-    CreateUserTransaction, RevokeUserSessionsTransaction, UpdateUserTransaction,
-    UserIdentifierValue, UserManagementMutationOutcome, UserManagementPageData,
-    UserManagementPageEntry, UserManagementQuery, UserManagementRepository,
-    UserManagementRepositoryError, UserPageDirection, UserSortKey, UserStateTransaction,
+    CreateUserTransaction, RevokeUserSessionsTransaction, SendUserInvitationTransaction,
+    UpdateUserTransaction, UserIdentifierValue, UserInvitationOutcome,
+    UserManagementMutationOutcome, UserManagementPageData, UserManagementPageEntry,
+    UserManagementQuery, UserManagementRepository, UserManagementRepositoryError,
+    UserPageDirection, UserSortKey, UserStateTransaction,
 };
 pub use service::{
     DEFAULT_PAGE_SIZE, MAX_CLIENT_MUTATION_ID_LENGTH, MAX_EMAIL_FILTER_LENGTH, MAX_PAGE_SIZE,
-    MAX_QUERY_FILTER_LENGTH, MAX_REASON_LENGTH, MAX_USERNAME_FILTER_LENGTH, UserManagementService,
+    MAX_QUERY_FILTER_LENGTH, MAX_REASON_LENGTH, MAX_USERNAME_FILTER_LENGTH, UserInvitations,
+    UserManagementService,
 };

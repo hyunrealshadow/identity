@@ -128,12 +128,15 @@ impl UserProfilePatch {
     }
 }
 
-/// Create command after GraphQL shape validation.
+/// Create command after GraphQL shape validation. A new user gets exactly
+/// one way to sign in for the first time: an initial password, or an
+/// emailed invitation to set one.
 #[derive(Debug, Clone)]
 pub struct CreateUserCommand {
     pub username: String,
     pub email: String,
-    pub password: UserPassword,
+    pub password: Option<UserPassword>,
+    pub send_invitation: bool,
     pub profile: UserProfilePatch,
     pub reason: String,
     pub client_mutation_id: Option<String>,
@@ -151,6 +154,24 @@ pub struct UpdateUserCommand {
     pub required_actions: Option<RequiredActions>,
     pub profile: UserProfilePatch,
     pub expected_version: Uuid,
+    pub reason: String,
+    pub client_mutation_id: Option<String>,
+}
+
+/// A created user, and whether its invitation email went out.
+#[derive(Debug, Clone)]
+pub struct CreatedUser {
+    pub record: UserManagementRecord,
+    /// `None` when no invitation was asked for. `Some(false)` when the
+    /// account exists but the email could not be sent; sending the
+    /// invitation again retries it.
+    pub invitation_sent: Option<bool>,
+}
+
+/// Email a new invitation link to a user who has no password yet.
+#[derive(Debug, Clone)]
+pub struct SendUserInvitationCommand {
+    pub user_oid: UserOid,
     pub reason: String,
     pub client_mutation_id: Option<String>,
 }

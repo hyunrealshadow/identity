@@ -38,6 +38,11 @@ pub enum EmailTemplateKind {
     EmailVerification,
     /// The link that replaces a forgotten password from the sign-in flow.
     PasswordReset,
+    /// The link with which an invited user sets their first password.
+    UserInvitation,
+    /// The link that continues creating an account from the sign-in flow, or
+    /// a notice that the address already has an account.
+    Registration,
 }
 
 impl EmailTemplateKind {
@@ -47,6 +52,8 @@ impl EmailTemplateKind {
             Self::SignInCode => "sign_in_code",
             Self::EmailVerification => "email_verification",
             Self::PasswordReset => "password_reset",
+            Self::UserInvitation => "user_invitation",
+            Self::Registration => "registration",
         }
     }
 
@@ -77,6 +84,21 @@ impl EmailTemplateKind {
                 "expires_in_minutes",
                 "user.name",
                 "user.email",
+                "application.name",
+                "locale",
+            ],
+            Self::UserInvitation => &[
+                "link",
+                "expires_in_days",
+                "user.name",
+                "user.email",
+                "locale",
+            ],
+            Self::Registration => &[
+                "link",
+                "email",
+                "account_exists",
+                "expires_in_minutes",
                 "application.name",
                 "locale",
             ],
@@ -118,6 +140,23 @@ impl EmailTemplateKind {
                     "name": if chinese { "张三" } else { "Alex Doe" },
                     "email": "alex@example.com",
                 },
+                "application": { "name": "Example App" },
+                "locale": locale,
+            }),
+            Self::UserInvitation => json!({
+                "link": "https://login.example.com/invitation?token=example",
+                "expires_in_days": 7,
+                "user": {
+                    "name": if chinese { "zhangsan" } else { "alex" },
+                    "email": "alex@example.com",
+                },
+                "locale": locale,
+            }),
+            Self::Registration => json!({
+                "link": "https://login.example.com/login/register?login_id=example&token=example",
+                "email": "alex@example.com",
+                "account_exists": false,
+                "expires_in_minutes": 15,
                 "application": { "name": "Example App" },
                 "locale": locale,
             }),
@@ -225,6 +264,32 @@ pub fn built_in_template(kind: EmailTemplateKind) -> EmailTemplate {
                 content(
                     include_str!("templates/password_reset/zh-CN/subject.txt"),
                     include_str!("templates/password_reset/zh-CN/body.html"),
+                ),
+            )]),
+        },
+        EmailTemplateKind::UserInvitation => EmailTemplate {
+            default: content(
+                include_str!("templates/user_invitation/en-US/subject.txt"),
+                include_str!("templates/user_invitation/en-US/body.html"),
+            ),
+            translations: BTreeMap::from([(
+                "zh-CN".to_owned(),
+                content(
+                    include_str!("templates/user_invitation/zh-CN/subject.txt"),
+                    include_str!("templates/user_invitation/zh-CN/body.html"),
+                ),
+            )]),
+        },
+        EmailTemplateKind::Registration => EmailTemplate {
+            default: content(
+                include_str!("templates/registration/en-US/subject.txt"),
+                include_str!("templates/registration/en-US/body.html"),
+            ),
+            translations: BTreeMap::from([(
+                "zh-CN".to_owned(),
+                content(
+                    include_str!("templates/registration/zh-CN/subject.txt"),
+                    include_str!("templates/registration/zh-CN/body.html"),
                 ),
             )]),
         },

@@ -229,6 +229,37 @@ function AuthenticationSettingsForm({ settings }: { settings: AuthenticationSett
               />
             ) : null}
           </SettingsRow>
+          <SettingsRow
+            label={t('settingsRegistration')}
+            description={t('settingsRegistrationHint')}
+            action={
+              <SettingsSwitch
+                label={t('settingsRegistration')}
+                isSelected={draft.registrationEnabled}
+                onChange={(value) => change('registrationEnabled', value)}
+                isDisabled={disabled || (!deliveryConfigured && !draft.registrationEnabled)}
+              />
+            }
+          >
+            {!deliveryConfigured ? (
+              <p className="text-xs leading-5 text-muted-foreground">
+                {t(
+                  draft.registrationEnabled
+                    ? 'settingsRegistrationDeliveryOff'
+                    : 'settingsRegistrationNeedsDelivery',
+                )}{' '}
+                <Link to="/email" className="text-link">
+                  {t('settingsEmailSignInConfigureDelivery')}
+                </Link>
+              </p>
+            ) : null}
+            {serverErrors.registrationEnabled ? (
+              <SettingsFieldError
+                id={`${errorPrefix}-registrationEnabled`}
+                message={serverErrors.registrationEnabled}
+              />
+            ) : null}
+          </SettingsRow>
         </SettingsGroup>
 
         <SettingsGroup title={t('settingsPasswordPolicySection')}>

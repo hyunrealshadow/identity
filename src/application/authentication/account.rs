@@ -124,7 +124,7 @@ impl AccountService {
     }
 }
 
-fn validate_username(username: &str) -> Result<UserIdentifierUpdate, AppError> {
+pub(super) fn validate_username(username: &str) -> Result<UserIdentifierUpdate, AppError> {
     match normalization_validate_username(username) {
         Ok(normalized) => Ok(UserIdentifierUpdate::Username {
             value: username.trim().to_owned(),

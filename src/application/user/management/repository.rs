@@ -7,7 +7,13 @@
 
 use std::error::Error as StdError;
 
-use crate::{authorization::ManagementAuthorizationError, user::Password};
+use crate::{
+    authorization::ManagementAuthorizationError,
+    user::{
+        Password,
+        invitation::{InvitationIssue, UserInvitationStatus},
+    },
+};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use identity_domain::user::{
@@ -64,7 +70,8 @@ pub struct UserManagementPageData {
 }
 
 /// Fully prepared create. The application service has already normalized
-/// identifiers, validated the password and produced the stored hash.
+/// identifiers, validated the password and produced the stored hash. Exactly
+/// one of `password` and `invitation` is set.
 ///
 /// `Debug` is intentionally not derived because the stored credential hash must
 /// never be logged.
@@ -74,10 +81,37 @@ pub struct CreateUserTransaction {
     pub username_normalized: String,
     pub email: String,
     pub email_normalized: String,
-    pub password: Password,
+    pub password: Option<Password>,
+    pub invitation: Option<InvitationIssue>,
     pub profile: UserProfilePatch,
     pub reason: String,
     pub authority: UserManagementAuthority,
+}
+
+/// A new invitation link for a user who has no password yet. It replaces
+/// any earlier link once `delivery` admits another email.
+#[derive(Debug, Clone)]
+pub struct SendUserInvitationTransaction {
+    pub user_oid: UserOid,
+    pub invitation: InvitationIssue,
+    pub delivery: identity_domain::auth::challenge::DeliveryPolicy,
+    pub reason: String,
+    pub authority: UserManagementAuthority,
+}
+
+/// Business outcome of sending an invitation.
+#[derive(Debug, Clone)]
+pub enum UserInvitationOutcome {
+    Sent {
+        record: Box<UserManagementRecord>,
+        invitation: UserInvitationStatus,
+    },
+    UserNotFound,
+    /// The user already has a password.
+    HasPassword,
+    TooSoon {
+        available_at: DateTime<Utc>,
+    },
 }
 
 /// Fully prepared sparse update.
@@ -212,6 +246,13 @@ pub trait UserManagementRepository: Send + Sync {
         &self,
         command: RevokeUserSessionsTransaction,
     ) -> Result<UserManagementMutationOutcome, UserManagementRepositoryError>;
+
+    /// Store a new invitation link for a user without a password and audit
+    /// it.
+    async fn send_user_invitation(
+        &self,
+        command: SendUserInvitationTransaction,
+    ) -> Result<UserInvitationOutcome, UserManagementRepositoryError>;
 
     /// Delete a disabled user with its credentials, sessions, consents and
     /// memberships. Grants it made to others keep their rows without it as

@@ -41,3 +41,7 @@ E11031 = The reset link is invalid or has expired. Request a new one.
 E11032 = A reset email was sent recently. You can request another in { $seconds } seconds.
 E11033 = The reset email could not be sent. Try again later.
 E11034 = The new password cannot repeat any of your last { $count } passwords.
+E11035 = Creating an account is not available here.
+E11036 = The sign-up link is invalid or has expired. Request a new one.
+E11037 = A sign-up email was sent recently. You can request another in { $seconds } seconds.
+E11038 = The invitation link is invalid or has expired. Ask your administrator to send a new one.

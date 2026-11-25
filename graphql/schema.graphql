@@ -181,6 +181,7 @@ A stable public audit action, named object first, then verb.
 """
 enum AuditAction {
 	USER_CREATE
+	USER_INVITE
 	USER_UPDATE
 	USER_ENABLE
 	USER_DISABLE
@@ -238,6 +239,8 @@ enum AuditAction {
 	ACCOUNT_EMAIL_VERIFY
 	ACCOUNT_PASSWORD_CHANGE
 	ACCOUNT_PASSWORD_RESET
+	ACCOUNT_REGISTER
+	ACCOUNT_INVITATION_ACCEPT
 	ACCOUNT_CREDENTIAL_REPLACE
 	ACCOUNT_TOTP_ENABLE
 	ACCOUNT_TOTP_DISABLE
@@ -530,6 +533,12 @@ type AuthenticationSettings {
 	Offered only while email delivery is configured.
 	"""
 	passwordResetEnabled: Boolean!
+	"""
+	Whether someone without an account may create one from the sign-in
+	flow after verifying their email address. Offered only while email
+	delivery is configured.
+	"""
+	registrationEnabled: Boolean!
 	"""
 	Days a password stays usable before the next sign-in must replace it.
 	`0` means passwords do not expire.
@@ -1140,7 +1149,16 @@ input CreateSigningKeyInput {
 input CreateUserInput {
 	username: String!
 	email: String!
-	password: String!
+	"""
+	The initial password. Leave it out and set `sendInvitation` to let
+	the user choose their own.
+	"""
+	password: String
+	"""
+	Email the user a link to set their first password instead of setting
+	one now. Needs email delivery.
+	"""
+	sendInvitation: Boolean! = false
 	profile: UserProfilePatchInput
 	reason: String! = ""
 	clientMutationId: String
@@ -1148,6 +1166,11 @@ input CreateUserInput {
 
 type CreateUserPayload {
 	userId: ID!
+	"""
+	Whether the invitation email went out, when one was asked for. The
+	user exists either way; when it is `false`, send the invitation again.
+	"""
+	invitationSent: Boolean
 	version: UUID!
 	user: User
 	clientMutationId: String
@@ -1361,6 +1384,14 @@ enum EmailTemplateKind {
 	The link that replaces a forgotten password from the sign-in flow.
 	"""
 	PASSWORD_RESET
+	"""
+	The link with which an invited user sets their first password.
+	"""
+	USER_INVITATION
+	"""
+	The link that continues creating an account from the sign-in flow.
+	"""
+	REGISTRATION
 }
 
 """
@@ -1906,6 +1937,11 @@ type MutationRoot {
 	revokeSession(id: ID!, clientMutationId: String): RevokeSessionPayload! @access(policy: {scopes: ["session.revoke"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
 	revokeOtherSessions(clientMutationId: String): RevokeOtherSessionsPayload! @access(policy: {scopes: ["session.revoke"], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: true, runtime: false})
 	createUser(input: CreateUserInput!): CreateUserPayload! @access(policy: {scopes: ["management.user.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
+	Email a new link with which the user sets their first password. Only
+	for a user without a password; it replaces any earlier link.
+	"""
+	sendUserInvitation(input: SendUserInvitationInput!): SendUserInvitationPayload! @access(policy: {scopes: ["management.user.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	updateUser(input: UpdateUserInput!): UpdateUserPayload! @access(policy: {scopes: ["management.user.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	enableUser(input: UserStateInput!): UserStatePayload! @access(policy: {scopes: ["management.user.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	disableUser(input: UserStateInput!): UserStatePayload! @access(policy: {scopes: ["management.user.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
@@ -2190,6 +2226,11 @@ type QueryRoot {
 	effectivePermissions: EffectivePermissions! @access(policy: {scopes: [], authentication: SESSION, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: false})
 	group(id: ID!): Group @access(policy: {scopes: ["management.group.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	groups(filter: GroupFilter, orderBy: GroupOrder, first: Int, after: String, last: Int, before: String): GroupConnection! @access(policy: {scopes: ["management.group.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
+	Whether new users can be invited to set their own password: email
+	delivery and the sign-in address are configured.
+	"""
+	userInvitationsAvailable: Boolean! @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	user(id: ID!): User @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	users(filter: UserFilter, orderBy: UserOrder, first: Int, after: String, last: Int, before: String): UserConnection! @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	resource(id: ID!): Resource @access(policy: {scopes: ["management.resource.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
@@ -2661,6 +2702,22 @@ type SendTestEmailPayload {
 	clientMutationId: String
 }
 
+input SendUserInvitationInput {
+	id: ID!
+	reason: String! = ""
+	clientMutationId: String
+}
+
+type SendUserInvitationPayload {
+	userId: ID!
+	user: User
+	"""
+	The invitation just sent.
+	"""
+	invitation: UserInvitation!
+	clientMutationId: String
+}
+
 type Session implements Node {
 	id: ID!
 	status: String!
@@ -2817,6 +2874,7 @@ input UpdateAuthenticationSettingsInput {
 	identifierEnumerationAllowed: Boolean!
 	emailSignInEnabled: Boolean!
 	passwordResetEnabled: Boolean!
+	registrationEnabled: Boolean!
 	passwordMaxAgeDays: Int!
 	passwordHistoryCount: Int!
 	passwordHashing: PasswordHashingInput!
@@ -3050,6 +3108,11 @@ type User implements Node {
 	"""
 	authenticationMethods: UserAuthenticationMethods @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	"""
+	The invitation the user has not accepted yet: the account has no
+	password and the link was sent to its current address.
+	"""
+	invitation: UserInvitation @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	"""
 	The user's active sessions, most recently active first.
 	"""
 	sessions(after: String, before: String, first: Int, last: Int): SessionConnection! @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
@@ -3103,6 +3166,17 @@ input UserFilter {
 	locked: Boolean
 	createdFrom: DateTime
 	createdBefore: DateTime
+}
+
+"""
+An invitation to set a first password, as shown to administrators.
+"""
+type UserInvitation {
+	sentAt: DateTime!
+	"""
+	When the link stops working. Send the invitation again after that.
+	"""
+	expiresAt: DateTime!
 }
 
 """

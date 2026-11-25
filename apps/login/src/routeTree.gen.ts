@@ -17,6 +17,7 @@ import { Route as CallbackRouteImport } from './routes/callback'
 import { Route as ConsentRouteImport } from './routes/consent'
 import { Route as DeviceRouteImport } from './routes/device'
 import { Route as InstallRouteImport } from './routes/install'
+import { Route as InvitationRouteImport } from './routes/invitation'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as LogoutRouteImport } from './routes/logout'
 import { Route as VerifyEmailRouteImport } from './routes/verify-email'
@@ -29,10 +30,12 @@ import { Route as DeviceOutcomeRouteImport } from './routes/device_.$outcome'
 import { Route as HealthLiveRouteImport } from './routes/health.live'
 import { Route as HealthMetricsRouteImport } from './routes/health.metrics'
 import { Route as HealthReadyRouteImport } from './routes/health.ready'
+import { Route as InvitationAcceptedRouteImport } from './routes/invitation_.accepted'
 import { Route as LoginMethodRouteImport } from './routes/login.$method'
 import { Route as LoginChangePasswordRouteImport } from './routes/login.change-password'
 import { Route as LoginMfaSetupRouteImport } from './routes/login.mfa-setup'
 import { Route as LoginPasskeySetupRouteImport } from './routes/login.passkey-setup'
+import { Route as LoginRegisterRouteImport } from './routes/login.register'
 import { Route as LoginResetPasswordRouteImport } from './routes/login.reset-password'
 import { Route as VerifyEmailOutcomeRouteImport } from './routes/verify-email_.$outcome'
 import { Route as AccountMfaSetupRouteImport } from './routes/account/mfa/setup'
@@ -75,6 +78,11 @@ const DeviceRoute = DeviceRouteImport.update({
 const InstallRoute = InstallRouteImport.update({
   id: '/install',
   path: '/install',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const InvitationRoute = InvitationRouteImport.update({
+  id: '/invitation',
+  path: '/invitation',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -137,6 +145,11 @@ const HealthReadyRoute = HealthReadyRouteImport.update({
   path: '/health/ready',
   getParentRoute: () => rootRouteImport,
 } as any)
+const InvitationAcceptedRoute = InvitationAcceptedRouteImport.update({
+  id: '/invitation_/accepted',
+  path: '/invitation/accepted',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginMethodRoute = LoginMethodRouteImport.update({
   id: '/$method',
   path: '/$method',
@@ -155,6 +168,11 @@ const LoginMfaSetupRoute = LoginMfaSetupRouteImport.update({
 const LoginPasskeySetupRoute = LoginPasskeySetupRouteImport.update({
   id: '/passkey-setup',
   path: '/passkey-setup',
+  getParentRoute: () => LoginRoute,
+} as any)
+const LoginRegisterRoute = LoginRegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
   getParentRoute: () => LoginRoute,
 } as any)
 const LoginResetPasswordRoute = LoginResetPasswordRouteImport.update({
@@ -182,6 +200,7 @@ export interface FileRoutesByFullPath {
   '/consent': typeof ConsentRoute
   '/device': typeof DeviceRoute
   '/install': typeof InstallRoute
+  '/invitation': typeof InvitationRoute
   '/login': typeof LoginRouteWithChildren
   '/logout': typeof LogoutRoute
   '/verify-email': typeof VerifyEmailRoute
@@ -193,10 +212,12 @@ export interface FileRoutesByFullPath {
   '/health/live': typeof HealthLiveRoute
   '/health/metrics': typeof HealthMetricsRoute
   '/health/ready': typeof HealthReadyRoute
+  '/invitation/accepted': typeof InvitationAcceptedRoute
   '/login/$method': typeof LoginMethodRoute
   '/login/change-password': typeof LoginChangePasswordRoute
   '/login/mfa-setup': typeof LoginMfaSetupRoute
   '/login/passkey-setup': typeof LoginPasskeySetupRoute
+  '/login/register': typeof LoginRegisterRoute
   '/login/reset-password': typeof LoginResetPasswordRoute
   '/verify-email/$outcome': typeof VerifyEmailOutcomeRoute
   '/account/': typeof AccountIndexRoute
@@ -210,6 +231,7 @@ export interface FileRoutesByTo {
   '/consent': typeof ConsentRoute
   '/device': typeof DeviceRoute
   '/install': typeof InstallRoute
+  '/invitation': typeof InvitationRoute
   '/login': typeof LoginRouteWithChildren
   '/logout': typeof LogoutRoute
   '/verify-email': typeof VerifyEmailRoute
@@ -221,10 +243,12 @@ export interface FileRoutesByTo {
   '/health/live': typeof HealthLiveRoute
   '/health/metrics': typeof HealthMetricsRoute
   '/health/ready': typeof HealthReadyRoute
+  '/invitation/accepted': typeof InvitationAcceptedRoute
   '/login/$method': typeof LoginMethodRoute
   '/login/change-password': typeof LoginChangePasswordRoute
   '/login/mfa-setup': typeof LoginMfaSetupRoute
   '/login/passkey-setup': typeof LoginPasskeySetupRoute
+  '/login/register': typeof LoginRegisterRoute
   '/login/reset-password': typeof LoginResetPasswordRoute
   '/verify-email/$outcome': typeof VerifyEmailOutcomeRoute
   '/account': typeof AccountIndexRoute
@@ -240,6 +264,7 @@ export interface FileRoutesById {
   '/consent': typeof ConsentRoute
   '/device': typeof DeviceRoute
   '/install': typeof InstallRoute
+  '/invitation': typeof InvitationRoute
   '/login': typeof LoginRouteWithChildren
   '/logout': typeof LogoutRoute
   '/verify-email': typeof VerifyEmailRoute
@@ -251,10 +276,12 @@ export interface FileRoutesById {
   '/health/live': typeof HealthLiveRoute
   '/health/metrics': typeof HealthMetricsRoute
   '/health/ready': typeof HealthReadyRoute
+  '/invitation_/accepted': typeof InvitationAcceptedRoute
   '/login/$method': typeof LoginMethodRoute
   '/login/change-password': typeof LoginChangePasswordRoute
   '/login/mfa-setup': typeof LoginMfaSetupRoute
   '/login/passkey-setup': typeof LoginPasskeySetupRoute
+  '/login/register': typeof LoginRegisterRoute
   '/login/reset-password': typeof LoginResetPasswordRoute
   '/verify-email_/$outcome': typeof VerifyEmailOutcomeRoute
   '/account/': typeof AccountIndexRoute
@@ -271,6 +298,7 @@ export interface FileRouteTypes {
     | '/consent'
     | '/device'
     | '/install'
+    | '/invitation'
     | '/login'
     | '/logout'
     | '/verify-email'
@@ -282,10 +310,12 @@ export interface FileRouteTypes {
     | '/health/live'
     | '/health/metrics'
     | '/health/ready'
+    | '/invitation/accepted'
     | '/login/$method'
     | '/login/change-password'
     | '/login/mfa-setup'
     | '/login/passkey-setup'
+    | '/login/register'
     | '/login/reset-password'
     | '/verify-email/$outcome'
     | '/account/'
@@ -299,6 +329,7 @@ export interface FileRouteTypes {
     | '/consent'
     | '/device'
     | '/install'
+    | '/invitation'
     | '/login'
     | '/logout'
     | '/verify-email'
@@ -310,10 +341,12 @@ export interface FileRouteTypes {
     | '/health/live'
     | '/health/metrics'
     | '/health/ready'
+    | '/invitation/accepted'
     | '/login/$method'
     | '/login/change-password'
     | '/login/mfa-setup'
     | '/login/passkey-setup'
+    | '/login/register'
     | '/login/reset-password'
     | '/verify-email/$outcome'
     | '/account'
@@ -328,6 +361,7 @@ export interface FileRouteTypes {
     | '/consent'
     | '/device'
     | '/install'
+    | '/invitation'
     | '/login'
     | '/logout'
     | '/verify-email'
@@ -339,10 +373,12 @@ export interface FileRouteTypes {
     | '/health/live'
     | '/health/metrics'
     | '/health/ready'
+    | '/invitation_/accepted'
     | '/login/$method'
     | '/login/change-password'
     | '/login/mfa-setup'
     | '/login/passkey-setup'
+    | '/login/register'
     | '/login/reset-password'
     | '/verify-email_/$outcome'
     | '/account/'
@@ -358,6 +394,7 @@ export interface RootRouteChildren {
   ConsentRoute: typeof ConsentRoute
   DeviceRoute: typeof DeviceRoute
   InstallRoute: typeof InstallRoute
+  InvitationRoute: typeof InvitationRoute
   LoginRoute: typeof LoginRouteWithChildren
   LogoutRoute: typeof LogoutRoute
   VerifyEmailRoute: typeof VerifyEmailRoute
@@ -365,6 +402,7 @@ export interface RootRouteChildren {
   HealthLiveRoute: typeof HealthLiveRoute
   HealthMetricsRoute: typeof HealthMetricsRoute
   HealthReadyRoute: typeof HealthReadyRoute
+  InvitationAcceptedRoute: typeof InvitationAcceptedRoute
   VerifyEmailOutcomeRoute: typeof VerifyEmailOutcomeRoute
 }
 
@@ -424,6 +462,13 @@ declare module '@tanstack/react-router' {
       path: '/install'
       fullPath: '/install'
       preLoaderRoute: typeof InstallRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/invitation': {
+      id: '/invitation'
+      path: '/invitation'
+      fullPath: '/invitation'
+      preLoaderRoute: typeof InvitationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -510,6 +555,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HealthReadyRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/invitation_/accepted': {
+      id: '/invitation_/accepted'
+      path: '/invitation/accepted'
+      fullPath: '/invitation/accepted'
+      preLoaderRoute: typeof InvitationAcceptedRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login/$method': {
       id: '/login/$method'
       path: '/$method'
@@ -536,6 +588,13 @@ declare module '@tanstack/react-router' {
       path: '/passkey-setup'
       fullPath: '/login/passkey-setup'
       preLoaderRoute: typeof LoginPasskeySetupRouteImport
+      parentRoute: typeof LoginRoute
+    }
+    '/login/register': {
+      id: '/login/register'
+      path: '/register'
+      fullPath: '/login/register'
+      preLoaderRoute: typeof LoginRegisterRouteImport
       parentRoute: typeof LoginRoute
     }
     '/login/reset-password': {
@@ -589,6 +648,7 @@ interface LoginRouteChildren {
   LoginChangePasswordRoute: typeof LoginChangePasswordRoute
   LoginMfaSetupRoute: typeof LoginMfaSetupRoute
   LoginPasskeySetupRoute: typeof LoginPasskeySetupRoute
+  LoginRegisterRoute: typeof LoginRegisterRoute
   LoginResetPasswordRoute: typeof LoginResetPasswordRoute
 }
 
@@ -597,6 +657,7 @@ const LoginRouteChildren: LoginRouteChildren = {
   LoginChangePasswordRoute: LoginChangePasswordRoute,
   LoginMfaSetupRoute: LoginMfaSetupRoute,
   LoginPasskeySetupRoute: LoginPasskeySetupRoute,
+  LoginRegisterRoute: LoginRegisterRoute,
   LoginResetPasswordRoute: LoginResetPasswordRoute,
 }
 
@@ -611,6 +672,7 @@ const rootRouteChildren: RootRouteChildren = {
   ConsentRoute: ConsentRoute,
   DeviceRoute: DeviceRoute,
   InstallRoute: InstallRoute,
+  InvitationRoute: InvitationRoute,
   LoginRoute: LoginRouteWithChildren,
   LogoutRoute: LogoutRoute,
   VerifyEmailRoute: VerifyEmailRoute,
@@ -618,6 +680,7 @@ const rootRouteChildren: RootRouteChildren = {
   HealthLiveRoute: HealthLiveRoute,
   HealthMetricsRoute: HealthMetricsRoute,
   HealthReadyRoute: HealthReadyRoute,
+  InvitationAcceptedRoute: InvitationAcceptedRoute,
   VerifyEmailOutcomeRoute: VerifyEmailOutcomeRoute,
 }
 export const routeTree = rootRouteImport

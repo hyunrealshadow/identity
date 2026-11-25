@@ -37,18 +37,23 @@ use crate::{
     },
     observability::{BusinessEvent, EventSink, EventValue, NoopEventSink, error_outcome},
     setting::{PasswordHashSetting, PasswordHistoryCountSetting, SettingsSource},
+    user::invitation::{
+        InvitationDelivery, InvitationToken, USER_INVITATION_DELIVERY, UserInvitationRepository,
+        UserInvitationStatus,
+    },
     user::management::{
         cursor::{NormalizedFilter, decode_cursor, encode_cursor},
         model::{
-            CreateUserCommand, RevokeUserSessionsCommand, UpdateUserCommand, UserFilter,
-            UserManagementAuthority, UserManagementPage, UserManagementPageItem, UserPageRequest,
-            UserPasswordResetResult, UserStateCommand, domain_profile_patch,
+            CreateUserCommand, CreatedUser, RevokeUserSessionsCommand, SendUserInvitationCommand,
+            UpdateUserCommand, UserFilter, UserManagementAuthority, UserManagementPage,
+            UserManagementPageItem, UserPageRequest, UserPasswordResetResult, UserStateCommand,
+            domain_profile_patch,
         },
         repository::{
-            CreateUserTransaction, RevokeUserSessionsTransaction, UpdateUserTransaction,
-            UserIdentifierValue, UserManagementMutationOutcome, UserManagementQuery,
-            UserManagementRepository, UserManagementRepositoryError, UserPageDirection,
-            UserStateTransaction,
+            CreateUserTransaction, RevokeUserSessionsTransaction, SendUserInvitationTransaction,
+            UpdateUserTransaction, UserIdentifierValue, UserInvitationOutcome,
+            UserManagementMutationOutcome, UserManagementQuery, UserManagementRepository,
+            UserManagementRepositoryError, UserPageDirection, UserStateTransaction,
         },
     },
 };
@@ -67,7 +72,15 @@ pub struct UserManagementService {
     breach_checker: Arc<dyn BreachedPasswordChecker>,
     settings: Arc<dyn SettingsSource>,
     data_protector: Arc<dyn DataProtector>,
+    invitations: Option<UserInvitations>,
     events: Arc<dyn EventSink>,
+}
+
+/// What sending invitations needs.
+#[derive(Clone)]
+pub struct UserInvitations {
+    pub delivery: InvitationDelivery,
+    pub repository: Arc<dyn UserInvitationRepository>,
 }
 
 impl UserManagementService {
@@ -85,8 +98,105 @@ impl UserManagementService {
             breach_checker,
             settings,
             data_protector,
+            invitations: None,
             events: Arc::new(NoopEventSink),
         }
+    }
+
+    /// Let administrators invite users by email.
+    #[must_use]
+    pub fn with_invitations(mut self, invitations: UserInvitations) -> Self {
+        self.invitations = Some(invitations);
+        self
+    }
+
+    /// Whether an invitation can be sent now.
+    #[must_use]
+    pub fn invitations_available(&self) -> bool {
+        self.invitations
+            .as_ref()
+            .is_some_and(|invitations| invitations.delivery.available())
+    }
+
+    /// The user's outstanding invitation, for a field already admitted with
+    /// `management.user.read`.
+    pub async fn invitation_status(
+        &self,
+        user_oid: UserOid,
+    ) -> Result<Option<UserInvitationStatus>, AppError> {
+        match &self.invitations {
+            Some(invitations) => invitations.repository.find_for_user(user_oid).await,
+            None => Ok(None),
+        }
+    }
+
+    fn available_invitations(&self) -> Result<&UserInvitations, AppError> {
+        self.invitations
+            .as_ref()
+            .filter(|invitations| invitations.delivery.available())
+            .ok_or_else(|| AppError::from_code(UserManagementErrorCode::InvitationUnavailable))
+    }
+
+    /// Email a new invitation link to a user who has no password yet,
+    /// replacing any earlier link.
+    #[tracing::instrument(skip_all, name = "user.management.send_invitation")]
+    pub async fn send_user_invitation(
+        &self,
+        authority: &UserManagementAuthority,
+        command: SendUserInvitationCommand,
+    ) -> Result<(UserManagementRecord, UserInvitationStatus), AppError> {
+        let result = self.send_user_invitation_inner(authority, command).await;
+        self.emit_mutation_ref(
+            "user.management.send_invitation",
+            result.as_ref().map(|(record, _)| record),
+        );
+        result
+    }
+
+    async fn send_user_invitation_inner(
+        &self,
+        authority: &UserManagementAuthority,
+        command: SendUserInvitationCommand,
+    ) -> Result<(UserManagementRecord, UserInvitationStatus), AppError> {
+        let reason = validate_reason(&command.reason)?;
+        validate_client_mutation_id(command.client_mutation_id.as_deref())?;
+        let invitations = self.available_invitations()?;
+        let now = chrono::Utc::now();
+        let token = InvitationToken::generate(now);
+        let outcome = self
+            .repository
+            .send_user_invitation(SendUserInvitationTransaction {
+                user_oid: command.user_oid,
+                invitation: token.issue.clone(),
+                delivery: USER_INVITATION_DELIVERY,
+                reason,
+                authority: (*authority).clone(),
+            })
+            .await
+            .map_err(map_repository_error)?;
+        let (record, status) = match outcome {
+            UserInvitationOutcome::Sent { record, invitation } => (*record, invitation),
+            UserInvitationOutcome::UserNotFound => {
+                return Err(AppError::from_code(UserManagementErrorCode::UserNotFound));
+            }
+            UserInvitationOutcome::HasPassword => {
+                return Err(AppError::from_code(
+                    UserManagementErrorCode::InvitationNotPending,
+                ));
+            }
+            UserInvitationOutcome::TooSoon { available_at } => {
+                let seconds = (available_at - now).num_seconds().max(1);
+                return Err(
+                    AppError::from_code(UserManagementErrorCode::InvitationResendTooSoon)
+                        .with_param("seconds", seconds.to_string()),
+                );
+            }
+        };
+        invitations
+            .delivery
+            .send(&record.user, &token.token)
+            .await?;
+        Ok((record, status))
     }
 
     #[must_use]
@@ -185,9 +295,12 @@ impl UserManagementService {
         &self,
         authority: &UserManagementAuthority,
         command: CreateUserCommand,
-    ) -> Result<UserManagementRecord, AppError> {
+    ) -> Result<CreatedUser, AppError> {
         let result = self.create_user_inner(authority, command).await;
-        self.emit_mutation("user.management.create", &result);
+        self.emit_mutation_ref(
+            "user.management.create",
+            result.as_ref().map(|created| &created.record),
+        );
         result
     }
 
@@ -421,26 +534,45 @@ impl UserManagementService {
         &self,
         authority: &UserManagementAuthority,
         command: CreateUserCommand,
-    ) -> Result<UserManagementRecord, AppError> {
+    ) -> Result<CreatedUser, AppError> {
         let reason = validate_reason(&command.reason)?;
         validate_client_mutation_id(command.client_mutation_id.as_deref())?;
         let (username, username_normalized) = validate_username_field(&command.username)?;
         let (email, email_normalized) = validate_email_field(&command.email)?;
         let profile = domain_profile_patch(&command.profile)?;
 
-        validate_password(command.password.as_str(), &[&username, &email], "password")?;
-        validate_breached_password(
-            self.breach_checker.as_ref(),
-            &self.settings.snapshot(),
-            command.password.as_str(),
-            "password",
-        )
-        .await?;
-
-        let hash_options = self.settings.snapshot().get::<PasswordHashSetting>();
-        let hasher = Arc::clone(&self.password_hasher);
-        let password = command.password.into_inner();
-        let password = run_password_hashing(move || hasher.hash(&password, &hash_options)).await?;
+        let (password, invitation) = match (command.password, command.send_invitation) {
+            (Some(password), false) => {
+                validate_password(password.as_str(), &[&username, &email], "password")?;
+                validate_breached_password(
+                    self.breach_checker.as_ref(),
+                    &self.settings.snapshot(),
+                    password.as_str(),
+                    "password",
+                )
+                .await?;
+                let hash_options = self.settings.snapshot().get::<PasswordHashSetting>();
+                let hasher = Arc::clone(&self.password_hasher);
+                let password = password.into_inner();
+                let password =
+                    run_password_hashing(move || hasher.hash(&password, &hash_options)).await?;
+                (Some(password), None)
+            }
+            (None, true) => {
+                let invitations = self.available_invitations()?.clone();
+                let token = InvitationToken::generate(chrono::Utc::now());
+                (None, Some((invitations, token)))
+            }
+            _ => {
+                return Err(
+                    AppError::from_code(UserManagementErrorCode::ValidationFailed)
+                        .with_field_error(
+                            "password",
+                            AppError::from_code(UserManagementErrorCode::CredentialChoiceRequired),
+                        ),
+                );
+            }
+        };
 
         let outcome = self
             .repository
@@ -450,13 +582,28 @@ impl UserManagementService {
                 email,
                 email_normalized,
                 password,
+                invitation: invitation.as_ref().map(|(_, token)| token.issue.clone()),
                 profile,
                 reason,
                 authority: (*authority).clone(),
             })
             .await
             .map_err(map_repository_error)?;
-        map_mutation_outcome(outcome)
+        let record = map_mutation_outcome(outcome)?;
+        let invitation_sent = match invitation {
+            Some((invitations, token)) => Some(
+                invitations
+                    .delivery
+                    .send(&record.user, &token.token)
+                    .await
+                    .is_ok(),
+            ),
+            None => None,
+        };
+        Ok(CreatedUser {
+            record,
+            invitation_sent,
+        })
     }
 
     async fn update_user_inner(
@@ -982,6 +1129,14 @@ mod tests {
                 .clone()
                 .unwrap_or(UserManagementMutationOutcome::UserNotFound))
         }
+
+        async fn send_user_invitation(
+            &self,
+            _command: crate::user::management::SendUserInvitationTransaction,
+        ) -> Result<crate::user::management::UserInvitationOutcome, UserManagementRepositoryError>
+        {
+            Ok(crate::user::management::UserInvitationOutcome::UserNotFound)
+        }
     }
 
     struct TestProtector;
@@ -1063,6 +1218,57 @@ mod tests {
             Uuid::new_v4(),
             PolicyVersion::from_uuid(Uuid::new_v4()),
         )
+    }
+
+    fn create_command(password: Option<&str>, send_invitation: bool) -> model::CreateUserCommand {
+        model::CreateUserCommand {
+            username: "new-user".to_owned(),
+            email: "new-user@example.test".to_owned(),
+            password: password.map(model::UserPassword::new),
+            send_invitation,
+            profile: UserProfilePatch::default(),
+            reason: String::new(),
+            client_mutation_id: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn a_new_user_needs_exactly_one_first_sign_in_method() {
+        let service = service(UserManagementMutationOutcome::UserNotFound);
+        for command in [
+            create_command(None, false),
+            create_command(Some("correct horse battery staple"), true),
+        ] {
+            let error = service
+                .create_user(&authority(), command)
+                .await
+                .unwrap_err();
+            assert_eq!(error.code(), 16000);
+            assert_eq!(error.children_code(), Some(16029));
+        }
+    }
+
+    #[tokio::test]
+    async fn invitations_need_email_delivery() {
+        let service = service(UserManagementMutationOutcome::UserNotFound);
+        assert!(!service.invitations_available());
+        let error = service
+            .create_user(&authority(), create_command(None, true))
+            .await
+            .unwrap_err();
+        assert_eq!(error.code(), 16025);
+        let error = service
+            .send_user_invitation(
+                &authority(),
+                model::SendUserInvitationCommand {
+                    user_oid: UserOid(Uuid::new_v4()),
+                    reason: String::new(),
+                    client_mutation_id: None,
+                },
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(error.code(), 16025);
     }
 
     #[test]

@@ -40,6 +40,8 @@ session rules are summarized in [security.md](security.md).
 | Code or device redemption | `POST /oauth2/token` | Protocol layer |
 | Device verification entry | `GET /device`, `POST /oauth2/device` | Login and protocol layer |
 | Email verification link | `GET`/`POST /verify-email`, `POST /internal/email-verification` | Login and account service |
+| Self-registration | `GET`/`POST /login/register`, `POST /api/auth/login/registration[/check\|/confirm]` | Login |
+| Invitation link | `GET`/`POST /invitation`, `POST /internal/invitation/check\|accept` | Login and invitation service |
 | RP-initiated logout | `GET`/`POST /openid/logout` | Protocol layer |
 | Back-channel and front-channel logout | client `backchannel_logout_uri` / `frontchannel_logout_uri` | Protocol layer |
 
@@ -186,6 +188,67 @@ and a **verified** email address. Email templates: *Password reset*.
 - A temporarily locked account is still refused at the identifier step, so
   it waits for the lock to expire before it can reach the reset.
 
+### Self-registration
+
+The authentication setting `auth.login.registration_enabled` (Console:
+*Self-registration*, default `false`) lets someone without an account create
+one from the identifier step. It is offered only while email delivery is
+configured and can be turned on only then. Email template: *Registration*.
+
+- The identifier step links to `/login/register?login_id=…` while the
+  interaction is still at `Created` and has no account or session bound. The
+  page asks for an email address first and emails a single-use link to
+  `{login_domain}/login/register?login_id=…&token=…`. The link belongs to that
+  interaction, expires after 15 minutes, and sending extends the interaction to
+  at least that long. Sends follow email sign-in: at least 60 seconds apart, at
+  most five per interaction; a new send, to the same or another address,
+  replaces the previous link.
+- The page never reveals whether an address has an account: the answer is the
+  same, the email is sent in the background, and an address that already has
+  an account receives a notice to sign in (or reset the password) instead of a
+  link.
+- Opening the link shows the address it verifies and asks for a username and
+  password. The password follows the same policy as any new password. The link
+  is used up only when the account is created, so a taken username or a
+  rejected password leaves it usable.
+- Creating the account uses up the link, creates the user with the address
+  already verified and the password, binds the account to the interaction at
+  `IdentifierVerified`, and writes `ACCOUNT_REGISTER`, all in one transaction.
+  The user continues at the password step and signs in with the new password,
+  so the request's assurance requirements apply as to any other account.
+- A registered account has no roles or group memberships; an administrator
+  grants access as for any other user.
+
+### Invitations
+
+An administrator can create a user without a password and invite them to set
+their own (`createUser` with `sendInvitation: true`, or `sendUserInvitation`
+for a user who has no password yet). It needs email delivery and the Login
+address. Email template: *Invitation*.
+
+- The account exists, with its groups and roles assignable at once, but cannot
+  sign in until the invitation is accepted. `User.invitation` shows when the
+  outstanding link was sent and when it stops working; the Console marks the
+  user *Invited* or *Invitation expired*.
+- The link points at `{login_domain}/invitation?token=…`, needs no session, and
+  is valid for seven days. Only a SHA-256 digest of its token is stored. An
+  account has at most one outstanding invitation: sending another replaces the
+  link, at least 60 seconds after the previous one. Creating and each send
+  write `USER_INVITE`.
+- Opening the link only shows the account; the password is set when the form
+  is submitted, so a mail scanner that fetches the link cannot use it. The
+  Login server passes the token to Identity's private workload listener.
+- Accepting sets the first password (same policy as any new password), marks
+  the address verified, removes the invitation, renews the account `version`,
+  and writes `ACCOUNT_INVITATION_ACCEPT` in one transaction. The user then signs
+  in from the account center or any application.
+- The invitation stops applying when the account's address changes, when the
+  account is disabled, or when it gets a password some other way (for example
+  an administrator's password reset, which also removes it). If the email
+  cannot be sent when the user is created, the user still exists and
+  `CreateUserPayload.invitationSent` is `false`; sending the invitation again
+  retries it.
+
 ### Email address verification
 
 An account's email address is verified by following a single-use link emailed
@@ -220,6 +283,29 @@ to it. Only a verified address can be used for [email sign-in](#email-sign-in).
   sign-in email from the account's locale and then the request language.
 - An administrator can mark an address verified or unverified when editing the
   user in the Console; a changed address otherwise starts out unverified.
+
+### Emailed codes and links
+
+Every emailed code or link above is an authentication challenge, kept in one
+store with the passkey and authenticator-app enrollment challenges.
+
+- A challenge belongs to an interaction (sign-in email, password reset,
+  registration), to a session (passkey and authenticator enrollment), or to the
+  account alone when its link needs neither (email verification, invitation).
+  Ending the interaction or session removes its challenges; disabling the
+  account or revoking its sessions does not remove an account's verification
+  or invitation, which check the account's state when used.
+- An account has at most one challenge of each account-only kind, and its link
+  is found by the SHA-256 digest of the token, the only form stored. A link
+  that belongs to an interaction is looked up through the interaction and its
+  digest compared in constant time. Links are 32 random bytes in base64url.
+- Each kind sets how often its email may go out:
+
+  | Kind | Interval | Limit |
+  | --- | --- | --- |
+  | Sign-in, password reset, registration | 60 seconds | five per interaction for each kind |
+  | Email verification | 60 seconds | five per account in 24 hours |
+  | Invitation | 60 seconds | none (sent by administrators) |
 
 ## Credential stages
 

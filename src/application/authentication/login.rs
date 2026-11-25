@@ -39,6 +39,7 @@ mod password;
 mod password_change;
 mod password_reset;
 mod recovery_code;
+mod registration;
 mod session;
 
 #[cfg(test)]
@@ -51,6 +52,10 @@ pub use email::{
 pub use enrollment::{LoginMfaEnrollmentDependencies, LoginPasskeyEnrollment, LoginTotpEnrollment};
 pub use password_reset::{
     PasswordResetRequest, PasswordResetSent, can_receive_password_reset, password_reset_available,
+};
+pub use registration::{
+    NewAccount, RegistrationLink, RegistrationOutcome, RegistrationRepository, RegistrationRequest,
+    RegistrationSent, registration_available,
 };
 
 // ─── Input/Output Types ──────────────────────────────────────────────────────
@@ -121,6 +126,7 @@ pub struct LoginService {
     passkeys: Option<Arc<PasskeyService>>,
     mfa_enrollment: Option<LoginMfaEnrollmentDependencies>,
     email: Option<LoginEmailDependencies>,
+    registration: Option<Arc<dyn RegistrationRepository>>,
     breach_checker: Arc<dyn BreachedPasswordChecker>,
 }
 
@@ -152,6 +158,7 @@ impl LoginService {
             passkeys: None,
             mfa_enrollment: None,
             email: None,
+            registration: None,
             events: Arc::new(NoopEventSink),
         }
     }
@@ -174,6 +181,14 @@ impl LoginService {
     #[must_use]
     pub fn with_email(mut self, dependencies: LoginEmailDependencies) -> Self {
         self.email = Some(dependencies);
+        self
+    }
+
+    /// Let people without an account create one from the sign-in flow
+    /// when the instance turns it on.
+    #[must_use]
+    pub fn with_registration(mut self, repository: Arc<dyn RegistrationRepository>) -> Self {
+        self.registration = Some(repository);
         self
     }
 

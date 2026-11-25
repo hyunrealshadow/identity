@@ -41,6 +41,7 @@ function result(username: string): GraphQLResult<ConsoleUsersQuery> {
               locked: false,
               lockedUntil: null,
               failedAttempts: 0,
+              invitation: null,
               version: 'lock',
               createdAt: '2026-01-01T00:00:00Z',
               updatedAt: null,

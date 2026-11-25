@@ -1,3 +1,4 @@
+mod account_challenge;
 pub mod audit_query;
 pub mod authorization;
 pub(crate) mod authorization_lifecycle;
@@ -24,6 +25,7 @@ pub mod openid_connect;
 pub mod openid_connect_credential;
 pub mod rbac_authorization;
 pub mod rbac_management;
+pub mod registration;
 pub mod scope_catalog;
 pub mod session;
 mod session_security;
@@ -31,4 +33,5 @@ pub mod setting;
 pub mod shared;
 pub mod user;
 pub mod user_credential;
+pub mod user_invitation;
 pub mod user_management;

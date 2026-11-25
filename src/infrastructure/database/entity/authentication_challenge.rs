@@ -24,6 +24,14 @@ pub struct Model {
     pub purpose: String,
     #[sea_orm(column_type = "JsonBinary")]
     pub state: Json,
+    /// SHA-256 of an emailed link token, for links followed without an
+    /// interaction.
+    #[sea_orm(unique)]
+    pub token_digest: Option<String>,
+    pub sent_at: Option<DateTimeWithTimeZone>,
+    #[sea_orm(default_value = 0)]
+    pub send_count: i32,
+    pub window_started_at: Option<DateTimeWithTimeZone>,
     #[sea_orm(indexed)]
     pub expires_at: DateTimeWithTimeZone,
     #[sea_orm(default_expr = "Expr::current_timestamp()")]

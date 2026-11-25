@@ -374,6 +374,22 @@ impl UserNode {
         }))
     }
 
+    /// The invitation the user has not accepted yet: the account has no
+    /// password and the link was sent to its current address.
+    #[graphql(directive = access::apply(ManagementGuard::policy(ManagementScope::UsersRead)))]
+    async fn invitation(&self, ctx: &Context<'_>) -> GraphqlResult<Option<UserInvitation>> {
+        self.ensure_management_metadata(ctx).await?;
+        let request = request_context(ctx)?;
+        let status = request
+            .state
+            .services()
+            .user_management()
+            .invitation_status(self.user.oid)
+            .await
+            .map_err(|error| crate::graphql::schema::error::app_error(ctx, error))?;
+        Ok(status.map(Into::into))
+    }
+
     /// The user's active sessions, most recently active first.
     #[graphql(
         directive = access::apply(ManagementGuard::policy(ManagementScope::UsersRead)),
@@ -398,6 +414,23 @@ impl UserNode {
             last,
         )
         .await
+    }
+}
+
+/// An invitation to set a first password, as shown to administrators.
+#[derive(async_graphql::SimpleObject)]
+pub(crate) struct UserInvitation {
+    pub sent_at: DateTime<Utc>,
+    /// When the link stops working. Send the invitation again after that.
+    pub expires_at: DateTime<Utc>,
+}
+
+impl From<identity_application::user::invitation::UserInvitationStatus> for UserInvitation {
+    fn from(value: identity_application::user::invitation::UserInvitationStatus) -> Self {
+        Self {
+            sent_at: value.sent_at,
+            expires_at: value.expires_at,
+        }
     }
 }
 

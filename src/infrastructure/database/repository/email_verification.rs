@@ -6,14 +6,13 @@ use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use identity_domain::{
     audit::{AuditAction, AuditActor, AuditRecord},
+    auth::challenge::{ChallengePurpose, DeliveryDecision},
     user::{
         UserOid,
         email_verification::{
-            EMAIL_VERIFICATION_RESEND_INTERVAL, EMAIL_VERIFICATION_SEND_WINDOW,
-            EMAIL_VERIFICATION_TTL, EmailVerification, EmailVerificationAdmission,
-            EmailVerificationOutcome, EmailVerificationRepository,
+            EMAIL_VERIFICATION_DELIVERY, EMAIL_VERIFICATION_TTL, EmailVerification,
+            EmailVerificationAdmission, EmailVerificationOutcome, EmailVerificationRepository,
             EmailVerificationRepositoryError, EmailVerificationRequest,
-            MAX_EMAIL_VERIFICATION_SENDS,
         },
     },
 };
@@ -21,16 +20,33 @@ use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DbErr, EntityTrait,
     QueryFilter, QuerySelect, Set, TransactionTrait,
 };
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use super::{authorization_lifecycle::renew_user_version_in_txn, user::user_attribute_changes};
+use super::{
+    account_challenge::{self, AccountChallenge, AccountChallengeIssue},
+    authorization_lifecycle::renew_user_version_in_txn,
+    user::user_attribute_changes,
+};
 use crate::database::{
     audit,
-    entity::{
-        email_verification::{self, Column as VerificationColumn, Entity as VerificationEntity},
-        user::{self, Column as UserColumn, Entity as UserEntity},
-    },
+    entity::user::{self, Column as UserColumn, Entity as UserEntity},
 };
+
+const PURPOSE: ChallengePurpose = ChallengePurpose::EmailVerification;
+
+/// What an email verification challenge keeps besides its link digest.
+#[derive(Serialize, Deserialize)]
+struct VerificationState {
+    /// The address being verified, as entered, and its normalized form.
+    email: String,
+    email_normalized: String,
+    /// The account's address when the verification was requested; any
+    /// later change voids the link.
+    current_email_normalized: String,
+}
+
+type Verification = AccountChallenge<VerificationState>;
 
 pub struct EmailVerificationRepositoryImpl {
     db: DatabaseConnection,
@@ -53,23 +69,23 @@ fn duration(value: std::time::Duration) -> Duration {
     Duration::from_std(value).unwrap_or(Duration::MAX)
 }
 
-fn to_domain(model: &email_verification::Model, user_oid: Uuid) -> EmailVerification {
+fn to_domain(row: &Verification, user_oid: Uuid) -> EmailVerification {
     EmailVerification {
-        oid: model.oid,
+        oid: row.model.oid,
         user_oid: user_oid.into(),
-        email: model.email.clone(),
-        email_normalized: model.email_normalized.clone(),
-        changes_email: model.email_normalized != model.current_email_normalized,
-        sent_at: model.sent_at.into(),
-        expires_at: model.expires_at.into(),
+        email: row.state.email.clone(),
+        email_normalized: row.state.email_normalized.clone(),
+        changes_email: row.state.email_normalized != row.state.current_email_normalized,
+        sent_at: row.sent_at().unwrap_or_else(|| row.model.created_at.into()),
+        expires_at: row.expires_at(),
     }
 }
 
 /// Whether a stored verification can still be followed for `account`.
-fn usable(model: &email_verification::Model, account: &user::Model, now: DateTime<Utc>) -> bool {
-    DateTime::<Utc>::from(model.expires_at) > now
-        && model.current_email_normalized == account.email_normalized
-        && (model.email_normalized != account.email_normalized || !account.email_verified)
+fn usable(row: &Verification, account: &user::Model, now: DateTime<Utc>) -> bool {
+    row.expires_at() > now
+        && row.state.current_email_normalized == account.email_normalized
+        && (row.state.email_normalized != account.email_normalized || !account.email_verified)
 }
 
 async fn email_taken(
@@ -91,10 +107,7 @@ pub(crate) async fn discard_for_user_in_txn(
     connection: &impl ConnectionTrait,
     user_id: i64,
 ) -> Result<(), DbErr> {
-    VerificationEntity::delete_many()
-        .filter(VerificationColumn::UserId.eq(user_id))
-        .exec(connection)
-        .await?;
+    account_challenge::discard(connection, user_id, PURPOSE).await?;
     Ok(())
 }
 
@@ -128,70 +141,44 @@ impl EmailVerificationRepository for EmailVerificationRepositoryImpl {
         }
 
         let now = request.now;
-        let existing = VerificationEntity::find()
-            .filter(VerificationColumn::UserId.eq(account.id))
-            .one(&txn)
+        let existing: Option<Verification> = account_challenge::find(&txn, account.id, PURPOSE)
             .await
             .map_err(query_failed)?;
         // The interval and limit apply to the account, whichever address
         // each email went to.
-        let (window_started_at, send_count) = match &existing {
-            Some(row) => {
-                let available_at = DateTime::<Utc>::from(row.sent_at)
-                    + duration(EMAIL_VERIFICATION_RESEND_INTERVAL);
-                if now < available_at {
-                    return Ok(EmailVerificationAdmission::TooSoon { available_at });
-                }
-                let window_started_at = DateTime::<Utc>::from(row.window_started_at);
-                if now < window_started_at + duration(EMAIL_VERIFICATION_SEND_WINDOW) {
-                    if row.send_count >= MAX_EMAIL_VERIFICATION_SENDS {
-                        return Ok(EmailVerificationAdmission::LimitReached);
-                    }
-                    (window_started_at, row.send_count + 1)
-                } else {
-                    (now, 1)
-                }
+        let counter = match EMAIL_VERIFICATION_DELIVERY.admit(
+            existing.as_ref().and_then(Verification::counter).as_ref(),
+            now,
+        ) {
+            DeliveryDecision::Admit(counter) => counter,
+            DeliveryDecision::TooSoon { available_at } => {
+                return Ok(EmailVerificationAdmission::TooSoon { available_at });
             }
-            None => (now, 1),
+            DeliveryDecision::LimitReached => return Ok(EmailVerificationAdmission::LimitReached),
         };
-
-        let expires_at = now + duration(EMAIL_VERIFICATION_TTL);
-        let model = match existing {
-            Some(row) => {
-                let mut active: email_verification::ActiveModel = row.into();
-                active.oid = Set(Uuid::new_v4());
-                active.email = Set(request.email.clone());
-                active.email_normalized = Set(request.email_normalized.clone());
-                active.current_email_normalized = Set(account.email_normalized.clone());
-                active.token_digest = Set(request.token_digest.clone());
-                active.send_count = Set(send_count);
-                active.window_started_at = Set(window_started_at.into());
-                active.sent_at = Set(now.into());
-                active.expires_at = Set(expires_at.into());
-                active.update(&txn).await.map_err(query_failed)?
-            }
-            None => email_verification::ActiveModel {
-                oid: Set(Uuid::new_v4()),
-                user_id: Set(account.id),
-                email: Set(request.email.clone()),
-                email_normalized: Set(request.email_normalized.clone()),
-                current_email_normalized: Set(account.email_normalized.clone()),
-                token_digest: Set(request.token_digest.clone()),
-                send_count: Set(send_count),
-                window_started_at: Set(window_started_at.into()),
-                sent_at: Set(now.into()),
-                expires_at: Set(expires_at.into()),
-                created_at: Set(now.into()),
-                ..Default::default()
-            }
-            .insert(&txn)
-            .await
-            .map_err(query_failed)?,
+        let state = VerificationState {
+            email: request.email.clone(),
+            email_normalized: request.email_normalized.clone(),
+            current_email_normalized: account.email_normalized.clone(),
         };
+        let model = account_challenge::issue(
+            &txn,
+            AccountChallengeIssue {
+                user_id: account.id,
+                purpose: PURPOSE,
+                token_digest: &request.token_digest,
+                counter,
+                state: &state,
+                expires_at: now + duration(EMAIL_VERIFICATION_TTL),
+            },
+        )
+        .await
+        .map_err(query_failed)?;
+        let model = Verification { model, state };
         txn.commit().await.map_err(query_failed)?;
         Ok(EmailVerificationAdmission::Admitted {
             verification: to_domain(&model, account.oid),
-            resend_available_at: now + duration(EMAIL_VERIFICATION_RESEND_INTERVAL),
+            resend_available_at: EMAIL_VERIFICATION_DELIVERY.resend_available_at(&counter),
         })
     }
 
@@ -201,10 +188,15 @@ impl EmailVerificationRepository for EmailVerificationRepositoryImpl {
         user_oid: UserOid,
         now: DateTime<Utc>,
     ) -> Result<Option<EmailVerification>, EmailVerificationRepositoryError> {
-        let Some((row, Some(account))) = VerificationEntity::find()
-            .find_also_related(UserEntity)
+        let Some(account) = UserEntity::find()
             .filter(UserColumn::Oid.eq(Uuid::from(user_oid)))
             .one(&self.db)
+            .await
+            .map_err(query_failed)?
+        else {
+            return Ok(None);
+        };
+        let Some(row) = account_challenge::find::<VerificationState>(&self.db, account.id, PURPOSE)
             .await
             .map_err(query_failed)?
         else {
@@ -223,12 +215,9 @@ impl EmailVerificationRepository for EmailVerificationRepositoryImpl {
         else {
             return Ok(false);
         };
-        let result = VerificationEntity::delete_many()
-            .filter(VerificationColumn::UserId.eq(account.id))
-            .exec(&self.db)
+        account_challenge::discard(&self.db, account.id, PURPOSE)
             .await
-            .map_err(query_failed)?;
-        Ok(result.rows_affected > 0)
+            .map_err(query_failed)
     }
 
     #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "confirm_email_verification"))]
@@ -238,15 +227,17 @@ impl EmailVerificationRepository for EmailVerificationRepositoryImpl {
         now: DateTime<Utc>,
     ) -> Result<EmailVerificationOutcome, EmailVerificationRepositoryError> {
         let txn = self.db.begin().await.map_err(query_failed)?;
-        let Some(row) = VerificationEntity::find()
-            .filter(VerificationColumn::TokenDigest.eq(token_digest))
-            .one(&txn)
-            .await
-            .map_err(query_failed)?
+        let Some(row) =
+            account_challenge::find_by_digest::<VerificationState>(&txn, token_digest, PURPOSE)
+                .await
+                .map_err(query_failed)?
         else {
             return Ok(EmailVerificationOutcome::Invalid);
         };
-        let Some(account) = UserEntity::find_by_id(row.user_id)
+        let Some(user_id) = row.model.user_id else {
+            return Ok(EmailVerificationOutcome::Invalid);
+        };
+        let Some(account) = UserEntity::find_by_id(user_id)
             .lock_exclusive()
             .one(&txn)
             .await
@@ -256,20 +247,20 @@ impl EmailVerificationRepository for EmailVerificationRepositoryImpl {
         };
         // Re-read under the account lock: a concurrent confirmation or new
         // request may have replaced or consumed the row.
-        let Some(row) = VerificationEntity::find_by_id(row.id)
-            .filter(VerificationColumn::TokenDigest.eq(token_digest))
-            .one(&txn)
-            .await
-            .map_err(query_failed)?
+        let Some(row) =
+            account_challenge::find_by_digest::<VerificationState>(&txn, token_digest, PURPOSE)
+                .await
+                .map_err(query_failed)?
+                .filter(|current| current.model.id == row.model.id)
         else {
             return Ok(EmailVerificationOutcome::Invalid);
         };
         if !account.enabled || !usable(&row, &account, now) {
             return Ok(EmailVerificationOutcome::Invalid);
         }
-        let changed = row.email_normalized != account.email_normalized;
+        let changed = row.state.email_normalized != account.email_normalized;
         if changed
-            && email_taken(&txn, &row.email_normalized, account.id)
+            && email_taken(&txn, &row.state.email_normalized, account.id)
                 .await
                 .map_err(query_failed)?
         {
@@ -279,8 +270,8 @@ impl EmailVerificationRepository for EmailVerificationRepositoryImpl {
         let before = account.clone();
         let mut active: user::ActiveModel = account.clone().into();
         if changed {
-            active.email = Set(row.email.clone());
-            active.email_normalized = Set(row.email_normalized.clone());
+            active.email = Set(row.state.email.clone());
+            active.email_normalized = Set(row.state.email_normalized.clone());
         }
         active.email_verified = Set(true);
         active.updated_at = Set(Some(now.into()));

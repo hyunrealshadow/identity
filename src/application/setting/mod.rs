@@ -15,7 +15,7 @@ pub use definitions::{
     EmailSignInEnabledSetting, EmailTemplatesSetting, IdentifierEnumerationAllowedSetting,
     InstallationSettings, LoginClientIdSetting, LoginDomainSetting, OpenIdConnectSettings,
     PasswordHashSetting, PasswordHistoryCountSetting, PasswordMaxAgeDaysSetting,
-    PasswordResetEnabledSetting,
+    PasswordResetEnabledSetting, RegistrationEnabledSetting,
 };
 pub use definitions::{
     ProtectedSecret, PushedAuthorizationSettings, SmtpAuthentication, SmtpSecurity, Xoauth2Grant,

@@ -32,6 +32,9 @@ query ConsoleUsers(
         locked
         lockedUntil
         failedAttempts
+        invitation {
+          expiresAt
+        }
         version
         createdAt
         updatedAt
@@ -51,6 +54,10 @@ query ConsoleUser($id: ID!) {
     lockedUntil
     failedAttempts
     requiredActions
+    invitation {
+      sentAt
+      expiresAt
+    }
     authenticationMethods {
       password
       authenticatorApp
@@ -73,10 +80,25 @@ query ConsoleUser($id: ID!) {
   }
 }
 
+query ConsoleUserInvitationsAvailable {
+  userInvitationsAvailable
+}
+
 mutation ConsoleCreateUser($input: CreateUserInput!) {
   createUser(input: $input) {
     userId
     version
+    invitationSent
+  }
+}
+
+mutation ConsoleSendUserInvitation($input: SendUserInvitationInput!) {
+  sendUserInvitation(input: $input) {
+    userId
+    invitation {
+      sentAt
+      expiresAt
+    }
   }
 }
 

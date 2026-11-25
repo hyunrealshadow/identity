@@ -25,7 +25,8 @@ use super::{
     AppSettings, BreachedPasswordCheckEnabledSetting, EmailDeliverySettings,
     EmailSignInEnabledSetting, IdentifierEnumerationAllowedSetting, InstallationSettings,
     OpenIdConnectSettings, PasswordHashSetting, PasswordHistoryCountSetting,
-    PasswordMaxAgeDaysSetting, PasswordResetEnabledSetting, SettingChanges,
+    PasswordMaxAgeDaysSetting, PasswordResetEnabledSetting, RegistrationEnabledSetting,
+    SettingChanges,
     email::{EmailManagementDependencies, EmailSettingsView},
     runtime::RefreshableSetting,
 };
@@ -104,6 +105,10 @@ impl InstanceSettingSection {
             Self::EmailTemplate(EmailTemplateKind::PasswordReset) => {
                 "email_template.password_reset"
             }
+            Self::EmailTemplate(EmailTemplateKind::UserInvitation) => {
+                "email_template.user_invitation"
+            }
+            Self::EmailTemplate(EmailTemplateKind::Registration) => "email_template.registration",
         }
     }
 
@@ -153,6 +158,7 @@ pub struct InstanceSettingsState {
     pub identifier_enumeration_allowed: bool,
     pub email_sign_in_enabled: bool,
     pub password_reset_enabled: bool,
+    pub registration_enabled: bool,
     pub password_max_age_days: u32,
     pub password_history_count: u32,
     pub email_delivery: EmailDeliverySettings,
@@ -167,6 +173,7 @@ pub struct AuthenticationSectionValues<'a> {
     pub identifier_enumeration_allowed: bool,
     pub email_sign_in_enabled: bool,
     pub password_reset_enabled: bool,
+    pub registration_enabled: bool,
     pub password_max_age_days: u32,
     pub password_history_count: u32,
 }
@@ -180,6 +187,7 @@ impl InstanceSettingsState {
             identifier_enumeration_allowed: self.identifier_enumeration_allowed,
             email_sign_in_enabled: self.email_sign_in_enabled,
             password_reset_enabled: self.password_reset_enabled,
+            registration_enabled: self.registration_enabled,
             password_max_age_days: self.password_max_age_days,
             password_history_count: self.password_history_count,
         }
@@ -218,6 +226,7 @@ pub struct AuthenticationSettingsView {
     pub identifier_enumeration_allowed: bool,
     pub email_sign_in_enabled: bool,
     pub password_reset_enabled: bool,
+    pub registration_enabled: bool,
     pub password_max_age_days: u32,
     pub password_history_count: u32,
     pub password_hashing: PasswordHashingView,
@@ -265,6 +274,7 @@ impl From<&InstanceSettingsState> for InstanceSettingsView {
                 identifier_enumeration_allowed: state.identifier_enumeration_allowed,
                 email_sign_in_enabled: state.email_sign_in_enabled,
                 password_reset_enabled: state.password_reset_enabled,
+                registration_enabled: state.registration_enabled,
                 password_max_age_days: state.password_max_age_days,
                 password_history_count: state.password_history_count,
                 password_hashing: PasswordHashingView {
@@ -297,6 +307,7 @@ pub struct UpdateAuthenticationSettingsCommand {
     pub identifier_enumeration_allowed: bool,
     pub email_sign_in_enabled: bool,
     pub password_reset_enabled: bool,
+    pub registration_enabled: bool,
     pub password_max_age_days: u32,
     pub password_history_count: u32,
     pub password_hashing: PasswordHashingView,
@@ -475,6 +486,7 @@ impl InstanceSettingService {
             let enumeration = command.identifier_enumeration_allowed;
             let email_sign_in = command.email_sign_in_enabled;
             let password_reset = command.password_reset_enabled;
+            let registration = command.registration_enabled;
             let build = move |state: &InstanceSettingsState| {
                 // Turning email sign-in on needs a way to send it. Once on,
                 // it stays saved if delivery is later turned off; it is then
@@ -497,12 +509,22 @@ impl InstanceSettingService {
                             .with_field("passwordResetEnabled"),
                     );
                 }
+                if registration
+                    && !state.registration_enabled
+                    && !state.email_delivery.is_configured()
+                {
+                    return Err(
+                        AppError::from_code(InstanceErrorCode::EmailDeliveryNotConfigured)
+                            .with_field("registrationEnabled"),
+                    );
+                }
                 Ok(SettingChanges::default()
                     .set::<PasswordHashSetting>(&options)?
                     .set::<BreachedPasswordCheckEnabledSetting>(&breached)?
                     .set::<IdentifierEnumerationAllowedSetting>(&enumeration)?
                     .set::<EmailSignInEnabledSetting>(&email_sign_in)?
                     .set::<PasswordResetEnabledSetting>(&password_reset)?
+                    .set::<RegistrationEnabledSetting>(&registration)?
                     .set::<PasswordMaxAgeDaysSetting>(&max_age_days)?
                     .set::<PasswordHistoryCountSetting>(&history_count)?)
             };
@@ -612,6 +634,7 @@ mod tests {
             identifier_enumeration_allowed: true,
             email_sign_in_enabled: false,
             password_reset_enabled: true,
+            registration_enabled: false,
             password_max_age_days: 0,
             password_history_count: 0,
             email_delivery: EmailDeliverySettings::default(),

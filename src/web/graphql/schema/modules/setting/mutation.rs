@@ -104,6 +104,7 @@ impl SettingMutation {
                         identifier_enumeration_allowed: input.identifier_enumeration_allowed,
                         email_sign_in_enabled: input.email_sign_in_enabled,
                         password_reset_enabled: input.password_reset_enabled,
+                        registration_enabled: input.registration_enabled,
                         password_max_age_days: input.password_max_age_days,
                         password_history_count: input.password_history_count,
                         password_hashing: PasswordHashingView {

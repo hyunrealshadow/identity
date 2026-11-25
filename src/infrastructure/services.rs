@@ -36,7 +36,10 @@ use identity_application::{
     },
     rbac::{GroupManagementService, RbacManagementService},
     setting::{email::EmailManagementDependencies, management::InstanceSettingService},
-    user::management::UserManagementService,
+    user::{
+        invitation::{InvitationDelivery, InvitationService},
+        management::{UserInvitations, UserManagementService},
+    },
 };
 use identity_domain::{
     openid_connect::{
@@ -81,8 +84,10 @@ use crate::{
             openid_connect_credential::OpenIdConnectCredentialRepositoryImpl,
             rbac_authorization::RbacAuthorizationRepositoryImpl,
             rbac_management::RbacManagementRepositoryImpl,
-            scope_catalog::ScopeCatalogRepositoryImpl, session::SessionRepositoryImpl,
-            user::UserRepositoryImpl, user_credential::UserCredentialRepositoryImpl,
+            registration::RegistrationRepositoryImpl, scope_catalog::ScopeCatalogRepositoryImpl,
+            session::SessionRepositoryImpl, user::UserRepositoryImpl,
+            user_credential::UserCredentialRepositoryImpl,
+            user_invitation::UserInvitationRepositoryImpl,
             user_management::UserManagementRepositoryImpl,
         },
         seed::console::ConsoleClientSeedConfig,
@@ -131,6 +136,7 @@ pub struct AppServices {
     audit_query: AuditQueryService,
     instance_overview: InstanceOverviewService,
     user_management: UserManagementService,
+    invitation: InvitationService,
     rbac_management: RbacManagementService,
     group_management: GroupManagementService,
     client_management: ClientManagementService,
@@ -272,6 +278,7 @@ impl AppServices {
                 renderer: Arc::clone(&email_renderer),
                 protector: data_protector.clone(),
             })
+            .with_registration(Arc::new(RegistrationRepositoryImpl::new(db.clone())))
             .with_events(Arc::clone(&events)),
             session: SessionService::new(Arc::new(SessionRepositoryImpl::new(db.clone())))
                 .with_events(Arc::clone(&events)),
@@ -338,6 +345,21 @@ impl AppServices {
                 breach_checker.clone(),
                 settings.store(),
                 data_protector.clone(),
+            )
+            .with_invitations(UserInvitations {
+                delivery: InvitationDelivery {
+                    sender: Arc::clone(&email_sender),
+                    renderer: Arc::clone(&email_renderer),
+                    settings: settings.store(),
+                },
+                repository: Arc::new(UserInvitationRepositoryImpl::new(db.clone())),
+            })
+            .with_events(Arc::clone(&events)),
+            invitation: InvitationService::new(
+                Arc::new(UserInvitationRepositoryImpl::new(db.clone())),
+                Arc::new(PasswordHasherImpl::new()),
+                breach_checker.clone(),
+                settings.store(),
             )
             .with_events(Arc::clone(&events)),
             rbac_management: RbacManagementService::new(
@@ -561,6 +583,10 @@ impl AppServices {
     }
 
     #[must_use]
+    pub fn invitation(&self) -> &InvitationService {
+        &self.invitation
+    }
+
     pub fn user_management(&self) -> &UserManagementService {
         &self.user_management
     }

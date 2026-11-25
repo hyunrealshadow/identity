@@ -10,12 +10,11 @@
 
 use std::sync::Arc;
 
-use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Duration, Utc};
 use identity_domain::{
     auth::{
-        AMR_EMAIL, EMAIL_CODE_RESEND_INTERVAL, EMAIL_CODE_TTL, LoginFailureReason, LoginStatus,
-        MAX_EMAIL_CODE_SENDS, MAX_FAILED_ATTEMPTS, MAX_OTP_ATTEMPTS,
+        AMR_EMAIL, EMAIL_CODE_RESEND_INTERVAL, EMAIL_CODE_TTL, LOGIN_EMAIL_DELIVERY,
+        LoginFailureReason, LoginStatus, MAX_FAILED_ATTEMPTS, MAX_OTP_ATTEMPTS,
         challenge::{
             AuthenticationChallenge, ChallengeBinding, ChallengeContext, ChallengeMethod,
             ChallengePurpose, DeliveryChallengeAdmission, DeliveryChallengeContext,
@@ -28,7 +27,6 @@ use identity_domain::{
 use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 use tracing::{Instrument, warn};
 use uuid::Uuid;
@@ -38,7 +36,8 @@ use crate::{
     authentication::challenge::ChallengeRepository,
     data_protection::DataProtector,
     email::{
-        EmailMessage, EmailSender, EmailTemplateKind, EmailTemplateRenderer, effective_template,
+        EmailRecipient, EmailSender, EmailTemplateKind, EmailTemplateRenderer, LinkToken,
+        link_matches, send_templated_email,
     },
     error::{AppError, codes::auth::AuthErrorCode},
     observability::{BusinessEvent, EventValue},
@@ -95,10 +94,6 @@ fn interval() -> Duration {
 
 fn ttl() -> Duration {
     Duration::from_std(EMAIL_CODE_TTL).unwrap_or_else(|_| Duration::minutes(10))
-}
-
-fn link_digest(token: &str) -> String {
-    URL_SAFE_NO_PAD.encode(Sha256::digest(token.as_bytes()))
 }
 
 fn challenge_context(user_oid: Uuid, login_oid: Uuid) -> ChallengeContext {
@@ -210,11 +205,7 @@ impl LoginService {
                     .map(|_| char::from(b'0' + rng.random_range(0..10u8)))
                     .collect::<String>()
             };
-            let token = {
-                let mut bytes = [0u8; 32];
-                rand::rng().fill(&mut bytes);
-                URL_SAFE_NO_PAD.encode(bytes)
-            };
+            let link = LinkToken::generate();
             let protected_code = dependencies
                 .protector
                 .protect(EMAIL_CODE_PURPOSE, code.as_bytes())
@@ -222,10 +213,10 @@ impl LoginService {
                 .map_err(AppError::from)?;
             let verifier = serde_json::to_value(EmailChallengeVerifier {
                 code: protected_code,
-                link: link_digest(&token),
+                link: link.digest,
             })
             .map_err(AppError::internal)?;
-            (Some((code, token)), Some(verifier))
+            (Some((code, link.token)), Some(verifier))
         } else {
             (None, None)
         };
@@ -242,8 +233,7 @@ impl LoginService {
                 },
                 DeliveryChallengeRequest {
                     now,
-                    resend_interval: EMAIL_CODE_RESEND_INTERVAL,
-                    max_sends: MAX_EMAIL_CODE_SENDS,
+                    policy: LOGIN_EMAIL_DELIVERY,
                     code_expires_at: expires_at,
                     required_login_status: Some(LoginStatus::IDENTIFIER_VERIFIED),
                     verifier,
@@ -440,11 +430,7 @@ async fn matches(
         };
         return bool::from(code.as_slice().ct_eq(credential.as_bytes()));
     }
-    bool::from(
-        link_digest(credential)
-            .as_bytes()
-            .ct_eq(verifier.link.as_bytes()),
-    )
+    link_matches(credential, &verifier.link)
 }
 
 /// Composes and sends one sign-in email.
@@ -462,51 +448,39 @@ struct DeliveryJob {
 
 impl DeliveryJob {
     async fn run(self) -> Result<(), AppError> {
-        let candidates: Vec<&str> = self
+        let locales: Vec<&str> = self
             .user
             .locale
             .as_deref()
             .into_iter()
             .chain(self.locales.iter().map(String::as_str))
             .collect();
-        let (template, _) = effective_template(&self.templates, EmailTemplateKind::SignInCode);
-        let (content, translation) = template.localize(candidates.iter().copied());
-        // The language of the content: the translation's, or for the default
-        // content the reader's first preference.
-        let locale = translation
-            .or_else(|| candidates.first().copied())
-            .unwrap_or("en")
-            .to_owned();
-        let context = json!({
-            "code": self.code,
-            "link": format!("{}{}", self.link_prefix, self.token),
-            "expires_in_minutes": ttl().num_minutes(),
-            "user": { "name": self.user.name, "email": self.user.email },
-            "application": self.application_name.as_ref().map(|name| json!({ "name": name })),
-            "locale": locale,
-        });
-        let rendered = self
-            .dependencies
-            .renderer
-            .render(content, &context)
-            .map_err(|error| {
-                AppError::from_code(AuthErrorCode::EmailDeliveryFailed).with_source(error)
-            })?;
-        self.dependencies
-            .sender
-            .send(
-                &self.delivery,
-                EmailMessage {
-                    to_address: self.user.email.clone(),
-                    to_name: Some(self.user.name.clone()),
-                    subject: rendered.subject,
-                    html: rendered.html,
-                },
-            )
-            .await
-            .map_err(|error| {
-                warn!(reason = error.reason(), "sign-in email was not delivered");
-                AppError::from_code(AuthErrorCode::EmailDeliveryFailed).with_source(error)
-            })
+        send_templated_email(
+            self.dependencies.sender.as_ref(),
+            self.dependencies.renderer.as_ref(),
+            &self.delivery,
+            &self.templates,
+            EmailTemplateKind::SignInCode,
+            EmailRecipient {
+                address: &self.user.email,
+                name: Some(&self.user.name),
+                locales: &locales,
+            },
+            |locale| {
+                json!({
+                    "code": self.code,
+                    "link": format!("{}{}", self.link_prefix, self.token),
+                    "expires_in_minutes": ttl().num_minutes(),
+                    "user": { "name": self.user.name, "email": self.user.email },
+                    "application": self.application_name.as_ref().map(|name| json!({ "name": name })),
+                    "locale": locale,
+                })
+            },
+        )
+        .await
+        .map_err(|error| {
+            warn!(reason = error.reason(), "sign-in email was not delivered");
+            AppError::from_code(AuthErrorCode::EmailDeliveryFailed).with_source(error)
+        })
     }
 }

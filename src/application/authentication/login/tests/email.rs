@@ -8,6 +8,7 @@ use identity_domain::{
             AuthenticationChallenge, ChallengeBinding, ChallengeContext, ChallengeMethod,
             ChallengePurpose, DeliveryChallengeAdmission, DeliveryChallengeContext,
             DeliveryChallengeRequest, DeliveryChallengeState, DeliveryChallengeStatus,
+            DeliveryCounter, DeliveryDecision,
         },
     },
     data_protection::DataProtectionError,
@@ -33,11 +34,12 @@ use crate::{
 
 pub(super) struct StoredMemoryChallenge {
     user_oid: Option<Uuid>,
-    binding: ChallengeBinding,
+    pub(super) binding: ChallengeBinding,
     method: ChallengeMethod,
-    purpose: ChallengePurpose,
+    pub(super) purpose: ChallengePurpose,
     pub(super) state: Value,
-    expires_at: DateTime<Utc>,
+    pub(super) counter: Option<DeliveryCounter>,
+    pub(super) expires_at: DateTime<Utc>,
 }
 
 pub(super) struct MemoryChallenges {
@@ -72,6 +74,7 @@ impl ChallengeRepository for MemoryChallenges {
                 method: context.method,
                 purpose: context.purpose,
                 state: challenge.state,
+                counter: None,
                 expires_at: challenge.expires_at,
             },
         );
@@ -116,24 +119,14 @@ impl ChallengeRepository for MemoryChallenges {
                     && item.purpose == context.purpose
             })
         });
-        let interval =
-            Duration::from_std(request.resend_interval).unwrap_or_else(|_| Duration::seconds(60));
-        let prev_count = if let Some(id) = existing_id {
-            let item = stored.get(&id).unwrap();
-            let state: DeliveryChallengeState = serde_json::from_value(item.state.clone()).unwrap();
-            if state.send_count >= request.max_sends {
-                return Ok(DeliveryChallengeAdmission::LimitReached);
-            }
-            let available_at = state.sent_at + interval;
-            if available_at > request.now {
+        let previous = existing_id.and_then(|id| stored.get(&id).and_then(|item| item.counter));
+        let counter = match request.policy.admit(previous.as_ref(), request.now) {
+            DeliveryDecision::Admit(counter) => counter,
+            DeliveryDecision::TooSoon { available_at } => {
                 return Ok(DeliveryChallengeAdmission::TooSoon { available_at });
             }
-            state.send_count
-        } else {
-            0
+            DeliveryDecision::LimitReached => return Ok(DeliveryChallengeAdmission::LimitReached),
         };
-
-        let send_count = prev_count + 1;
         login.expires_at = login.expires_at.max(request.code_expires_at);
         let row_expires_at = login.expires_at;
         drop(logins);
@@ -143,8 +136,6 @@ impl ChallengeRepository for MemoryChallenges {
         }
         let new_id = Uuid::new_v4();
         let state = serde_json::to_value(DeliveryChallengeState {
-            sent_at: request.now,
-            send_count,
             code_expires_at: request.code_expires_at,
             verifier: request.verifier,
         })
@@ -158,13 +149,14 @@ impl ChallengeRepository for MemoryChallenges {
                 method: context.method,
                 purpose: context.purpose,
                 state,
+                counter: Some(counter),
                 expires_at: row_expires_at,
             },
         );
         Ok(DeliveryChallengeAdmission::Admitted {
-            sent_at: request.now,
-            send_count,
-            resend_available_at: request.now + interval,
+            sent_at: counter.sent_at,
+            send_count: counter.send_count,
+            resend_available_at: request.policy.resend_available_at(&counter),
         })
     }
 
@@ -181,7 +173,8 @@ impl ChallengeRepository for MemoryChallenges {
             login.oid == login_oid
                 && matches!(
                     login.status,
-                    LoginStatus::IDENTIFIER_VERIFIED
+                    LoginStatus::CREATED
+                        | LoginStatus::IDENTIFIER_VERIFIED
                         | LoginStatus::MFA_REQUIRED
                         | LoginStatus::MFA_ENROLLMENT_REQUIRED
                 )
@@ -202,10 +195,9 @@ impl ChallengeRepository for MemoryChallenges {
         }) else {
             return Ok(None);
         };
-        let state: DeliveryChallengeState = serde_json::from_value(item.state.clone()).unwrap();
-        Ok(Some(DeliveryChallengeStatus {
-            sent_at: state.sent_at,
-            send_count: state.send_count,
+        Ok(item.counter.map(|counter| DeliveryChallengeStatus {
+            sent_at: counter.sent_at,
+            send_count: counter.send_count,
         }))
     }
 
@@ -403,13 +395,8 @@ impl EmailFlow {
     /// Allow the next send without waiting for the resend interval.
     fn forget_last_send(&self) {
         let mut stored = self.challenges.stored.lock().unwrap();
-        for item in stored.values_mut() {
-            if let Ok(mut state) =
-                serde_json::from_value::<DeliveryChallengeState>(item.state.clone())
-            {
-                state.sent_at -= Duration::minutes(2);
-                item.state = serde_json::to_value(state).unwrap();
-            }
+        for counter in stored.values_mut().filter_map(|item| item.counter.as_mut()) {
+            counter.sent_at -= Duration::minutes(2);
         }
     }
 }

@@ -112,6 +112,7 @@ export interface AuthenticationDraft {
   identifierEnumerationAllowed: boolean
   emailSignInEnabled: boolean
   passwordResetEnabled: boolean
+  registrationEnabled: boolean
   passwordMaxAgeDays: string
   passwordHistoryCount: string
   timeCost: string
@@ -133,6 +134,7 @@ export function authenticationDraft(settings: AuthenticationSettings): Authentic
     identifierEnumerationAllowed: settings.identifierEnumerationAllowed,
     emailSignInEnabled: settings.emailSignInEnabled,
     passwordResetEnabled: settings.passwordResetEnabled,
+    registrationEnabled: settings.registrationEnabled,
     passwordMaxAgeDays: String(settings.passwordMaxAgeDays),
     passwordHistoryCount: String(settings.passwordHistoryCount),
     timeCost: String(settings.passwordHashing.timeCost),
@@ -178,6 +180,7 @@ export function authenticationInput(
       identifierEnumerationAllowed: draft.identifierEnumerationAllowed,
       emailSignInEnabled: draft.emailSignInEnabled,
       passwordResetEnabled: draft.passwordResetEnabled,
+      registrationEnabled: draft.registrationEnabled,
       passwordMaxAgeDays: values.passwordMaxAgeDays!,
       passwordHistoryCount: values.passwordHistoryCount!,
       passwordHashing: {

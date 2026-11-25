@@ -16,6 +16,7 @@ use identity_application::{
         EmailSignInEnabledSetting, EmailTemplatesSetting, IdentifierEnumerationAllowedSetting,
         InstallationSettings, OpenIdConnectSettings, PasswordHashSetting,
         PasswordHistoryCountSetting, PasswordMaxAgeDaysSetting, PasswordResetEnabledSetting,
+        RegistrationEnabledSetting,
         email::{email_delivery_audit_values, email_template_audit_values},
         management::{
             InstanceSettingRepository, InstanceSettingRepositoryError, InstanceSettingSection,
@@ -82,6 +83,7 @@ async fn load_state<C: ConnectionTrait>(
         identifier_enumeration_allowed: snapshot.get::<IdentifierEnumerationAllowedSetting>(),
         email_sign_in_enabled: snapshot.get::<EmailSignInEnabledSetting>(),
         password_reset_enabled: snapshot.get::<PasswordResetEnabledSetting>(),
+        registration_enabled: snapshot.get::<RegistrationEnabledSetting>(),
         password_max_age_days: snapshot.get::<PasswordMaxAgeDaysSetting>(),
         password_history_count: snapshot.get::<PasswordHistoryCountSetting>(),
         email_delivery: snapshot.section::<EmailDeliverySettings>(),

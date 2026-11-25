@@ -11,7 +11,7 @@ import {
 import { Skeleton } from '@identity/ui/components/skeleton'
 import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
 import { DataTable, type DataTableColumn } from '@identity/ui/data-table'
-import { ExternalLink, KeyRound, LogOut, ShieldOff, TriangleAlert } from 'lucide-react'
+import { ExternalLink, KeyRound, LogOut, Mail, ShieldOff, TriangleAlert } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
@@ -236,6 +236,28 @@ export function UserSecurityPage() {
     }
   }
 
+  async function sendInvitation() {
+    if (!user) return
+    setPending(true)
+    setFeedback(null)
+    try {
+      const result = await mutations.sendInvitation({ id: user.id })
+      if (!result.data?.sendUserInvitation) {
+        return setFeedback(feedbackFrom(result, 'missing_send_invitation_payload'))
+      }
+      toast.success(t('usersInvitationSentToast'))
+      void detail.reload()
+    } catch {
+      setFeedback({
+        errors: [],
+        failure: { kind: 'network', code: 'user_security_request_failed' },
+        forbidden: false,
+      })
+    } finally {
+      setPending(false)
+    }
+  }
+
   async function setChangeRequired(required: boolean) {
     if (!user) return
     setPending(true)
@@ -366,6 +388,36 @@ export function UserSecurityPage() {
             </div>
           ))}
         </dl>
+        {methods && !methods.password ? (
+          <div className="flex flex-col gap-3 rounded-lg border border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="text-sm font-medium">{t('usersInvitationTitle')}</p>
+              <p className="text-xs leading-5 text-muted-foreground">
+                {user.invitation
+                  ? new Date(user.invitation.expiresAt).getTime() <= Date.now()
+                    ? t('usersInvitationExpired', {
+                        expiresAt: formatDateTime(user.invitation.expiresAt, locale, timeZone),
+                      })
+                    : t('usersInvitationPending', {
+                        sentAt: formatDateTime(user.invitation.sentAt, locale, timeZone),
+                        expiresAt: formatDateTime(user.invitation.expiresAt, locale, timeZone),
+                      })
+                  : t('usersInvitationNone')}
+              </p>
+            </div>
+            {scope.credentials && !selfTarget ? (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={pending}
+                onClick={() => void sendInvitation()}
+              >
+                <Mail className="size-4" aria-hidden="true" />
+                {t(user.invitation ? 'usersInvitationResend' : 'usersInvitationSend')}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
         {methods?.password ? (
           <div className="flex flex-col gap-3 rounded-lg border border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">

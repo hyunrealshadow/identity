@@ -137,7 +137,10 @@ impl UserCredentialRepositoryImpl {
         }
         txn.execute_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,
-            "DELETE FROM authentication_challenge WHERE user_id = $1",
+            // Challenges of the account's logins and sessions; an email
+            // verification or invitation followed without either stays.
+            "DELETE FROM authentication_challenge WHERE user_id = $1 \
+         AND (login_id IS NOT NULL OR session_id IS NOT NULL)",
             [owner.id.into()],
         ))
         .await

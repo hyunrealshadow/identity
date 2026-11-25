@@ -106,6 +106,10 @@ pub(crate) enum EmailTemplateKind {
     EmailVerification,
     /// The link that replaces a forgotten password from the sign-in flow.
     PasswordReset,
+    /// The link with which an invited user sets their first password.
+    UserInvitation,
+    /// The link that continues creating an account from the sign-in flow.
+    Registration,
 }
 
 impl From<AppEmailTemplateKind> for EmailTemplateKind {
@@ -114,6 +118,8 @@ impl From<AppEmailTemplateKind> for EmailTemplateKind {
             AppEmailTemplateKind::SignInCode => Self::SignInCode,
             AppEmailTemplateKind::EmailVerification => Self::EmailVerification,
             AppEmailTemplateKind::PasswordReset => Self::PasswordReset,
+            AppEmailTemplateKind::UserInvitation => Self::UserInvitation,
+            AppEmailTemplateKind::Registration => Self::Registration,
         }
     }
 }
@@ -124,6 +130,8 @@ impl From<EmailTemplateKind> for AppEmailTemplateKind {
             EmailTemplateKind::SignInCode => Self::SignInCode,
             EmailTemplateKind::EmailVerification => Self::EmailVerification,
             EmailTemplateKind::PasswordReset => Self::PasswordReset,
+            EmailTemplateKind::UserInvitation => Self::UserInvitation,
+            EmailTemplateKind::Registration => Self::Registration,
         }
     }
 }

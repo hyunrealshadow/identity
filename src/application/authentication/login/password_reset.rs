@@ -13,11 +13,10 @@
 //! the same whether or not the identifier matched an account while the login
 //! conceals it.
 
-use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Duration, Utc};
 use identity_domain::{
     auth::{
-        EMAIL_CODE_RESEND_INTERVAL, LoginStatus, MAX_EMAIL_CODE_SENDS, PASSWORD_RESET_TTL,
+        EMAIL_CODE_RESEND_INTERVAL, LOGIN_EMAIL_DELIVERY, LoginStatus, PASSWORD_RESET_TTL,
         challenge::{
             ChallengeBinding, ChallengeContext, ChallengeMethod, ChallengePurpose,
             DeliveryChallengeAdmission, DeliveryChallengeContext, DeliveryChallengeRequest,
@@ -27,17 +26,14 @@ use identity_domain::{
     },
     user::User,
 };
-use rand::RngExt;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use sha2::{Digest, Sha256};
-use subtle::ConstantTimeEq;
 use tracing::{Instrument, warn};
 use uuid::Uuid;
 
 use super::{LoginEmailDependencies, LoginService};
 use crate::{
-    email::{EmailMessage, EmailTemplateKind, effective_template},
+    email::{EmailRecipient, EmailTemplateKind, LinkToken, link_matches, send_templated_email},
     error::{AppError, codes::auth::AuthErrorCode},
     observability::{BusinessEvent, EventValue},
     setting::{
@@ -79,10 +75,6 @@ fn interval() -> Duration {
 
 fn ttl() -> Duration {
     Duration::from_std(PASSWORD_RESET_TTL).unwrap_or_else(|_| Duration::minutes(15))
-}
-
-fn link_digest(token: &str) -> String {
-    URL_SAFE_NO_PAD.encode(Sha256::digest(token.as_bytes()))
 }
 
 fn challenge_context(user_oid: Uuid, login_oid: Uuid) -> ChallengeContext {
@@ -220,16 +212,10 @@ impl LoginService {
         }
 
         let (token, verifier) = if recipient.is_some() {
-            let token = {
-                let mut bytes = [0u8; 32];
-                rand::rng().fill(&mut bytes);
-                URL_SAFE_NO_PAD.encode(bytes)
-            };
-            let verifier = serde_json::to_value(PasswordResetVerifier {
-                link: link_digest(&token),
-            })
-            .map_err(AppError::internal)?;
-            (Some(token), Some(verifier))
+            let link = LinkToken::generate();
+            let verifier = serde_json::to_value(PasswordResetVerifier { link: link.digest })
+                .map_err(AppError::internal)?;
+            (Some(link.token), Some(verifier))
         } else {
             (None, None)
         };
@@ -246,8 +232,7 @@ impl LoginService {
                 },
                 DeliveryChallengeRequest {
                     now,
-                    resend_interval: EMAIL_CODE_RESEND_INTERVAL,
-                    max_sends: MAX_EMAIL_CODE_SENDS,
+                    policy: LOGIN_EMAIL_DELIVERY,
                     code_expires_at: expires_at,
                     required_login_status: Some(LoginStatus::IDENTIFIER_VERIFIED),
                     verifier,
@@ -435,11 +420,7 @@ fn matches(
     else {
         return false;
     };
-    bool::from(
-        link_digest(token)
-            .as_bytes()
-            .ct_eq(verifier.link.as_bytes()),
-    )
+    link_matches(token, &verifier.link)
 }
 
 /// Composes and sends one password reset email.
@@ -455,51 +436,41 @@ struct DeliveryJob {
 
 impl DeliveryJob {
     async fn run(self) -> Result<(), AppError> {
-        let candidates: Vec<&str> = self
+        let locales: Vec<&str> = self
             .user
             .locale
             .as_deref()
             .into_iter()
             .chain(self.locales.iter().map(String::as_str))
             .collect();
-        let (template, _) = effective_template(&self.templates, EmailTemplateKind::PasswordReset);
-        let (content, translation) = template.localize(candidates.iter().copied());
-        let locale = translation
-            .or_else(|| candidates.first().copied())
-            .unwrap_or("en")
-            .to_owned();
-        let context = json!({
-            "link": self.link,
-            "expires_in_minutes": ttl().num_minutes(),
-            "user": { "name": self.user.name, "email": self.user.email },
-            "application": self.application_name.as_ref().map(|name| json!({ "name": name })),
-            "locale": locale,
-        });
-        let rendered = self
-            .dependencies
-            .renderer
-            .render(content, &context)
-            .map_err(|error| {
-                AppError::from_code(AuthErrorCode::PasswordResetDeliveryFailed).with_source(error)
-            })?;
-        self.dependencies
-            .sender
-            .send(
-                &self.delivery,
-                EmailMessage {
-                    to_address: self.user.email.clone(),
-                    to_name: Some(self.user.name.clone()),
-                    subject: rendered.subject,
-                    html: rendered.html,
-                },
-            )
-            .await
-            .map_err(|error| {
-                warn!(
-                    reason = error.reason(),
-                    "password reset email was not delivered"
-                );
-                AppError::from_code(AuthErrorCode::PasswordResetDeliveryFailed).with_source(error)
-            })
+        send_templated_email(
+            self.dependencies.sender.as_ref(),
+            self.dependencies.renderer.as_ref(),
+            &self.delivery,
+            &self.templates,
+            EmailTemplateKind::PasswordReset,
+            EmailRecipient {
+                address: &self.user.email,
+                name: Some(&self.user.name),
+                locales: &locales,
+            },
+            |locale| {
+                json!({
+                    "link": self.link,
+                    "expires_in_minutes": ttl().num_minutes(),
+                    "user": { "name": self.user.name, "email": self.user.email },
+                    "application": self.application_name.as_ref().map(|name| json!({ "name": name })),
+                    "locale": locale,
+                })
+            },
+        )
+        .await
+        .map_err(|error| {
+            warn!(
+                reason = error.reason(),
+                "password reset email was not delivered"
+            );
+            AppError::from_code(AuthErrorCode::PasswordResetDeliveryFailed).with_source(error)
+        })
     }
 }

@@ -44,3 +44,18 @@ impl SettingDefinition for PasswordResetEnabledSetting {
         true
     }
 }
+
+/// Whether someone without an account may create one from the sign-in flow.
+/// The email address is verified with an emailed link before the account
+/// exists, so it is offered only while email delivery is configured.
+pub struct RegistrationEnabledSetting;
+
+impl SettingDefinition for RegistrationEnabledSetting {
+    type Value = bool;
+
+    const KEY: &'static str = "auth.login.registration_enabled";
+
+    fn default_value() -> Self::Value {
+        false
+    }
+}

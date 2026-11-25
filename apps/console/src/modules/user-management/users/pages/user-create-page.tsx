@@ -5,8 +5,16 @@ import {
 } from '@identity/ui/components/alert'
 import { Button } from '@identity/ui/components/button'
 import { Card, CardContent } from '@identity/ui/components/card'
+import {
+  Field,
+  FieldContent,
+  FieldDescription,
+  FieldLabel,
+  FieldTitle,
+} from '@identity/ui/components/field'
+import { RadioGroup, RadioGroupItem } from '@identity/ui/components/radio-group'
 import { useNavigate } from '@tanstack/react-router'
-import { ArrowLeft, ChevronDown, Plus, TriangleAlert } from 'lucide-react'
+import { ArrowLeft, ChevronDown, KeyRound, Mail, Plus, TriangleAlert } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
@@ -43,6 +51,17 @@ import {
 } from '#/lib/graphql/presentation'
 import { useTranslator, type MessageKey } from '#/lib/i18n'
 import { useWorkspace } from '#/lib/workspace'
+import {
+  ConsoleUserInvitationsAvailableDocument,
+  type ConsoleUserInvitationsAvailableQuery,
+  type ConsoleUserInvitationsAvailableQueryVariables,
+} from '#/generated/graphql'
+import { useConsoleQuery } from '#/lib/graphql/use-console-query'
+
+/** How the new user signs in for the first time. */
+type FirstSignIn = 'invite' | 'password'
+
+const NO_VARIABLES: ConsoleUserInvitationsAvailableQueryVariables = {}
 
 type LocalField = 'username' | 'email' | 'password'
 
@@ -91,6 +110,21 @@ export function UserCreatePage() {
     userId: string
     version: string
   } | null>(null)
+  const invitations = useConsoleQuery<
+    ConsoleUserInvitationsAvailableQuery,
+    ConsoleUserInvitationsAvailableQueryVariables
+  >(
+    ConsoleUserInvitationsAvailableDocument,
+    scope.create ? NO_VARIABLES : null,
+    scope.create,
+    'missing_invitations_available',
+  )
+  const invitationsAvailable = invitations.data?.userInvitationsAvailable === true
+  const [chosenFirstSignIn, setFirstSignIn] = useState<FirstSignIn | null>(null)
+  const firstSignIn: FirstSignIn =
+    chosenFirstSignIn === 'invite' && !invitationsAvailable
+      ? 'password'
+      : (chosenFirstSignIn ?? (invitationsAvailable ? 'invite' : 'password'))
 
   useEffect(() => {
     draftRef.current = draft
@@ -342,7 +376,9 @@ export function UserCreatePage() {
     const next: Partial<Record<LocalField, MessageKey>> = {}
     if (!draft.username.trim()) next.username = 'usersUsernameRequired'
     if (!draft.email.trim()) next.email = 'usersEmailRequired'
-    if (!draft.password) next.password = 'usersCreatePasswordRequired'
+    if (firstSignIn === 'password' && !draft.password) {
+      next.password = 'usersCreatePasswordRequired'
+    }
     setLocalErrors(next)
     return Object.keys(next).length === 0
   }
@@ -355,7 +391,12 @@ export function UserCreatePage() {
     setFeedback(null)
     setFieldErrors({})
     try {
-      const result = await mutations.create(createInputFromDraft(draft))
+      const input = createInputFromDraft(draft)
+      const result = await mutations.create(
+        firstSignIn === 'invite'
+          ? { ...input, password: undefined, sendInvitation: true }
+          : input,
+      )
       const payload = result.data?.createUser ?? null
       if (!payload) {
         setFieldErrors(fieldErrorsFromIssues(result.errors))
@@ -378,9 +419,17 @@ export function UserCreatePage() {
       // Clear the sensitive local password immediately after a committed write.
       leaveCreate()
       changeDraft((current) => ({ ...current, password: '' }))
-      toast.success(t('usersCreateSuccessToast'), {
-        description: t('usersCreateCommitted'),
-      })
+      if (payload.invitationSent === false) {
+        toast.warning(t('usersCreateSuccessToast'), {
+          description: t('usersInvitationNotSent'),
+        })
+      } else {
+        toast.success(t('usersCreateSuccessToast'), {
+          description: t(
+            payload.invitationSent ? 'usersInvitationSentToast' : 'usersCreateCommitted',
+          ),
+        })
+      }
       if (result.partial) {
         toast.warning(t('usersPartialMutationNote'))
       }
@@ -472,23 +521,94 @@ export function UserCreatePage() {
                 isDisabled={pending}
                 error={emailError}
               />
-              <UserTextField
-                name="password"
-                label={t('usersFieldPassword')}
-                value={draft.password}
-                onChange={(value) => setAccountField('password', value)}
-                type="password"
-                autoComplete="new-password"
-                isRequired
-                isDisabled={pending}
-                description={
-                  restoredPasswordHint
-                    ? t('usersCreateDraftPasswordHint')
-                    : t('usersFieldPasswordDescription')
-                }
-                error={passwordError}
-              />
             </div>
+          </section>
+
+          <section className="space-y-4 border-t border-border pt-6">
+            <div className="space-y-1">
+              <h2 className="text-base font-semibold tracking-tight">
+                {t('usersSectionFirstSignIn')}
+              </h2>
+              <p className="text-sm text-muted-foreground">
+                {t('usersFirstSignInDescription')}
+              </p>
+            </div>
+            <RadioGroup
+              name="first-sign-in"
+              aria-label={t('usersSectionFirstSignIn')}
+              value={firstSignIn}
+              disabled={pending}
+              onValueChange={(value: string) => {
+                setFirstSignIn(value as FirstSignIn)
+                setFeedback(null)
+                clearLocalError('password')
+                clearFieldError('password')
+              }}
+              className="grid gap-3 sm:grid-cols-2"
+            >
+              <FieldLabel htmlFor="first-sign-in-invite" className="bg-card">
+                <Field orientation="horizontal" data-disabled={!invitationsAvailable || undefined}>
+                  <span
+                    className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"
+                    aria-hidden="true"
+                  >
+                    <Mail className="size-4" />
+                  </span>
+                  <FieldContent>
+                    <FieldTitle>{t('usersFirstSignInInvite')}</FieldTitle>
+                    <FieldDescription>
+                      {invitationsAvailable
+                        ? t('usersFirstSignInInviteHint')
+                        : t('usersFirstSignInInviteUnavailable')}
+                    </FieldDescription>
+                  </FieldContent>
+                  <RadioGroupItem
+                    value="invite"
+                    id="first-sign-in-invite"
+                    disabled={!invitationsAvailable}
+                  />
+                </Field>
+              </FieldLabel>
+              <FieldLabel htmlFor="first-sign-in-password" className="bg-card">
+                <Field orientation="horizontal">
+                  <span
+                    className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"
+                    aria-hidden="true"
+                  >
+                    <KeyRound className="size-4" />
+                  </span>
+                  <FieldContent>
+                    <FieldTitle>{t('usersFirstSignInPassword')}</FieldTitle>
+                    <FieldDescription>{t('usersFirstSignInPasswordHint')}</FieldDescription>
+                  </FieldContent>
+                  <RadioGroupItem value="password" id="first-sign-in-password" />
+                </Field>
+              </FieldLabel>
+            </RadioGroup>
+            {firstSignIn === 'password' ? (
+              <div className="grid gap-4 sm:grid-cols-2">
+                <UserTextField
+                  name="password"
+                  label={t('usersFieldPassword')}
+                  value={draft.password}
+                  onChange={(value) => setAccountField('password', value)}
+                  type="password"
+                  autoComplete="new-password"
+                  isRequired
+                  isDisabled={pending}
+                  description={
+                    restoredPasswordHint
+                      ? t('usersCreateDraftPasswordHint')
+                      : t('usersFieldPasswordDescription')
+                  }
+                  error={passwordError}
+                />
+              </div>
+            ) : fieldErrors.password ? (
+              <p className="text-sm text-destructive" role="alert">
+                {fieldErrors.password}
+              </p>
+            ) : null}
           </section>
 
           <section className="space-y-4 border-t border-border pt-6">

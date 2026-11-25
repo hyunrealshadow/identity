@@ -3,7 +3,7 @@ use async_graphql::{Context, Guard, MaybeUndefined, Object, Result};
 use identity_application::{
     authorization::ManagementTarget,
     error::{codes::graphql::GraphqlErrorCode, params::ErrorParams},
-    user::management::UpdateUserCommand,
+    user::management::{CreateUserCommand, UpdateUserCommand, UserPassword},
 };
 use identity_domain::{
     authorization::ManagementScope,
@@ -18,9 +18,9 @@ use super::{
     query::decode_user_oid,
     types::{
         CreateUserInput, CreateUserPayload, DeleteUserPayload, ResetUserPasswordPayload,
-        RevokeUserSessionsInput, UnlockUserInput, UpdateUserInput, UpdateUserPayload,
-        UserProfilePatchInput, UserStateInput, UserStatePayload, normalize_reason,
-        optional_identifier,
+        RevokeUserSessionsInput, SendUserInvitationInput, SendUserInvitationPayload,
+        UnlockUserInput, UpdateUserInput, UpdateUserPayload, UserProfilePatchInput, UserStateInput,
+        UserStatePayload, normalize_reason, optional_identifier,
     },
 };
 use crate::graphql::schema::{
@@ -47,6 +47,7 @@ impl UserManagementMutation {
             username,
             email,
             password,
+            send_invitation,
             profile,
             reason,
             client_mutation_id,
@@ -56,18 +57,60 @@ impl UserManagementMutation {
             .map(UserProfilePatchInput::into_patch)
             .unwrap_or_default();
         let request = request_context(ctx)?;
-        let user = integration::create_user(
+        let (user, invitation_sent) = integration::create_user(
             request,
-            username,
-            email,
-            password,
-            profile,
-            reason,
-            client_mutation_id.clone(),
+            CreateUserCommand {
+                username,
+                email,
+                password: password.map(UserPassword::new),
+                send_invitation,
+                profile,
+                reason,
+                client_mutation_id: client_mutation_id.clone(),
+            },
         )
         .await
         .map_err(|error| app_error(ctx, error))?;
-        Ok(CreateUserPayload::new(user, client_mutation_id))
+        Ok(CreateUserPayload::new(
+            user,
+            invitation_sent,
+            client_mutation_id,
+        ))
+    }
+
+    /// Email a new link with which the user sets their first password. Only
+    /// for a user without a password; it replaces any earlier link.
+    #[graphql(
+        guard = "ManagementGuard::new(ManagementScope::UsersWrite, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::UsersWrite))
+    )]
+    async fn send_user_invitation(
+        &self,
+        ctx: &Context<'_>,
+        input: SendUserInvitationInput,
+    ) -> Result<SendUserInvitationPayload> {
+        let SendUserInvitationInput {
+            id,
+            reason,
+            client_mutation_id,
+        } = input;
+        let (user, reason) = state_fields(ctx, &id, &reason)?;
+        let request = request_context(ctx)?;
+        ManagementGuard::new(
+            ManagementScope::UsersWrite,
+            ManagementTarget::user(user, false),
+        )
+        .check(ctx)
+        .await?;
+        let (user, invitation) =
+            integration::send_user_invitation(request, user, reason, client_mutation_id.clone())
+                .await
+                .map_err(|error| app_error(ctx, error))?;
+        Ok(SendUserInvitationPayload::new(
+            user,
+            invitation,
+            client_mutation_id,
+        ))
     }
 
     #[graphql(

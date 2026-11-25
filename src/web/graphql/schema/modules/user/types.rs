@@ -135,8 +135,14 @@ pub(super) struct CreateUserInput {
     pub username: String,
     #[graphql(validator(chars_max_length = 320))]
     pub email: String,
+    /// The initial password. Leave it out and set `sendInvitation` to let
+    /// the user choose their own.
     #[graphql(secret, validator(chars_max_length = 1024))]
-    pub password: String,
+    pub password: Option<String>,
+    /// Email the user a link to set their first password instead of setting
+    /// one now. Needs email delivery.
+    #[graphql(default)]
+    pub send_invitation: bool,
     pub profile: Option<UserProfilePatchInput>,
     #[graphql(default, validator(chars_max_length = 1000))]
     pub reason: String,
@@ -211,16 +217,22 @@ pub(super) struct CreateUserPayload {
     user_id: ID,
     version: Uuid,
     user: Option<UserNode>,
+    invitation_sent: Option<bool>,
     client_mutation_id: Option<String>,
 }
 
 impl CreateUserPayload {
-    pub(super) fn new(user: User, client_mutation_id: Option<String>) -> Self {
+    pub(super) fn new(
+        user: User,
+        invitation_sent: Option<bool>,
+        client_mutation_id: Option<String>,
+    ) -> Self {
         let version = user.version;
         Self {
             user_id: account::user_global_id(&user),
             version,
             user: Some(UserNode::managed(user)),
+            invitation_sent,
             client_mutation_id,
         }
     }
@@ -230,6 +242,12 @@ impl CreateUserPayload {
 impl CreateUserPayload {
     async fn user_id(&self) -> &ID {
         &self.user_id
+    }
+
+    /// Whether the invitation email went out, when one was asked for. The
+    /// user exists either way; when it is `false`, send the invitation again.
+    async fn invitation_sent(&self) -> Option<bool> {
+        self.invitation_sent
     }
 
     async fn version(&self) -> Uuid {
@@ -490,5 +508,52 @@ impl DeleteUserPayload {
 
     async fn client_mutation_id(&self) -> Option<&str> {
         self.client_mutation_id.as_deref()
+    }
+}
+
+#[derive(Clone, InputObject)]
+pub(super) struct SendUserInvitationInput {
+    pub id: ID,
+    #[graphql(default, validator(chars_max_length = 1000))]
+    pub reason: String,
+    #[graphql(validator(chars_max_length = 255))]
+    pub client_mutation_id: Option<String>,
+}
+
+pub(super) struct SendUserInvitationPayload {
+    state: UserStatePayload,
+    invitation: account::UserInvitation,
+}
+
+impl SendUserInvitationPayload {
+    pub(super) fn new(
+        user: User,
+        invitation: identity_application::user::invitation::UserInvitationStatus,
+        client_mutation_id: Option<String>,
+    ) -> Self {
+        Self {
+            state: UserStatePayload::new(user, client_mutation_id),
+            invitation: invitation.into(),
+        }
+    }
+}
+
+#[Object]
+impl SendUserInvitationPayload {
+    async fn user_id(&self) -> &ID {
+        &self.state.user_id
+    }
+
+    async fn user(&self, ctx: &Context<'_>) -> GraphqlResult<Option<&UserNode>> {
+        payload_user(ctx, &self.state.user).await
+    }
+
+    /// The invitation just sent.
+    async fn invitation(&self) -> &account::UserInvitation {
+        &self.invitation
+    }
+
+    async fn client_mutation_id(&self) -> Option<&str> {
+        self.state.client_mutation_id.as_deref()
     }
 }

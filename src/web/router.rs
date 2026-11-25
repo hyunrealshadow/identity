@@ -10,7 +10,7 @@ use salvo::{Router, Service, affix_state::inject, serve_static::StaticDir};
 
 use super::{
     controllers::{
-        auth, email_verification, install, oauth2, observability, openid, well_known,
+        auth, email_verification, install, invitation, oauth2, observability, openid, well_known,
         workload_runtime,
     },
     middleware::{
@@ -92,7 +92,8 @@ pub fn internal_router(
         .hoop(require_login_workload)
         .push(install::status_routes())
         .push(install::routes())
-        .push(email_verification::routes());
+        .push(email_verification::routes())
+        .push(invitation::routes());
     if config.observability.self_metrics.enable {
         login = login.push(
             Router::with_path(internal_relative_route(

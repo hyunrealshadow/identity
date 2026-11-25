@@ -235,10 +235,22 @@ pub const EMAIL_CODE_RESEND_INTERVAL: Duration = Duration::from_secs(60);
 /// Sign-in emails one login may send in total.
 pub const MAX_EMAIL_CODE_SENDS: i32 = 5;
 
+/// How often a login may email a sign-in code or link, a password reset
+/// link, or a registration link: each kind is counted over the whole login.
+pub const LOGIN_EMAIL_DELIVERY: challenge::DeliveryPolicy = challenge::DeliveryPolicy {
+    resend_interval: EMAIL_CODE_RESEND_INTERVAL,
+    max_sends: Some(MAX_EMAIL_CODE_SENDS),
+    window: None,
+};
+
 /// How long an emailed password reset link stays valid. Sending one extends
 /// the login to at least this long from the moment it is sent, and the resend
 /// interval and send limit of sign-in emails apply to it as well.
 pub const PASSWORD_RESET_TTL: Duration = Duration::from_secs(15 * 60);
+
+/// How long an emailed registration link stays valid. Like a reset link, it
+/// belongs to a login and keeps that login open at least this long.
+pub const REGISTRATION_LINK_TTL: Duration = Duration::from_secs(15 * 60);
 
 /// Duration after which a login flow expires (from `created_at`).
 pub const LOGIN_EXPIRY: Duration = Duration::from_secs(5 * 60);
