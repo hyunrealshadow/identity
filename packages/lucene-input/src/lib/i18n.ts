@@ -205,6 +205,50 @@ function getBuiltInDiagnosticTemplate(diagnostic: ComponentDiagnostic, locale: s
         ? '请在 {operator} 后输入另一个搜索条件'
         : 'Enter another search condition after {operator}';
     }
+
+    if (expected === 'closing quote') {
+      return locale.startsWith('zh')
+        ? '请添加 {delimiter} 来结束这段引号内容'
+        : 'Add a closing {delimiter} to finish this quoted value';
+    }
+
+    if (expected === 'closing regex') {
+      return locale.startsWith('zh')
+        ? '请添加 "/" 来结束这个正则表达式'
+        : 'Add a closing "/" to finish this regular expression';
+    }
+
+    if (expected === 'closing bracket') {
+      return locale.startsWith('zh')
+        ? '请添加 "{delimiter}" 来结束这个范围'
+        : 'Add a closing "{delimiter}" to finish this range';
+    }
+
+    if (expected === 'group expression') {
+      return locale.startsWith('zh')
+        ? '请在分组内输入搜索条件'
+        : 'Add a search condition inside this group';
+    }
+
+    if (expected === 'TO') {
+      return locale.startsWith('zh')
+        ? '范围的起止值之间请使用 TO'
+        : 'Use TO between the start and end of a range';
+    }
+
+    if (expected === 'range start') {
+      return locale.startsWith('zh') ? '请为范围输入起始值' : 'Add a start value for this range';
+    }
+
+    if (expected === 'range end') {
+      return locale.startsWith('zh') ? '请为范围输入结束值' : 'Add an end value for this range';
+    }
+
+    if (expected === 'comparison value') {
+      return locale.startsWith('zh')
+        ? '请在 {operator} 后输入比较值'
+        : 'Enter a value after {operator}';
+    }
   }
 
   if (diagnostic.code === 'invalidFieldValue') {

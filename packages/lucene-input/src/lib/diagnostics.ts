@@ -1,5 +1,5 @@
-import { localizeDiagnostics } from './i18n';
 import { isDateMathValue } from './date-math';
+import { localizeDiagnostics } from './i18n';
 import { tokenizeLuceneQuery, type LuceneToken } from './syntax-highlighting';
 import { buildLuceneSyntaxTree } from './syntax-tree';
 import type {
@@ -8,7 +8,8 @@ import type {
   LuceneField,
   LuceneFieldType,
   LuceneInputMessages,
-  LuceneSyntaxFeature
+  LuceneSyntaxFeature,
+  LuceneSyntaxTree
 } from './types';
 
 export function getLuceneDiagnostics(
@@ -18,22 +19,27 @@ export function getLuceneDiagnostics(
   messages?: LuceneInputMessages,
   options: LuceneDiagnosticsOptions = {}
 ): ComponentDiagnostic[] {
+  const tokens = tokenizeLuceneQuery(value);
+  const tree = buildLuceneSyntaxTree(value, fields, tokens);
+  const disabled = options.disabledSyntax ?? [];
+
   const diagnostics: ComponentDiagnostic[] = [
-    ...getUnknownFieldDiagnostics(value, fields, options),
-    ...getTypedFieldValueDiagnostics(value, fields),
-    ...getGroupDiagnostics(value),
-    ...getMissingValueDiagnostics(value),
-    ...getBooleanOperatorDiagnostics(value),
-    ...getDisabledSyntaxDiagnostics(value, options.disabledSyntax ?? [])
+    ...getUnknownFieldDiagnostics(tokens, fields, options),
+    ...getUnclosedLiteralDiagnostics(tokens, disabled),
+    ...getTypedFieldValueDiagnostics(value, tree, fields),
+    ...getGroupDiagnostics(tokens),
+    ...getBooleanOperatorDiagnostics(tokens, value),
+    ...getDisabledSyntaxDiagnostics(tokens, disabled)
   ];
-  diagnostics.push(...getUnparsedDiagnostics(value, diagnostics));
+  diagnostics.push(...getAstStructureDiagnostics(value, tree, diagnostics));
+  diagnostics.push(...getUnparsedDiagnostics(tree, diagnostics));
 
   return localizeDiagnostics(diagnostics, locale, messages);
 }
 
 /** The syntax the host turned off, wherever it is written. */
 function getDisabledSyntaxDiagnostics(
-  value: string,
+  tokens: readonly LuceneToken[],
   disabled: readonly LuceneSyntaxFeature[]
 ): ComponentDiagnostic[] {
   if (disabled.length === 0) {
@@ -41,7 +47,7 @@ function getDisabledSyntaxDiagnostics(
   }
 
   const diagnostics: ComponentDiagnostic[] = [];
-  for (const token of tokenizeLuceneQuery(value)) {
+  for (const token of tokens) {
     const feature = syntaxFeature(token);
     if (feature && disabled.includes(feature)) {
       diagnostics.push({
@@ -67,12 +73,68 @@ function syntaxFeature(token: LuceneToken): LuceneSyntaxFeature | null {
   return null;
 }
 
+function getUnclosedLiteralDiagnostics(
+  tokens: readonly LuceneToken[],
+  disabled: readonly LuceneSyntaxFeature[]
+): ComponentDiagnostic[] {
+  const diagnostics: ComponentDiagnostic[] = [];
+
+  for (const token of tokens) {
+    if (token.type === 'string' || (token.type === 'date' && (token.text[0] === '"' || token.text[0] === "'"))) {
+      const delimiter = token.text[0];
+      if (!isClosedDelimited(token.text, delimiter)) {
+        diagnostics.push({
+          code: 'missingToken',
+          message: '',
+          severity: 'error',
+          from: token.from,
+          to: token.to,
+          params: { expected: 'closing quote', delimiter }
+        });
+      }
+      continue;
+    }
+
+    if (token.type === 'regex' && !disabled.includes('regex') && !isClosedDelimited(token.text, '/')) {
+      diagnostics.push({
+        code: 'missingToken',
+        message: '',
+        severity: 'error',
+        from: token.from,
+        to: token.to,
+        params: { expected: 'closing regex' }
+      });
+    }
+  }
+
+  return diagnostics;
+}
+
+function isClosedDelimited(text: string, delimiter: string): boolean {
+  if (text.length < 2 || text[0] !== delimiter) {
+    return false;
+  }
+
+  for (let index = 1; index < text.length; index += 1) {
+    if (text[index] === '\\') {
+      index += 1;
+      continue;
+    }
+
+    if (text[index] === delimiter) {
+      return index === text.length - 1;
+    }
+  }
+
+  return false;
+}
+
 /**
  * Text the query grammar cannot place, such as a stray `)` or `:`, unless
  * another error already covers where it starts.
  */
-function getUnparsedDiagnostics(value: string, reported: ComponentDiagnostic[]): ComponentDiagnostic[] {
-  const unparsed = buildLuceneSyntaxTree(value).children?.find((child) => child.type === 'UnparsedTokens');
+function getUnparsedDiagnostics(tree: LuceneSyntaxTree, reported: ComponentDiagnostic[]): ComponentDiagnostic[] {
+  const unparsed = tree.children?.find((child) => child.type === 'UnparsedTokens');
   const first = unparsed?.children?.[0];
   if (!first || first.from === undefined || first.to === undefined) {
     return [];
@@ -96,8 +158,182 @@ function getUnparsedDiagnostics(value: string, reported: ComponentDiagnostic[]):
       ];
 }
 
-function getBooleanOperatorDiagnostics(value: string): ComponentDiagnostic[] {
-  const tokens = tokenizeLuceneQuery(value);
+function getAstStructureDiagnostics(
+  value: string,
+  tree: LuceneSyntaxTree,
+  reported: readonly ComponentDiagnostic[]
+): ComponentDiagnostic[] {
+  const diagnostics: ComponentDiagnostic[] = [];
+
+  const visit = (node: LuceneSyntaxTree): void => {
+    const children = node.children ?? [];
+
+    switch (node.type) {
+      case 'Node': {
+        const [fieldNode, termNode] = children;
+        if (fieldNode && termNode?.type === 'Missing' && termNode.from !== undefined) {
+          const from = termNode.from;
+          const to = extendTrailingWhitespace(value, from);
+          if (!isSpanCovered(reported, from, to)) {
+            diagnostics.push({
+              code: 'missingToken',
+              message: '',
+              severity: 'error',
+              from,
+              to,
+              params: { expected: 'field value', field: fieldNode.value ?? '' }
+            });
+          }
+        }
+        if (termNode) {
+          visit(termNode);
+        }
+        return;
+      }
+
+      case 'GroupExpression': {
+        const child = children[0];
+        if (child?.type === 'Missing' && node.from !== undefined && node.to !== undefined) {
+          diagnostics.push({
+            code: 'missingToken',
+            message: '',
+            severity: 'error',
+            from: node.from,
+            to: node.to,
+            params: { expected: 'group expression' }
+          });
+          return;
+        }
+        for (const item of children) {
+          visit(item);
+        }
+        return;
+      }
+
+      case 'NotExpression':
+      case 'FieldTermNotExpression':
+      case 'RequiredExpression':
+      case 'FieldTermRequiredExpression': {
+        const child = children[0];
+        if (child?.type === 'Missing' && node.from !== undefined && node.to !== undefined) {
+          const to = extendTrailingWhitespace(value, node.to);
+          if (!isSpanCovered(reported, node.from, to)) {
+            diagnostics.push({
+              code: 'missingToken',
+              message: '',
+              severity: 'error',
+              from: node.from,
+              to,
+              params: { expected: 'term', operator: node.operator ?? '' }
+            });
+          }
+          return;
+        }
+        for (const item of children) {
+          visit(item);
+        }
+        return;
+      }
+
+      case 'FieldComparisonExpression': {
+        const child = children[0];
+        if (child?.type === 'Missing' && node.from !== undefined && node.to !== undefined) {
+          const to = extendTrailingWhitespace(value, node.to);
+          if (!isSpanCovered(reported, node.from, to)) {
+            diagnostics.push({
+              code: 'missingToken',
+              message: '',
+              severity: 'error',
+              from: node.from,
+              to,
+              params: { expected: 'comparison value', operator: node.operator ?? '' }
+            });
+          }
+          return;
+        }
+        for (const item of children) {
+          visit(item);
+        }
+        return;
+      }
+
+      case 'FieldRangeExpression': {
+        const [startNode, endNode] = children;
+        if (startNode?.type === 'Missing' && startNode.from !== undefined && startNode.to !== undefined) {
+          diagnostics.push({
+            code: 'missingToken',
+            message: '',
+            severity: 'error',
+            from: startNode.from,
+            to: startNode.to,
+            params: { expected: 'range start' }
+          });
+        }
+        if (!node.operator && node.from !== undefined && node.to !== undefined) {
+          diagnostics.push({
+            code: 'missingToken',
+            message: '',
+            severity: 'error',
+            from: startNode?.to ?? node.from,
+            to: endNode?.from ?? node.to,
+            params: { expected: 'TO' }
+          });
+        }
+        if (endNode?.type === 'Missing' && endNode.from !== undefined && endNode.to !== undefined) {
+          diagnostics.push({
+            code: 'missingToken',
+            message: '',
+            severity: 'error',
+            from: endNode.from,
+            to: endNode.to,
+            params: { expected: 'range end' }
+          });
+        }
+        if (node.closed === false && node.from !== undefined) {
+          diagnostics.push({
+            code: 'missingToken',
+            message: '',
+            severity: 'error',
+            from: node.from,
+            to: node.from + 1,
+            params: { expected: 'closing bracket', delimiter: node.inclusive?.[0] === false ? '}' : ']' }
+          });
+        }
+        return;
+      }
+
+      case 'UnparsedTokens':
+        return;
+
+      default:
+        for (const child of children) {
+          visit(child);
+        }
+    }
+  };
+
+  visit(tree);
+  return diagnostics;
+}
+
+function extendTrailingWhitespace(value: string, pos: number): number {
+  let cursor = pos;
+  while (cursor < value.length && /\s/.test(value[cursor])) {
+    cursor += 1;
+  }
+  return cursor;
+}
+
+function isSpanCovered(reported: readonly ComponentDiagnostic[], from: number, to: number): boolean {
+  return reported.some(
+    (item) =>
+      item.severity === 'error' &&
+      ((item.from <= from && from < Math.max(item.to, item.from + 1)) ||
+        (item.from >= from && item.from <= to))
+  );
+}
+
+function getBooleanOperatorDiagnostics(tokens: readonly LuceneToken[], value: string): ComponentDiagnostic[] {
   let previousMeaningful: LuceneToken | undefined;
 
   for (const token of tokens) {
@@ -161,7 +397,7 @@ function canEndExpression(token: LuceneToken): boolean {
   );
 }
 
-function nextMeaningfulToken(tokens: LuceneToken[], current: LuceneToken): LuceneToken | undefined {
+function nextMeaningfulToken(tokens: readonly LuceneToken[], current: LuceneToken): LuceneToken | undefined {
   return tokens.find((token) => token.from >= current.to && token !== current);
 }
 
@@ -177,7 +413,7 @@ function unexpectedToken(token: LuceneToken): ComponentDiagnostic {
 }
 
 function getUnknownFieldDiagnostics(
-  value: string,
+  tokens: readonly LuceneToken[],
   fields: LuceneField[],
   options: LuceneDiagnosticsOptions
 ): ComponentDiagnostic[] {
@@ -188,7 +424,7 @@ function getUnknownFieldDiagnostics(
   const knownFields = new Set(fields.map((field) => field.name));
   const diagnostics: ComponentDiagnostic[] = [];
 
-  for (const token of tokenizeLuceneQuery(value)) {
+  for (const token of tokens) {
     if (token.type !== 'field' || knownFields.has(token.text)) {
       continue;
     }
@@ -206,106 +442,101 @@ function getUnknownFieldDiagnostics(
   return diagnostics;
 }
 
-function getTypedFieldValueDiagnostics(value: string, fields: LuceneField[]): ComponentDiagnostic[] {
-  const typedFields = new Map(fields.filter((field) => field.type).map((field) => [field.name, field]));
+type TypedField = {
+  name: string;
+  type: Extract<LuceneFieldType, 'number' | 'date' | 'time' | 'datetime'>;
+};
+
+function getTypedFieldValueDiagnostics(
+  value: string,
+  tree: LuceneSyntaxTree,
+  fields: LuceneField[]
+): ComponentDiagnostic[] {
+  const typedFields = new Map<string, TypedField>();
+  for (const field of fields) {
+    if (field.type && isTypedFieldType(field.type)) {
+      typedFields.set(field.name, { name: field.name, type: field.type });
+    }
+  }
   if (typedFields.size === 0) {
     return [];
   }
 
   const diagnostics: ComponentDiagnostic[] = [];
-  const tokens = tokenizeLuceneQuery(value);
-  const fieldStarts: { fieldName: string; valueFrom: number; from: number }[] = [];
 
-  for (let index = 0; index < tokens.length; index += 1) {
-    const token = tokens[index];
-    if (token.type !== 'field' || tokens[index + 1]?.type !== 'fieldSeparator') {
-      continue;
+  const visit = (node: LuceneSyntaxTree, activeField: TypedField | undefined): void => {
+    const children = node.children ?? [];
+
+    switch (node.type) {
+      case 'Node': {
+        const [fieldNode, termNode] = children;
+        if (fieldNode && termNode) {
+          visit(termNode, typedFields.get(fieldNode.value ?? ''));
+        }
+        return;
+      }
+
+      case 'FieldRangeExpression': {
+        if (!activeField) {
+          return;
+        }
+        for (const endpoint of children) {
+          if (endpoint.type !== 'Missing') {
+            visit(endpoint, activeField);
+          }
+        }
+        return;
+      }
+
+      case 'FieldComparisonExpression': {
+        if (!activeField) {
+          return;
+        }
+        const child = children[0];
+        if (child && child.type !== 'Missing') {
+          visit(child, activeField);
+        }
+        return;
+      }
+
+      case 'DateTerm':
+      case 'DateTimeTerm':
+      case 'TimeTerm':
+      case 'DateMathTerm':
+      case 'SearchTerm':
+      case 'WildcardTerm': {
+        if (!activeField || node.from === undefined || node.to === undefined) {
+          return;
+        }
+        const raw = value.slice(node.from, node.to);
+        if (raw === '*') {
+          return;
+        }
+        if ((raw[0] === '"' || raw[0] === "'") && !isClosedDelimited(raw, raw[0])) {
+          return;
+        }
+        diagnostics.push(...validateSingleTypedValue(activeField.name, activeField.type, raw, node.from, node.to));
+        return;
+      }
+
+      case 'UnparsedTokens':
+        return;
+
+      default:
+        for (const child of children) {
+          visit(child, activeField);
+        }
     }
+  };
 
-    let valueFrom = tokens[index + 1].to;
-    while (valueFrom < value.length && /\s/.test(value[valueFrom])) {
-      valueFrom += 1;
-    }
-    fieldStarts.push({ fieldName: token.text, valueFrom, from: token.from });
-  }
-
-  for (let index = 0; index < fieldStarts.length; index += 1) {
-    const entry = fieldStarts[index];
-    const field = typedFields.get(entry.fieldName);
-    if (!field?.type) {
-      continue;
-    }
-
-    const nextFieldStart = fieldStarts[index + 1]?.from;
-    const rawValue = fieldValueText(value.slice(entry.valueFrom, nextFieldStart)).trimEnd();
-    if (!rawValue.trim()) {
-      continue;
-    }
-
-    diagnostics.push(...validateTypedFieldValue(field.name, field.type, rawValue, entry.valueFrom));
-  }
-
+  visit(tree, undefined);
   return diagnostics;
 }
 
-function validateTypedFieldValue(
-  field: string,
-  type: LuceneFieldType,
-  rawValue: string,
-  valueFrom: number
-): ComponentDiagnostic[] {
-  if (type === 'number') {
-    return validateComparableValue(field, 'number', rawValue, valueFrom);
-  }
-
-  if (isDateLikeFieldType(type)) {
-    return validateDateLikeValue(field, type, rawValue, valueFrom);
-  }
-
-  return [];
-}
-
-function validateDateLikeValue(
-  field: string,
-  type: Extract<LuceneFieldType, 'date' | 'time' | 'datetime'>,
-  rawValue: string,
-  valueFrom: number
-): ComponentDiagnostic[] {
-  const range = readToRange(rawValue, valueFrom, type);
-  if (range) {
-    return [
-      ...validateRangeEndpoint(field, type, range.start.value, range.start.from, range.start.to),
-      ...validateRangeEndpoint(field, type, range.end.value, range.end.from, range.end.to)
-    ];
-  }
-
-  return validateComparableValue(field, type, rawValue, valueFrom);
-}
-
-function validateRangeEndpoint(
-  field: string,
-  type: Extract<LuceneFieldType, 'date' | 'time' | 'datetime'>,
-  rawValue: string,
-  from: number,
-  to: number
-): ComponentDiagnostic[] {
-  return rawValue === '*' ? [] : validateSingleTypedValue(field, type, rawValue, from, to);
-}
-
-function validateComparableValue(
-  field: string,
-  type: Extract<LuceneFieldType, 'number' | 'date' | 'time' | 'datetime'>,
-  rawValue: string,
-  valueFrom: number
-): ComponentDiagnostic[] {
-  const comparison = /^(>=|<=|>|<)\s*/.exec(rawValue);
-  const offset = comparison?.[0].length ?? 0;
-  const value = readCandidateValue(rawValue.slice(offset), valueFrom + offset);
-  if (!value) {
-    return [];
-  }
-
-  return validateSingleTypedValue(field, type, value.value, value.from, value.to);
+function isTypedFieldType(
+  type: LuceneFieldType
+): type is Extract<LuceneFieldType, 'number' | 'date' | 'time' | 'datetime'> {
+  return type === 'number' || type === 'date' || type === 'time' || type === 'datetime';
 }
 
 function validateSingleTypedValue(
@@ -388,163 +619,6 @@ function isPartialDateValue(value: string): boolean {
   return month >= 1 && month <= 12 && day >= 1 && day <= maxDay;
 }
 
-/**
- * The text of one field value. A range ends at its closing bracket, so the
- * clauses that follow it (`field:[x TO y] AND other`) are not read as part of
- * the range.
- */
-function fieldValueText(rawValue: string): string {
-  if (rawValue[0] !== '[' && rawValue[0] !== '{') {
-    return rawValue;
-  }
-  let quote: string | undefined;
-  for (let index = 1; index < rawValue.length; index += 1) {
-    const char = rawValue[index];
-    if (char === '\\') {
-      index += 1;
-    } else if (quote) {
-      if (char === quote) quote = undefined;
-    } else if (char === '"' || char === "'") {
-      quote = char;
-    } else if (char === ']' || char === '}') {
-      return rawValue.slice(0, index + 1);
-    }
-  }
-  return rawValue;
-}
-
-function readToRange(
-  rawValue: string,
-  valueFrom: number,
-  type: Extract<LuceneFieldType, 'date' | 'time' | 'datetime'>
-): { start: { value: string; from: number; to: number }; end: { value: string; from: number; to: number } } | null {
-  const valuePattern = getValuePattern(type);
-  const endpointPattern = `(?:${valuePattern}|${getQuotedValuePattern()}|\\*)`;
-  const match = new RegExp(`^[\\[{]\\s*(${endpointPattern})\\s+to\\s+(${endpointPattern})\\s*[\\]}]$`, 'i').exec(
-    rawValue
-  );
-  if (!match) {
-    return null;
-  }
-
-  const startOffset = match[0].indexOf(match[1]);
-  const endOffset = match[0].lastIndexOf(match[2]);
-  return {
-    start: {
-      value: match[1],
-      from: valueFrom + startOffset,
-      to: valueFrom + startOffset + match[1].length
-    },
-    end: {
-      value: match[2],
-      from: valueFrom + endOffset,
-      to: valueFrom + endOffset + match[2].length
-    }
-  };
-}
-
-function readCandidateValue(rawValue: string, from: number): { value: string; from: number; to: number } | null {
-  const quoted = readQuotedCandidate(rawValue, from);
-  if (quoted) {
-    return quoted;
-  }
-
-  const candidate = readUnquotedCandidate(rawValue);
-  if (!candidate) {
-    return null;
-  }
-
-  const start = from + candidate.index;
-  return {
-    value: candidate.value,
-    from: start,
-    to: start + candidate.value.length
-  };
-}
-
-function isDateLikeFieldType(type: LuceneFieldType): type is Extract<LuceneFieldType, 'date' | 'time' | 'datetime'> {
-  return type === 'date' || type === 'time' || type === 'datetime';
-}
-
-function getValuePattern(type: Extract<LuceneFieldType, 'number' | 'date' | 'time' | 'datetime'>): string {
-  if (type === 'number') {
-    return '-?(?:\\d+|\\d*\\.\\d+)';
-  }
-
-  if (type === 'date') {
-    return `(?:\\d{4}-\\d{2}-\\d{2}|${getDateMathPattern()})`;
-  }
-
-  if (type === 'time') {
-    return '\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?';
-  }
-
-  return `(?:\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{1,3})?(?:Z|[+-]\\d{2}:?\\d{2})|${getDateMathPattern()})`;
-}
-
-function getDateMathPattern(): string {
-  return 'now(?:[+-]\\d+(?:ms|s|m|h|d|w|M|y))?(?:\\/(?:s|m|h|d|w|M|y))?';
-}
-
-function getQuotedValuePattern(): string {
-  return `(?:"(?:\\\\.|[^"\\\\])*"|'(?:\\\\.|[^'\\\\])*')`;
-}
-
-function readQuotedCandidate(rawValue: string, from: number): { value: string; from: number; to: number } | null {
-  const quote = rawValue[0];
-  if (quote !== '"' && quote !== "'") {
-    return null;
-  }
-
-  for (let index = 1; index < rawValue.length; index += 1) {
-    if (rawValue[index] === '\\') {
-      index += 1;
-      continue;
-    }
-
-    if (rawValue[index] === quote) {
-      return {
-        value: rawValue.slice(0, index + 1),
-        from,
-        to: from + index + 1
-      };
-    }
-  }
-
-  return {
-    value: rawValue,
-    from,
-    to: from + rawValue.length
-  };
-}
-
-function readUnquotedCandidate(rawValue: string): { value: string; index: number } | null {
-  let index = 0;
-  while (index < rawValue.length && /\s/.test(rawValue[index])) {
-    index += 1;
-  }
-
-  if (index >= rawValue.length) {
-    return null;
-  }
-
-  let to = index;
-  while (to < rawValue.length) {
-    if (rawValue[to] === '\\') {
-      to += 2;
-      continue;
-    }
-
-    if (/\s/.test(rawValue[to])) {
-      break;
-    }
-
-    to += 1;
-  }
-
-  return { value: rawValue.slice(index, to), index };
-}
-
 function isQuoted(value: string): boolean {
   return /^(['"]).*\1$/.test(value);
 }
@@ -609,20 +683,22 @@ function isDatetimeValue(value: string, quoted: boolean): boolean {
   return Boolean(localMatch && isDateValue(localMatch[1]) && isTimeValue(localMatch[2]));
 }
 
-function getGroupDiagnostics(value: string): ComponentDiagnostic[] {
-  const stack: number[] = [];
+function getGroupDiagnostics(tokens: readonly LuceneToken[]): ComponentDiagnostic[] {
+  const stack: LuceneToken[] = [];
 
-  for (let index = 0; index < value.length; index += 1) {
-    const char = value[index];
-    if (char === '(') {
-      stack.push(index);
-    } else if (char === ')') {
+  for (const token of tokens) {
+    if (token.type !== 'punctuation') {
+      continue;
+    }
+    if (token.text === '(') {
+      stack.push(token);
+    } else if (token.text === ')') {
       stack.pop();
     }
   }
 
   const firstUnclosed = stack[0];
-  if (firstUnclosed === undefined) {
+  if (!firstUnclosed) {
     return [];
   }
 
@@ -631,29 +707,9 @@ function getGroupDiagnostics(value: string): ComponentDiagnostic[] {
       code: 'unclosedGroup',
       message: '',
       severity: 'error',
-      from: firstUnclosed,
-      to: firstUnclosed + 1,
+      from: firstUnclosed.from,
+      to: firstUnclosed.to,
       params: {}
-    }
-  ];
-}
-
-function getMissingValueDiagnostics(value: string): ComponentDiagnostic[] {
-  const match = /(^|[\s(])([A-Za-z_][\w.-]*)\s*:\s*$/.exec(value);
-  if (!match) {
-    return [];
-  }
-
-  const from = (match.index ?? 0) + match[0].lastIndexOf(':') + 1;
-
-  return [
-    {
-      code: 'missingToken',
-      message: '',
-      severity: 'error',
-      from,
-      to: value.length,
-      params: { expected: 'field value', field: match[2] }
     }
   ];
 }

@@ -2,8 +2,12 @@ import { evaluateDateMath, formatDateMathValue, isDateMathValue } from './date-m
 import { tokenizeLuceneQuery, type LuceneToken } from './syntax-highlighting';
 import type { LuceneField, LuceneFieldType, LuceneSyntaxTree } from './types';
 
-export function buildLuceneSyntaxTree(value: string, fields: LuceneField[] = []): LuceneSyntaxTree {
-  const parser = new SyntaxTreeParser(tokenizeLuceneQuery(value), fields);
+export function buildLuceneSyntaxTree(
+  value: string,
+  fields: LuceneField[] = [],
+  tokens: LuceneToken[] = tokenizeLuceneQuery(value)
+): LuceneSyntaxTree {
+  const parser = new SyntaxTreeParser(tokens, fields);
   return parser.parse();
 }
 
@@ -34,14 +38,14 @@ class SyntaxTreeParser {
     return { type: 'Query', children };
   }
 
-  private parseDefaultExpression(): LuceneSyntaxTree | undefined {
-    let left = this.parseOrExpression();
+  private parseDefaultExpression(fieldType?: LuceneFieldType, inFieldGroup = false): LuceneSyntaxTree | undefined {
+    let left = this.parseOrExpression(fieldType, inFieldGroup);
     if (!left) {
       return undefined;
     }
 
-    while (this.startsPrimary(this.peek())) {
-      const right = this.parseOrExpression();
+    while (this.startsPrimary(this.peek(), inFieldGroup)) {
+      const right = this.parseOrExpression(fieldType, inFieldGroup);
       if (!right) {
         break;
       }
@@ -52,37 +56,37 @@ class SyntaxTreeParser {
     return left;
   }
 
-  private parseOrExpression(): LuceneSyntaxTree | undefined {
-    let left = this.parseAndExpression();
+  private parseOrExpression(fieldType?: LuceneFieldType, inFieldGroup = false): LuceneSyntaxTree | undefined {
+    let left = this.parseAndExpression(fieldType, inFieldGroup);
     if (!left) {
       return undefined;
     }
 
     while (this.matchOperator('OR')) {
       const operator = this.previous();
-      const right = this.parseAndExpression();
+      const right = this.parseAndExpression(fieldType, inFieldGroup);
       left = this.binaryNode(operator.text, left, right ?? this.missingNode(operator.to));
     }
 
     return left;
   }
 
-  private parseAndExpression(): LuceneSyntaxTree | undefined {
-    let left = this.parsePrimaryExpression();
+  private parseAndExpression(fieldType?: LuceneFieldType, inFieldGroup = false): LuceneSyntaxTree | undefined {
+    let left = this.parsePrimaryExpression(fieldType, inFieldGroup);
     if (!left) {
       return undefined;
     }
 
     while (this.matchOperator('AND')) {
       const operator = this.previous();
-      const right = this.parsePrimaryExpression();
+      const right = this.parsePrimaryExpression(fieldType, inFieldGroup);
       left = this.binaryNode(operator.text, left, right ?? this.missingNode(operator.to));
     }
 
     return left;
   }
 
-  private parsePrimaryExpression(): LuceneSyntaxTree | undefined {
+  private parsePrimaryExpression(fieldType?: LuceneFieldType, inFieldGroup = false): LuceneSyntaxTree | undefined {
     const token = this.peek();
     if (!token) {
       return undefined;
@@ -95,12 +99,20 @@ class SyntaxTreeParser {
         operator: token.text,
         from: token.from,
         to: token.to,
-        children: [this.parsePrimaryExpression() ?? this.missingNode(token.to)]
+        children: [this.parsePrimaryExpression(fieldType, inFieldGroup) ?? this.missingNode(token.to)]
       };
     }
 
     if (token.type === 'punctuation' && token.text === '(') {
-      return this.withModifiers(this.parseGroupExpression());
+      return this.withModifiers(this.parseGroupExpression(fieldType, inFieldGroup));
+    }
+
+    if (inFieldGroup && this.isComparisonOperator(token)) {
+      return this.parseFieldComparisonExpression(fieldType);
+    }
+
+    if (inFieldGroup && token.type === 'punctuation' && (token.text === '[' || token.text === '{')) {
+      return this.parseFieldRangeExpression(fieldType);
     }
 
     if (token.type === 'field' && this.peek(1)?.text === ':') {
@@ -108,21 +120,22 @@ class SyntaxTreeParser {
     }
 
     if (this.isTerm(token)) {
-      return this.withModifiers(this.termNode(this.advanceTerm()));
+      return this.withModifiers(this.termNode(this.advanceTerm(), fieldType));
     }
 
     return undefined;
   }
 
-  private parseGroupExpression(): LuceneSyntaxTree {
+  private parseGroupExpression(fieldType?: LuceneFieldType, inFieldGroup = false): LuceneSyntaxTree {
     const open = this.advance();
-    const expression = this.parseDefaultExpression() ?? this.missingNode(open.to);
+    const expression = this.parseDefaultExpression(fieldType, inFieldGroup) ?? this.missingNode(open.to);
     const close = this.peek()?.text === ')' ? this.advance() : undefined;
 
     return {
       type: 'GroupExpression',
       from: open.from,
       to: close?.to ?? expression.to,
+      closed: Boolean(close),
       children: [expression]
     };
   }
@@ -162,7 +175,7 @@ class SyntaxTreeParser {
     }
 
     if (token.type === 'punctuation' && token.text === '(') {
-      return this.withModifiers(this.parseGroupExpression());
+      return this.withModifiers(this.parseGroupExpression(fieldType, true));
     }
 
     if (this.isComparisonOperator(token)) {
@@ -184,37 +197,42 @@ class SyntaxTreeParser {
     const open = this.advance();
     const startToken = this.peek();
     const start =
-      startToken && this.isTerm(startToken) ? this.termNode(this.advanceTerm(), fieldType) : this.missingNode(open.to);
-    const operator = this.peek();
-    if (operator && /^to$/i.test(operator.text)) {
-      this.advance();
-    }
+      startToken && this.isRangeEndpoint(startToken)
+        ? this.termNode(this.advanceTerm(), fieldType)
+        : this.missingNode(open.to);
+    const maybeTo = this.peek();
+    const operatorToken =
+      maybeTo && maybeTo.type === 'operator' && /^to$/i.test(maybeTo.text) ? this.advance() : undefined;
 
     const endToken = this.peek();
     const end =
-      endToken && this.isTerm(endToken)
+      endToken && this.isRangeEndpoint(endToken)
         ? this.termNode(this.advanceTerm(), fieldType)
-        : this.missingNode(operator?.to ?? start.to ?? open.to);
+        : this.missingNode(operatorToken?.to ?? start.to ?? open.to);
     const closeText = this.peek()?.text;
     const close = closeText === ']' || closeText === '}' ? this.advance() : undefined;
 
     return {
       type: 'FieldRangeExpression',
-      operator: operator?.text,
+      ...(operatorToken ? { operator: operatorToken.text } : {}),
       from: open.from,
       to: close?.to ?? end.to,
+      closed: Boolean(close),
       inclusive: [open.text === '[', close?.text !== '}'],
       children: [start, end]
     };
   }
 
-  private startsPrimary(token: LuceneToken | undefined): boolean {
+  private startsPrimary(token: LuceneToken | undefined, inFieldGroup = false): boolean {
     return Boolean(
       token &&
         (this.isUnaryOperator(token) ||
           this.isTerm(token) ||
           (token.type === 'field' && this.peek(1)?.text === ':') ||
-          (token.type === 'punctuation' && token.text === '('))
+          (token.type === 'punctuation' && token.text === '(') ||
+          (inFieldGroup &&
+            (this.isComparisonOperator(token) ||
+              (token.type === 'punctuation' && (token.text === '[' || token.text === '{')))))
     );
   }
 
@@ -226,6 +244,19 @@ class SyntaxTreeParser {
       token.type === 'regex' ||
       token.type === 'wildcard'
     );
+  }
+
+  private isRangeEndpoint(token: LuceneToken): boolean {
+    return (
+      token.type === 'term' ||
+      token.type === 'date' ||
+      token.type === 'string' ||
+      token.type === 'wildcard'
+    );
+  }
+
+  private isComparisonValue(token: LuceneToken): boolean {
+    return token.type === 'term' || token.type === 'date' || token.type === 'string';
   }
 
   private isUnaryOperator(token: LuceneToken): boolean {
@@ -258,7 +289,11 @@ class SyntaxTreeParser {
 
   private parseFieldComparisonExpression(fieldType: LuceneFieldType | undefined): LuceneSyntaxTree {
     const operator = this.advance();
-    const term = this.parseFieldTerm(fieldType) ?? this.missingNode(operator.to);
+    const token = this.peek();
+    const term =
+      token && this.isComparisonValue(token)
+        ? this.withModifiers(this.termNode(this.advanceTerm(), fieldType))
+        : this.missingNode(operator.to);
 
     return {
       type: 'FieldComparisonExpression',

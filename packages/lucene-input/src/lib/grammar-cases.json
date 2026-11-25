@@ -309,6 +309,121 @@
     },
     {
       "query": "occurredAt:[now-1d TO now-1h]"
+    },
+    {
+      "query": "occurredAt:(>=now-7d AND <now)"
+    },
+    {
+      "query": "occurredAt:([now-7d TO now-1d] OR >=now-1h)"
+    },
+    {
+      "query": "occurredAt:now-1d+2h/d"
+    },
+    {
+      "query": "actorLabel:(a AND b AND c)",
+      "tree": {
+        "and": [
+          {
+            "field": "actorLabel",
+            "value": "a"
+          },
+          {
+            "field": "actorLabel",
+            "value": "b"
+          },
+          {
+            "field": "actorLabel",
+            "value": "c"
+          }
+        ]
+      }
+    },
+    {
+      "query": "actorLabel:NOT *",
+      "tree": {
+        "not": {
+          "field": "actorLabel",
+          "value": "*"
+        }
+      }
+    },
+    {
+      "query": "actorLabel:(* OR alice)",
+      "tree": {
+        "or": [
+          {
+            "field": "actorLabel",
+            "value": "*"
+          },
+          {
+            "field": "actorLabel",
+            "value": "alice"
+          }
+        ]
+      }
+    },
+    {
+      "query": "actorLabel:a*b",
+      "tree": {
+        "field": "actorLabel",
+        "value": "a*b"
+      }
+    },
+    {
+      "query": "actorLabel:fo?",
+      "tree": {
+        "field": "actorLabel",
+        "value": "fo?"
+      }
+    },
+    {
+      "query": "actorLabel:a\\*b",
+      "tree": {
+        "field": "actorLabel",
+        "value": "a*b"
+      }
+    },
+    {
+      "query": "how to login",
+      "tree": {
+        "and": [
+          {
+            "text": "how"
+          },
+          {
+            "text": "to"
+          },
+          {
+            "text": "login"
+          }
+        ]
+      }
+    },
+    {
+      "query": "actorLabel:to",
+      "tree": {
+        "field": "actorLabel",
+        "value": "to"
+      }
+    },
+    {
+      "query": "nowhere",
+      "tree": {
+        "text": "nowhere"
+      }
+    },
+    {
+      "query": "not-found",
+      "tree": {
+        "text": "not-found"
+      }
+    },
+    {
+      "query": "userAgent:\"Mozilla (5.0\"",
+      "tree": {
+        "field": "userAgent",
+        "value": "Mozilla (5.0"
+      }
     }
   ],
   "invalid": [
@@ -331,6 +446,17 @@
     "actorLabel:a^2",
     "actorLabel:/re/",
     "occurredAt:[now-1d TO now}",
-    "actorLabel:a)"
+    "actorLabel:\"unterminated",
+    "actorLabel:'unterminated",
+    "()",
+    "actorLabel:()",
+    "(actorLabel:)",
+    "actorLabel:[a TO b",
+    "occurredAt:[now-1d now]",
+    "occurredAt:>=",
+    "occurredAt:> >=now",
+    "occurredAt:> [now-1d TO now]",
+    "occurredAt:2026-11-25T10:30:00Zfoo",
+    "occurredAt:NOT"
   ]
 }

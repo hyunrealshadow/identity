@@ -105,7 +105,7 @@ export function tokenizeLuceneQuery(value: string): LuceneToken[] {
       continue;
     }
 
-    if (char === '*') {
+    if (char === '*' || char === '?') {
       tokens.push(createToken('wildcard', value, index, index + 1));
       index += 1;
       continue;
@@ -264,7 +264,7 @@ function shouldAllowColonInTerm(tokens: LuceneToken[]): boolean {
 
 function readWord(value: string, from: number, allowColon = false): number {
   let index = from;
-  const stopPattern = allowColon ? /[\s()[\]{}!*&|<>~^]/ : /[\s:()[\]{}!*&|<>~^]/;
+  const stopPattern = allowColon ? /[\s()[\]{}!*?&|<>~^]/ : /[\s:()[\]{}!*?&|<>~^]/;
   while (index < value.length && !stopPattern.test(value[index])) {
     if (value[index] === '\\') {
       index += 2;
@@ -276,17 +276,30 @@ function readWord(value: string, from: number, allowColon = false): number {
   return index === from ? from + 1 : index;
 }
 
+function isTermBoundary(char: string | undefined): boolean {
+  return char === undefined || /[\s()[\]{}!&|<>~^"']/.test(char);
+}
+
 function readDateTime(value: string, from: number): number | undefined {
   const match = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:?\d{2})/.exec(
     value.slice(from)
   );
+  if (!match) {
+    return undefined;
+  }
 
-  return match ? from + match[0].length : undefined;
+  const to = from + match[0].length;
+  return isTermBoundary(value[to]) ? to : undefined;
 }
 
 function readTime(value: string, from: number): number | undefined {
   const match = /^\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?/.exec(value.slice(from));
-  return match ? from + match[0].length : undefined;
+  if (!match) {
+    return undefined;
+  }
+
+  const to = from + match[0].length;
+  return isTermBoundary(value[to]) ? to : undefined;
 }
 
 function isQuotedDateLike(value: string): boolean {
@@ -304,7 +317,7 @@ function isDateLike(value: string): boolean {
     /^\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?$/.test(value) ||
     /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,3})?$/.test(value) ||
     /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:?\d{2})$/.test(value) ||
-    /^now(?:[+-]\d+(?:ms|s|m|h|d|w|M|y))?(?:\/(?:s|m|h|d|w|M|y))?$/.test(value)
+    /^now(?:[+-]\d+(?:ms|s|m|h|d|w|M|y))*(?:\/(?:s|m|h|d|w|M|y))?$/.test(value)
   );
 }
 

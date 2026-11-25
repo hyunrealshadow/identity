@@ -285,6 +285,28 @@ describe('lucene syntax tree', () => {
     expect(collect(tree, 'NotExpression')).toEqual([]);
     expect(collect(tree, 'SearchTerm').map((node) => node.value)).toContain('a-b');
   });
+
+  it('parses ? wildcards and comparisons or ranges inside field groups', () => {
+    expect(buildLuceneSyntaxTree('author:fo?')).toMatchObject({
+      type: 'Query',
+      children: [
+        {
+          type: 'Node',
+          children: [{ type: 'Field', value: 'author' }, { type: 'WildcardTerm', value: 'fo?' }]
+        }
+      ]
+    });
+
+    const groupedComparison = buildLuceneSyntaxTree('score:(>=10 OR <5)', [{ name: 'score', type: 'number' }]);
+    expect(collect(groupedComparison, 'FieldComparisonExpression').map((node) => node.operator)).toEqual(['>=', '<']);
+    expect(collect(groupedComparison, 'UnparsedTokens')).toEqual([]);
+
+    const groupedRange = buildLuceneSyntaxTree('published_on:([2024-01-01 TO 2024-12-31])', [
+      { name: 'published_on', type: 'date' }
+    ]);
+    expect(collect(groupedRange, 'FieldRangeExpression')).toHaveLength(1);
+    expect(collect(groupedRange, 'UnparsedTokens')).toEqual([]);
+  });
 });
 
 function collect(tree: ReturnType<typeof buildLuceneSyntaxTree>, type: string): ReturnType<typeof buildLuceneSyntaxTree>[] {

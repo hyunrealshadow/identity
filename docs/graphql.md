@@ -184,14 +184,15 @@ characters, nesting depth 16, and 64 leaf clauses) over fields named after
 The grammar is the Console query input's (`packages/lucene-input`): `AND`/`&&`,
 `OR`/`||`, `NOT`/`!` and a range's `TO` match in any letter case; clauses side
 by side must all match and bind more loosely than `OR` (`a b OR c` is
-`a AND (b OR c)`); ranges are inclusive `[from TO to]`; phrases take `"` or
+`a AND (b OR c)`); field groups (`occurredAt:(>=now-7d AND <now)`) also carry
+comparisons and ranges; ranges are inclusive `[from TO to]`; phrases take `"` or
 `'`, and a backslash makes the next character literal (`a\*`). The input
 also recognizes `+`/`-` prefixes, `{a TO b}` ranges, `/regex/`, `~` and `^`;
 audit queries reject them, and the Console query bar marks them through the
 input's `disabledSyntax`. Both sides run the cases in
 `packages/lucene-input/src/lib/grammar-cases.json`.
-`occurredAt` bare dates and calendar math resolve against `timeZone` (default
-`UTC`). Encrypted cursors bind the category, normalized query, time zone, sort
+`occurredAt` bare dates and multi-step calendar math (`now-1d+2h/d`) resolve against
+`timeZone` (default `UTC`). Encrypted cursors bind the category, normalized query, time zone, sort
 order, and initial `snapshot_at` timestamp so relative ranges such as `now-24h`
 stay consistent across pages. `AuditActor.user` and `AuditActor.client` carry
 separate `@access` guards (`management.user.read` and `management.client.read`)

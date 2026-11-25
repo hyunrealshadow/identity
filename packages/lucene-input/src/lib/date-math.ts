@@ -110,22 +110,23 @@ export function fromZonedDateParts(parts: ZonedDateParts, timeZone?: string): Da
 }
 
 export function isDateMathValue(value: string): boolean {
-  return /^now(?:[+-]\d+(?:ms|s|m|h|d|w|M|y))?(?:\/(?:s|m|h|d|w|M|y))?$/.test(value);
+  return /^now(?:[+-]\d+(?:ms|s|m|h|d|w|M|y))*(?:\/(?:s|m|h|d|w|M|y))?$/.test(value);
 }
 
 export function evaluateDateMath(value: string, referenceDate = new Date(), timeZone?: string): Date | null {
-  const match = /^now(?:([+-])(\d+)(ms|s|m|h|d|w|M|y))?(?:\/(s|m|h|d|w|M|y))?$/.exec(value);
+  const match = /^now((?:[+-]\d+(?:ms|s|m|h|d|w|M|y))*)(?:\/(s|m|h|d|w|M|y))?$/.exec(value);
   if (!match) {
     return null;
   }
 
   let date = new Date(referenceDate.getTime());
-  const direction = match[1];
-  const amount = match[2] ? Number(match[2]) : 0;
-  const mathUnit = match[3];
-  const roundUnit = match[4];
+  const offsetPart = match[1];
+  const roundUnit = match[2];
 
-  if (direction && mathUnit) {
+  for (const step of offsetPart.matchAll(/([+-])(\d+)(ms|s|m|h|d|w|M|y)/g)) {
+    const direction = step[1];
+    const amount = Number(step[2]);
+    const mathUnit = step[3];
     date = addDateMath(date, direction === '-' ? -amount : amount, mathUnit, timeZone);
   }
 

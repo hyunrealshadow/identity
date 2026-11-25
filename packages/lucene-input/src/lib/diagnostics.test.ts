@@ -208,7 +208,12 @@ describe('lucene diagnostics', () => {
 
   it('still checks a range that is followed by more clauses', () => {
     expect(getLuceneDiagnostics('created_at:[yesterday TO now] AND title:a', fields)).toEqual([
-      expect.objectContaining({ code: 'invalidFieldValue', from: 11, params: expect.objectContaining({ field: 'created_at' }) })
+      expect.objectContaining({
+        code: 'invalidFieldValue',
+        from: 12,
+        to: 21,
+        params: expect.objectContaining({ field: 'created_at' })
+      })
     ]);
   });
 
@@ -390,6 +395,79 @@ describe('lucene diagnostics', () => {
     ]);
     expect(getLuceneDiagnostics(':a', fields)).toMatchObject([
       { code: 'unexpectedToken', from: 0, to: 1, params: { token: ':' } }
+    ]);
+  });
+
+  it('ignores parentheses inside quotes or escaped in terms', () => {
+    expect(getLuceneDiagnostics('author:"hello (world"', fields)).toEqual([]);
+    expect(getLuceneDiagnostics(String.raw`title:a\(b`, fields)).toEqual([]);
+  });
+
+  it('reports unclosed quotes, unclosed ranges, missing TO, empty groups, mid-query missing field values, and invalid comparisons', () => {
+    expect(getLuceneDiagnostics('author:"hello', fields)).toMatchObject([
+      { code: 'missingToken', severity: 'error', params: { expected: 'closing quote', delimiter: '"' } }
+    ]);
+    expect(getLuceneDiagnostics("author:'hello", fields, 'zh-CN')).toMatchObject([
+      {
+        code: 'missingToken',
+        severity: 'error',
+        message: "请添加 ' 来结束这段引号内容",
+        params: { expected: 'closing quote', delimiter: "'" }
+      }
+    ]);
+    expect(getLuceneDiagnostics('author:[a TO b', fields, 'zh-CN')).toMatchObject([
+      {
+        code: 'missingToken',
+        severity: 'error',
+        message: '请添加 "]" 来结束这个范围',
+        params: { expected: 'closing bracket', delimiter: ']' }
+      }
+    ]);
+    expect(getLuceneDiagnostics('published_on:[2024-01-01 2024-12-31]', fields, 'zh-CN')).toMatchObject([
+      {
+        code: 'missingToken',
+        severity: 'error',
+        message: '范围的起止值之间请使用 TO',
+        params: { expected: 'TO' }
+      }
+    ]);
+    expect(getLuceneDiagnostics('()', fields, 'zh-CN')).toMatchObject([
+      {
+        code: 'missingToken',
+        severity: 'error',
+        message: '请在分组内输入搜索条件',
+        params: { expected: 'group expression' }
+      }
+    ]);
+    expect(getLuceneDiagnostics('author:()', fields)).toMatchObject([
+      { code: 'missingToken', severity: 'error', params: { expected: 'group expression' } }
+    ]);
+    expect(getLuceneDiagnostics('(author:)', fields)).toMatchObject([
+      { code: 'missingToken', severity: 'error', from: 8, to: 8, params: { expected: 'field value', field: 'author' } }
+    ]);
+    expect(getLuceneDiagnostics('score:> >=10', fields, 'zh-CN')).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: 'missingToken',
+          severity: 'error',
+          message: '请在 > 后输入比较值',
+          params: { expected: 'comparison value', operator: '>' }
+        })
+      ])
+    );
+  });
+
+  it('validates multi-step date math and typed values inside field groups', () => {
+    expect(getLuceneDiagnostics('created_at:now-1d+2h/d', fields)).toEqual([]);
+    expect(getLuceneDiagnostics('created_at:(>=now-7d AND <now)', fields)).toEqual([]);
+    expect(getLuceneDiagnostics('created_at:(>=now-7d AND <bad)', fields)).toEqual([
+      expect.objectContaining({
+        code: 'invalidFieldValue',
+        severity: 'error',
+        from: 26,
+        to: 29,
+        params: { field: 'created_at', expected: 'datetime' }
+      })
     ]);
   });
 });

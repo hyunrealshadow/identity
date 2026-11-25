@@ -182,13 +182,15 @@ pub enum AuditQueryError {
 /// marks a missing or unparsed part, this parser rejects the query.
 ///
 /// ```text
-/// query     := implicit?
-/// implicit  := or or*                       (juxtaposition, lowest precedence)
-/// or        := and (("OR" | "||") and)*
-/// and       := primary (("AND" | "&&") primary)*
-/// primary   := ("NOT" | "!") primary | "(" implicit ")" | field ":" fieldTerm | term
-/// fieldTerm := ("NOT" | "!") fieldTerm | "(" implicit ")" | cmp term
-///            | "[" term "TO" term "]" | term
+/// query      := implicit?
+/// implicit   := or or*                       (juxtaposition, lowest precedence)
+/// or         := and (("OR" | "||") and)*
+/// and        := primary (("AND" | "&&") primary)*
+/// primary    := ("NOT" | "!") primary | "(" implicit ")" | field ":" fieldTerm | term
+/// fieldGroup := ("NOT" | "!") fieldGroup | "(" fieldGroup ")" | field ":" fieldTerm
+///             | cmp term | "[" term "TO" term "]" | term
+/// fieldTerm  := ("NOT" | "!") fieldTerm | "(" fieldGroup ")" | cmp term
+///             | "[" term "TO" term "]" | term
 /// ```
 ///
 /// Keywords match in any letter case; `TO` is a keyword only inside a range.
@@ -433,8 +435,31 @@ fn digits(bytes: &[u8], from: usize, count: usize) -> bool {
     bytes.len() >= from + count && bytes[from..from + count].iter().all(u8::is_ascii_digit)
 }
 
+fn is_term_boundary(rest: &str, len: usize) -> bool {
+    rest[len..].chars().next().is_none_or(|ch| {
+        ch.is_whitespace()
+            || matches!(
+                ch,
+                '(' | ')'
+                    | '['
+                    | ']'
+                    | '{'
+                    | '}'
+                    | '!'
+                    | '&'
+                    | '|'
+                    | '<'
+                    | '>'
+                    | '~'
+                    | '^'
+                    | '"'
+                    | '\''
+            )
+    })
+}
+
 /// `HH:MM:SS` with up to three fractional digits.
-fn read_time(rest: &str) -> Option<usize> {
+fn read_time_prefix(rest: &str) -> Option<usize> {
     let bytes = rest.as_bytes();
     let shape = digits(bytes, 0, 2)
         && bytes.get(2) == Some(&b':')
@@ -458,6 +483,10 @@ fn read_time(rest: &str) -> Option<usize> {
     Some(len)
 }
 
+fn read_time(rest: &str) -> Option<usize> {
+    read_time_prefix(rest).filter(|&len| is_term_boundary(rest, len))
+}
+
 /// An ISO 8601 date and time with a zone, such as `2026-11-19T00:00:00Z`.
 fn read_date_time(rest: &str) -> Option<usize> {
     let bytes = rest.as_bytes();
@@ -470,7 +499,7 @@ fn read_date_time(rest: &str) -> Option<usize> {
     if !date {
         return None;
     }
-    let mut len = 11 + read_time(&rest[11..])?;
+    let mut len = 11 + read_time_prefix(&rest[11..])?;
     match bytes.get(len) {
         Some(b'Z') => len += 1,
         Some(b'+' | b'-') if digits(bytes, len + 1, 2) => {
@@ -485,7 +514,7 @@ fn read_date_time(rest: &str) -> Option<usize> {
         }
         _ => return None,
     }
-    Some(len)
+    is_term_boundary(rest, len).then_some(len)
 }
 
 fn is_field_name(text: &str) -> bool {
@@ -611,11 +640,11 @@ impl Parser {
         Ok(())
     }
 
-    fn starts_primary(&self) -> bool {
+    fn starts_primary(&self, in_field_group: bool) -> bool {
         matches!(
             self.peek(),
             Some(Token::Not | Token::Open | Token::Field(_) | Token::Quoted(_) | Token::Word(_))
-        )
+        ) || (in_field_group && matches!(self.peek(), Some(Token::Cmp(_) | Token::RangeOpen)))
     }
 
     fn starts_field_term(&self) -> bool {
@@ -640,7 +669,7 @@ impl Parser {
         depth: usize,
     ) -> Result<AuditQueryExpr, AuditQueryError> {
         let mut items = vec![self.parse_or(field, depth)?];
-        while self.starts_primary() {
+        while self.starts_primary(field.is_some()) {
             items.push(self.parse_or(field, depth)?);
         }
         Ok(join(items, false))
@@ -682,13 +711,18 @@ impl Parser {
             None => Err(syntax("expected query clause")),
             Some(Token::Not) => {
                 self.advance();
-                if !self.starts_primary() {
+                if !self.starts_primary(field.is_some()) {
                     return Err(syntax("missing operand after unary operator"));
                 }
                 let inner = self.parse_primary(field, depth)?;
                 Ok(AuditQueryExpr::Not(Box::new(inner)))
             }
             Some(Token::Open) => self.parse_group(field, depth),
+            Some(&Token::Cmp(op)) if field.is_some() => {
+                self.advance();
+                self.parse_comparison(field.expect("checked"), op)
+            }
+            Some(Token::RangeOpen) if field.is_some() => self.parse_range(field.expect("checked")),
             Some(Token::Field(name)) => {
                 let name = name.clone();
                 self.advance();
@@ -750,25 +784,7 @@ impl Parser {
             Some(Token::Open) => self.parse_group(Some(field), depth),
             Some(&Token::Cmp(op)) => {
                 self.advance();
-                let Some(value) = self.take_value() else {
-                    return Err(syntax(if self.peek() == Some(&Token::RangeOpen) {
-                        "unexpected bracket after comparison operator"
-                    } else {
-                        "missing value after comparison operator"
-                    }));
-                };
-                if !field.is_date() {
-                    return Err(AuditQueryError::UnsupportedOperator {
-                        field: field.as_str(),
-                    });
-                }
-                value.check_supported()?;
-                let text = value.text();
-                if text.is_empty() {
-                    return Err(AuditQueryError::InvalidDateValue { value: text });
-                }
-                self.record_clause()?;
-                build_occurred_at_cmp(op, &text, self.reference_now, self.tz)
+                self.parse_comparison(field, op)
             }
             Some(Token::RangeOpen) => self.parse_range(field),
             Some(Token::Quoted(_) | Token::Word(_)) => {
@@ -780,6 +796,32 @@ impl Parser {
             )),
             _ => Err(syntax("missing value after field colon")),
         }
+    }
+
+    fn parse_comparison(
+        &mut self,
+        field: AuditQueryField,
+        op: CmpOp,
+    ) -> Result<AuditQueryExpr, AuditQueryError> {
+        let Some(value) = self.take_value() else {
+            return Err(syntax(if self.peek() == Some(&Token::RangeOpen) {
+                "unexpected bracket after comparison operator"
+            } else {
+                "missing value after comparison operator"
+            }));
+        };
+        if !field.is_date() {
+            return Err(AuditQueryError::UnsupportedOperator {
+                field: field.as_str(),
+            });
+        }
+        value.check_supported()?;
+        let text = value.text();
+        if text.is_empty() {
+            return Err(AuditQueryError::InvalidDateValue { value: text });
+        }
+        self.record_clause()?;
+        build_occurred_at_cmp(op, &text, self.reference_now, self.tz)
     }
 
     /// `[start TO end]`, both ends inclusive.
@@ -1210,13 +1252,16 @@ fn parse_date_math(
                     value: raw.to_owned(),
                 })?;
         rest = &rest[digits_len..];
-        let unit = rest
-            .chars()
-            .next()
-            .ok_or_else(|| AuditQueryError::InvalidDateValue {
+        let (unit, unit_len) = if rest.starts_with("ms") {
+            ("ms", 2)
+        } else if let Some(ch) = rest.chars().next() {
+            (&rest[..ch.len_utf8()], ch.len_utf8())
+        } else {
+            return Err(AuditQueryError::InvalidDateValue {
                 value: raw.to_owned(),
-            })?;
-        rest = &rest[unit.len_utf8()..];
+            });
+        };
+        rest = &rest[unit_len..];
         current = apply_date_math_offset(current, tz, sign == '+', amount, unit, raw)?;
     }
 
@@ -1250,29 +1295,34 @@ fn apply_date_math_offset(
     tz: Tz,
     add: bool,
     amount: u32,
-    unit: char,
+    unit: &str,
     raw: &str,
 ) -> Result<DateTime<Utc>, AuditQueryError> {
     let amount_i64 = i64::from(amount);
     let delta_i64 = if add { amount_i64 } else { -amount_i64 };
     match unit {
-        's' => instant
+        "ms" => instant
+            .checked_add_signed(Duration::milliseconds(delta_i64))
+            .ok_or_else(|| AuditQueryError::InvalidDateValue {
+                value: raw.to_owned(),
+            }),
+        "s" => instant
             .checked_add_signed(Duration::seconds(delta_i64))
             .ok_or_else(|| AuditQueryError::InvalidDateValue {
                 value: raw.to_owned(),
             }),
-        'm' => instant
+        "m" => instant
             .checked_add_signed(Duration::minutes(delta_i64))
             .ok_or_else(|| AuditQueryError::InvalidDateValue {
                 value: raw.to_owned(),
             }),
-        'h' => instant
+        "h" => instant
             .checked_add_signed(Duration::hours(delta_i64))
             .ok_or_else(|| AuditQueryError::InvalidDateValue {
                 value: raw.to_owned(),
             }),
-        'd' | 'w' => {
-            let days = if unit == 'w' {
+        "d" | "w" => {
+            let days = if unit == "w" {
                 amount.checked_mul(7)
             } else {
                 Some(amount)
@@ -1294,7 +1344,7 @@ fn apply_date_math_offset(
                 NaiveDateTime::new(date, local.time()),
             ))
         }
-        'M' => {
+        "M" => {
             let local = instant.with_timezone(&tz).naive_local();
             let date = if add {
                 local.date().checked_add_months(Months::new(amount))
@@ -1309,7 +1359,7 @@ fn apply_date_math_offset(
                 NaiveDateTime::new(date, local.time()),
             ))
         }
-        'y' => {
+        "y" => {
             let months =
                 amount
                     .checked_mul(12)
@@ -1781,6 +1831,77 @@ mod tests {
         assert!(matches!(
             parse_audit_query("action:\"unterminated", ref_now(), utc()).unwrap_err(),
             AuditQueryError::SyntaxError { .. }
+        ));
+    }
+
+    #[test]
+    fn field_groups_support_comparisons_ranges_and_multi_step_date_math() {
+        let now = Utc.with_ymd_and_hms(2026, 11, 20, 10, 30, 45).unwrap();
+        let grouped = parse_audit_query("occurredAt:(>=now-7d AND <now)", now, utc()).unwrap();
+        assert_eq!(
+            grouped,
+            AuditQueryExpr::And(vec![
+                AuditQueryExpr::OccurredAtRange {
+                    min: Some(AuditTimeBound {
+                        instant: now - Duration::days(7),
+                        inclusive: true,
+                    }),
+                    max: None,
+                },
+                AuditQueryExpr::OccurredAtRange {
+                    min: None,
+                    max: Some(AuditTimeBound {
+                        instant: now,
+                        inclusive: false,
+                    }),
+                },
+            ])
+        );
+
+        let grouped_or_range =
+            parse_audit_query("occurredAt:([now-7d TO now-1d] OR >=now-1h)", now, utc()).unwrap();
+        assert_eq!(
+            grouped_or_range,
+            AuditQueryExpr::Or(vec![
+                AuditQueryExpr::OccurredAtRange {
+                    min: Some(AuditTimeBound {
+                        instant: now - Duration::days(7),
+                        inclusive: true,
+                    }),
+                    max: Some(AuditTimeBound {
+                        instant: now - Duration::days(1),
+                        inclusive: true,
+                    }),
+                },
+                AuditQueryExpr::OccurredAtRange {
+                    min: Some(AuditTimeBound {
+                        instant: now - Duration::hours(1),
+                        inclusive: true,
+                    }),
+                    max: None,
+                },
+            ])
+        );
+
+        let multi_math = parse_audit_query("occurredAt:now-1d+2h-500ms/s", now, utc()).unwrap();
+        let expected_instant = Utc.with_ymd_and_hms(2026, 11, 19, 12, 30, 44).unwrap();
+        assert_eq!(
+            multi_math,
+            AuditQueryExpr::OccurredAtRange {
+                min: Some(AuditTimeBound {
+                    instant: expected_instant,
+                    inclusive: true,
+                }),
+                max: Some(AuditTimeBound {
+                    instant: expected_instant,
+                    inclusive: true,
+                }),
+            }
+        );
+
+        assert!(matches!(
+            parse_audit_query("occurredAt:2026-11-25T10:30:00Zfoo", now, utc()).unwrap_err(),
+            AuditQueryError::InvalidDateValue { .. }
         ));
     }
 }

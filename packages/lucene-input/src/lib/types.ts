@@ -108,6 +108,8 @@ export type LuceneSyntaxTree = {
   from?: number;
   to?: number;
   children?: LuceneSyntaxTree[];
+  /** Whether a group or range has its closing delimiter. */
+  closed?: boolean;
   /** Whether a range includes its start and its end. */
   inclusive?: [boolean, boolean];
 };

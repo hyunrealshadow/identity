@@ -8,6 +8,7 @@ describe('date math', () => {
     expect(isDateMathValue('now')).toBe(true);
     expect(isDateMathValue('now-5m')).toBe(true);
     expect(isDateMathValue('now-7d/d')).toBe(true);
+    expect(isDateMathValue('now-1d+2h/d')).toBe(true);
     expect(isDateMathValue('today')).toBe(false);
   });
 
@@ -19,6 +20,12 @@ describe('date math', () => {
       '2026-05-15 10:25:45'
     );
     expect(formatDateMathValue(evaluateDateMath('now-7d/d', reference)!, 'date')).toBe('2026-05-08');
+    expect(formatDateMathValue(evaluateDateMath('now-1d+2h/d', reference)!, 'datetime', { quoteDatetime: false })).toBe(
+      '2026-05-14 00:00:00'
+    );
+    expect(formatDateMathValue(evaluateDateMath('now-1d+2h', reference)!, 'datetime', { quoteDatetime: false })).toBe(
+      '2026-05-14 12:30:45'
+    );
   });
 
   it('evaluates and formats date math in an explicit IANA timeZone', () => {
