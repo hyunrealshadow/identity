@@ -20,7 +20,10 @@ use tracing::{Instrument, info, info_span, warn};
 use uuid::Uuid;
 
 use super::spawn_until_shutdown;
+use identity_domain::email::{EmailDeliveryFailure, EmailDeliveryReport};
+
 use crate::{
+    database::repository::account_challenge::record_delivery,
     email::{EMAIL_QUEUE, EmailJob},
     state::AppState,
 };
@@ -34,7 +37,8 @@ const RETRY_DELAYS: [Duration; 4] = [
 ];
 
 /// Failures that another attempt cannot fix; an operator has to change the
-/// delivery settings or the address first.
+/// delivery settings or the address first. Only a transport failure may
+/// pass.
 fn permanent(error: &EmailDeliveryError) -> bool {
     !matches!(error, EmailDeliveryError::Transport { .. })
 }
@@ -53,11 +57,54 @@ fn report(kind: &str, outcome: &'static str, reason: Option<&'static str>, attem
     event_sink().emit(event);
 }
 
+/// The bounded failure a delivery error stands for.
+const fn failure_of(error: &EmailDeliveryError) -> EmailDeliveryFailure {
+    match error {
+        EmailDeliveryError::NotConfigured => EmailDeliveryFailure::NotConfigured,
+        EmailDeliveryError::InvalidAddress => EmailDeliveryFailure::InvalidAddress,
+        EmailDeliveryError::SecretUnavailable => EmailDeliveryFailure::SecretUnavailable,
+        EmailDeliveryError::Authentication { .. } => EmailDeliveryFailure::AuthenticationFailed,
+        EmailDeliveryError::Rejected { .. } => EmailDeliveryFailure::Rejected,
+        EmailDeliveryError::Transport { .. } => EmailDeliveryFailure::TransportFailed,
+    }
+}
+
+const fn reason_of(failure: EmailDeliveryFailure) -> &'static str {
+    match failure {
+        EmailDeliveryFailure::Expired => "expired",
+        EmailDeliveryFailure::NotConfigured => "not_configured",
+        EmailDeliveryFailure::InvalidAddress => "invalid_address",
+        EmailDeliveryFailure::AuthenticationFailed => "authentication_failed",
+        EmailDeliveryFailure::Rejected => "rejected",
+        EmailDeliveryFailure::TransportFailed => "transport_failed",
+        EmailDeliveryFailure::SecretUnavailable => "secret_unavailable",
+        EmailDeliveryFailure::MessageUnreadable => "message_unreadable",
+    }
+}
+
+/// Record the outcome on the challenge the message carries a link of, so
+/// administrators can see it. A failure to record it is only logged.
+async fn record(state: &AppState, job: &EmailJob, report: EmailDeliveryReport) {
+    let Some(oid) = job.report_to else {
+        return;
+    };
+    if let Err(error) = record_delivery(state.resources().db(), oid, &report).await {
+        warn!(email_kind = %job.kind, error = %error, "email delivery outcome not recorded");
+    }
+}
+
 /// Stop working on the message. The recorded error is a bounded reason,
 /// never the message.
-fn give_up(job: &EmailJob, reason: &'static str, attempts: usize) -> BoxDynError {
+async fn give_up(
+    state: &AppState,
+    job: &EmailJob,
+    failure: EmailDeliveryFailure,
+    attempts: usize,
+) -> BoxDynError {
+    let reason = reason_of(failure);
     warn!(email_kind = %job.kind, reason, attempts, "queued email given up");
     report(&job.kind, "abandoned", Some(reason), attempts);
+    record(state, job, EmailDeliveryReport::failed(failure, Utc::now())).await;
     Box::new(AbortError::new(reason))
 }
 
@@ -67,12 +114,16 @@ async fn deliver(job: EmailJob, state: Data<AppState>) -> Result<(), BoxDynError
         let services = state.services();
         let message = match services.email_queue().open(&job).await {
             Ok(message) => message,
-            Err(reason) => return Err(give_up(&job, reason, 0)),
+            Err(_) => {
+                return Err(
+                    give_up(&state, &job, EmailDeliveryFailure::MessageUnreadable, 0).await,
+                );
+            }
         };
         let mut attempts = 0;
         loop {
             if Utc::now() >= job.expires_at {
-                return Err(give_up(&job, "expired", attempts));
+                return Err(give_up(&state, &job, EmailDeliveryFailure::Expired, attempts).await);
             }
             // The settings in force now, not when the message was queued.
             let delivery = state
@@ -81,7 +132,9 @@ async fn deliver(job: EmailJob, state: Data<AppState>) -> Result<(), BoxDynError
                 .snapshot()
                 .section::<EmailDeliverySettings>();
             if !delivery.is_configured() {
-                return Err(give_up(&job, "not_configured", attempts));
+                return Err(
+                    give_up(&state, &job, EmailDeliveryFailure::NotConfigured, attempts).await,
+                );
             }
             attempts += 1;
             match services
@@ -92,14 +145,15 @@ async fn deliver(job: EmailJob, state: Data<AppState>) -> Result<(), BoxDynError
                 Ok(()) => {
                     info!(email_kind = %job.kind, attempts, "queued email delivered");
                     report(&job.kind, "delivered", None, attempts);
+                    record(&state, &job, EmailDeliveryReport::delivered(Utc::now())).await;
                     return Ok(());
                 }
                 Err(error) if permanent(&error) => {
-                    return Err(give_up(&job, error.reason(), attempts));
+                    return Err(give_up(&state, &job, failure_of(&error), attempts).await);
                 }
                 Err(error) => {
                     let Some(delay) = RETRY_DELAYS.get(attempts - 1) else {
-                        return Err(give_up(&job, error.reason(), attempts));
+                        return Err(give_up(&state, &job, failure_of(&error), attempts).await);
                     };
                     warn!(
                         email_kind = %job.kind,

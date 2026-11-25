@@ -293,6 +293,9 @@ impl EmailSender for SmtpEmailSender {
                         .is_some_and(|code| code.to_string().starts_with("535"))
                     {
                         EmailDeliveryError::Authentication { detail }
+                    } else if error.is_permanent() {
+                        // Another attempt would be refused the same way.
+                        EmailDeliveryError::Rejected { detail }
                     } else {
                         EmailDeliveryError::Transport { detail }
                     }

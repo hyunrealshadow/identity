@@ -34,6 +34,9 @@ query ConsoleUsers(
         failedAttempts
         invitation {
           expiresAt
+          delivery {
+            status
+          }
         }
         version
         createdAt
@@ -57,6 +60,11 @@ query ConsoleUser($id: ID!) {
     invitation {
       sentAt
       expiresAt
+      delivery {
+        status
+        failure
+        updatedAt
+      }
     }
     authenticationMethods {
       password
@@ -97,6 +105,11 @@ mutation ConsoleSendUserInvitation($input: SendUserInvitationInput!) {
     invitation {
       sentAt
       expiresAt
+      delivery {
+        status
+        failure
+        updatedAt
+      }
     }
   }
 }

@@ -180,7 +180,7 @@ impl EmailVerificationRepository for EmailVerificationRepositoryImpl {
         .map_err(query_failed)?;
         let model = Verification { model, state };
         self.email_queue
-            .enqueue(&txn, &request.message)
+            .enqueue(&txn, &request.message, None)
             .await
             .map_err(query_failed)?;
         txn.commit().await.map_err(query_failed)?;

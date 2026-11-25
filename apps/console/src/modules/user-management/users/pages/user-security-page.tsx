@@ -12,7 +12,7 @@ import { Skeleton } from '@identity/ui/components/skeleton'
 import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
 import { DataTable, type DataTableColumn } from '@identity/ui/data-table'
 import { ExternalLink, KeyRound, LogOut, Mail, ShieldOff, TriangleAlert } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
 import { ConfirmationDialog } from '#/components/confirmation-dialog'
@@ -23,7 +23,7 @@ import {
   type ConsoleUserSessionsQuery,
   type ConsoleUserSessionsQueryVariables,
 } from '#/generated/graphql'
-import type { UserRequiredAction } from '#/generated/graphql'
+import type { EmailDeliveryFailure, UserRequiredAction } from '#/generated/graphql'
 import { useAuth } from '#/lib/auth/context'
 import { formatDateTime } from '#/lib/format'
 import {
@@ -50,6 +50,21 @@ type Session = NonNullable<
 
 /** At most this many sessions are listed; revoking all covers the rest. */
 const SESSION_PAGE_SIZE = 50
+
+/** While an invitation email is queued, its status is read again this often, a few times. */
+const QUEUED_REFRESH_MS = 3_000
+const QUEUED_REFRESH_LIMIT = 10
+
+const DELIVERY_FAILURE_KEYS: Record<EmailDeliveryFailure, MessageKey> = {
+  EXPIRED: 'usersInvitationFailureExpired',
+  NOT_CONFIGURED: 'usersInvitationFailureNotConfigured',
+  INVALID_ADDRESS: 'usersInvitationFailureInvalidAddress',
+  AUTHENTICATION_FAILED: 'usersInvitationFailureAuthentication',
+  REJECTED: 'usersInvitationFailureRejected',
+  TRANSPORT_FAILED: 'usersInvitationFailureTransport',
+  SECRET_UNAVAILABLE: 'usersInvitationFailureSecret',
+  MESSAGE_UNREADABLE: 'usersInvitationFailureUnreadable',
+}
 
 type Confirm = 'resetPassword' | 'resetMfa' | 'revokeAll' | { session: Session }
 
@@ -162,6 +177,24 @@ export function UserSecurityPage() {
   const [temporaryPassword, setTemporaryPassword] = useState<string | null>(null)
   const confirmDialog = useOverlayState()
   const revealDialog = useOverlayState()
+
+  // A queued invitation email is usually delivered within seconds; follow it
+  // for a short while so the panel shows the outcome.
+  const invitation = user?.invitation ?? null
+  const queuedRefreshes = useRef(0)
+  const refreshDetail = detail.refresh
+  useEffect(() => {
+    if (invitation?.delivery.status !== 'QUEUED') {
+      queuedRefreshes.current = 0
+      return
+    }
+    if (queuedRefreshes.current >= QUEUED_REFRESH_LIMIT) return
+    const timer = window.setTimeout(() => {
+      queuedRefreshes.current += 1
+      void refreshDetail()
+    }, QUEUED_REFRESH_MS)
+    return () => window.clearTimeout(timer)
+  }, [invitation, refreshDetail])
 
   if (!user) {
     if (detail.status === 'idle' || detail.status === 'loading') {
@@ -404,6 +437,13 @@ export function UserSecurityPage() {
                       })
                   : t('usersInvitationNone')}
               </p>
+              {user.invitation ? (
+                <InvitationDeliveryLine
+                  delivery={user.invitation.delivery}
+                  locale={locale}
+                  timeZone={timeZone}
+                />
+              ) : null}
             </div>
             {scope.credentials && !selfTarget ? (
               <Button
@@ -584,5 +624,41 @@ export function UserSecurityPage() {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+function InvitationDeliveryLine({
+  delivery,
+  locale,
+  timeZone,
+}: {
+  delivery: { status: string; failure?: EmailDeliveryFailure | null; updatedAt: string }
+  locale: Parameters<typeof formatDateTime>[1]
+  timeZone: Parameters<typeof formatDateTime>[2]
+}) {
+  const t = useTranslator()
+  const at = formatDateTime(delivery.updatedAt, locale, timeZone)
+  if (delivery.status === 'DELIVERED') {
+    return (
+      <p className="text-xs leading-5 text-success">
+        {t('usersInvitationDelivered', { at })}
+      </p>
+    )
+  }
+  if (delivery.status === 'FAILED') {
+    return (
+      <p className="flex items-start gap-1.5 text-xs leading-5 text-destructive" role="status">
+        <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
+        {t('usersInvitationFailed', {
+          at,
+          reason: t(delivery.failure ? DELIVERY_FAILURE_KEYS[delivery.failure] : 'usersInvitationFailureTransport'),
+        })}
+      </p>
+    )
+  }
+  return (
+    <p className="text-xs leading-5 text-muted-foreground" role="status">
+      {t('usersInvitationQueued')}
+    </p>
   )
 }

@@ -12,6 +12,7 @@ use identity_domain::email::{EmailMessage, OutboundEmail};
 use sea_orm::{ConnectionTrait, DbBackend, DbErr, Statement};
 use serde::{Deserialize, Serialize};
 use ulid::Ulid;
+use uuid::Uuid;
 
 /// The job queue that delivers outgoing email.
 pub const EMAIL_QUEUE: &str = "identity.email";
@@ -26,6 +27,10 @@ pub struct EmailJob {
     pub kind: String,
     pub expires_at: DateTime<Utc>,
     pub message: String,
+    /// The account challenge whose link the message carries; its delivery
+    /// outcome is recorded there.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub report_to: Option<Uuid>,
 }
 
 impl std::fmt::Debug for EmailJob {
@@ -66,11 +71,13 @@ impl EmailQueue {
     }
 
     /// Queue `email` inside the caller's transaction; it is delivered only
-    /// if the transaction commits.
+    /// if the transaction commits. The outcome is recorded on the account
+    /// challenge `report_to` when given.
     pub async fn enqueue(
         &self,
         connection: &impl ConnectionTrait,
         email: &OutboundEmail,
+        report_to: Option<Uuid>,
     ) -> Result<(), DbErr> {
         let plain = serde_json::to_vec(&email.message).map_err(failed)?;
         let message = self
@@ -82,6 +89,7 @@ impl EmailQueue {
             kind: email.kind.to_owned(),
             expires_at: email.expires_at,
             message,
+            report_to,
         })
         .map_err(failed)?;
         // The columns apalis-postgres writes for a new task; the queue's own

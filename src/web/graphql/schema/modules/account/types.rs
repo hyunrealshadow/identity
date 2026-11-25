@@ -423,6 +423,8 @@ pub(crate) struct UserInvitation {
     pub sent_at: DateTime<Utc>,
     /// When the link stops working. Send the invitation again after that.
     pub expires_at: DateTime<Utc>,
+    /// Where the latest invitation email stands.
+    pub delivery: EmailDelivery,
 }
 
 impl From<identity_application::user::invitation::UserInvitationStatus> for UserInvitation {
@@ -430,6 +432,68 @@ impl From<identity_application::user::invitation::UserInvitationStatus> for User
         Self {
             sent_at: value.sent_at,
             expires_at: value.expires_at,
+            delivery: value.delivery.into(),
+        }
+    }
+}
+
+/// Where a queued email stands.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]
+#[graphql(
+    name = "EmailDeliveryStatus",
+    remote = "identity_domain::email::EmailDeliveryStatus"
+)]
+pub(crate) enum EmailDeliveryStatus {
+    /// Waiting for, or being tried by, the delivery worker.
+    Queued,
+    /// The mail server accepted it.
+    Delivered,
+    /// Given up; `failure` says why.
+    Failed,
+}
+
+/// Why a queued email was given up.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]
+#[graphql(
+    name = "EmailDeliveryFailure",
+    remote = "identity_domain::email::EmailDeliveryFailure"
+)]
+pub(crate) enum EmailDeliveryFailure {
+    /// What it carried stopped working before it could be sent.
+    Expired,
+    /// Email delivery was turned off or is incomplete.
+    NotConfigured,
+    /// The mail server refused the address.
+    InvalidAddress,
+    /// The mail server refused the instance's credentials.
+    AuthenticationFailed,
+    /// The mail server refused the message for good, for example an
+    /// unknown recipient.
+    Rejected,
+    /// The mail server could not be reached or kept failing.
+    TransportFailed,
+    /// The stored delivery secret could not be read.
+    SecretUnavailable,
+    /// The queued message could not be read back.
+    MessageUnreadable,
+}
+
+/// The latest delivery outcome of an email.
+#[derive(async_graphql::SimpleObject)]
+pub(crate) struct EmailDelivery {
+    pub status: EmailDeliveryStatus,
+    /// Set when `status` is `FAILED`.
+    pub failure: Option<EmailDeliveryFailure>,
+    /// When the status was reached.
+    pub updated_at: DateTime<Utc>,
+}
+
+impl From<identity_domain::email::EmailDeliveryReport> for EmailDelivery {
+    fn from(value: identity_domain::email::EmailDeliveryReport) -> Self {
+        Self {
+            status: value.status.into(),
+            failure: value.failure.map(Into::into),
+            updated_at: value.at,
         }
     }
 }

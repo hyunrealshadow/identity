@@ -368,7 +368,7 @@ impl ChallengeRepository for ChallengeRepositoryImpl {
 
         if let (Some(email), Some(queue)) = (&email, &email_queue) {
             queue
-                .enqueue(&txn, email)
+                .enqueue(&txn, email, None)
                 .await
                 .map_err(AppError::internal)?;
         }

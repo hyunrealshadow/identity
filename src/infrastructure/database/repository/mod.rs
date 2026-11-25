@@ -1,4 +1,4 @@
-mod account_challenge;
+pub mod account_challenge;
 pub mod audit_query;
 pub mod authorization;
 pub(crate) mod authorization_lifecycle;

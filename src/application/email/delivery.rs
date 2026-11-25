@@ -23,6 +23,10 @@ pub enum EmailDeliveryError {
     SecretUnavailable,
     #[error("authentication with the mail server failed: {detail}")]
     Authentication { detail: String },
+    /// The mail server refused the message for good (a 5xx reply other
+    /// than failed authentication), for example an unknown recipient.
+    #[error("the mail server rejected the message: {detail}")]
+    Rejected { detail: String },
     #[error("email delivery failed: {detail}")]
     Transport { detail: String },
 }
@@ -36,6 +40,7 @@ impl EmailDeliveryError {
             Self::InvalidAddress => "invalid_address",
             Self::SecretUnavailable => "secret_unavailable",
             Self::Authentication { .. } => "authentication_failed",
+            Self::Rejected { .. } => "rejected",
             Self::Transport { .. } => "transport_failed",
         }
     }
@@ -43,7 +48,9 @@ impl EmailDeliveryError {
     #[must_use]
     pub fn detail(&self) -> Option<&str> {
         match self {
-            Self::Authentication { detail } | Self::Transport { detail } => Some(detail),
+            Self::Authentication { detail }
+            | Self::Rejected { detail }
+            | Self::Transport { detail } => Some(detail),
             _ => None,
         }
     }

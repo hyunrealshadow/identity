@@ -7,7 +7,10 @@
 //! changes of one account are serialized.
 
 use chrono::{DateTime, Utc};
-use identity_domain::auth::challenge::{ChallengeMethod, ChallengePurpose, DeliveryCounter};
+use identity_domain::{
+    auth::challenge::{ChallengeMethod, ChallengePurpose, DeliveryCounter},
+    email::EmailDeliveryReport,
+};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DbErr, EntityTrait, QueryFilter, Set,
 };
@@ -158,4 +161,24 @@ pub(super) async fn discard(
         .exec(connection)
         .await?;
     Ok(result.rows_affected > 0)
+}
+
+/// Record the delivery outcome of the email that carries the link of the
+/// account challenge `oid`. A link replaced since has a new `oid`, so a late
+/// outcome of an older email changes nothing.
+pub async fn record_delivery(
+    connection: &impl ConnectionTrait,
+    oid: Uuid,
+    report: &EmailDeliveryReport,
+) -> Result<(), DbErr> {
+    let report = serde_json::to_value(report).map_err(|error| DbErr::Custom(error.to_string()))?;
+    connection
+        .execute_raw(sea_orm::Statement::from_sql_and_values(
+            sea_orm::DbBackend::Postgres,
+            "UPDATE authentication_challenge SET state = jsonb_set(state, '{delivery}', $2) \
+             WHERE oid = $1 AND login_id IS NULL AND session_id IS NULL",
+            [oid.into(), report.into()],
+        ))
+        .await?;
+    Ok(())
 }

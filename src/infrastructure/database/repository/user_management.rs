@@ -1511,6 +1511,9 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
             invitation: UserInvitationStatus {
                 sent_at: command.invitation.sent_at,
                 expires_at: command.invitation.expires_at,
+                delivery: identity_domain::email::EmailDeliveryReport::queued(
+                    command.invitation.sent_at,
+                ),
             },
         })
     }

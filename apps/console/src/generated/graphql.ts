@@ -466,6 +466,37 @@ export type EmailAuthenticationMethod =
   /** An OAuth 2.0 access token (`AUTH XOAUTH2`). */
   | 'XOAUTH2';
 
+/** Why a queued email was given up. */
+export type EmailDeliveryFailure =
+  /** The mail server refused the instance's credentials. */
+  | 'AUTHENTICATION_FAILED'
+  /** What it carried stopped working before it could be sent. */
+  | 'EXPIRED'
+  /** The mail server refused the address. */
+  | 'INVALID_ADDRESS'
+  /** The queued message could not be read back. */
+  | 'MESSAGE_UNREADABLE'
+  /** Email delivery was turned off or is incomplete. */
+  | 'NOT_CONFIGURED'
+  /**
+   * The mail server refused the message for good, for example an
+   * unknown recipient.
+   */
+  | 'REJECTED'
+  /** The stored delivery secret could not be read. */
+  | 'SECRET_UNAVAILABLE'
+  /** The mail server could not be reached or kept failing. */
+  | 'TRANSPORT_FAILED';
+
+/** Where a queued email stands. */
+export type EmailDeliveryStatus =
+  /** The mail server accepted it. */
+  | 'DELIVERED'
+  /** Given up; `failure` says why. */
+  | 'FAILED'
+  /** Waiting for, or being tried by, the delivery worker. */
+  | 'QUEUED';
+
 export type EmailTemplateContentInput = {
   html: string;
   subject: string;
@@ -1622,14 +1653,14 @@ export type ConsoleUsersQueryVariables = Exact<{
 }>;
 
 
-export type ConsoleUsersQuery = { users: { totalCount: number, pageInfo: { hasNextPage: boolean, hasPreviousPage: boolean, startCursor: string | null, endCursor: string | null }, edges: Array<{ cursor: string, node: { id: string, username: string, email: string, emailVerified: boolean, enabled: boolean | null, locked: boolean | null, lockedUntil: string | null, failedAttempts: number | null, version: string, createdAt: string, updatedAt: string | null, invitation: { expiresAt: string } | null } }> } };
+export type ConsoleUsersQuery = { users: { totalCount: number, pageInfo: { hasNextPage: boolean, hasPreviousPage: boolean, startCursor: string | null, endCursor: string | null }, edges: Array<{ cursor: string, node: { id: string, username: string, email: string, emailVerified: boolean, enabled: boolean | null, locked: boolean | null, lockedUntil: string | null, failedAttempts: number | null, version: string, createdAt: string, updatedAt: string | null, invitation: { expiresAt: string, delivery: { status: EmailDeliveryStatus } } | null } }> } };
 
 export type ConsoleUserQueryVariables = Exact<{
   id: string | number;
 }>;
 
 
-export type ConsoleUserQuery = { user: { id: string, username: string, email: string, emailVerified: boolean, enabled: boolean | null, locked: boolean | null, lockedUntil: string | null, failedAttempts: number | null, requiredActions: Array<UserRequiredAction> | null, version: string, givenName: string | null, familyName: string | null, middleName: string | null, nickname: string | null, profile: string | null, picture: string | null, website: string | null, birthdate: string | null, locale: string | null, theme: string | null, createdAt: string, updatedAt: string | null, invitation: { sentAt: string, expiresAt: string } | null, authenticationMethods: { password: boolean, authenticatorApp: boolean, recoveryCodes: boolean, passkey: boolean } | null } | null };
+export type ConsoleUserQuery = { user: { id: string, username: string, email: string, emailVerified: boolean, enabled: boolean | null, locked: boolean | null, lockedUntil: string | null, failedAttempts: number | null, requiredActions: Array<UserRequiredAction> | null, version: string, givenName: string | null, familyName: string | null, middleName: string | null, nickname: string | null, profile: string | null, picture: string | null, website: string | null, birthdate: string | null, locale: string | null, theme: string | null, createdAt: string, updatedAt: string | null, invitation: { sentAt: string, expiresAt: string, delivery: { status: EmailDeliveryStatus, failure: EmailDeliveryFailure | null, updatedAt: string } } | null, authenticationMethods: { password: boolean, authenticatorApp: boolean, recoveryCodes: boolean, passkey: boolean } | null } | null };
 
 export type ConsoleUserInvitationsAvailableQueryVariables = Exact<{ [key: string]: never; }>;
 
@@ -1648,7 +1679,7 @@ export type ConsoleSendUserInvitationMutationVariables = Exact<{
 }>;
 
 
-export type ConsoleSendUserInvitationMutation = { sendUserInvitation: { userId: string, invitation: { sentAt: string, expiresAt: string } } };
+export type ConsoleSendUserInvitationMutation = { sendUserInvitation: { userId: string, invitation: { sentAt: string, expiresAt: string, delivery: { status: EmailDeliveryStatus, failure: EmailDeliveryFailure | null, updatedAt: string } } } };
 
 export type ConsoleUpdateUserMutationVariables = Exact<{
   input: UpdateUserInput;
@@ -4306,6 +4337,9 @@ export const ConsoleUsersDocument = new TypedDocumentString(`
         failedAttempts
         invitation {
           expiresAt
+          delivery {
+            status
+          }
         }
         version
         createdAt
@@ -4330,6 +4364,11 @@ export const ConsoleUserDocument = new TypedDocumentString(`
     invitation {
       sentAt
       expiresAt
+      delivery {
+        status
+        failure
+        updatedAt
+      }
     }
     authenticationMethods {
       password
@@ -4373,6 +4412,11 @@ export const ConsoleSendUserInvitationDocument = new TypedDocumentString(`
     invitation {
       sentAt
       expiresAt
+      delivery {
+        status
+        failure
+        updatedAt
+      }
     }
   }
 }

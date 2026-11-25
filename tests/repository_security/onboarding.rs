@@ -17,6 +17,7 @@ use identity_application::{
         },
     },
 };
+use identity_domain::email::{EmailDeliveryFailure, EmailDeliveryReport, EmailDeliveryStatus};
 use identity_domain::{
     audit::AuditAction,
     auth::{
@@ -30,8 +31,9 @@ use identity_domain::{
 };
 use identity_infrastructure::database::{
     repository::{
-        challenge::ChallengeRepositoryImpl, login::LoginRepositoryImpl,
-        registration::RegistrationRepositoryImpl, user_invitation::UserInvitationRepositoryImpl,
+        account_challenge::record_delivery, challenge::ChallengeRepositoryImpl,
+        login::LoginRepositoryImpl, registration::RegistrationRepositoryImpl,
+        user_invitation::UserInvitationRepositoryImpl,
         user_management::UserManagementRepositoryImpl,
     },
     seed,
@@ -76,6 +78,31 @@ async fn user_oid(db: &DatabaseConnection, name: &str) -> Uuid {
     .unwrap()
     .try_get("", "oid")
     .unwrap()
+}
+
+/// The invitation each queued email reports to, oldest first.
+async fn queued_reports(db: &DatabaseConnection) -> Vec<Uuid> {
+    let schema: String = db
+        .query_one_raw(Statement::from_string(
+            DbBackend::Postgres,
+            "SELECT current_schema() AS name".to_owned(),
+        ))
+        .await
+        .unwrap()
+        .unwrap()
+        .try_get("", "name")
+        .unwrap();
+    db.query_all_raw(Statement::from_sql_and_values(
+        DbBackend::Postgres,
+        "SELECT (convert_from(job, 'UTF8')::jsonb ->> 'report_to')::uuid AS oid \
+         FROM apalis.jobs WHERE job_type = $1 ORDER BY run_at, id",
+        [format!("test.{schema}").into()],
+    ))
+    .await
+    .unwrap()
+    .into_iter()
+    .map(|row| row.try_get("", "oid").unwrap())
+    .collect()
 }
 
 async fn version(db: &DatabaseConnection, user: Uuid) -> Uuid {
@@ -170,6 +197,35 @@ async fn an_invitation_sets_the_first_password_once_and_only_for_its_address() {
         ));
         assert_eq!(common::queued_emails(&db).await, 2);
         assert!(invitations.find_by_token("digest-first", Utc::now()).await.unwrap().is_none());
+
+        // Each queued email names the invitation it carries; the worker's
+        // outcome shows on the invitation. A late outcome of the replaced
+        // link's email changes nothing.
+        let reported = queued_reports(&db).await;
+        assert_eq!(reported.len(), 2);
+        let status = |db: DatabaseConnection| async move {
+            UserInvitationRepositoryImpl::new(db)
+                .find_for_user(invitee.into())
+                .await
+                .unwrap()
+                .expect("an invitation is pending")
+                .delivery
+        };
+        assert_eq!(status(db.clone()).await.status, EmailDeliveryStatus::Queued);
+        record_delivery(
+            &db,
+            reported[1],
+            &EmailDeliveryReport::failed(EmailDeliveryFailure::InvalidAddress, Utc::now()),
+        )
+        .await
+        .unwrap();
+        let failed = status(db.clone()).await;
+        assert_eq!(failed.status, EmailDeliveryStatus::Failed);
+        assert_eq!(failed.failure, Some(EmailDeliveryFailure::InvalidAddress));
+        record_delivery(&db, reported[0], &EmailDeliveryReport::delivered(Utc::now()))
+            .await
+            .unwrap();
+        assert_eq!(status(db.clone()).await.status, EmailDeliveryStatus::Failed);
 
         // An email written for an address the account no longer has is
         // neither stored nor queued, so the old address never gets a link

@@ -1902,6 +1902,28 @@ export const schemaMetadata: SchemaMetadata = {
         }
       }
     },
+    "EmailDelivery": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "failure": {
+          "name": "failure",
+          "returnType": "EmailDeliveryFailure",
+          "policies": []
+        },
+        "status": {
+          "name": "status",
+          "returnType": "EmailDeliveryStatus",
+          "policies": []
+        },
+        "updatedAt": {
+          "name": "updatedAt",
+          "returnType": "DateTime",
+          "policies": []
+        }
+      }
+    },
     "EmailDeliverySettings": {
       "kind": "OBJECT",
       "interfaces": [],
@@ -6283,6 +6305,11 @@ export const schemaMetadata: SchemaMetadata = {
       "interfaces": [],
       "possibleTypes": [],
       "fields": {
+        "delivery": {
+          "name": "delivery",
+          "returnType": "EmailDelivery",
+          "policies": []
+        },
         "expiresAt": {
           "name": "expiresAt",
           "returnType": "DateTime",

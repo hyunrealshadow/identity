@@ -17,7 +17,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde_json::json;
 
-use identity_domain::auth::challenge::DeliveryPolicy;
+use identity_domain::{auth::challenge::DeliveryPolicy, email::EmailDeliveryReport};
 
 use super::{Password, User, UserOid};
 use crate::{
@@ -60,6 +60,8 @@ const INVITATION_ROUTE: &str = "invitation";
 pub struct UserInvitationStatus {
     pub sent_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
+    /// Where the latest invitation email stands.
+    pub delivery: EmailDeliveryReport,
 }
 
 /// A new invitation link, ready to store with the account.

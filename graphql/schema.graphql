@@ -1296,6 +1296,60 @@ enum EmailAuthenticationMethod {
 	XOAUTH2
 }
 
+"""
+The latest delivery outcome of an email.
+"""
+type EmailDelivery {
+	status: EmailDeliveryStatus!
+	"""
+	Set when `status` is `FAILED`.
+	"""
+	failure: EmailDeliveryFailure
+	"""
+	When the status was reached.
+	"""
+	updatedAt: DateTime!
+}
+
+"""
+Why a queued email was given up.
+"""
+enum EmailDeliveryFailure {
+	"""
+	What it carried stopped working before it could be sent.
+	"""
+	EXPIRED
+	"""
+	Email delivery was turned off or is incomplete.
+	"""
+	NOT_CONFIGURED
+	"""
+	The mail server refused the address.
+	"""
+	INVALID_ADDRESS
+	"""
+	The mail server refused the instance's credentials.
+	"""
+	AUTHENTICATION_FAILED
+	"""
+	The mail server refused the message for good, for example an
+	unknown recipient.
+	"""
+	REJECTED
+	"""
+	The mail server could not be reached or kept failing.
+	"""
+	TRANSPORT_FAILED
+	"""
+	The stored delivery secret could not be read.
+	"""
+	SECRET_UNAVAILABLE
+	"""
+	The queued message could not be read back.
+	"""
+	MESSAGE_UNREADABLE
+}
+
 type EmailDeliverySettings {
 	enabled: Boolean!
 	host: String!
@@ -1316,6 +1370,24 @@ type EmailDeliverySettings {
 	UUID optimistic-lock version of this section.
 	"""
 	version: UUID!
+}
+
+"""
+Where a queued email stands.
+"""
+enum EmailDeliveryStatus {
+	"""
+	Waiting for, or being tried by, the delivery worker.
+	"""
+	QUEUED
+	"""
+	The mail server accepted it.
+	"""
+	DELIVERED
+	"""
+	Given up; `failure` says why.
+	"""
+	FAILED
 }
 
 type EmailSettings {
@@ -3172,6 +3244,10 @@ type UserInvitation {
 	When the link stops working. Send the invitation again after that.
 	"""
 	expiresAt: DateTime!
+	"""
+	Where the latest invitation email stands.
+	"""
+	delivery: EmailDelivery!
 }
 
 """

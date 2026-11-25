@@ -6,7 +6,7 @@ export interface UserStatusSource {
   enabled: boolean | null
   locked: boolean | null
   /** Present while the user has not accepted an invitation yet. */
-  invitation?: { expiresAt: string } | null
+  invitation?: { expiresAt: string; delivery: { status: string } } | null
 }
 
 function badgeSizeClass(size: 'sm' | 'md' | 'lg'): string | undefined {
@@ -53,13 +53,19 @@ export function UserStatusBadges({
         </Badge>
       ) : null}
       {user.invitation ? (
-        <Badge variant="outline" className={badgeClassName(size)}>
-          {t(
-            new Date(user.invitation.expiresAt).getTime() <= Date.now()
-              ? 'usersInvitationExpiredBadge'
-              : 'usersInvitationPendingBadge',
-          )}
-        </Badge>
+        user.invitation.delivery.status === 'FAILED' ? (
+          <Badge variant="destructive" className={badgeClassName(size)}>
+            {t('usersInvitationFailedBadge')}
+          </Badge>
+        ) : (
+          <Badge variant="outline" className={badgeClassName(size)}>
+            {t(
+              new Date(user.invitation.expiresAt).getTime() <= Date.now()
+                ? 'usersInvitationExpiredBadge'
+                : 'usersInvitationPendingBadge',
+            )}
+          </Badge>
+        )
       ) : null}
     </div>
   )

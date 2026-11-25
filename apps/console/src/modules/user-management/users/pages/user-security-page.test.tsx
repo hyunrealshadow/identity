@@ -169,6 +169,55 @@ describe('UserSecurityPage', () => {
     mocks.update.mockReset()
   })
 
+  it('shows where the invitation email stands and follows a queued one', async () => {
+    const invited = (delivery: NonNullable<ProjectedUser['invitation']>['delivery']) =>
+      makeUser({
+        invitation: {
+          sentAt: '2026-11-24T10:00:00Z',
+          expiresAt: '2099-12-01T10:00:00Z',
+          delivery,
+        },
+        authenticationMethods: {
+          password: false,
+          authenticatorApp: false,
+          recoveryCodes: false,
+          passkey: false,
+        },
+      })
+
+    const failed = renderSecurityPage(
+      makeDetail(
+        invited({ status: 'FAILED', failure: 'INVALID_ADDRESS', updatedAt: '2026-11-24T10:00:05Z' }),
+      ),
+    )
+    expect(screen.getByText(/could not be delivered.*the mail server refused the address/)).toBeTruthy()
+    expect(screen.getByRole('button', { name: 'Send again' })).toBeTruthy()
+    failed.unmount()
+
+    const delivered = renderSecurityPage(
+      makeDetail(invited({ status: 'DELIVERED', failure: null, updatedAt: '2026-11-24T10:00:01Z' })),
+    )
+    expect(screen.getByText(/The mail server accepted the invitation email/)).toBeTruthy()
+    delivered.unmount()
+
+    vi.useFakeTimers()
+    try {
+      const refresh = vi.fn().mockResolvedValue({ kind: 'ready', user: null })
+      renderSecurityPage(
+        makeDetail(
+          invited({ status: 'QUEUED', failure: null, updatedAt: '2026-11-24T10:00:00Z' }),
+          'ready',
+          refresh,
+        ),
+      )
+      expect(screen.getByText('The invitation email is being sent')).toBeTruthy()
+      await vi.advanceTimersByTimeAsync(3_100)
+      expect(refresh).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('renders loading skeleton before user detail arrives', () => {
     renderSecurityPage(makeDetail(null, 'loading'))
     expect(screen.getByRole('status', { name: 'Loading user details…' })).toBeTruthy()

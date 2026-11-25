@@ -17,6 +17,7 @@ use identity_application::{
 use identity_domain::{
     audit::{AuditAction, AuditActor, AuditField, AuditRecord},
     auth::challenge::{ChallengePurpose, DeliveryDecision, DeliveryPolicy},
+    email::EmailDeliveryReport,
     user::{User, UserOid},
 };
 use sea_orm::{
@@ -53,6 +54,9 @@ struct InvitationState {
     /// The account's address when the invitation was sent; a later change
     /// of the address voids the link.
     email_normalized: String,
+    /// Where the invitation email stands; the delivery worker updates it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    delivery: Option<EmailDeliveryReport>,
 }
 
 type Invitation = AccountChallenge<InvitationState>;
@@ -130,7 +134,7 @@ pub(super) async fn issue_in_txn<C: ConnectionTrait>(
             return Ok(InvitationIssueOutcome::TooSoon(window_end));
         }
     };
-    account_challenge::issue(
+    let stored = account_challenge::issue(
         txn,
         AccountChallengeIssue {
             user_id,
@@ -139,12 +143,15 @@ pub(super) async fn issue_in_txn<C: ConnectionTrait>(
             counter,
             state: &InvitationState {
                 email_normalized: email_normalized.to_owned(),
+                delivery: Some(EmailDeliveryReport::queued(invitation.sent_at)),
             },
             expires_at: invitation.expires_at,
         },
     )
     .await?;
-    email_queue.enqueue(txn, &invitation.email).await?;
+    email_queue
+        .enqueue(txn, &invitation.email, Some(stored.oid))
+        .await?;
     Ok(InvitationIssueOutcome::Issued)
 }
 
@@ -185,11 +192,16 @@ impl UserInvitationRepository for UserInvitationRepositoryImpl {
         if has_password(&self.db, account.id).await.map_err(internal)? {
             return Ok(None);
         }
+        let sent_at = invitation
+            .sent_at()
+            .unwrap_or_else(|| invitation.model.created_at.into());
         Ok(Some(UserInvitationStatus {
-            sent_at: invitation
-                .sent_at()
-                .unwrap_or_else(|| invitation.model.created_at.into()),
+            sent_at,
             expires_at: invitation.expires_at(),
+            delivery: invitation
+                .state
+                .delivery
+                .unwrap_or_else(|| EmailDeliveryReport::queued(sent_at)),
         }))
     }
 

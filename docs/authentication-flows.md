@@ -245,9 +245,13 @@ address. Email template: *Invitation*.
 - The invitation stops applying when the account's address changes, when the
   account is disabled, or when it gets a password some other way (for example
   an administrator's password reset, which also removes it). The email is
-  queued with the link (see [emailed codes and links](#emailed-codes-and-links));
-  an invitation whose email could not be delivered is sent again from the
-  user's Security tab.
+  queued with the link (see [emailed codes and links](#emailed-codes-and-links)).
+  `User.invitation.delivery` shows whether the latest email is queued, was
+  accepted by the mail server, or was given up and why; the Console shows it
+  on the user's Security tab, follows a queued email for a short while, and
+  marks the user *Invitation not delivered*. An outcome of an email whose link
+  was since replaced is not recorded. A failed invitation is sent again from
+  the Security tab.
 
 ### Email address verification
 
@@ -304,8 +308,9 @@ store with the passkey and authenticator-app enrollment challenges.
   refused send queues nothing. A worker delivers it, woken as soon as the
   transaction commits. A transient SMTP failure is tried again after 5 s,
   30 s, 2 min and 10 min while the code or link still works; an expired
-  message, a permanent failure (invalid address, failed authentication,
-  delivery turned off) or the last failed attempt gives it up. Each delivery
+  message, a permanent failure (a permanent 5xx rejection by the mail server,
+  an invalid address, failed authentication, delivery turned off) or the last
+  failed attempt gives it up. Each delivery
   and each abandoned message is logged and reported as an `email.delivery`
   event with the template kind and a reason, never the content. The queued
   job holds the message data-protected and is removed once it finishes. A

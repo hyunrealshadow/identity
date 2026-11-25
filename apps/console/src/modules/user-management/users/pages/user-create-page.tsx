@@ -120,6 +120,9 @@ export function UserCreatePage() {
     'missing_invitations_available',
   )
   const invitationsAvailable = invitations.data?.userInvitationsAvailable === true
+  // Until the answer arrives the option stays disabled without claiming that
+  // email delivery is off.
+  const invitationsUnknown = invitations.status === 'idle' || invitations.status === 'loading'
   const [chosenFirstSignIn, setFirstSignIn] = useState<FirstSignIn | null>(null)
   const firstSignIn: FirstSignIn =
     chosenFirstSignIn === 'invite' && !invitationsAvailable
@@ -551,7 +554,7 @@ export function UserCreatePage() {
                   <FieldContent>
                     <FieldTitle>{t('usersFirstSignInInvite')}</FieldTitle>
                     <FieldDescription>
-                      {invitationsAvailable
+                      {invitationsAvailable || invitationsUnknown
                         ? t('usersFirstSignInInviteHint')
                         : t('usersFirstSignInInviteUnavailable')}
                     </FieldDescription>
