@@ -5,6 +5,7 @@ use crate::setting::{
     BreachedPasswordCheckEnabledSetting, PasswordHistoryCountSetting, PasswordMaxAgeDaysSetting,
     SettingDefinition as _,
 };
+use identity_domain::user::RequiredAction;
 
 /// `correct-password` matches the stored password; a password recorded by
 /// [`RecordingPasswordHasher`] matches itself.
@@ -106,7 +107,7 @@ impl PolicyFlow {
 
 fn required_user() -> User {
     User {
-        password_change_required: true,
+        required_actions: [RequiredAction::ChangePassword].into(),
         ..test_user()
     }
 }

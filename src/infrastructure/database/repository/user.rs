@@ -2,7 +2,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, FixedOffset, Utc};
 use identity_domain::audit::{AuditAction, AuditActor, AuditChanges, AuditField, AuditRecord};
 use identity_domain::user::{
-    MfaMethod, User, UserOid, UserTheme,
+    MfaMethod, RequiredActions, User, UserOid, UserTheme,
     normalization::normalize_identifier,
     repository::{UserIdentifierUpdate, UserProfilePatch, UserRepository, UserRepositoryError},
 };
@@ -11,7 +11,8 @@ use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, EntityTrait,
     ExprTrait, QueryFilter, QuerySelect, Set, sea_query::Expr,
 };
-use serde_json::{Value, json};
+use serde::Deserialize as _;
+use serde_json::{Value, json, to_value};
 use uuid::Uuid;
 
 use super::authorization_lifecycle::{renew_user_version_in_txn, sync_user_authority_in_txn};
@@ -40,6 +41,7 @@ pub(crate) fn to_domain(m: user::Model) -> Result<User, UserRepositoryError> {
         .map(str::parse)
         .transpose()
         .map_err(|_| UserRepositoryError::InvalidStoredTheme)?;
+    let required_actions = stored_required_actions(&m.required_actions)?;
     Ok(User {
         oid: m.oid.into(),
         version: m.version,
@@ -73,10 +75,33 @@ pub(crate) fn to_domain(m: user::Model) -> Result<User, UserRepositoryError> {
         enabled: m.enabled,
         locked: m.locked,
         locked_until: m.locked_until.map(DateTime::<Utc>::from),
-        password_change_required: m.password_change_required,
+        required_actions,
         created_at: DateTime::<Utc>::from(m.created_at),
         updated_at: m.updated_at.map(DateTime::<Utc>::from),
     })
+}
+
+/// Decode the stored `required_actions` array.
+pub(crate) fn stored_required_actions(
+    value: &Value,
+) -> Result<RequiredActions, UserRepositoryError> {
+    RequiredActions::deserialize(value)
+        .map_err(|_| UserRepositoryError::InvalidStoredRequiredActions)
+}
+
+/// The stored action codes, for audit membership changes.
+fn stored_action_codes(value: &Value) -> impl Iterator<Item = &Value> {
+    value.as_array().into_iter().flatten()
+}
+
+/// Encode an action set as the sorted array `required_actions` stores.
+pub(crate) fn required_actions_value(actions: &RequiredActions) -> Value {
+    Value::Array(
+        actions
+            .iter()
+            .map(|action| to_value(action).expect("a required action serializes as a string"))
+            .collect(),
+    )
 }
 
 pub(crate) fn update_theme_preference(preferences: &mut Value, theme: Option<UserTheme>) {
@@ -124,10 +149,10 @@ pub(crate) fn user_attribute_changes(
             &before.email_verified,
             &after.email_verified,
         )
-        .diff(
-            AuditField::PasswordChangeRequired,
-            &before.password_change_required,
-            &after.password_change_required,
+        .members(
+            AuditField::RequiredActions,
+            stored_action_codes(&before.required_actions),
+            stored_action_codes(&after.required_actions),
         )
         .diff(
             AuditField::PhoneNumber,
@@ -685,7 +710,7 @@ mod tests {
             enabled: true,
             locked: false,
             locked_until: None,
-            password_change_required: false,
+            required_actions: serde_json::json!([]),
             created_at: now,
             updated_at: None,
         }

@@ -26,6 +26,9 @@ pub enum UserRepositoryError {
     #[error("database contains an invalid MFA preference")]
     InvalidStoredMfaPreference,
 
+    #[error("database contains an invalid required action")]
+    InvalidStoredRequiredActions,
+
     #[error("failed to update failed attempts")]
     UpdateFailedAttempts(#[source] Box<dyn StdError + Send + Sync>),
 

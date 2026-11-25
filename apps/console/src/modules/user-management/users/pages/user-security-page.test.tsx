@@ -92,7 +92,7 @@ function makeUser(overrides: Partial<ProjectedUser> = {}): ProjectedUser {
     locked: false,
     lockedUntil: null,
     failedAttempts: 0,
-    passwordChangeRequired: false,
+    requiredActions: [],
     authenticationMethods: {
       password: true,
       authenticatorApp: true,
@@ -177,7 +177,7 @@ describe('UserSecurityPage', () => {
     renderSecurityPage(
       makeDetail(
         makeUser({
-          passwordChangeRequired: true,
+          requiredActions: ['CHANGE_PASSWORD'],
           authenticationMethods: {
             password: false,
             authenticatorApp: false,
@@ -198,7 +198,7 @@ describe('UserSecurityPage', () => {
     renderSecurityPage(
       makeDetail(
         makeUser({
-          passwordChangeRequired: true,
+          requiredActions: ['CHANGE_PASSWORD'],
           authenticationMethods: {
             password: true,
             authenticatorApp: false,
@@ -214,6 +214,38 @@ describe('UserSecurityPage', () => {
     expect(
       (screen.getByRole('button', { name: 'Clear second factors' }) as HTMLButtonElement).disabled,
     ).toBe(true)
+  })
+
+  it('adds and removes only the password change in the required actions', async () => {
+    const ok = {
+      data: { updateUser: { user: makeUser() } },
+      errors: [],
+      partial: false,
+      forbidden: false,
+      unauthorized: false,
+    }
+    mocks.update.mockResolvedValue(ok)
+    const { unmount } = renderSecurityPage(makeDetail(makeUser({ requiredActions: [] })))
+    await userEvent.click(screen.getByRole('button', { name: 'Require' }))
+    await waitFor(() => {
+      expect(mocks.update).toHaveBeenCalledWith({
+        id: 'User:target',
+        expectedVersion: '5e7f4626-1618-4ef5-b227-703e5802d10d',
+        requiredActions: ['CHANGE_PASSWORD'],
+      })
+    })
+    unmount()
+
+    mocks.update.mockClear()
+    renderSecurityPage(makeDetail(makeUser({ requiredActions: ['CHANGE_PASSWORD'] })))
+    await userEvent.click(screen.getByRole('button', { name: 'Stop requiring' }))
+    await waitFor(() => {
+      expect(mocks.update).toHaveBeenCalledWith({
+        id: 'User:target',
+        expectedVersion: '5e7f4626-1618-4ef5-b227-703e5802d10d',
+        requiredActions: [],
+      })
+    })
   })
 
   it('resets another user password, reveals temporary password once, and reloads immediately', async () => {

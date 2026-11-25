@@ -24,7 +24,7 @@ function user(overrides: Partial<ProjectedUser> = {}): ProjectedUser {
     locked: false,
     lockedUntil: null,
     failedAttempts: 0,
-    passwordChangeRequired: false,
+    requiredActions: [],
     authenticationMethods: null,
     version: '9f0c2b1a-3d4e-4f50-8a9b-1c2d3e4f5a6b',
     givenName: null,

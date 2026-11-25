@@ -7,7 +7,9 @@ pub mod recovery_code;
 pub mod repository;
 
 pub use credential::{CredentialData, CredentialType, UserCredential, UserCredentialOid};
-pub use identity_domain::user::{ParseUserThemeError, User, UserOid, UserTheme};
+pub use identity_domain::user::{
+    ParseUserThemeError, RequiredAction, RequiredActions, User, UserOid, UserTheme,
+};
 pub use otp::{OtpAlgorithm, OtpCredentialData};
 pub use password::{Argon2Options, Argon2Password, Argon2Variant, Argon2Version, Password};
 pub use recovery_code::RecoveryCodeCredentialData;

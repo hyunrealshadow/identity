@@ -464,7 +464,13 @@ impl UserManagementService {
         authority: &UserManagementAuthority,
         command: UpdateUserCommand,
     ) -> Result<UserManagementRecord, AppError> {
-        if command.password_change_required == Some(true) {
+        // Clearing is harmless; requiring anything of one's own next sign-in
+        // belongs in the account center.
+        if command
+            .required_actions
+            .as_ref()
+            .is_some_and(|actions| !actions.is_empty())
+        {
             reject_self_credential_action(authority, command.user_oid)?;
         }
         let reason = validate_reason(&command.reason)?;
@@ -491,7 +497,7 @@ impl UserManagementService {
                 username,
                 email,
                 email_verified: command.email_verified,
-                password_change_required: command.password_change_required,
+                required_actions: command.required_actions,
                 profile,
                 expected_version: command.expected_version,
                 reason,
@@ -819,9 +825,13 @@ mod tests {
         authorization::{
             ActorContext, ActorPrincipal, HumanAuthenticationContext, PolicyVersion, RequestId,
         },
-        user::{UserManagementRecord, UserOid, UserTheme},
+        user::{RequiredAction, RequiredActions, UserManagementRecord, UserOid, UserTheme},
     };
     use uuid::Uuid;
+
+    fn change_password() -> RequiredActions {
+        [RequiredAction::ChangePassword].into()
+    }
 
     use super::{
         super::model, UserManagementService, normalize_filter, validate_reason,
@@ -1229,25 +1239,30 @@ mod tests {
         let err = service.reset_user_mfa(&auth, state).await.unwrap_err();
         assert_eq!(err.code(), self_code);
 
-        let update = |password_change_required| model::UpdateUserCommand {
+        let update = |required_actions| model::UpdateUserCommand {
             user_oid: self_oid,
             username: None,
             email: None,
             email_verified: None,
-            password_change_required,
+            required_actions,
             profile: UserProfilePatch::default(),
             expected_version: Uuid::new_v4(),
             reason: String::new(),
             client_mutation_id: None,
         };
         let err = service
-            .update_user(&auth, update(Some(true)))
+            .update_user(&auth, update(Some(change_password())))
             .await
             .unwrap_err();
         assert_eq!(err.code(), self_code);
 
-        let err = service.update_user(&auth, update(None)).await.unwrap_err();
-        assert_eq!(err.code(), not_found_code);
+        for keep_or_clear in [None, Some(RequiredActions::new())] {
+            let err = service
+                .update_user(&auth, update(keep_or_clear))
+                .await
+                .unwrap_err();
+            assert_eq!(err.code(), not_found_code);
+        }
 
         let machine_auth = UserManagementAuthority::new(
             ActorContext::for_client(
@@ -1274,7 +1289,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(err.code(), not_found_code);
         let err = service
-            .update_user(&machine_auth, update(Some(true)))
+            .update_user(&machine_auth, update(Some(change_password())))
             .await
             .unwrap_err();
         assert_eq!(err.code(), not_found_code);

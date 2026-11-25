@@ -154,8 +154,9 @@ pub(super) struct UpdateUserInput {
     /// Mark the email address verified or unverified. Without it, a changed
     /// address becomes unverified.
     pub email_verified: Option<bool>,
-    /// Require, or stop requiring, a password change at the next sign-in.
-    pub password_change_required: Option<bool>,
+    /// Replace what the next sign-in must complete; an empty list clears it.
+    /// Omitted, the current actions are kept.
+    pub required_actions: Option<Vec<account::UserRequiredAction>>,
     pub profile: Option<UserProfilePatchInput>,
     pub expected_version: Uuid,
     #[graphql(default, validator(chars_max_length = 1000))]

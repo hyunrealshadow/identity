@@ -56,8 +56,12 @@ pub struct Model {
     #[sea_orm(default_value = false)]
     pub locked: bool,
     pub locked_until: Option<DateTimeWithTimeZone>,
-    #[sea_orm(default_value = false)]
-    pub password_change_required: bool,
+    /// What the next sign-in must complete, as a JSON array of action codes.
+    #[sea_orm(
+        column_type = "JsonBinary",
+        default_expr = "Expr::cust(\"'[]'::jsonb\")"
+    )]
+    pub required_actions: Json,
     #[sea_orm(default_expr = "Expr::current_timestamp()")]
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: Option<DateTimeWithTimeZone>,

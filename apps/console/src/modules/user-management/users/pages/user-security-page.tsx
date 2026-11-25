@@ -23,6 +23,7 @@ import {
   type ConsoleUserSessionsQuery,
   type ConsoleUserSessionsQueryVariables,
 } from '#/generated/graphql'
+import type { UserRequiredAction } from '#/generated/graphql'
 import { useAuth } from '#/lib/auth/context'
 import { formatDateTime } from '#/lib/format'
 import {
@@ -40,6 +41,8 @@ import { MutationFeedback } from '../components/user-feedback'
 import { useUserMutations } from '../hooks/user-mutations'
 import type { MutationFeedbackState } from '../lib/user-errors'
 import { isCurrentUser, userManagementScope } from '../lib/user-scope'
+
+const CHANGE_PASSWORD: UserRequiredAction = 'CHANGE_PASSWORD'
 
 type Session = NonNullable<
   ConsoleUserSessionsQuery['user']
@@ -168,6 +171,7 @@ export function UserSecurityPage() {
   }
   const selfTarget = isCurrentUser(user.id, claims?.sub)
   const methods = user.authenticationMethods
+  const changeRequired = (user.requiredActions ?? []).includes(CHANGE_PASSWORD)
   const hasSecondFactor = Boolean(
     methods && (methods.authenticatorApp || methods.recoveryCodes || methods.passkey),
   )
@@ -236,11 +240,15 @@ export function UserSecurityPage() {
     if (!user) return
     setPending(true)
     setFeedback(null)
+    // Replace only this action; any other required action stays as it is.
+    const others = (user.requiredActions ?? []).filter(
+      (action) => action !== CHANGE_PASSWORD,
+    )
     try {
       const result = await mutations.update({
         id: user.id,
         expectedVersion: user.version,
-        passwordChangeRequired: required,
+        requiredActions: required ? [...others, CHANGE_PASSWORD] : others,
       })
       if (!result.data?.updateUser) {
         return setFeedback(feedbackFrom(result, 'missing_update_user_payload'))
@@ -364,7 +372,7 @@ export function UserSecurityPage() {
               <p className="text-sm font-medium">{t('usersSecurityChangeRequired')}</p>
               <p className="text-xs leading-5 text-muted-foreground">
                 {t(
-                  user.passwordChangeRequired
+                  changeRequired
                     ? 'usersSecurityChangeRequiredOn'
                     : 'usersSecurityChangeRequiredOff',
                 )}
@@ -375,10 +383,10 @@ export function UserSecurityPage() {
                 variant="outline"
                 size="sm"
                 disabled={pending}
-                onClick={() => void setChangeRequired(!user.passwordChangeRequired)}
+                onClick={() => void setChangeRequired(!changeRequired)}
               >
                 {t(
-                  user.passwordChangeRequired
+                  changeRequired
                     ? 'usersSecurityChangeRequiredClear'
                     : 'usersSecurityChangeRequiredSet',
                 )}

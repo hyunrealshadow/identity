@@ -58,9 +58,13 @@ self-service sign-in methods belong in the account center.
   digits, and symbols without look-alikes), returns it once, requires a change
   at the next sign-in, and ends a lockout from failed attempts. An account
   without a password receives one.
-- **Require a password change** (`updateUser` with `passwordChangeRequired`)
-  sets or clears the same requirement without changing the password. Any
-  password change by the user clears it.
+- **Require a password change** (`updateUser` with `requiredActions`) adds or
+  removes `CHANGE_PASSWORD` without changing the password. `requiredActions`
+  is the user's set of actions the next sign-in must complete, stored as one
+  JSON array on the user so later policies add an action rather than a column;
+  the list replaces the set, and an omitted list keeps it. Any password change
+  by the user removes `CHANGE_PASSWORD`. Expiry from `max_age_days` is
+  evaluated at sign-in and never stored there.
 - **Clear second factors** (`resetUserMfa`, audit `USER_MFA_RESET`) removes the
   authenticator app, recovery codes and passkeys. It is refused while the user
   has no password, so it cannot leave an account without a way to sign in.

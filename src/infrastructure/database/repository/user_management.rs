@@ -26,7 +26,7 @@ use identity_application::{
 use identity_domain::audit::{AuditAction, AuditField, AuditRecord};
 use identity_domain::{
     authorization::{ActorPrincipal, ManagementScope, policy_fingerprint},
-    user::{UserManagementRecord, UserOid, repository::UserRepositoryError},
+    user::{RequiredAction, UserManagementRecord, UserOid, repository::UserRepositoryError},
 };
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection,
@@ -46,7 +46,10 @@ use super::{
     email_verification::discard_for_user_in_txn,
     session_security::lock_account_sessions,
     shared::lock_user_credentials,
-    user::{to_domain, update_theme_preference, user_attribute_changes},
+    user::{
+        required_actions_value, stored_required_actions, to_domain, update_theme_preference,
+        user_attribute_changes,
+    },
     user_credential::prune_password_history,
 };
 use crate::database::{
@@ -862,8 +865,8 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         if let Some(verified) = command.email_verified {
             active.email_verified = Set(verified);
         }
-        if let Some(required) = command.password_change_required {
-            active.password_change_required = Set(required);
+        if let Some(actions) = &command.required_actions {
+            active.required_actions = Set(required_actions_value(actions));
         }
         let mut preferences = model.preferences.clone();
         let mut preferences_changed = false;
@@ -1185,8 +1188,11 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         prune_password_history(&txn, model.id, keep_history)
             .await
             .map_err(storage)?;
+        let mut required_actions =
+            stored_required_actions(&model.required_actions).map_err(map_domain_user)?;
+        let newly_required = required_actions.insert(RequiredAction::ChangePassword);
         let mut active: user::ActiveModel = model.clone().into();
-        active.password_change_required = Set(true);
+        active.required_actions = Set(required_actions_value(&required_actions));
         active.failed_attempts = Set(0);
         if model.locked_until.is_some() {
             active.locked = Set(false);
@@ -1201,11 +1207,14 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
             &command.authority,
             AuditRecord::success(AuditAction::UserPasswordReset, Uuid::from(command.user_oid))
                 .with_changes(|changes| {
-                    changes.secret(AuditField::Password).diff(
-                        AuditField::PasswordChangeRequired,
-                        &model.password_change_required,
-                        &true,
-                    );
+                    changes.secret(AuditField::Password);
+                    if newly_required {
+                        changes.delta(
+                            AuditField::RequiredActions,
+                            &[RequiredAction::ChangePassword],
+                            &[] as &[RequiredAction],
+                        );
+                    }
                 }),
         )
         .await?;

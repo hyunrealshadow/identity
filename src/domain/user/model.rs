@@ -1,4 +1,4 @@
-use std::{fmt, str::FromStr};
+use std::{collections::BTreeSet, fmt, str::FromStr};
 
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
@@ -16,6 +16,20 @@ use uuid::Uuid;
     derive_more::Into,
 )]
 pub struct UserOid(pub Uuid);
+
+/// Something the account must do at its next sign-in before a session is
+/// issued. Stored as a set, so new policies add a variant rather than a column.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, serde::Serialize, serde::Deserialize,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum RequiredAction {
+    /// Replace the password.
+    ChangePassword,
+}
+
+/// The actions an account must complete at its next sign-in.
+pub type RequiredActions = BTreeSet<RequiredAction>;
 
 /// Account-wide ordering preference. It never changes which factors are required.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -109,8 +123,8 @@ pub struct User {
     pub enabled: bool,
     pub locked: bool,
     pub locked_until: Option<DateTime<Utc>>,
-    /// The next sign-in must replace the password before a session is issued.
-    pub password_change_required: bool,
+    /// What the next sign-in must complete before a session is issued.
+    pub required_actions: RequiredActions,
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
 }

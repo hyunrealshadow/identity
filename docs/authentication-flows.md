@@ -68,7 +68,7 @@ Created ─▶ IdentifierVerified ─▶ MfaRequired ─▶ Authenticated
 | `IdentifierVerified` | User identified (or, while account existence is concealed, any identifier entered), first factor not yet accepted | Password, passkey, email code or link |
 | `MfaRequired` | First factor accepted, a second factor is still required | OTP, recovery code, passkey |
 | `MfaEnrollmentRequired` | The verified factors fall short of the requested class and the user has no credential that meets it | `aal2`: authenticator enrollment, then a completed session. `phr`: passkey registration, then a passkey challenge (an existing passkey may also be used) |
-| `PasswordChangeRequired` | Every requested factor is verified, but the account must replace its password first: an administrator required it, or it is older than the password lifetime | A new password, then a completed session |
+| `PasswordChangeRequired` | Every requested factor is verified, but the account must replace its password first: its required actions include `change_password`, or the password is older than the password lifetime | A new password, then a completed session |
 | `Authenticated` | Session established and bound to the interaction | Continue to consent or the protocol |
 | `Expired` | Interaction lifetime elapsed | Restart only |
 | `Failed` | Bounded failure such as a locked or disabled account | Nothing |

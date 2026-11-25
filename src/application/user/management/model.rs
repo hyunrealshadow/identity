@@ -17,7 +17,7 @@ use identity_domain::{
     client::model::ClientOid,
     time_zone::TimeZone,
     user::{
-        UserManagementRecord, UserOid, UserTheme,
+        RequiredActions, UserManagementRecord, UserOid, UserTheme,
         repository::UserProfilePatch as RepositoryUserProfilePatch,
     },
 };
@@ -147,8 +147,8 @@ pub struct UpdateUserCommand {
     pub email: Option<String>,
     /// Mark the address verified or unverified.
     pub email_verified: Option<bool>,
-    /// Require, or stop requiring, a password change at the next sign-in.
-    pub password_change_required: Option<bool>,
+    /// Replace what the next sign-in must complete; `None` keeps it.
+    pub required_actions: Option<RequiredActions>,
     pub profile: UserProfilePatch,
     pub expected_version: Uuid,
     pub reason: String,

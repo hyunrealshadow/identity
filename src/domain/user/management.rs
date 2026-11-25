@@ -76,7 +76,7 @@ mod tests {
             enabled: true,
             locked: false,
             locked_until: None,
-            password_change_required: false,
+            required_actions: Default::default(),
             created_at: Utc::now(),
             updated_at: None,
         };

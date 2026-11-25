@@ -2,12 +2,12 @@ use std::result::Result as StdResult;
 
 use crate::graphql::schema::access::access;
 use async_graphql::{
-    Context, ID, InputObject, MaybeUndefined, Object, Result as GraphqlResult,
+    Context, Enum, ID, InputObject, MaybeUndefined, Object, Result as GraphqlResult,
     connection::Connection,
 };
 use chrono::{DateTime, Utc};
 use identity_domain::global_id::GlobalId;
-use identity_domain::user::{User, UserTheme, repository::UserProfilePatch};
+use identity_domain::user::{RequiredAction, User, UserTheme, repository::UserProfilePatch};
 use tokio::sync::OnceCell;
 use uuid::Uuid;
 
@@ -35,6 +35,14 @@ use identity_application::authorization::ManagementTarget;
 use identity_application::user::CredentialType;
 use identity_domain::{authorization::ManagementScope, user::UserOid};
 use identity_infrastructure::graphql::cursor::ProtectedCursor;
+
+/// Something the user must do at their next sign-in before it completes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]
+#[graphql(name = "UserRequiredAction", remote = "RequiredAction")]
+pub(crate) enum UserRequiredAction {
+    /// Replace the password.
+    ChangePassword,
+}
 
 pub(crate) use identity_domain::global_id::kind::User as UserGlobalId;
 
@@ -324,12 +332,23 @@ impl UserNode {
         Ok(Some(self.user.failed_attempts))
     }
 
-    /// Whether the next sign-in must replace the password before a session is
-    /// issued, as an administrator required.
+    /// What the next sign-in must complete before a session is issued, as an
+    /// administrator required. A password past its lifetime is not listed: the
+    /// expiry is evaluated at sign-in.
     #[graphql(directive = access::apply(ManagementGuard::policy(ManagementScope::UsersRead)))]
-    async fn password_change_required(&self, ctx: &Context<'_>) -> GraphqlResult<Option<bool>> {
+    async fn required_actions(
+        &self,
+        ctx: &Context<'_>,
+    ) -> GraphqlResult<Option<Vec<UserRequiredAction>>> {
         self.ensure_management_metadata(ctx).await?;
-        Ok(Some(self.user.password_change_required))
+        Ok(Some(
+            self.user
+                .required_actions
+                .iter()
+                .copied()
+                .map(Into::into)
+                .collect(),
+        ))
     }
 
     /// The ways the user can sign in. Never the credentials themselves.

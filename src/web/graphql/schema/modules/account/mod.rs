@@ -6,4 +6,4 @@ mod types;
 
 pub(crate) use mutation::AccountMutation;
 pub(crate) use query::AccountQuery;
-pub(crate) use types::{UserGlobalId, UserNode, user_global_id};
+pub(crate) use types::{UserGlobalId, UserNode, UserRequiredAction, user_global_id};

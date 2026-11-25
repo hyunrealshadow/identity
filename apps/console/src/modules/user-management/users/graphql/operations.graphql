@@ -50,7 +50,7 @@ query ConsoleUser($id: ID!) {
     locked
     lockedUntil
     failedAttempts
-    passwordChangeRequired
+    requiredActions
     authenticationMethods {
       password
       authenticatorApp

@@ -1215,8 +1215,8 @@ async fn required_password_change_keeps_active_interaction() {
                 )
             };
             sql(&db, &format!(r#"
-                INSERT INTO "user" (oid,name,name_normalized,email,email_normalized,password_change_required)
-                  VALUES ('{user}','{user}','{user}','{user}@example.test','{user}@example.test',true);
+                INSERT INTO "user" (oid,name,name_normalized,email,email_normalized,required_actions)
+                  VALUES ('{user}','{user}','{user}','{user}@example.test','{user}@example.test','["change_password"]');
                 INSERT INTO client (oid,name,protocol) VALUES ('{client}','pw-change-test','openid_connect');
                 INSERT INTO user_credential (oid,user_id,type,data)
                   SELECT '{credential}',id,'password','{}'::jsonb FROM "user" WHERE oid='{user}';
@@ -1268,7 +1268,7 @@ async fn required_password_change_keeps_active_interaction() {
             assert_eq!(
                 scalar(
                     &db,
-                    &format!("SELECT count(*)::bigint n FROM \"user\" WHERE oid='{user}' AND password_change_required=false"),
+                    &format!("SELECT count(*)::bigint n FROM \"user\" WHERE oid='{user}' AND required_actions='[]'::jsonb"),
                 )
                 .await,
                 1

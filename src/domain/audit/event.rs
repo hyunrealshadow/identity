@@ -181,7 +181,7 @@ pub enum AuditField {
     Username,
     Email,
     EmailVerified,
-    PasswordChangeRequired,
+    RequiredActions,
     PhoneNumber,
     GivenName,
     FamilyName,

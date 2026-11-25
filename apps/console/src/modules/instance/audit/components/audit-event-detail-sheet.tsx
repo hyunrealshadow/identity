@@ -46,6 +46,7 @@ import {
   AUDIT_AUTH_METHOD_LABELS,
   AUDIT_CATEGORY_LABELS,
   AUDIT_FIELD_LABELS,
+  AUDIT_FIELD_VALUE_LABELS,
   AUDIT_TARGET_KIND_LABELS,
 } from '../lib/audit-labels'
 import { auditActorName, auditChangeValueText, auditSentenceText } from '../lib/audit-presentation'
@@ -224,18 +225,23 @@ function ChangeValue({ change, t }: { change: AuditEventDetail['changes'][number
     return <span className="text-muted-foreground">{t('auditChangeRedacted')}</span>
   }
   if (change.kind === 'SET') {
+    const valueLabels = AUDIT_FIELD_VALUE_LABELS[change.field]
+    const itemText = (item: unknown) => {
+      const key = typeof item === 'string' ? valueLabels?.[item] : undefined
+      return key ? t(key) : auditChangeValueText(item, empty)
+    }
     return (
       <div className="flex flex-wrap gap-1.5">
         {change.added.map((item, index) => (
           <Badge key={`added-${index}`} variant="secondary">
             <span aria-label={t('auditChangeAdded')}>+</span>
-            {auditChangeValueText(item, empty)}
+            {itemText(item)}
           </Badge>
         ))}
         {change.removed.map((item, index) => (
           <Badge key={`removed-${index}`} variant="outline" className="text-muted-foreground">
             <span aria-label={t('auditChangeRemoved')}>−</span>
-            <span className="line-through">{auditChangeValueText(item, empty)}</span>
+            <span className="line-through">{itemText(item)}</span>
           </Badge>
         ))}
       </div>

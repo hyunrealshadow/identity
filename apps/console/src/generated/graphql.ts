@@ -186,13 +186,13 @@ export type AuditField =
   | 'NICKNAME'
   | 'PASSKEY'
   | 'PASSWORD'
-  | 'PASSWORD_CHANGE_REQUIRED'
   | 'PERMISSIONS'
   | 'PHONE_NUMBER'
   | 'PICTURE'
   | 'PREFERENCES'
   | 'PROFILE'
   | 'RECOVERY_CODES'
+  | 'REQUIRED_ACTIONS'
   | 'ROLES'
   | 'SCOPES'
   | 'SETTINGS'
@@ -852,10 +852,13 @@ export type UpdateUserInput = {
   emailVerified?: boolean | null | undefined;
   expectedVersion: string;
   id: string | number;
-  /** Require, or stop requiring, a password change at the next sign-in. */
-  passwordChangeRequired?: boolean | null | undefined;
   profile?: UserProfilePatchInput | null | undefined;
   reason?: string;
+  /**
+   * Replace what the next sign-in must complete; an empty list clears it.
+   * Omitted, the current actions are kept.
+   */
+  requiredActions?: Array<UserRequiredAction> | null | undefined;
   username?: string | null | undefined;
 };
 
@@ -899,6 +902,11 @@ export type UserProfilePatchInput = {
   website?: string | null | undefined;
   zoneInfo?: string | null | undefined;
 };
+
+/** Something the user must do at their next sign-in before it completes. */
+export type UserRequiredAction =
+  /** Replace the password. */
+  | 'CHANGE_PASSWORD';
 
 export type UserRoleOrder =
   | 'CREATED_AT_ASC'
@@ -1598,7 +1606,7 @@ export type ConsoleUserQueryVariables = Exact<{
 }>;
 
 
-export type ConsoleUserQuery = { user: { id: string, username: string, email: string, emailVerified: boolean, enabled: boolean | null, locked: boolean | null, lockedUntil: string | null, failedAttempts: number | null, passwordChangeRequired: boolean | null, version: string, givenName: string | null, familyName: string | null, middleName: string | null, nickname: string | null, profile: string | null, picture: string | null, website: string | null, birthdate: string | null, locale: string | null, theme: string | null, createdAt: string, updatedAt: string | null, authenticationMethods: { password: boolean, authenticatorApp: boolean, recoveryCodes: boolean, passkey: boolean } | null } | null };
+export type ConsoleUserQuery = { user: { id: string, username: string, email: string, emailVerified: boolean, enabled: boolean | null, locked: boolean | null, lockedUntil: string | null, failedAttempts: number | null, requiredActions: Array<UserRequiredAction> | null, version: string, givenName: string | null, familyName: string | null, middleName: string | null, nickname: string | null, profile: string | null, picture: string | null, website: string | null, birthdate: string | null, locale: string | null, theme: string | null, createdAt: string, updatedAt: string | null, authenticationMethods: { password: boolean, authenticatorApp: boolean, recoveryCodes: boolean, passkey: boolean } | null } | null };
 
 export type ConsoleCreateUserMutationVariables = Exact<{
   input: CreateUserInput;
@@ -4274,7 +4282,7 @@ export const ConsoleUserDocument = new TypedDocumentString(`
     locked
     lockedUntil
     failedAttempts
-    passwordChangeRequired
+    requiredActions
     authenticationMethods {
       password
       authenticatorApp

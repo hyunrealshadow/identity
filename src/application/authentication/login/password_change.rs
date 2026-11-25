@@ -10,7 +10,7 @@ use crate::{
     observability::{BusinessEvent, EventValue},
     setting::{PasswordHashSetting, PasswordHistoryCountSetting, PasswordMaxAgeDaysSetting},
     user::{
-        Password, UserCredentialOid, UserOid,
+        Password, RequiredAction, UserCredentialOid, UserOid,
         model::{CredentialData, CredentialType},
         repository::{PasswordReplacement, PasswordReplacementKind},
     },
@@ -161,7 +161,12 @@ impl LoginService {
         let Some(set_at) = self.credential_repo.password_set_at(user_oid).await? else {
             return Ok(false);
         };
-        if self.get_user(user_oid).await?.password_change_required {
+        if self
+            .get_user(user_oid)
+            .await?
+            .required_actions
+            .contains(&RequiredAction::ChangePassword)
+        {
             return Ok(true);
         }
         let max_age_days = self.settings.snapshot().get::<PasswordMaxAgeDaysSetting>();

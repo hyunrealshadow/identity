@@ -432,7 +432,7 @@ enum AuditField {
 	USERNAME
 	EMAIL
 	EMAIL_VERIFIED
-	PASSWORD_CHANGE_REQUIRED
+	REQUIRED_ACTIONS
 	PHONE_NUMBER
 	GIVEN_NAME
 	FAMILY_NAME
@@ -2970,9 +2970,10 @@ input UpdateUserInput {
 	"""
 	emailVerified: Boolean
 	"""
-	Require, or stop requiring, a password change at the next sign-in.
+	Replace what the next sign-in must complete; an empty list clears it.
+	Omitted, the current actions are kept.
 	"""
-	passwordChangeRequired: Boolean
+	requiredActions: [UserRequiredAction!]
 	profile: UserProfilePatchInput
 	expectedVersion: UUID!
 	reason: String! = ""
@@ -3039,10 +3040,11 @@ type User implements Node {
 	lockedUntil: DateTime @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	failedAttempts: Int @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	"""
-	Whether the next sign-in must replace the password before a session is
-	issued, as an administrator required.
+	What the next sign-in must complete before a session is issued, as an
+	administrator required. A password past its lifetime is not listed: the
+	expiry is evaluated at sign-in.
 	"""
-	passwordChangeRequired: Boolean @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	requiredActions: [UserRequiredAction!] @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	"""
 	The ways the user can sign in. Never the credentials themselves.
 	"""
@@ -3133,6 +3135,16 @@ input UserProfilePatchInput {
 	addressRegion: String
 	addressPostalCode: String
 	addressCountry: String
+}
+
+"""
+Something the user must do at their next sign-in before it completes.
+"""
+enum UserRequiredAction {
+	"""
+	Replace the password.
+	"""
+	CHANGE_PASSWORD
 }
 
 type UserRoleConnection {

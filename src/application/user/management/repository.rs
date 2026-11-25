@@ -10,7 +10,9 @@ use std::error::Error as StdError;
 use crate::{authorization::ManagementAuthorizationError, user::Password};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
-use identity_domain::user::{UserManagementRecord, UserOid, repository::UserProfilePatch};
+use identity_domain::user::{
+    RequiredActions, UserManagementRecord, UserOid, repository::UserProfilePatch,
+};
 use uuid::Uuid;
 
 use super::model::{UserFilter, UserManagementAuthority, UserOrder};
@@ -87,8 +89,8 @@ pub struct UpdateUserTransaction {
     /// Mark the address verified or unverified. Without it, a changed
     /// address becomes unverified.
     pub email_verified: Option<bool>,
-    /// Require, or stop requiring, a password change at the next sign-in.
-    pub password_change_required: Option<bool>,
+    /// Replace what the next sign-in must complete; `None` keeps it.
+    pub required_actions: Option<RequiredActions>,
     pub profile: UserProfilePatch,
     pub expected_version: Uuid,
     pub reason: String,

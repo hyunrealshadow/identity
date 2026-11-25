@@ -151,7 +151,7 @@ export const AUDIT_FIELD_LABELS: Readonly<Record<AuditField, MessageKey>> = {
   DESCRIPTIONS: 'auditFieldDescriptions',
   EMAIL: 'auditFieldEmail',
   EMAIL_VERIFIED: 'auditFieldEmailVerified',
-  PASSWORD_CHANGE_REQUIRED: 'auditFieldPasswordChangeRequired',
+  REQUIRED_ACTIONS: 'auditFieldRequiredActions',
   ENABLED: 'auditFieldEnabled',
   FAMILY_NAME: 'auditFieldFamilyName',
   GENDER: 'auditFieldGender',
@@ -180,6 +180,13 @@ export const AUDIT_FIELD_LABELS: Readonly<Record<AuditField, MessageKey>> = {
 }
 
 // Sentence templates with {actor} and {target} placeholders.
+/** Labels for the stored codes a set-valued field lists, keyed by field. */
+export const AUDIT_FIELD_VALUE_LABELS: Readonly<
+  Partial<Record<AuditField, Readonly<Record<string, MessageKey>>>>
+> = {
+  REQUIRED_ACTIONS: { change_password: 'auditRequiredActionChangePassword' },
+}
+
 export const AUDIT_SENTENCE_LABELS: Readonly<Record<AuditAction, MessageKey>> = {
   ACCOUNT_CREDENTIAL_REPLACE: 'auditSentenceAccountCredentialReplace',
   ACCOUNT_IDENTIFIER_UPDATE: 'auditSentenceAccountIdentifierUpdate',

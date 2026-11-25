@@ -292,7 +292,7 @@ pub(super) async fn authorize_first_hop_state() -> (AppState, Uuid) {
         enabled: true,
         locked: false,
         locked_until: None,
-        password_change_required: false,
+        required_actions: serde_json::json!([]),
         created_at: now.into(),
         updated_at: None,
     };

@@ -6022,20 +6022,6 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "String",
           "policies": []
         },
-        "passwordChangeRequired": {
-          "name": "passwordChangeRequired",
-          "returnType": "Boolean",
-          "policies": [
-            {
-              "scopes": [
-                "management.user.read"
-              ],
-              "authentication": "AAL2",
-              "userOnly": false,
-              "runtime": true
-            }
-          ]
-        },
         "phoneNumber": {
           "name": "phoneNumber",
           "returnType": "String",
@@ -6055,6 +6041,20 @@ export const schemaMetadata: SchemaMetadata = {
           "name": "profile",
           "returnType": "String",
           "policies": []
+        },
+        "requiredActions": {
+          "name": "requiredActions",
+          "returnType": "UserRequiredAction",
+          "policies": [
+            {
+              "scopes": [
+                "management.user.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
         },
         "roles": {
           "name": "roles",

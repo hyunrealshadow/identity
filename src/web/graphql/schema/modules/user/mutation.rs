@@ -5,7 +5,11 @@ use identity_application::{
     error::{codes::graphql::GraphqlErrorCode, params::ErrorParams},
     user::management::UpdateUserCommand,
 };
-use identity_domain::{authorization::ManagementScope, global_id::GlobalId, user::UserOid};
+use identity_domain::{
+    authorization::ManagementScope,
+    global_id::GlobalId,
+    user::{RequiredAction, UserOid},
+};
 
 use crate::graphql::schema::modules::session::SessionGlobalId;
 
@@ -80,12 +84,14 @@ impl UserManagementMutation {
             username,
             email,
             email_verified,
-            password_change_required,
+            required_actions,
             profile,
             expected_version,
             reason,
             client_mutation_id,
         } = input;
+        let required_actions =
+            required_actions.map(|actions| actions.into_iter().map(RequiredAction::from).collect());
         let user = decode_user_oid(ctx, &id)?;
         let reason = reason.trim().to_owned();
         let username = identifier(username, ctx)?;
@@ -108,7 +114,7 @@ impl UserManagementMutation {
                 username,
                 email,
                 email_verified,
-                password_change_required,
+                required_actions,
                 profile,
                 expected_version,
                 reason,

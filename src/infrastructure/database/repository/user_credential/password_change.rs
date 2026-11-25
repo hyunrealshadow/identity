@@ -107,13 +107,15 @@ impl UserCredentialRepositoryImpl {
                 "UPDATE login SET failed_attempts = 0, failure_reason = NULL, expires_at = GREATEST(expires_at, now() + make_interval(secs => $3)), updated_at = now() WHERE user_id = $1 AND oid = $2 AND status = $4",
                 [owner.id.into(), login.into(), (LOGIN_EXPIRY.as_secs_f64()).into(), kept_status.into()])).await.map_err(fail)?;
         }
-        UserEntity::update_many()
-            .col_expr(UserColumn::PasswordChangeRequired, Expr::value(false))
-            .filter(UserColumn::Id.eq(owner.id))
-            .filter(UserColumn::PasswordChangeRequired.eq(true))
-            .exec(&txn)
-            .await
-            .map_err(fail)?;
+        // A new password fulfils a required password change.
+        txn.execute_raw(Statement::from_sql_and_values(
+            DbBackend::Postgres,
+            "UPDATE \"user\" SET required_actions = required_actions - 'change_password' \
+             WHERE id = $1 AND required_actions @> '[\"change_password\"]'",
+            [owner.id.into()],
+        ))
+        .await
+        .map_err(fail)?;
         if matches!(replacement.kind, PasswordReplacementKind::Reset { .. }) {
             // Proving the email address ends a lockout caused by wrong passwords.
             UserEntity::update_many()

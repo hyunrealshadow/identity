@@ -49,7 +49,7 @@ pub enum User {
     Enabled,
     Locked,
     LockedUntil,
-    PasswordChangeRequired,
+    RequiredActions,
     CreatedAt,
     UpdatedAt,
 }
@@ -102,9 +102,12 @@ impl MigrationTrait for Migration {
                     .col(boolean(User::Enabled).default(true))
                     .col(boolean(User::Locked).default(false))
                     .col(timestamp_with_time_zone_null(User::LockedUntil))
-                    // Set when an administrator resets the password: the next
-                    // sign-in must replace it before a session is issued.
-                    .col(boolean(User::PasswordChangeRequired).default(false))
+                    // What the next sign-in must complete before a session is
+                    // issued, as a JSON array of action codes.
+                    .col(
+                        json_binary(User::RequiredActions)
+                            .default(Expr::val("[]").cast_as(Alias::new("jsonb"))),
+                    )
                     .col(
                         timestamp_with_time_zone(User::CreatedAt)
                             .default(Expr::current_timestamp()),
