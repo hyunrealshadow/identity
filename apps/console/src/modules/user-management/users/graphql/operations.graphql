@@ -88,7 +88,6 @@ mutation ConsoleCreateUser($input: CreateUserInput!) {
   createUser(input: $input) {
     userId
     version
-    invitationSent
   }
 }
 

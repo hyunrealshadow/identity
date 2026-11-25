@@ -17,6 +17,7 @@ use uuid::Uuid;
 
 use super::UserOid;
 use crate::auth::challenge::DeliveryPolicy;
+use crate::email::OutboundEmail;
 
 /// How long an emailed verification link stays valid.
 pub const EMAIL_VERIFICATION_TTL: Duration = Duration::from_secs(24 * 60 * 60);
@@ -60,6 +61,8 @@ pub struct EmailVerificationRequest {
     pub email_normalized: String,
     /// SHA-256 of the new link token, base64url.
     pub token_digest: String,
+    /// The message with the link, queued only if the send is admitted.
+    pub message: OutboundEmail,
     pub now: DateTime<Utc>,
 }
 

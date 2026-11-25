@@ -150,7 +150,7 @@ pub(super) async fn list_users(
 pub(super) async fn create_user(
     request: &RequestContext,
     command: CreateUserCommand,
-) -> Result<(User, Option<bool>), AppError> {
+) -> Result<User, AppError> {
     let authority = authority(request).await?;
     let created = request
         .state
@@ -158,7 +158,7 @@ pub(super) async fn create_user(
         .user_management()
         .create_user(&authority, command)
         .await?;
-    Ok((record_parts(created.record), created.invitation_sent))
+    Ok(record_parts(created))
 }
 
 pub(super) async fn send_user_invitation(

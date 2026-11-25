@@ -10,10 +10,10 @@ pub mod repository;
 pub mod service;
 
 pub use model::{
-    CreateUserCommand, CreatedUser, RevokeUserSessionsCommand, SendUserInvitationCommand,
-    UpdateUserCommand, UserFilter, UserManagementAuthority, UserManagementMutationResult,
-    UserManagementPage, UserManagementPageItem, UserOrder, UserPageRequest, UserPassword,
-    UserPasswordResetResult, UserProfilePatch, UserRecord, UserStateCommand,
+    CreateUserCommand, RevokeUserSessionsCommand, SendUserInvitationCommand, UpdateUserCommand,
+    UserFilter, UserManagementAuthority, UserManagementMutationResult, UserManagementPage,
+    UserManagementPageItem, UserOrder, UserPageRequest, UserPassword, UserPasswordResetResult,
+    UserProfilePatch, UserRecord, UserStateCommand,
 };
 pub use repository::{
     CreateUserTransaction, RevokeUserSessionsTransaction, SendUserInvitationTransaction,

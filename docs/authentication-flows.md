@@ -244,10 +244,10 @@ address. Email template: *Invitation*.
   in from the account center or any application.
 - The invitation stops applying when the account's address changes, when the
   account is disabled, or when it gets a password some other way (for example
-  an administrator's password reset, which also removes it). If the email
-  cannot be sent when the user is created, the user still exists and
-  `CreateUserPayload.invitationSent` is `false`; sending the invitation again
-  retries it.
+  an administrator's password reset, which also removes it). The email is
+  queued with the link (see [emailed codes and links](#emailed-codes-and-links));
+  an invitation whose email could not be delivered is sent again from the
+  user's Security tab.
 
 ### Email address verification
 
@@ -299,6 +299,21 @@ store with the passkey and authenticator-app enrollment challenges.
   is found by the SHA-256 digest of the token, the only form stored. A link
   that belongs to an interaction is looked up through the interaction and its
   digest compared in constant time. Links are 32 random bytes in base64url.
+- The email is rendered before the challenge is stored and queued in the same
+  transaction, so a stored challenge always has its email on the way and a
+  refused send queues nothing. A worker delivers it, woken as soon as the
+  transaction commits. A transient SMTP failure is tried again after 5 s,
+  30 s, 2 min and 10 min while the code or link still works; an expired
+  message, a permanent failure (invalid address, failed authentication,
+  delivery turned off) or the last failed attempt gives it up. Each delivery
+  and each abandoned message is logged and reported as an `email.delivery`
+  event with the template kind and a reason, never the content. The queued
+  job holds the message data-protected and is removed once it finishes. A
+  worker that stops mid-delivery has its message picked up again, so a message
+  can rarely arrive twice.
+- Responses report that an email was sent once it is queued. While an
+  interaction conceals whether an account exists, the email is composed and
+  queued, or not, without changing the answer.
 - Each kind sets how often its email may go out:
 
   | Kind | Interval | Limit |

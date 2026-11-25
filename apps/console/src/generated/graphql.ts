@@ -1641,7 +1641,7 @@ export type ConsoleCreateUserMutationVariables = Exact<{
 }>;
 
 
-export type ConsoleCreateUserMutation = { createUser: { userId: string, version: string, invitationSent: boolean | null } };
+export type ConsoleCreateUserMutation = { createUser: { userId: string, version: string } };
 
 export type ConsoleSendUserInvitationMutationVariables = Exact<{
   input: SendUserInvitationInput;
@@ -4363,7 +4363,6 @@ export const ConsoleCreateUserDocument = new TypedDocumentString(`
   createUser(input: $input) {
     userId
     version
-    invitationSent
   }
 }
     `) as unknown as TypedDocumentString<ConsoleCreateUserMutation, ConsoleCreateUserMutationVariables>;

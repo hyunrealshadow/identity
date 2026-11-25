@@ -19,14 +19,13 @@ use identity_domain::user::{
     repository::UserIdentifierUpdate,
 };
 use serde_json::json;
-use tracing::warn;
 use uuid::Uuid;
 
 use super::account::{AccountService, map_identifier_error, validate_email};
 use crate::{
     email::{
-        EmailRecipient, EmailSender, EmailTemplateKind, EmailTemplateRenderer, LinkToken,
-        link_digest, login_link_prefix, plausible_link_token, send_templated_email,
+        EmailRecipient, EmailTemplateKind, EmailTemplateRenderer, LinkToken, link_digest,
+        login_link_prefix, plausible_link_token, render_templated_email,
     },
     error::{
         AppError,
@@ -43,7 +42,6 @@ const VERIFY_EMAIL_ROUTE: &str = "verify-email";
 #[derive(Clone)]
 pub struct EmailVerificationDependencies {
     pub repository: Arc<dyn EmailVerificationRepository>,
-    pub sender: Arc<dyn EmailSender>,
     pub renderer: Arc<dyn EmailTemplateRenderer>,
     pub settings: Arc<dyn SettingsSource>,
 }
@@ -308,6 +306,39 @@ impl AccountService {
         let link_prefix = verification_link_prefix(&snapshot.section::<AppSettings>())?;
         let LinkToken { token, digest } = LinkToken::generate();
         let now = Utc::now();
+        let changes_email = email_normalized != user.email_normalized;
+        let locales: Vec<&str> = user
+            .locale
+            .as_deref()
+            .into_iter()
+            .chain(locales.iter().map(String::as_str))
+            .collect();
+        let message = render_templated_email(
+            dependencies.renderer.as_ref(),
+            &snapshot.get::<EmailTemplatesSetting>(),
+            EmailTemplateKind::EmailVerification,
+            EmailRecipient {
+                address: &email,
+                name: Some(&user.name),
+                locales: &locales,
+            },
+            now + duration(EMAIL_VERIFICATION_TTL),
+            |locale| {
+                json!({
+                    "link": format!("{link_prefix}{token}"),
+                    "email": email,
+                    "changes_email": changes_email,
+                    "expires_in_hours": duration(EMAIL_VERIFICATION_TTL).num_hours(),
+                    "user": { "name": user.name, "email": user.email },
+                    "locale": locale,
+                })
+            },
+        )
+        .map_err(|error| {
+            AppError::from_code(AccountErrorCode::EmailVerificationDeliveryFailed)
+                .with_source(error)
+        })?;
+        // The email is queued with the verification it carries.
         let admission = dependencies
             .repository
             .admit(EmailVerificationRequest {
@@ -315,6 +346,7 @@ impl AccountService {
                 email,
                 email_normalized,
                 token_digest: digest,
+                message,
                 now,
             })
             .await
@@ -350,43 +382,6 @@ impl AccountService {
             }
         };
 
-        let locales: Vec<&str> = user
-            .locale
-            .as_deref()
-            .into_iter()
-            .chain(locales.iter().map(String::as_str))
-            .collect();
-        send_templated_email(
-            dependencies.sender.as_ref(),
-            dependencies.renderer.as_ref(),
-            &snapshot.section::<EmailDeliverySettings>(),
-            &snapshot.get::<EmailTemplatesSetting>(),
-            EmailTemplateKind::EmailVerification,
-            EmailRecipient {
-                address: &sent.verification.email,
-                name: Some(&user.name),
-                locales: &locales,
-            },
-            |locale| {
-                json!({
-                    "link": format!("{link_prefix}{token}"),
-                    "email": sent.verification.email,
-                    "changes_email": sent.verification.changes_email,
-                    "expires_in_hours": duration(EMAIL_VERIFICATION_TTL).num_hours(),
-                    "user": { "name": user.name, "email": user.email },
-                    "locale": locale,
-                })
-            },
-        )
-        .await
-        .map_err(|error| {
-            warn!(
-                reason = error.reason(),
-                "verification email was not delivered"
-            );
-            AppError::from_code(AccountErrorCode::EmailVerificationDeliveryFailed)
-                .with_source(error)
-        })?;
         Ok(sent)
     }
 }

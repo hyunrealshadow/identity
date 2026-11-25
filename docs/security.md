@@ -108,7 +108,11 @@ with a refresh token or client credentials and caches them until shortly before
 they expire. The SMTP password, OAuth client secret and refresh token are
 stored data-protected, are never returned by the API, and appear in the audit
 log only as a fingerprint; leaving one empty when saving keeps the stored
-value. An operator can send a test message with the saved settings.
+value. An operator can send a test message with the saved settings; it is
+sent at once and its result shown. Every other message goes through the
+outgoing queue described under
+[emailed codes and links](authentication-flows.md#emailed-codes-and-links),
+which uses the delivery settings in force when it is sent.
 
 Each message kind has one email template (`email.templates`): default content
 and optional translations keyed by language tag, each a subject and an HTML

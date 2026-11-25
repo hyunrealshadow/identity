@@ -22,8 +22,8 @@ use uuid::Uuid;
 use super::*;
 use crate::{
     email::{
-        EmailDeliveryError, EmailMessage, EmailSender, EmailTemplateContent,
-        EmailTemplateRenderError, EmailTemplateRenderer, RenderedEmail,
+        EmailMessage, EmailTemplateContent, EmailTemplateRenderError, EmailTemplateRenderer,
+        RenderedEmail,
     },
     error::codes::account::AccountErrorCode,
     setting::{AppSettings, EmailDeliverySettings, SettingsSnapshot},
@@ -131,6 +131,8 @@ impl UserRepository for MemoryUsers {
 #[derive(Default)]
 struct MemoryVerifications {
     admitted: Mutex<Vec<EmailVerificationRequest>>,
+    /// Messages queued with admitted verifications.
+    queued: Arc<RecordingSender>,
     admission: Mutex<Option<EmailVerificationAdmission>>,
     pending: Mutex<Option<EmailVerification>>,
     cancelled: Mutex<usize>,
@@ -148,6 +150,11 @@ impl EmailVerificationRepository for MemoryVerifications {
         if let Some(admission) = self.admission.lock().unwrap().clone() {
             return Ok(admission);
         }
+        self.queued
+            .sent
+            .lock()
+            .unwrap()
+            .push(request.message.message.clone());
         Ok(EmailVerificationAdmission::Admitted {
             verification: EmailVerification {
                 oid: Uuid::new_v4(),
@@ -190,27 +197,10 @@ impl EmailVerificationRepository for MemoryVerifications {
     }
 }
 
+/// Records what was queued.
 #[derive(Default)]
 struct RecordingSender {
     sent: Mutex<Vec<EmailMessage>>,
-    fail: bool,
-}
-
-#[async_trait]
-impl EmailSender for RecordingSender {
-    async fn send(
-        &self,
-        _settings: &EmailDeliverySettings,
-        message: EmailMessage,
-    ) -> Result<(), EmailDeliveryError> {
-        if self.fail {
-            return Err(EmailDeliveryError::Transport {
-                detail: "connection refused".to_owned(),
-            });
-        }
-        self.sent.lock().unwrap().push(message);
-        Ok(())
-    }
 }
 
 /// Renders the template context as the body, so tests can read it back.
@@ -253,7 +243,7 @@ struct Fixture {
     account: User,
 }
 
-fn fixture_with(account: User, delivery: bool, sender: RecordingSender) -> Fixture {
+fn fixture_with(account: User, delivery: bool) -> Fixture {
     let users = Arc::new(MemoryUsers::default());
     users
         .users
@@ -261,11 +251,10 @@ fn fixture_with(account: User, delivery: bool, sender: RecordingSender) -> Fixtu
         .unwrap()
         .insert(account.oid, account.clone());
     let verifications = Arc::new(MemoryVerifications::default());
-    let sender = Arc::new(sender);
+    let sender = Arc::clone(&verifications.queued);
     let service =
         AccountService::new(users.clone()).with_email_verification(EmailVerificationDependencies {
             repository: verifications.clone(),
-            sender: sender.clone(),
             renderer: Arc::new(ContextRenderer),
             settings: settings(delivery),
         });
@@ -279,7 +268,7 @@ fn fixture_with(account: User, delivery: bool, sender: RecordingSender) -> Fixtu
 }
 
 fn fixture(account: User) -> Fixture {
-    fixture_with(account, true, RecordingSender::default())
+    fixture_with(account, true)
 }
 
 /// The link and other variables the message was rendered with.
@@ -330,11 +319,7 @@ async fn a_new_address_is_verified_before_it_replaces_the_current_one() {
 
 #[tokio::test]
 async fn without_email_delivery_the_address_changes_at_once_and_unverified() {
-    let f = fixture_with(
-        user("ada@example.com", true),
-        false,
-        RecordingSender::default(),
-    );
+    let f = fixture_with(user("ada@example.com", true), false);
 
     let change = f
         .service
@@ -456,35 +441,8 @@ async fn refused_admissions_send_nothing_and_explain_why() {
 }
 
 #[tokio::test]
-async fn a_failed_delivery_is_reported() {
-    let f = fixture_with(
-        user("ada@example.com", false),
-        true,
-        RecordingSender {
-            fail: true,
-            ..RecordingSender::default()
-        },
-    );
-
-    let error = f
-        .service
-        .send_email_verification(f.account.oid, Vec::new())
-        .await
-        .unwrap_err();
-
-    assert_eq!(
-        error.code(),
-        AppError::from_code(AccountErrorCode::EmailVerificationDeliveryFailed).code()
-    );
-}
-
-#[tokio::test]
 async fn nothing_is_sent_while_email_delivery_is_off() {
-    let f = fixture_with(
-        user("ada@example.com", false),
-        false,
-        RecordingSender::default(),
-    );
+    let f = fixture_with(user("ada@example.com", false), false);
 
     let error = f
         .service

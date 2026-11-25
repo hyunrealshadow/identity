@@ -17,10 +17,7 @@ use crate::{
             RegistrationRequest,
         },
     },
-    email::{
-        EmailSender, EmailTemplateContent, EmailTemplateRenderError, EmailTemplateRenderer,
-        RenderedEmail,
-    },
+    email::{EmailTemplateContent, EmailTemplateRenderError, EmailTemplateRenderer, RenderedEmail},
     setting::{
         BreachedPasswordCheckEnabledSetting, EmailDeliverySettings, RegistrationEnabledSetting,
         SettingDefinition as _,
@@ -177,7 +174,7 @@ fn registration_flow(enabled: bool) -> RegistrationFlow {
     let logins = Arc::clone(&login_repo.state);
     let challenges = Arc::new(MemoryChallenges::new(Arc::clone(&logins)));
     let (service, _) = otp_service(Arc::clone(&login_repo), test_user());
-    let sender = Arc::new(RecordingSender::default());
+    let sender = Arc::clone(&challenges.outbox);
     let registrations = Arc::new(MemoryRegistrations {
         challenges: Arc::clone(&challenges),
         logins: Arc::clone(&logins),
@@ -187,7 +184,6 @@ fn registration_flow(enabled: bool) -> RegistrationFlow {
     let mut service = service
         .with_email(LoginEmailDependencies {
             challenges: Arc::clone(&challenges) as Arc<dyn ChallengeRepository>,
-            sender: Arc::clone(&sender) as Arc<dyn EmailSender>,
             renderer: Arc::new(LinkRenderer),
             protector: Arc::new(PlainProtector),
         })

@@ -1557,11 +1557,6 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "String",
           "policies": []
         },
-        "invitationSent": {
-          "name": "invitationSent",
-          "returnType": "Boolean",
-          "policies": []
-        },
         "user": {
           "name": "user",
           "returnType": "User",

@@ -155,6 +155,8 @@ pub struct AppServices {
     oidc_client_repo: Arc<dyn OpenIdConnectClientRepository>,
     oidc_credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
     data_protector: Arc<dyn DataProtector>,
+    email_sender: Arc<dyn identity_application::email::EmailSender>,
+    email_queue: crate::email::EmailQueue,
     events: Arc<dyn EventSink>,
 }
 
@@ -196,6 +198,7 @@ impl AppServices {
             Arc::new(crate::email::SmtpEmailSender::new(data_protector.clone())?);
         let email_renderer: Arc<dyn identity_application::email::EmailTemplateRenderer> =
             Arc::new(crate::email::TeraEmailTemplateRenderer);
+        let email_queue = crate::email::EmailQueue::new(data_protector.clone());
 
         let events = sink();
         let authorization = Arc::new(AuthorizationRepositoryImpl::new(db.clone()));
@@ -273,8 +276,9 @@ impl AppServices {
                 challenges: Arc::new(ChallengeRepositoryImpl::new(db.clone())),
             })
             .with_email(LoginEmailDependencies {
-                challenges: Arc::new(ChallengeRepositoryImpl::new(db.clone())),
-                sender: Arc::clone(&email_sender),
+                challenges: Arc::new(
+                    ChallengeRepositoryImpl::new(db.clone()).with_email_queue(email_queue.clone()),
+                ),
                 renderer: Arc::clone(&email_renderer),
                 protector: data_protector.clone(),
             })
@@ -284,8 +288,10 @@ impl AppServices {
                 .with_events(Arc::clone(&events)),
             account: AccountService::new(Arc::new(UserRepositoryImpl::new(db.clone())))
                 .with_email_verification(EmailVerificationDependencies {
-                    repository: Arc::new(EmailVerificationRepositoryImpl::new(db.clone())),
-                    sender: Arc::clone(&email_sender),
+                    repository: Arc::new(EmailVerificationRepositoryImpl::new(
+                        db.clone(),
+                        email_queue.clone(),
+                    )),
                     renderer: Arc::clone(&email_renderer),
                     settings: settings.store(),
                 })
@@ -340,7 +346,10 @@ impl AppServices {
                 InstanceOverviewRepositoryImpl::new(db.clone()),
             )),
             user_management: UserManagementService::new(
-                Arc::new(UserManagementRepositoryImpl::new(db.clone())),
+                Arc::new(
+                    UserManagementRepositoryImpl::new(db.clone())
+                        .with_email_queue(email_queue.clone()),
+                ),
                 Arc::new(PasswordHasherImpl::new()),
                 breach_checker.clone(),
                 settings.store(),
@@ -348,7 +357,6 @@ impl AppServices {
             )
             .with_invitations(UserInvitations {
                 delivery: InvitationDelivery {
-                    sender: Arc::clone(&email_sender),
                     renderer: Arc::clone(&email_renderer),
                     settings: settings.store(),
                 },
@@ -510,6 +518,8 @@ impl AppServices {
             oidc_client_repo,
             oidc_credential_repo,
             data_protector,
+            email_sender,
+            email_queue,
             events,
         })
     }
@@ -676,6 +686,16 @@ impl AppServices {
     }
 
     #[must_use]
+    /// Delivers queued email.
+    pub fn email_sender(&self) -> &Arc<dyn identity_application::email::EmailSender> {
+        &self.email_sender
+    }
+
+    /// Writes and opens queued email.
+    pub fn email_queue(&self) -> &crate::email::EmailQueue {
+        &self.email_queue
+    }
+
     pub fn data_protector(&self) -> &Arc<dyn DataProtector> {
         &self.data_protector
     }

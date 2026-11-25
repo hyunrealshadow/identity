@@ -217,22 +217,16 @@ pub(super) struct CreateUserPayload {
     user_id: ID,
     version: Uuid,
     user: Option<UserNode>,
-    invitation_sent: Option<bool>,
     client_mutation_id: Option<String>,
 }
 
 impl CreateUserPayload {
-    pub(super) fn new(
-        user: User,
-        invitation_sent: Option<bool>,
-        client_mutation_id: Option<String>,
-    ) -> Self {
+    pub(super) fn new(user: User, client_mutation_id: Option<String>) -> Self {
         let version = user.version;
         Self {
             user_id: account::user_global_id(&user),
             version,
             user: Some(UserNode::managed(user)),
-            invitation_sent,
             client_mutation_id,
         }
     }
@@ -242,12 +236,6 @@ impl CreateUserPayload {
 impl CreateUserPayload {
     async fn user_id(&self) -> &ID {
         &self.user_id
-    }
-
-    /// Whether the invitation email went out, when one was asked for. The
-    /// user exists either way; when it is `false`, send the invitation again.
-    async fn invitation_sent(&self) -> Option<bool> {
-        self.invitation_sent
     }
 
     async fn version(&self) -> Uuid {

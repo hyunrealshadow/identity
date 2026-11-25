@@ -14,16 +14,30 @@ use identity_domain::auth::{
         DeliveryDecision,
     },
 };
+use identity_domain::email::OutboundEmail;
 use sea_orm::{ConnectionTrait, DatabaseConnection, DbBackend, DbErr, Statement, TransactionTrait};
 use uuid::Uuid;
 
+use crate::email::EmailQueue;
+
 pub struct ChallengeRepositoryImpl {
     db: DatabaseConnection,
+    email_queue: Option<EmailQueue>,
 }
 
 impl ChallengeRepositoryImpl {
     pub fn new(db: DatabaseConnection) -> Self {
-        Self { db }
+        Self {
+            db,
+            email_queue: None,
+        }
+    }
+
+    /// Let admitted outbound challenges queue their email.
+    #[must_use]
+    pub fn with_email_queue(mut self, email_queue: EmailQueue) -> Self {
+        self.email_queue = Some(email_queue);
+        self
     }
 }
 
@@ -118,7 +132,16 @@ impl ChallengeRepository for ChallengeRepositoryImpl {
         &self,
         context: DeliveryChallengeContext,
         request: DeliveryChallengeRequest,
+        email: Option<OutboundEmail>,
     ) -> Result<DeliveryChallengeAdmission, AppError> {
+        let email_queue = match (&email, &self.email_queue) {
+            (Some(_), None) => {
+                return Err(AppError::internal(std::io::Error::other(
+                    "challenge repository has no email queue",
+                )));
+            }
+            (_, queue) => queue.clone(),
+        };
         let txn = self.db.begin().await.map_err(AppError::internal)?;
         let expected_user_id = match context.user_oid {
             Some(user_oid) => {
@@ -343,6 +366,12 @@ impl ChallengeRepository for ChallengeRepositoryImpl {
             .map_err(AppError::internal)?;
         }
 
+        if let (Some(email), Some(queue)) = (&email, &email_queue) {
+            queue
+                .enqueue(&txn, email)
+                .await
+                .map_err(AppError::internal)?;
+        }
         txn.commit().await.map_err(AppError::internal)?;
         Ok(DeliveryChallengeAdmission::Admitted {
             sent_at: counter.sent_at,

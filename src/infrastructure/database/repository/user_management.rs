@@ -55,25 +55,49 @@ use super::{
         user_attribute_changes,
     },
     user_credential::prune_password_history,
-    user_invitation::{discard_invitation_in_txn, has_password, issue_in_txn},
-};
-use crate::database::{
-    audit, client_authorization_boundary,
-    entity::{
-        user,
-        user::{Column as UserColumn, Entity as UserEntity},
-        user_credential,
+    user_invitation::{
+        InvitationIssueOutcome, discard_invitation_in_txn, has_password, issue_in_txn,
     },
+};
+use crate::{
+    database::{
+        audit, client_authorization_boundary,
+        entity::{
+            user,
+            user::{Column as UserColumn, Entity as UserEntity},
+            user_credential,
+        },
+    },
+    email::EmailQueue,
 };
 
 pub struct UserManagementRepositoryImpl {
     db: DatabaseConnection,
+    email_queue: Option<EmailQueue>,
 }
 
 impl UserManagementRepositoryImpl {
     #[must_use]
     pub fn new(db: DatabaseConnection) -> Self {
-        Self { db }
+        Self {
+            db,
+            email_queue: None,
+        }
+    }
+
+    /// Let invitations queue their email.
+    #[must_use]
+    pub fn with_email_queue(mut self, email_queue: EmailQueue) -> Self {
+        self.email_queue = Some(email_queue);
+        self
+    }
+
+    fn email_queue(&self) -> Result<&EmailQueue, UserManagementRepositoryError> {
+        self.email_queue.as_ref().ok_or_else(|| {
+            storage(DbErr::Custom(
+                "user management repository has no email queue".to_owned(),
+            ))
+        })
     }
 }
 
@@ -795,16 +819,26 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         )
         .await?;
         if let Some(invitation) = &command.invitation {
-            // A new account has no earlier invitation to wait for.
-            let _ = issue_in_txn(
+            // A new account has no earlier invitation to wait for, and the
+            // email was written for the address it is created with.
+            match issue_in_txn(
                 &txn,
+                self.email_queue()?,
                 model.id,
                 &model.email_normalized,
                 invitation,
                 USER_INVITATION_DELIVERY,
             )
             .await
-            .map_err(storage)?;
+            .map_err(storage)?
+            {
+                InvitationIssueOutcome::Issued => {}
+                InvitationIssueOutcome::TooSoon(_) | InvitationIssueOutcome::AddressChanged => {
+                    return Err(storage(DbErr::Custom(
+                        "a new account's invitation was not issued".to_owned(),
+                    )));
+                }
+            }
             append_semantic_audit(
                 &txn,
                 &command.authority,
@@ -1445,8 +1479,9 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         if has_password(&txn, model.id).await.map_err(storage)? {
             return Ok(UserInvitationOutcome::HasPassword);
         }
-        if let Err(available_at) = issue_in_txn(
+        match issue_in_txn(
             &txn,
+            self.email_queue()?,
             model.id,
             &model.email_normalized,
             &command.invitation,
@@ -1455,7 +1490,13 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         .await
         .map_err(storage)?
         {
-            return Ok(UserInvitationOutcome::TooSoon { available_at });
+            InvitationIssueOutcome::Issued => {}
+            InvitationIssueOutcome::TooSoon(available_at) => {
+                return Ok(UserInvitationOutcome::TooSoon { available_at });
+            }
+            InvitationIssueOutcome::AddressChanged => {
+                return Ok(UserInvitationOutcome::AddressChanged);
+            }
         }
         append_semantic_audit(
             &txn,

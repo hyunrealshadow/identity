@@ -43,12 +43,25 @@ use super::{
     client_management, common, latest_semantic_audit, password, scalar, sql, user_mgmt_authority,
 };
 
-fn issue(digest: &str) -> InvitationIssue {
+/// A new invitation link whose email was written for `recipient`.
+fn issue(digest: &str, recipient: &str) -> InvitationIssue {
     let now = Utc::now();
+    let expires_at = now + ChronoDuration::days(7);
     InvitationIssue {
         token_digest: digest.to_owned(),
+        email: identity_domain::email::OutboundEmail {
+            kind: "user_invitation",
+            message: identity_domain::email::EmailMessage {
+                to_address: recipient.to_owned(),
+                to_name: None,
+                subject: "Invitation".to_owned(),
+                html: format!("link-{digest}"),
+            },
+            expires_at,
+        },
+        recipient_normalized: recipient.to_owned(),
         sent_at: now,
-        expires_at: now + ChronoDuration::days(7),
+        expires_at,
     }
 }
 
@@ -88,7 +101,7 @@ async fn send(
     users
         .send_user_invitation(SendUserInvitationTransaction {
             user_oid: user.into(),
-            invitation: issue(digest),
+            invitation: issue(digest, "invitee@example.test"),
             delivery: identity_application::user::invitation::USER_INVITATION_DELIVERY,
             reason: String::new(),
             authority: user_mgmt_authority(db, request).await,
@@ -103,7 +116,8 @@ async fn an_invitation_sets_the_first_password_once_and_only_for_its_address() {
     common::isolated(|db| async move {
         seed::run_all(&db).await.unwrap();
         client_management::owner(&db).await;
-        let users = UserManagementRepositoryImpl::new(db.clone());
+        let users = UserManagementRepositoryImpl::new(db.clone())
+            .with_email_queue(common::email_queue(&db).await);
         let invitations = UserInvitationRepositoryImpl::new(db.clone());
 
         // Created without a password, with an invitation, in one write.
@@ -114,7 +128,7 @@ async fn an_invitation_sets_the_first_password_once_and_only_for_its_address() {
                 email: "Invitee@example.test".to_owned(),
                 email_normalized: "invitee@example.test".to_owned(),
                 password: None,
-                invitation: Some(issue("digest-first")),
+                invitation: Some(issue("digest-first", "invitee@example.test")),
                 profile: identity_domain::user::repository::UserProfilePatch::default(),
                 reason: String::new(),
                 authority: user_mgmt_authority(&db, "invite-create").await,
@@ -139,18 +153,42 @@ async fn an_invitation_sets_the_first_password_once_and_only_for_its_address() {
             .expect("the link shows its account");
         assert_eq!(shown.name, "invitee");
 
-        // Another send within the interval is refused; afterwards it
-        // replaces the link.
+        // The invitation email was queued with the account.
+        assert_eq!(common::queued_emails(&db).await, 1);
+
+        // Another send within the interval is refused and queues nothing;
+        // afterwards it replaces the link.
         assert!(matches!(
             send(&users, &db, invitee, "digest-too-soon", "invite-too-soon").await,
             UserInvitationOutcome::TooSoon { .. }
         ));
+        assert_eq!(common::queued_emails(&db).await, 1);
         sql(&db, "UPDATE authentication_challenge SET sent_at = sent_at - interval '2 minutes' WHERE purpose = 'invitation'").await;
         assert!(matches!(
             send(&users, &db, invitee, "digest-second", "invite-resend").await,
             UserInvitationOutcome::Sent { .. }
         ));
+        assert_eq!(common::queued_emails(&db).await, 2);
         assert!(invitations.find_by_token("digest-first", Utc::now()).await.unwrap().is_none());
+
+        // An email written for an address the account no longer has is
+        // neither stored nor queued, so the old address never gets a link
+        // that works for the account.
+        sql(&db, "UPDATE authentication_challenge SET sent_at = sent_at - interval '2 minutes' WHERE purpose = 'invitation'").await;
+        let stale = users
+            .send_user_invitation(SendUserInvitationTransaction {
+                user_oid: invitee.into(),
+                invitation: issue("digest-stale-address", "old@example.test"),
+                delivery: identity_application::user::invitation::USER_INVITATION_DELIVERY,
+                reason: String::new(),
+                authority: user_mgmt_authority(&db, "invite-stale-address").await,
+            })
+            .await
+            .unwrap();
+        assert!(matches!(stale, UserInvitationOutcome::AddressChanged));
+        assert_eq!(common::queued_emails(&db).await, 2);
+        assert!(invitations.find_by_token("digest-stale-address", Utc::now()).await.unwrap().is_none());
+        assert!(invitations.find_by_token("digest-second", Utc::now()).await.unwrap().is_some());
 
         // Disabling the account ends its logins and sessions with their
         // challenges, but not the invitation, which needs neither. It works
@@ -235,7 +273,8 @@ async fn an_administrator_password_replaces_an_outstanding_invitation() {
     common::isolated(|db| async move {
         seed::run_all(&db).await.unwrap();
         client_management::owner(&db).await;
-        let users = UserManagementRepositoryImpl::new(db.clone());
+        let users = UserManagementRepositoryImpl::new(db.clone())
+            .with_email_queue(common::email_queue(&db).await);
         let invitations = UserInvitationRepositoryImpl::new(db.clone());
         users
             .create_user(CreateUserTransaction {
@@ -244,7 +283,7 @@ async fn an_administrator_password_replaces_an_outstanding_invitation() {
                 email: "pending@example.test".to_owned(),
                 email_normalized: "pending@example.test".to_owned(),
                 password: None,
-                invitation: Some(issue("digest-pending")),
+                invitation: Some(issue("digest-pending", "pending@example.test")),
                 profile: identity_domain::user::repository::UserProfilePatch::default(),
                 reason: String::new(),
                 authority: user_mgmt_authority(&db, "pending-create").await,
@@ -326,6 +365,7 @@ async fn registration_creates_a_verified_account_and_binds_its_login_once() {
                         "email_normalized": "new@example.test",
                     })),
                 },
+                None,
             )
             .await
             .unwrap();

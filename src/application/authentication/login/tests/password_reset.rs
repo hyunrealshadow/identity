@@ -11,10 +11,7 @@ use crate::{
         challenge::ChallengeRepository,
         login::{LoginEmailDependencies, PasswordResetRequest},
     },
-    email::{
-        EmailSender, EmailTemplateContent, EmailTemplateRenderError, EmailTemplateRenderer,
-        RenderedEmail,
-    },
+    email::{EmailTemplateContent, EmailTemplateRenderError, EmailTemplateRenderer, RenderedEmail},
     setting::{
         BreachedPasswordCheckEnabledSetting, EmailDeliverySettings,
         IdentifierEnumerationAllowedSetting, PasswordResetEnabledSetting, SettingDefinition as _,
@@ -101,10 +98,9 @@ fn reset_flow(user: User, login: Login) -> ResetFlow {
     });
     let challenges = Arc::new(MemoryChallenges::new(Arc::clone(&login_repo.state)));
     let (service, _) = otp_service(Arc::clone(&login_repo), user);
-    let sender = Arc::new(RecordingSender::default());
+    let sender = Arc::clone(&challenges.outbox);
     let mut service = service.with_email(LoginEmailDependencies {
         challenges: Arc::clone(&challenges) as Arc<dyn ChallengeRepository>,
-        sender: Arc::clone(&sender) as Arc<dyn EmailSender>,
         renderer: Arc::new(LinkRenderer),
         protector: Arc::new(PlainProtector),
     });

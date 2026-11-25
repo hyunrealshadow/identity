@@ -28,12 +28,12 @@ use identity_domain::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tracing::{Instrument, warn};
+use tracing::warn;
 use uuid::Uuid;
 
 use super::{LoginEmailDependencies, LoginService};
 use crate::{
-    email::{EmailRecipient, EmailTemplateKind, LinkToken, link_matches, send_templated_email},
+    email::{EmailRecipient, EmailTemplateKind, LinkToken, link_matches, render_templated_email},
     error::{AppError, codes::auth::AuthErrorCode},
     observability::{BusinessEvent, EventValue},
     setting::{
@@ -221,6 +221,54 @@ impl LoginService {
         };
 
         let expires_at = now + ttl();
+        let email = match recipient.as_ref().zip(token.as_ref()) {
+            Some((user, token)) => {
+                let snapshot = self.settings.snapshot();
+                let locales: Vec<&str> = user
+                    .locale
+                    .as_deref()
+                    .into_iter()
+                    .chain(request.locales.iter().map(String::as_str))
+                    .collect();
+                let rendered = render_templated_email(
+                    dependencies.renderer.as_ref(),
+                    &snapshot.get::<EmailTemplatesSetting>(),
+                    EmailTemplateKind::PasswordReset,
+                    EmailRecipient {
+                        address: &user.email,
+                        name: Some(&user.name),
+                        locales: &locales,
+                    },
+                    expires_at,
+                    |locale| {
+                        json!({
+                            "link": format!("{}{}", request.link_prefix, token),
+                            "expires_in_minutes": ttl().num_minutes(),
+                            "user": { "name": user.name, "email": user.email },
+                            "application": request.application_name.as_ref().map(|name| json!({ "name": name })),
+                            "locale": locale,
+                        })
+                    },
+                );
+                match rendered {
+                    Ok(email) => Some(email),
+                    // While the login conceals the account, the answer must
+                    // not depend on whether an email goes out.
+                    Err(error) if concealed => {
+                        warn!(error = %error, "password reset email could not be composed");
+                        None
+                    }
+                    Err(error) => {
+                        return Err(AppError::from_code(
+                            AuthErrorCode::PasswordResetDeliveryFailed,
+                        )
+                        .with_source(error));
+                    }
+                }
+            }
+            None => None,
+        };
+        // The email is queued with the challenge it carries.
         let sent = match dependencies
             .challenges
             .admit_delivery(
@@ -237,6 +285,7 @@ impl LoginService {
                     required_login_status: Some(LoginStatus::IDENTIFIER_VERIFIED),
                     verifier,
                 },
+                email,
             )
             .await?
         {
@@ -262,32 +311,6 @@ impl LoginService {
             }
         };
 
-        let Some((user, token)) = recipient.zip(token) else {
-            return Ok(sent);
-        };
-        let snapshot = self.settings.snapshot();
-        let delivery = DeliveryJob {
-            dependencies,
-            delivery: snapshot.section::<EmailDeliverySettings>(),
-            templates: snapshot.get::<EmailTemplatesSetting>(),
-            user,
-            locales: request.locales,
-            application_name: request.application_name,
-            link: format!("{}{}", request.link_prefix, token),
-        };
-        if concealed {
-            // The response must not wait on whether anything is sent.
-            tokio::spawn(
-                async move {
-                    if let Err(error) = delivery.run().await {
-                        warn!(error = %error, "failed to deliver password reset email");
-                    }
-                }
-                .in_current_span(),
-            );
-        } else {
-            delivery.run().await?;
-        }
         Ok(sent)
     }
 
@@ -421,56 +444,4 @@ fn matches(
         return false;
     };
     link_matches(token, &verifier.link)
-}
-
-/// Composes and sends one password reset email.
-struct DeliveryJob {
-    dependencies: LoginEmailDependencies,
-    delivery: EmailDeliverySettings,
-    templates: crate::email::EmailTemplates,
-    user: User,
-    locales: Vec<String>,
-    application_name: Option<String>,
-    link: String,
-}
-
-impl DeliveryJob {
-    async fn run(self) -> Result<(), AppError> {
-        let locales: Vec<&str> = self
-            .user
-            .locale
-            .as_deref()
-            .into_iter()
-            .chain(self.locales.iter().map(String::as_str))
-            .collect();
-        send_templated_email(
-            self.dependencies.sender.as_ref(),
-            self.dependencies.renderer.as_ref(),
-            &self.delivery,
-            &self.templates,
-            EmailTemplateKind::PasswordReset,
-            EmailRecipient {
-                address: &self.user.email,
-                name: Some(&self.user.name),
-                locales: &locales,
-            },
-            |locale| {
-                json!({
-                    "link": self.link,
-                    "expires_in_minutes": ttl().num_minutes(),
-                    "user": { "name": self.user.name, "email": self.user.email },
-                    "application": self.application_name.as_ref().map(|name| json!({ "name": name })),
-                    "locale": locale,
-                })
-            },
-        )
-        .await
-        .map_err(|error| {
-            warn!(
-                reason = error.reason(),
-                "password reset email was not delivered"
-            );
-            AppError::from_code(AuthErrorCode::PasswordResetDeliveryFailed).with_source(error)
-        })
-    }
 }

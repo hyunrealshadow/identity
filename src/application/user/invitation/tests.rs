@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use super::{
-    InvitationAcceptance, InvitationService, InvitationToken, USER_INVITATION_TTL,
+    InvitationAcceptance, InvitationDelivery, InvitationService, Invitee, USER_INVITATION_TTL,
     UserInvitationRepository, UserInvitationStatus,
 };
 use crate::{
@@ -15,10 +15,14 @@ use crate::{
         password::{HashOptions, PasswordHashError, PasswordHasher, VerifyResult},
         password_policy::BreachedPasswordChecker,
     },
+    email::{
+        EmailTemplateContent, EmailTemplateRenderError, EmailTemplateRenderer, LinkToken,
+        RenderedEmail, link_digest,
+    },
     error::{AppError, code::AppErrorCode, codes::auth::AuthErrorCode},
     setting::{
-        BreachedPasswordCheckEnabledSetting, PasswordHashSetting, SettingDefinition as _,
-        SettingsSnapshot,
+        AppSettings, BreachedPasswordCheckEnabledSetting, EmailDeliverySettings,
+        PasswordHashSetting, SettingDefinition as _, SettingsSnapshot,
     },
     user::{Argon2Password, Password, User, UserOid},
 };
@@ -138,9 +142,9 @@ fn invited_user() -> User {
 }
 
 fn service() -> (InvitationService, Arc<OneInvitation>, String) {
-    let token = InvitationToken::generate(Utc::now());
+    let token = LinkToken::generate();
     let repository = Arc::new(OneInvitation {
-        digest: token.issue.token_digest.clone(),
+        digest: token.digest.clone(),
         user: invited_user(),
         accepted: Mutex::new(None),
     });
@@ -158,19 +162,65 @@ fn service() -> (InvitationService, Arc<OneInvitation>, String) {
     (service, repository, token.token)
 }
 
+/// Puts the link in the body, so tests can read it back.
+struct LinkRenderer;
+
+impl EmailTemplateRenderer for LinkRenderer {
+    fn render(
+        &self,
+        _: &EmailTemplateContent,
+        context: &serde_json::Value,
+    ) -> Result<RenderedEmail, EmailTemplateRenderError> {
+        Ok(RenderedEmail {
+            subject: "invitation".to_owned(),
+            html: context["link"].as_str().unwrap().to_owned(),
+        })
+    }
+}
+
 #[test]
-fn a_new_link_stores_only_its_digest_and_lasts_a_week() {
+fn a_new_link_is_emailed_to_its_account_and_only_its_digest_is_kept() {
+    let delivery = InvitationDelivery {
+        renderer: Arc::new(LinkRenderer),
+        settings: Arc::new(
+            SettingsSnapshot::default()
+                .with_section(&AppSettings {
+                    login_domain: Some("https://login.example.com".to_owned()),
+                    ..AppSettings::default()
+                })
+                .with_section(&EmailDeliverySettings {
+                    enabled: true,
+                    host: "smtp.example.com".to_owned(),
+                    sender_address: "identity@example.com".to_owned(),
+                    ..EmailDeliverySettings::default()
+                }),
+        ),
+    };
     let now = Utc::now();
-    let token = InvitationToken::generate(now);
-    assert_ne!(token.issue.token_digest, token.token);
+    let issue = delivery
+        .issue(
+            &Invitee {
+                name: "invited",
+                email: "Invited@Example.com",
+                email_normalized: "invited@example.com",
+                locale: None,
+            },
+            now,
+        )
+        .unwrap();
+
+    let link = &issue.email.message.html;
+    let token = link
+        .strip_prefix("https://login.example.com/invitation?token=")
+        .expect("the email carries the invitation link");
+    assert_eq!(issue.token_digest, link_digest(token));
+    assert_eq!(issue.email.message.to_address, "Invited@Example.com");
+    assert_eq!(issue.recipient_normalized, "invited@example.com");
     assert_eq!(
-        token.issue.token_digest,
-        crate::email::link_digest(&token.token)
-    );
-    assert_eq!(
-        (token.issue.expires_at - now).to_std().unwrap(),
+        (issue.expires_at - now).to_std().unwrap(),
         USER_INVITATION_TTL
     );
+    assert_eq!(issue.email.expires_at, issue.expires_at);
 }
 
 #[tokio::test]

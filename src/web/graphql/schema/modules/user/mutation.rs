@@ -57,7 +57,7 @@ impl UserManagementMutation {
             .map(UserProfilePatchInput::into_patch)
             .unwrap_or_default();
         let request = request_context(ctx)?;
-        let (user, invitation_sent) = integration::create_user(
+        let user = integration::create_user(
             request,
             CreateUserCommand {
                 username,
@@ -71,11 +71,7 @@ impl UserManagementMutation {
         )
         .await
         .map_err(|error| app_error(ctx, error))?;
-        Ok(CreateUserPayload::new(
-            user,
-            invitation_sent,
-            client_mutation_id,
-        ))
+        Ok(CreateUserPayload::new(user, client_mutation_id))
     }
 
     /// Email a new link with which the user sets their first password. Only

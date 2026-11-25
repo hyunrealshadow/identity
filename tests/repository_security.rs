@@ -1053,7 +1053,23 @@ async fn email_code_admission_is_atomic_and_independent_of_the_account() {
         )
         .await;
         let logins = Arc::new(LoginRepositoryImpl::new(db.clone()));
-        let challenges = Arc::new(ChallengeRepositoryImpl::new(db.clone()));
+        let challenges = Arc::new(
+            ChallengeRepositoryImpl::new(db.clone())
+                .with_email_queue(common::email_queue(&db).await),
+        );
+        // Every request carries a message; only admitted ones may queue it.
+        let email = || {
+            Some(identity_domain::email::OutboundEmail {
+                kind: "sign_in_code",
+                message: identity_domain::email::EmailMessage {
+                    to_address: "nobody@example.test".to_owned(),
+                    to_name: None,
+                    subject: "Code".to_owned(),
+                    html: "code".to_owned(),
+                },
+                expires_at: Utc::now() + ChronoDuration::minutes(10),
+            })
+        };
         let login = logins.create_pending(client, relation, &[]).await.unwrap();
         let context = DeliveryChallengeContext {
             user_oid: None,
@@ -1075,7 +1091,7 @@ async fn email_code_admission_is_atomic_and_independent_of_the_account() {
         // Not yet waiting for a first factor.
         assert_eq!(
             challenges
-                .admit_delivery(context, make_request(Utc::now(), Utc::now()))
+                .admit_delivery(context, make_request(Utc::now(), Utc::now()), email())
                 .await
                 .unwrap(),
             DeliveryChallengeAdmission::InvalidState
@@ -1091,7 +1107,7 @@ async fn email_code_admission_is_atomic_and_independent_of_the_account() {
         let attempts = (0..8).map(|_| {
             let challenges = Arc::clone(&challenges);
             let request = make_request(now, extended);
-            tokio::spawn(async move { challenges.admit_delivery(context, request).await.unwrap() })
+            tokio::spawn(async move { challenges.admit_delivery(context, request, email()).await.unwrap() })
         });
         let mut admitted = 0;
         for attempt in attempts {
@@ -1137,6 +1153,7 @@ async fn email_code_admission_is_atomic_and_independent_of_the_account() {
                 .admit_delivery(
                     context,
                     make_request(later, later + ChronoDuration::minutes(10)),
+                    email(),
                 )
                 .await
                 .unwrap()
@@ -1153,10 +1170,17 @@ async fn email_code_admission_is_atomic_and_independent_of_the_account() {
                 .admit_delivery(
                     context,
                     make_request(later, later + ChronoDuration::minutes(10)),
+                    email(),
                 )
                 .await
                 .unwrap(),
             DeliveryChallengeAdmission::LimitReached
+        );
+        // One message per admitted send: the concurrent first send queued
+        // once, the refused and over-limit sends never.
+        assert_eq!(
+            common::queued_emails(&db).await,
+            i64::from(MAX_EMAIL_CODE_SENDS)
         );
 
         // Satisfied AMR is kept on the login and cleared along with challenges on identity reset.

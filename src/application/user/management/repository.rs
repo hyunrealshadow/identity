@@ -112,6 +112,9 @@ pub enum UserInvitationOutcome {
     TooSoon {
         available_at: DateTime<Utc>,
     },
+    /// The account's address is no longer the one the email was written
+    /// for; nothing was stored or queued.
+    AddressChanged,
 }
 
 /// Fully prepared sparse update.

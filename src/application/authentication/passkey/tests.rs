@@ -115,6 +115,7 @@ impl ChallengeRepository for MemoryRepo {
         &self,
         _context: DeliveryChallengeContext,
         _request: DeliveryChallengeRequest,
+        _email: Option<identity_domain::email::OutboundEmail>,
     ) -> Result<DeliveryChallengeAdmission, AppError> {
         Ok(DeliveryChallengeAdmission::InvalidState)
     }

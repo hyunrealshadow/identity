@@ -6,6 +6,7 @@ use identity_domain::auth::challenge::{
     DeliveryChallengeAdmission, DeliveryChallengeContext, DeliveryChallengeRequest,
     DeliveryChallengeStatus,
 };
+use identity_domain::email::OutboundEmail;
 use uuid::Uuid;
 
 #[async_trait]
@@ -18,11 +19,13 @@ pub trait ChallengeRepository: Send + Sync {
     ) -> Result<(), AppError>;
 
     /// Atomically enforce resend interval and send limits on an outbound
-    /// delivery challenge and store its new verifier when provided.
+    /// delivery challenge, store its new verifier when provided, and queue
+    /// `email` with it. Nothing is queued unless the send is admitted.
     async fn admit_delivery(
         &self,
         context: DeliveryChallengeContext,
         request: DeliveryChallengeRequest,
+        email: Option<OutboundEmail>,
     ) -> Result<DeliveryChallengeAdmission, AppError>;
 
     /// Return the latest outbound delivery status for an active interaction

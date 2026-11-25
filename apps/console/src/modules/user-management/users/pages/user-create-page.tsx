@@ -419,17 +419,11 @@ export function UserCreatePage() {
       // Clear the sensitive local password immediately after a committed write.
       leaveCreate()
       changeDraft((current) => ({ ...current, password: '' }))
-      if (payload.invitationSent === false) {
-        toast.warning(t('usersCreateSuccessToast'), {
-          description: t('usersInvitationNotSent'),
-        })
-      } else {
-        toast.success(t('usersCreateSuccessToast'), {
-          description: t(
-            payload.invitationSent ? 'usersInvitationSentToast' : 'usersCreateCommitted',
-          ),
-        })
-      }
+      toast.success(t('usersCreateSuccessToast'), {
+        description: t(
+          firstSignIn === 'invite' ? 'usersInvitationSentToast' : 'usersCreateCommitted',
+        ),
+      })
       if (result.partial) {
         toast.warning(t('usersPartialMutationNote'))
       }

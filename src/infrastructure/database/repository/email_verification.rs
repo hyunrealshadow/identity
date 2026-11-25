@@ -28,9 +28,12 @@ use super::{
     authorization_lifecycle::renew_user_version_in_txn,
     user::user_attribute_changes,
 };
-use crate::database::{
-    audit,
-    entity::user::{self, Column as UserColumn, Entity as UserEntity},
+use crate::{
+    database::{
+        audit,
+        entity::user::{self, Column as UserColumn, Entity as UserEntity},
+    },
+    email::EmailQueue,
 };
 
 const PURPOSE: ChallengePurpose = ChallengePurpose::EmailVerification;
@@ -50,12 +53,13 @@ type Verification = AccountChallenge<VerificationState>;
 
 pub struct EmailVerificationRepositoryImpl {
     db: DatabaseConnection,
+    email_queue: EmailQueue,
 }
 
 impl EmailVerificationRepositoryImpl {
     #[must_use]
-    pub const fn new(db: DatabaseConnection) -> Self {
-        Self { db }
+    pub const fn new(db: DatabaseConnection, email_queue: EmailQueue) -> Self {
+        Self { db, email_queue }
     }
 }
 
@@ -175,6 +179,10 @@ impl EmailVerificationRepository for EmailVerificationRepositoryImpl {
         .await
         .map_err(query_failed)?;
         let model = Verification { model, state };
+        self.email_queue
+            .enqueue(&txn, &request.message)
+            .await
+            .map_err(query_failed)?;
         txn.commit().await.map_err(query_failed)?;
         Ok(EmailVerificationAdmission::Admitted {
             verification: to_domain(&model, account.oid),

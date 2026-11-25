@@ -34,12 +34,15 @@ use super::{
     shared::lock_user_credentials,
     user::to_domain,
 };
-use crate::database::{
-    audit,
-    entity::{
-        user::{self, Column as UserColumn, Entity as UserEntity},
-        user_credential,
+use crate::{
+    database::{
+        audit,
+        entity::{
+            user::{self, Column as UserColumn, Entity as UserEntity},
+            user_credential,
+        },
     },
+    email::EmailQueue,
 };
 
 const PURPOSE: ChallengePurpose = ChallengePurpose::Invitation;
@@ -82,21 +85,37 @@ pub(super) async fn has_password<C: ConnectionTrait>(db: &C, user_id: i64) -> Re
         .is_some())
 }
 
-/// Store `invitation` as the account's only one, inside the transaction that
-/// holds the account row lock. Refused while `delivery` does not admit
-/// another email yet; the refusal says when it will.
+/// What became of a new invitation link.
+pub(super) enum InvitationIssueOutcome {
+    /// Stored, and its email queued.
+    Issued,
+    /// Another email is not admitted before this time.
+    TooSoon(DateTime<Utc>),
+    /// The account no longer has the address the email was written for.
+    AddressChanged,
+}
+
+/// Store `invitation` as the account's only one and queue its email, inside
+/// the transaction that holds the account row lock with the account's
+/// current normalized address `email_normalized`.
 pub(super) async fn issue_in_txn<C: ConnectionTrait>(
     txn: &C,
+    email_queue: &EmailQueue,
     user_id: i64,
     email_normalized: &str,
     invitation: &InvitationIssue,
     delivery: DeliveryPolicy,
-) -> Result<Result<(), DateTime<Utc>>, DbErr> {
+) -> Result<InvitationIssueOutcome, DbErr> {
+    if invitation.recipient_normalized != email_normalized {
+        return Ok(InvitationIssueOutcome::AddressChanged);
+    }
     let previous: Option<Invitation> = account_challenge::find(txn, user_id, PURPOSE).await?;
     let previous_counter = previous.as_ref().and_then(Invitation::counter);
     let counter = match delivery.admit(previous_counter.as_ref(), invitation.sent_at) {
         DeliveryDecision::Admit(counter) => counter,
-        DeliveryDecision::TooSoon { available_at } => return Ok(Err(available_at)),
+        DeliveryDecision::TooSoon { available_at } => {
+            return Ok(InvitationIssueOutcome::TooSoon(available_at));
+        }
         // Only with a policy that limits sends; the earliest is the end of
         // the current window.
         DeliveryDecision::LimitReached => {
@@ -108,7 +127,7 @@ pub(super) async fn issue_in_txn<C: ConnectionTrait>(
                         .and_then(|window| counter.window_started_at.checked_add_signed(window))
                 })
                 .unwrap_or(DateTime::<Utc>::MAX_UTC);
-            return Ok(Err(window_end));
+            return Ok(InvitationIssueOutcome::TooSoon(window_end));
         }
     };
     account_challenge::issue(
@@ -125,7 +144,8 @@ pub(super) async fn issue_in_txn<C: ConnectionTrait>(
         },
     )
     .await?;
-    Ok(Ok(()))
+    email_queue.enqueue(txn, &invitation.email).await?;
+    Ok(InvitationIssueOutcome::Issued)
 }
 
 /// Remove the account's outstanding invitation, if any.

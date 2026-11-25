@@ -38,13 +38,13 @@ use crate::{
     observability::{BusinessEvent, EventSink, EventValue, NoopEventSink, error_outcome},
     setting::{PasswordHashSetting, PasswordHistoryCountSetting, SettingsSource},
     user::invitation::{
-        InvitationDelivery, InvitationToken, USER_INVITATION_DELIVERY, UserInvitationRepository,
+        InvitationDelivery, Invitee, USER_INVITATION_DELIVERY, UserInvitationRepository,
         UserInvitationStatus,
     },
     user::management::{
         cursor::{NormalizedFilter, decode_cursor, encode_cursor},
         model::{
-            CreateUserCommand, CreatedUser, RevokeUserSessionsCommand, SendUserInvitationCommand,
+            CreateUserCommand, RevokeUserSessionsCommand, SendUserInvitationCommand,
             UpdateUserCommand, UserFilter, UserManagementAuthority, UserManagementPage,
             UserManagementPageItem, UserPageRequest, UserPasswordResetResult, UserStateCommand,
             domain_profile_patch,
@@ -162,12 +162,29 @@ impl UserManagementService {
         validate_client_mutation_id(command.client_mutation_id.as_deref())?;
         let invitations = self.available_invitations()?;
         let now = chrono::Utc::now();
-        let token = InvitationToken::generate(now);
+        let Some(current) = self
+            .repository
+            .find_user(command.user_oid)
+            .await
+            .map_err(map_repository_error)?
+        else {
+            return Err(AppError::from_code(UserManagementErrorCode::UserNotFound));
+        };
+        let user = &current.user;
+        let issue = invitations.delivery.issue(
+            &Invitee {
+                name: &user.name,
+                email: &user.email,
+                email_normalized: &user.email_normalized,
+                locale: user.locale.as_deref(),
+            },
+            now,
+        )?;
         let outcome = self
             .repository
             .send_user_invitation(SendUserInvitationTransaction {
                 user_oid: command.user_oid,
-                invitation: token.issue.clone(),
+                invitation: issue,
                 delivery: USER_INVITATION_DELIVERY,
                 reason,
                 authority: (*authority).clone(),
@@ -191,11 +208,13 @@ impl UserManagementService {
                         .with_param("seconds", seconds.to_string()),
                 );
             }
+            // The address changed after the email was written for it.
+            UserInvitationOutcome::AddressChanged => {
+                return Err(AppError::from_code(
+                    UserManagementErrorCode::VersionConflict,
+                ));
+            }
         };
-        invitations
-            .delivery
-            .send(&record.user, &token.token)
-            .await?;
         Ok((record, status))
     }
 
@@ -295,12 +314,9 @@ impl UserManagementService {
         &self,
         authority: &UserManagementAuthority,
         command: CreateUserCommand,
-    ) -> Result<CreatedUser, AppError> {
+    ) -> Result<UserManagementRecord, AppError> {
         let result = self.create_user_inner(authority, command).await;
-        self.emit_mutation_ref(
-            "user.management.create",
-            result.as_ref().map(|created| &created.record),
-        );
+        self.emit_mutation_ref("user.management.create", result.as_ref());
         result
     }
 
@@ -534,7 +550,7 @@ impl UserManagementService {
         &self,
         authority: &UserManagementAuthority,
         command: CreateUserCommand,
-    ) -> Result<CreatedUser, AppError> {
+    ) -> Result<UserManagementRecord, AppError> {
         let reason = validate_reason(&command.reason)?;
         validate_client_mutation_id(command.client_mutation_id.as_deref())?;
         let (username, username_normalized) = validate_username_field(&command.username)?;
@@ -559,9 +575,16 @@ impl UserManagementService {
                 (Some(password), None)
             }
             (None, true) => {
-                let invitations = self.available_invitations()?.clone();
-                let token = InvitationToken::generate(chrono::Utc::now());
-                (None, Some((invitations, token)))
+                let issue = self.available_invitations()?.delivery.issue(
+                    &Invitee {
+                        name: &username,
+                        email: &email,
+                        email_normalized: &email_normalized,
+                        locale: profile.locale.as_ref().and_then(|locale| locale.as_deref()),
+                    },
+                    chrono::Utc::now(),
+                )?;
+                (None, Some(issue))
             }
             _ => {
                 return Err(
@@ -582,28 +605,15 @@ impl UserManagementService {
                 email,
                 email_normalized,
                 password,
-                invitation: invitation.as_ref().map(|(_, token)| token.issue.clone()),
+                invitation,
                 profile,
                 reason,
                 authority: (*authority).clone(),
             })
             .await
             .map_err(map_repository_error)?;
-        let record = map_mutation_outcome(outcome)?;
-        let invitation_sent = match invitation {
-            Some((invitations, token)) => Some(
-                invitations
-                    .delivery
-                    .send(&record.user, &token.token)
-                    .await
-                    .is_ok(),
-            ),
-            None => None,
-        };
-        Ok(CreatedUser {
-            record,
-            invitation_sent,
-        })
+        // An invitation's email is queued with the account.
+        map_mutation_outcome(outcome)
     }
 
     async fn update_user_inner(

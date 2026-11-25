@@ -9,22 +9,7 @@ use crate::setting::EmailDeliverySettings;
 /// email delivery settings.
 pub const EMAIL_DELIVERY_SECRET_PURPOSE: &str = "setting.email.delivery.secret";
 
-/// One rendered message to a single recipient. The sender adds a plain-text
-/// alternative derived from the HTML body.
-#[derive(Clone)]
-pub struct EmailMessage {
-    pub to_address: String,
-    pub to_name: Option<String>,
-    pub subject: String,
-    pub html: String,
-}
-
-impl std::fmt::Debug for EmailMessage {
-    // Bodies carry sign-in codes and links; never print them.
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("EmailMessage").finish_non_exhaustive()
-    }
-}
+pub use identity_domain::email::EmailMessage;
 
 /// Why a message could not be delivered. `detail` is the mail server's or
 /// token endpoint's own explanation, shown only to operators.

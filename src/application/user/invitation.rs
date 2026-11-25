@@ -16,7 +16,6 @@ use std::{sync::Arc, time::Duration};
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde_json::json;
-use tracing::warn;
 
 use identity_domain::auth::challenge::DeliveryPolicy;
 
@@ -27,8 +26,8 @@ use crate::{
         password_policy::{BreachedPasswordChecker, validate_breached_password, validate_password},
     },
     email::{
-        EmailRecipient, EmailSender, EmailTemplateKind, EmailTemplateRenderer, LinkToken,
-        link_digest, login_link_prefix, plausible_link_token, send_templated_email,
+        EmailRecipient, EmailTemplateKind, EmailTemplateRenderer, LinkToken, OutboundEmail,
+        link_digest, login_link_prefix, plausible_link_token, render_templated_email,
     },
     error::{
         AppError,
@@ -68,26 +67,13 @@ pub struct UserInvitationStatus {
 pub struct InvitationIssue {
     /// SHA-256 of the link token, base64url.
     pub token_digest: String,
+    /// The invitation email, queued with the link.
+    pub email: OutboundEmail,
+    /// The normalized address the email goes to. The link is stored only
+    /// while the account still has this address.
+    pub recipient_normalized: String,
     pub sent_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
-}
-
-/// A link token and its stored form. The token goes only into the email.
-pub(crate) struct InvitationToken {
-    pub(crate) token: String,
-    pub(crate) issue: InvitationIssue,
-}
-
-impl InvitationToken {
-    pub(crate) fn generate(now: DateTime<Utc>) -> Self {
-        let LinkToken { token, digest } = LinkToken::generate();
-        let issue = InvitationIssue {
-            token_digest: digest,
-            sent_at: now,
-            expires_at: now + ttl(),
-        };
-        Self { token, issue }
-    }
 }
 
 fn ttl() -> chrono::Duration {
@@ -129,12 +115,19 @@ pub trait UserInvitationRepository: Send + Sync {
     ) -> Result<InvitationAcceptance, AppError>;
 }
 
-/// Composes and sends invitation emails.
+/// Composes invitation emails.
 #[derive(Clone)]
 pub struct InvitationDelivery {
-    pub sender: Arc<dyn EmailSender>,
     pub renderer: Arc<dyn EmailTemplateRenderer>,
     pub settings: Arc<dyn SettingsSource>,
+}
+
+/// Who an invitation is for, as the account is now.
+pub(crate) struct Invitee<'a> {
+    pub name: &'a str,
+    pub email: &'a str,
+    pub email_normalized: &'a str,
+    pub locale: Option<&'a str>,
 }
 
 impl InvitationDelivery {
@@ -147,39 +140,46 @@ impl InvitationDelivery {
             && invitation_link_prefix(&snapshot.section::<AppSettings>()).is_ok()
     }
 
-    /// Email the invitation link `token` to `user`.
-    pub(crate) async fn send(&self, user: &User, token: &str) -> Result<(), AppError> {
+    /// A new link for `invitee` with its email, ready to store and queue.
+    pub(crate) fn issue(
+        &self,
+        invitee: &Invitee<'_>,
+        now: DateTime<Utc>,
+    ) -> Result<InvitationIssue, AppError> {
         let snapshot = self.settings.snapshot();
         let link_prefix = invitation_link_prefix(&snapshot.section::<AppSettings>())?;
-        let locales: Vec<&str> = user.locale.as_deref().into_iter().collect();
-        send_templated_email(
-            self.sender.as_ref(),
+        let LinkToken { token, digest } = LinkToken::generate();
+        let expires_at = now + ttl();
+        let locales: Vec<&str> = invitee.locale.into_iter().collect();
+        let email = render_templated_email(
             self.renderer.as_ref(),
-            &snapshot.section::<EmailDeliverySettings>(),
             &snapshot.get::<EmailTemplatesSetting>(),
             EmailTemplateKind::UserInvitation,
             EmailRecipient {
-                address: &user.email,
-                name: Some(&user.name),
+                address: invitee.email,
+                name: Some(invitee.name),
                 locales: &locales,
             },
+            expires_at,
             |locale| {
                 json!({
                     "link": format!("{link_prefix}{token}"),
                     "expires_in_days": ttl().num_days(),
-                    "user": { "name": user.name, "email": user.email },
+                    "user": { "name": invitee.name, "email": invitee.email },
                     "locale": locale,
                 })
             },
         )
-        .await
         .map_err(|error| {
-            warn!(
-                reason = error.reason(),
-                "invitation email was not delivered"
-            );
             AppError::from_code(UserManagementErrorCode::InvitationDeliveryFailed)
                 .with_source(error)
+        })?;
+        Ok(InvitationIssue {
+            token_digest: digest,
+            email,
+            recipient_normalized: invitee.email_normalized.to_owned(),
+            sent_at: now,
+            expires_at,
         })
     }
 }

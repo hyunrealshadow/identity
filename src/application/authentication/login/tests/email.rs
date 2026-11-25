@@ -23,8 +23,8 @@ use crate::{
     },
     data_protection::DataProtector,
     email::{
-        EmailDeliveryError, EmailMessage, EmailSender, EmailTemplateContent,
-        EmailTemplateRenderError, EmailTemplateRenderer, RenderedEmail,
+        EmailMessage, EmailTemplateContent, EmailTemplateRenderError, EmailTemplateRenderer,
+        OutboundEmail, RenderedEmail,
     },
     setting::{
         EmailDeliverySettings, EmailSignInEnabledSetting, IdentifierEnumerationAllowedSetting,
@@ -46,6 +46,8 @@ pub(super) struct MemoryChallenges {
     logins: Arc<Mutex<TestLoginRepoState>>,
     pub(super) stored: Mutex<HashMap<Uuid, StoredMemoryChallenge>>,
     order: Mutex<Vec<Uuid>>,
+    /// Messages queued with admitted challenges.
+    pub(super) outbox: Arc<RecordingSender>,
 }
 
 impl MemoryChallenges {
@@ -54,6 +56,7 @@ impl MemoryChallenges {
             logins,
             stored: Mutex::new(HashMap::new()),
             order: Mutex::new(Vec::new()),
+            outbox: Arc::new(RecordingSender::default()),
         }
     }
 }
@@ -85,6 +88,7 @@ impl ChallengeRepository for MemoryChallenges {
         &self,
         context: DeliveryChallengeContext,
         request: DeliveryChallengeRequest,
+        email: Option<OutboundEmail>,
     ) -> Result<DeliveryChallengeAdmission, AppError> {
         let ChallengeBinding::Login(login_oid) = context.binding else {
             return Ok(DeliveryChallengeAdmission::InvalidState);
@@ -153,6 +157,9 @@ impl ChallengeRepository for MemoryChallenges {
                 expires_at: row_expires_at,
             },
         );
+        if let Some(email) = email {
+            self.outbox.sent.lock().unwrap().push(email.message);
+        }
         Ok(DeliveryChallengeAdmission::Admitted {
             sent_at: counter.sent_at,
             send_count: counter.send_count,
@@ -246,22 +253,10 @@ impl ChallengeRepository for MemoryChallenges {
     }
 }
 
-/// Records what would be sent; the body carries the rendered context.
+/// Records what was queued; the body carries the rendered context.
 #[derive(Default)]
 pub(super) struct RecordingSender {
     pub(super) sent: Mutex<Vec<EmailMessage>>,
-}
-
-#[async_trait]
-impl EmailSender for RecordingSender {
-    async fn send(
-        &self,
-        _settings: &EmailDeliverySettings,
-        message: EmailMessage,
-    ) -> Result<(), EmailDeliveryError> {
-        self.sent.lock().unwrap().push(message);
-        Ok(())
-    }
 }
 
 /// Puts the code in the subject and the link in the body.
@@ -335,10 +330,9 @@ fn email_flow(user: User, mfa: bool, login: Login) -> EmailFlow {
     });
     let challenges = Arc::new(MemoryChallenges::new(Arc::clone(&login_repo.state)));
     let (service, _) = otp_service(Arc::clone(&login_repo), user);
-    let sender = Arc::new(RecordingSender::default());
+    let sender = Arc::clone(&challenges.outbox);
     let mut service = service.with_email(LoginEmailDependencies {
         challenges: Arc::clone(&challenges) as Arc<dyn ChallengeRepository>,
-        sender: Arc::clone(&sender) as Arc<dyn EmailSender>,
         renderer: Arc::new(ContextRenderer),
         protector: Arc::new(PlainProtector),
     });

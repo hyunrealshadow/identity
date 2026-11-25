@@ -1166,11 +1166,6 @@ input CreateUserInput {
 
 type CreateUserPayload {
 	userId: ID!
-	"""
-	Whether the invitation email went out, when one was asked for. The
-	user exists either way; when it is `false`, send the invitation again.
-	"""
-	invitationSent: Boolean
 	version: UUID!
 	user: User
 	clientMutationId: String

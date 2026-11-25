@@ -13,12 +13,15 @@ use tracing::{error, warn};
 use crate::{config::AppConfig, state::AppState};
 
 pub mod authorization_expiration;
+mod email;
+mod queue_cleanup;
 mod queue_schema;
 pub mod rotation;
 
 pub async fn spawn_background_workers(state: AppState, config: &AppConfig) -> Result<(), Error> {
     // The workers poll and send heartbeats on a small pool of their own, so
-    // they neither wait for nor hold up request handling.
+    // they neither wait for nor hold up request handling. Email is queued on
+    // the connection of the transaction that causes it.
     let pool = PgPoolOptions::new()
         .max_connections(5)
         .acquire_timeout(Duration::from_millis(config.database.connect_timeout))
@@ -29,7 +32,9 @@ pub async fn spawn_background_workers(state: AppState, config: &AppConfig) -> Re
     }
 
     rotation::spawn_rotation_workers(state.clone(), pool.clone()).await?;
-    authorization_expiration::spawn_expiration_workers(state, pool).await?;
+    authorization_expiration::spawn_expiration_workers(state.clone(), pool.clone()).await?;
+    email::spawn_email_workers(&state, &pool);
+    queue_cleanup::spawn_cleanup_worker(&state, &pool);
     Ok(())
 }
 

@@ -31,7 +31,7 @@ use identity_domain::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tracing::{Instrument, warn};
+use tracing::warn;
 use uuid::Uuid;
 
 use super::{LoginEmailDependencies, LoginService};
@@ -41,7 +41,7 @@ use crate::{
         password::run_password_hashing,
         password_policy::{validate_breached_password, validate_password},
     },
-    email::{EmailRecipient, EmailTemplateKind, LinkToken, link_matches, send_templated_email},
+    email::{EmailRecipient, EmailTemplateKind, LinkToken, link_matches, render_templated_email},
     error::{
         AppError,
         codes::{account::AccountErrorCode, auth::AuthErrorCode},
@@ -256,6 +256,35 @@ impl LoginService {
         .map_err(AppError::internal)?;
 
         let expires_at = now + ttl();
+        let link = token.map(|token| format!("{}{}", request.link_prefix, token));
+        let locales: Vec<&str> = request.locales.iter().map(String::as_str).collect();
+        let snapshot = self.settings.snapshot();
+        // A notice or a link, depending on whether the address has an
+        // account; the answer is the same either way.
+        let email = render_templated_email(
+            dependencies.renderer.as_ref(),
+            &snapshot.get::<EmailTemplatesSetting>(),
+            EmailTemplateKind::Registration,
+            EmailRecipient {
+                address: &value,
+                name: None,
+                locales: &locales,
+            },
+            expires_at,
+            |locale| {
+                json!({
+                    "link": link,
+                    "email": value,
+                    "account_exists": link.is_none(),
+                    "expires_in_minutes": ttl().num_minutes(),
+                    "application": request.application_name.as_ref().map(|name| json!({ "name": name })),
+                    "locale": locale,
+                })
+            },
+        )
+        .inspect_err(|error| warn!(error = %error, "registration email could not be composed"))
+        .ok();
+        // The email is queued with the challenge it carries.
         let sent = match dependencies
             .challenges
             .admit_delivery(
@@ -272,6 +301,7 @@ impl LoginService {
                     required_login_status: Some(LoginStatus::CREATED),
                     verifier: Some(verifier),
                 },
+                email,
             )
             .await?
         {
@@ -297,25 +327,6 @@ impl LoginService {
             }
         };
 
-        let snapshot = self.settings.snapshot();
-        let delivery = DeliveryJob {
-            dependencies,
-            delivery: snapshot.section::<EmailDeliverySettings>(),
-            templates: snapshot.get::<EmailTemplatesSetting>(),
-            email: value,
-            locales: request.locales,
-            application_name: request.application_name,
-            link: token.map(|token| format!("{}{}", request.link_prefix, token)),
-        };
-        // The response must not wait on which message is sent, or whether.
-        tokio::spawn(
-            async move {
-                if let Err(error) = delivery.run().await {
-                    warn!(error = %error, "failed to deliver registration email");
-                }
-            }
-            .in_current_span(),
-        );
         Ok(sent)
     }
 
@@ -464,52 +475,4 @@ fn matching_verifier(
     let verifier = serde_json::from_value::<RegistrationVerifier>(state.verifier?).ok()?;
     let expected = verifier.link.as_deref()?;
     link_matches(token, expected).then_some(verifier)
-}
-
-/// Composes and sends one registration email.
-struct DeliveryJob {
-    dependencies: LoginEmailDependencies,
-    delivery: EmailDeliverySettings,
-    templates: crate::email::EmailTemplates,
-    email: String,
-    locales: Vec<String>,
-    application_name: Option<String>,
-    /// `None` when the address already has an account.
-    link: Option<String>,
-}
-
-impl DeliveryJob {
-    async fn run(self) -> Result<(), AppError> {
-        let locales: Vec<&str> = self.locales.iter().map(String::as_str).collect();
-        send_templated_email(
-            self.dependencies.sender.as_ref(),
-            self.dependencies.renderer.as_ref(),
-            &self.delivery,
-            &self.templates,
-            EmailTemplateKind::Registration,
-            EmailRecipient {
-                address: &self.email,
-                name: None,
-                locales: &locales,
-            },
-            |locale| {
-                json!({
-                    "link": self.link,
-                    "email": self.email,
-                    "account_exists": self.link.is_none(),
-                    "expires_in_minutes": ttl().num_minutes(),
-                    "application": self.application_name.as_ref().map(|name| json!({ "name": name })),
-                    "locale": locale,
-                })
-            },
-        )
-        .await
-        .map_err(|error| {
-            warn!(
-                reason = error.reason(),
-                "registration email was not delivered"
-            );
-            AppError::internal(error)
-        })
-    }
 }

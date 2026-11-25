@@ -7,6 +7,7 @@ use std::sync::Arc;
 use chrono::{Duration, Utc};
 use identity_domain::{
     audit::AuditAction,
+    email::{EmailMessage, OutboundEmail},
     user::{
         UserOid,
         email_verification::{
@@ -49,6 +50,16 @@ fn request(user: UserOid, email: &str, token: &str) -> EmailVerificationRequest 
         email: email.to_owned(),
         email_normalized: email.to_lowercase(),
         token_digest: format!("digest-{token}"),
+        message: OutboundEmail {
+            kind: "email_verification",
+            message: EmailMessage {
+                to_address: email.to_owned(),
+                to_name: None,
+                subject: "Verify".to_owned(),
+                html: format!("link-{token}"),
+            },
+            expires_at: Utc::now() + Duration::hours(24),
+        },
         now: Utc::now(),
     }
 }
@@ -86,7 +97,8 @@ async fn age_last_send(db: &DatabaseConnection, user: UserOid) {
 #[ignore = "requires explicitly configured PostgreSQL test database"]
 async fn sends_are_spaced_limited_and_refused_for_taken_or_verified_addresses() {
     common::isolated(|db| async move {
-        let repository = EmailVerificationRepositoryImpl::new(db.clone());
+        let repository =
+            EmailVerificationRepositoryImpl::new(db.clone(), common::email_queue(&db).await);
         let user = insert_user(&db, "ada@example.test", true).await;
         insert_user(&db, "taken@example.test", false).await;
 
@@ -104,6 +116,8 @@ async fn sends_are_spaced_limited_and_refused_for_taken_or_verified_addresses() 
                 .unwrap(),
             EmailVerificationAdmission::EmailExists
         );
+        // A refused request queues nothing.
+        assert_eq!(common::queued_emails(&db).await, 0);
 
         let first = repository
             .admit(request(user, "Ada.New@example.test", "first"))
@@ -146,8 +160,13 @@ async fn sends_are_spaced_limited_and_refused_for_taken_or_verified_addresses() 
                 .unwrap(),
             EmailVerificationAdmission::LimitReached
         );
-        // The refused requests left the address untouched.
+        // The refused requests left the address untouched, and only the
+        // admitted ones queued their email.
         assert_eq!(stored_email(&db, user).await.0, "ada@example.test");
+        assert_eq!(
+            common::queued_emails(&db).await,
+            i64::from(MAX_EMAIL_VERIFICATION_SENDS)
+        );
     })
     .await;
 }
@@ -156,7 +175,8 @@ async fn sends_are_spaced_limited_and_refused_for_taken_or_verified_addresses() 
 #[ignore = "requires explicitly configured PostgreSQL test database"]
 async fn a_link_replaces_the_address_once_and_is_audited_with_it() {
     common::isolated(|db| async move {
-        let repository = EmailVerificationRepositoryImpl::new(db.clone());
+        let repository =
+            EmailVerificationRepositoryImpl::new(db.clone(), common::email_queue(&db).await);
         let user = insert_user(&db, "ada@example.test", true).await;
         let (_, _, version_before) = stored_email(&db, user).await;
         repository
@@ -239,7 +259,8 @@ async fn a_link_replaces_the_address_once_and_is_audited_with_it() {
 #[ignore = "requires explicitly configured PostgreSQL test database"]
 async fn later_changes_void_older_links() {
     common::isolated(|db| async move {
-        let repository = EmailVerificationRepositoryImpl::new(db.clone());
+        let repository =
+            EmailVerificationRepositoryImpl::new(db.clone(), common::email_queue(&db).await);
         let users = UserRepositoryImpl::new(db.clone());
         let user = insert_user(&db, "ada@example.test", false).await;
 
@@ -306,7 +327,10 @@ async fn later_changes_void_older_links() {
 #[ignore = "requires explicitly configured PostgreSQL test database"]
 async fn concurrent_confirmations_use_a_link_once() {
     common::isolated(|db| async move {
-        let repository = Arc::new(EmailVerificationRepositoryImpl::new(db.clone()));
+        let repository = Arc::new(EmailVerificationRepositoryImpl::new(
+            db.clone(),
+            common::email_queue(&db).await,
+        ));
         let user = insert_user(&db, "ada@example.test", false).await;
         repository
             .admit(request(user, "ada@example.test", "race"))
@@ -352,7 +376,8 @@ async fn concurrent_confirmations_use_a_link_once() {
 #[ignore = "requires explicitly configured PostgreSQL test database"]
 async fn a_failed_audit_keeps_the_address_and_the_link() {
     common::isolated(|db| async move {
-        let repository = EmailVerificationRepositoryImpl::new(db.clone());
+        let repository =
+            EmailVerificationRepositoryImpl::new(db.clone(), common::email_queue(&db).await);
         let user = insert_user(&db, "ada@example.test", true).await;
         repository
             .admit(request(user, "ada.new@example.test", "rollback"))

@@ -158,16 +158,6 @@ pub struct UpdateUserCommand {
     pub client_mutation_id: Option<String>,
 }
 
-/// A created user, and whether its invitation email went out.
-#[derive(Debug, Clone)]
-pub struct CreatedUser {
-    pub record: UserManagementRecord,
-    /// `None` when no invitation was asked for. `Some(false)` when the
-    /// account exists but the email could not be sent; sending the
-    /// invitation again retries it.
-    pub invitation_sent: Option<bool>,
-}
-
 /// Email a new invitation link to a user who has no password yet.
 #[derive(Debug, Clone)]
 pub struct SendUserInvitationCommand {
