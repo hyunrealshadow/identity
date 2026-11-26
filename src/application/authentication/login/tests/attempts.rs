@@ -76,10 +76,6 @@ async fn otp_invalid_code_returns_invalid_otp_before_limit() {
         error.validation().expect("credential field error").fields()[0].field(),
         "credential"
     );
-    assert_eq!(
-        error.validation().expect("credential field error").fields()[0].field(),
-        "credential"
-    );
     assert_error_code(error, AuthErrorCode::InvalidOtp);
     assert_eq!(
         login_repo.state.lock().unwrap().logins[0].failed_attempts,
@@ -162,10 +158,6 @@ async fn otp_failures_across_fresh_logins_lock_the_user() {
             )
             .await
             .expect_err("expected invalid otp");
-        assert_eq!(
-            error.validation().expect("credential field error").fields()[0].field(),
-            "credential"
-        );
         assert_eq!(
             error.validation().expect("credential field error").fields()[0].field(),
             "credential"
@@ -263,10 +255,6 @@ async fn identify_rejection(
 async fn identify_audits_an_unknown_account_without_a_target() {
     let (error, failures, login_oid) = identify_rejection(test_user(), UNKNOWN_IDENTIFIER).await;
 
-    assert_eq!(
-        error.validation().expect("identifier field error").fields()[0].field(),
-        "identifier"
-    );
     assert_eq!(
         error.validation().expect("identifier field error").fields()[0].field(),
         "identifier"
