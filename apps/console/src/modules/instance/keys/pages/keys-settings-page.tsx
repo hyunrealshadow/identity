@@ -120,6 +120,7 @@ function KeysSection({ use, search }: { use: KeyUse; search: KeysSearch }) {
   const [target, setTarget] = useState<{ action: Action; key: ManagedKey } | null>(null)
   const [pending, setPending] = useState(false)
   const [feedback, setFeedback] = useState<RbacFeedbackState | null>(null)
+  const [confirmFeedback, setConfirmFeedback] = useState<RbacFeedbackState | null>(null)
 
   const listVariables = useMemo(
     () => (scope.read ? keysQueryVariables(use, search) : null),
@@ -157,6 +158,7 @@ function KeysSection({ use, search }: { use: KeyUse; search: KeysSearch }) {
 
   function ask(action: Action, key: ManagedKey) {
     setFeedback(null)
+    setConfirmFeedback(null)
     setTarget({ action, key })
     confirmDialog.open()
   }
@@ -165,6 +167,7 @@ function KeysSection({ use, search }: { use: KeyUse; search: KeysSearch }) {
     if (!target || pending) return
     const { action, key } = target
     setPending(true)
+    setConfirmFeedback(null)
     try {
       let result: Parameters<typeof mutationFeedback>[0]
       let done: boolean
@@ -182,9 +185,10 @@ function KeysSection({ use, search }: { use: KeyUse; search: KeysSearch }) {
         done = Boolean(response.data?.revokeKey)
       }
       if (!done) {
-        setFeedback(mutationFeedback(result, `missing_${action}_key_payload`))
+        setConfirmFeedback(mutationFeedback(result, `missing_${action}_key_payload`))
         return
       }
+      confirmDialog.close()
       toast.success(
         t(
           action === 'rotate'
@@ -201,9 +205,8 @@ function KeysSection({ use, search }: { use: KeyUse; search: KeysSearch }) {
       // here without a prompt.
       void signIn()
     } catch {
-      setFeedback(networkFeedback(`${action}_key_request_failed`))
+      setConfirmFeedback(networkFeedback(`${action}_key_request_failed`))
     } finally {
-      confirmDialog.close()
       setPending(false)
     }
   }
@@ -434,7 +437,17 @@ function KeysSection({ use, search }: { use: KeyUse; search: KeysSearch }) {
 
       {/* Dialogs stay mounted outside the row menu so closing it keeps them. */}
       <ConfirmationDialog
-        state={confirmDialog}
+        state={{
+          ...confirmDialog,
+          close() {
+            setConfirmFeedback(null)
+            confirmDialog.close()
+          },
+          setOpen(open) {
+            if (!open) setConfirmFeedback(null)
+            confirmDialog.setOpen(open)
+          },
+        }}
         title={t(text.title)}
         description={t(text.description)}
         confirmLabel={t(text.confirm)}
@@ -442,14 +455,23 @@ function KeysSection({ use, search }: { use: KeyUse; search: KeysSearch }) {
         pending={pending}
         onConfirm={() => void confirm()}
       >
-        {target ? (
-          <div className="space-y-2">
-            <code className="break-all rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs">
-              {target.key.keyId}
-            </code>
-            <p className="text-muted-foreground">{t('keysSignInAgainNotice')}</p>
-          </div>
-        ) : null}
+        <div className="space-y-3">
+          {confirmFeedback ? (
+            <RbacMutationFeedback
+              feedback={confirmFeedback}
+              onReload={refresh}
+              reloadPending={list.refreshing}
+            />
+          ) : null}
+          {target ? (
+            <div className="space-y-2">
+              <code className="break-all rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs">
+                {target.key.keyId}
+              </code>
+              <p className="text-muted-foreground">{t('keysSignInAgainNotice')}</p>
+            </div>
+          ) : null}
+        </div>
       </ConfirmationDialog>
       {signing && scope.create ? (
         <AddSigningKeyDialog

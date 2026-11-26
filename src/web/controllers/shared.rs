@@ -457,6 +457,14 @@ pub type ParsedUserAgent = (
     Option<String>,
 );
 
+fn clean_ua_value(value: &str) -> Option<String> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() || trimmed == woothee::woothee::VALUE_UNKNOWN {
+        return None;
+    }
+    Some(trimmed.to_owned())
+}
+
 pub fn parse_user_agent(headers: &HeaderMap) -> ParsedUserAgent {
     let ua_str = headers
         .get(header::USER_AGENT)
@@ -474,12 +482,12 @@ pub fn parse_user_agent(headers: &HeaderMap) -> ParsedUserAgent {
 
     match result {
         Some(r) => (
-            Some(r.name.to_owned()),        // device_name (browser name as device)
-            Some(r.category.to_owned()),    // device_type (pc, smartphone, etc.)
-            Some(r.os.to_owned()),          // os_name
-            Some(r.os_version.to_string()), // os_version
-            Some(r.name.to_owned()),        // browser_name
-            Some(r.version.to_owned()),     // browser_version
+            clean_ua_value(r.name),                // device_name (browser name as device)
+            clean_ua_value(r.category),            // device_type (pc, smartphone, etc.)
+            clean_ua_value(r.os),                  // os_name
+            clean_ua_value(r.os_version.as_ref()), // os_version
+            clean_ua_value(r.name),                // browser_name
+            clean_ua_value(r.version),             // browser_version
             raw_ua,
         ),
         None => (None, None, None, None, None, None, raw_ua),
@@ -638,5 +646,30 @@ mod tests {
             1
         );
         assert!(!from_header.iter().any(|id| id.trim().is_empty()));
+    }
+
+    #[test]
+    fn parse_user_agent_filters_woothee_unknown_placeholders() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            http::header::USER_AGENT,
+            HeaderValue::from_static("CustomClient/1.0"),
+        );
+
+        let (device_name, device_type, os_name, os_version, browser_name, browser_version, raw) =
+            super::parse_user_agent(&headers);
+
+        assert_eq!(raw.as_deref(), Some("CustomClient/1.0"));
+        for field in [
+            device_name,
+            device_type,
+            os_name,
+            os_version,
+            browser_name,
+            browser_version,
+        ] {
+            assert_ne!(field.as_deref(), Some(woothee::woothee::VALUE_UNKNOWN));
+            assert!(field.as_deref().is_none_or(|value| !value.is_empty()));
+        }
     }
 }

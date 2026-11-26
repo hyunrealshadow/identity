@@ -7,6 +7,7 @@ link-privacy = 隐私与 Cookie
 page-sign-in = 登录
 page-enter-password = 输入密码
 page-enter-otp = 输入验证码
+page-signed-out = 已退出登录
 
 # 通用按钮
 btn-next = 下一步

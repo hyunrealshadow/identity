@@ -7,6 +7,7 @@ link-privacy = Privacy & Cookies
 page-sign-in = Sign in
 page-enter-password = Enter password
 page-enter-otp = Enter code
+page-signed-out = Signed out
 
 # Common buttons
 btn-next = Next

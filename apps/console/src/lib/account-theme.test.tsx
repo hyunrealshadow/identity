@@ -1,12 +1,22 @@
-import { act, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 
 import { AccountThemeSync, themeFromAccount } from '#/lib/account-theme'
+import { useLocale } from '#/lib/i18n'
 import { applyTheme } from '#/lib/theme'
 import { renderWithLocale } from '#/test/render'
 
+type MockAccount = {
+  id: string
+  theme: string | null
+  locale?: string | null
+  zoneInfo?: string | null
+}
+
 const mocks = vi.hoisted(() => ({
-  account: { current: { theme: null } as { theme: string | null } | null },
+  account: {
+    current: { id: 'acc-1', theme: null, locale: null, zoneInfo: null } as MockAccount | null,
+  },
   failure: { current: null as Error | null },
   requests: { current: 0 },
 }))
@@ -53,6 +63,11 @@ function isDark() {
   return document.documentElement.classList.contains('dark')
 }
 
+function LocaleStateProbe() {
+  const { locale, timeZone } = useLocale()
+  return <output data-testid="locale-state">{`${locale}|${timeZone}`}</output>
+}
+
 describe('account theme', () => {
   it('maps only real preferences and treats everything else as the system', () => {
     expect(themeFromAccount('light')).toBe('light')
@@ -63,7 +78,7 @@ describe('account theme', () => {
 
   it('applies an explicit account preference and caches it for the next load', async () => {
     stubSystemTheme(false)
-    mocks.account.current = { theme: 'dark' }
+    mocks.account.current = { id: 'acc-1', theme: 'dark', locale: 'en-US', zoneInfo: 'UTC' }
 
     renderWithLocale(<AccountThemeSync />)
 
@@ -74,7 +89,7 @@ describe('account theme', () => {
 
   it('follows the system when the account has no preference and reacts to changes', async () => {
     const system = stubSystemTheme(true)
-    mocks.account.current = { theme: null }
+    mocks.account.current = { id: 'acc-1', theme: null, locale: null, zoneInfo: null }
 
     renderWithLocale(<AccountThemeSync />)
 
@@ -85,6 +100,40 @@ describe('account theme', () => {
     expect(isDark()).toBe(false)
 
     act(() => system.setDark(true))
+    expect(isDark()).toBe(true)
+  })
+
+  it('syncs locale and zoneInfo alongside theme initially and on window focus refetch', async () => {
+    stubSystemTheme(false)
+    mocks.account.current = {
+      id: 'acc-1',
+      theme: 'light',
+      locale: 'zh-CN',
+      zoneInfo: 'Asia/Tokyo',
+    }
+
+    renderWithLocale(
+      <>
+        <AccountThemeSync />
+        <LocaleStateProbe />
+      </>,
+    )
+
+    await waitFor(() => expect(screen.getByTestId('locale-state').textContent).toBe('zh-CN|Asia/Tokyo'))
+
+    mocks.account.current = {
+      id: 'acc-1',
+      theme: 'dark',
+      locale: 'en-US',
+      zoneInfo: 'Europe/Paris',
+    }
+    act(() => {
+      fireEvent(window, new Event('visibilitychange'))
+    })
+
+    await waitFor(() =>
+      expect(screen.getByTestId('locale-state').textContent).toBe('en-US|Europe/Paris'),
+    )
     expect(isDark()).toBe(true)
   })
 

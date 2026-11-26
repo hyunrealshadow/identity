@@ -24,5 +24,7 @@ query ConsoleAccountTheme {
   account {
     id
     theme
+    locale
+    zoneInfo
   }
 }

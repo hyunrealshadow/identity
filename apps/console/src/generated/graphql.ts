@@ -987,7 +987,7 @@ export type ConsoleBootstrapQuery = { effectivePermissions: { requestableScopes:
 export type ConsoleAccountThemeQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type ConsoleAccountThemeQuery = { account: { id: string, theme: string | null } | null };
+export type ConsoleAccountThemeQuery = { account: { id: string, theme: string | null, locale: string | null, zoneInfo: string | null } | null };
 
 export type ConsoleClientAdvancedSettingsFieldsFragment = { frontchannelLogoutUri: string | null, frontchannelLogoutSessionRequired: boolean, backchannelLogoutUri: string | null, backchannelLogoutSessionRequired: boolean, logoUri: string | null, clientUri: string | null, policyUri: string | null, tosUri: string | null, contacts: Array<string>, subjectType: ClientSubjectType, sectorIdentifierUri: string | null, defaultMaxAge: number | null, requireAuthTime: boolean, defaultAcrValues: Array<string>, idTokenSignedResponseAlgs: Array<string>, idTokenEncryptedResponseAlgs: Array<string>, idTokenEncryptedResponseEncs: Array<string>, userinfoSignedResponseAlgs: Array<string>, userinfoEncryptedResponseAlgs: Array<string>, userinfoEncryptedResponseEncs: Array<string>, requestObjectSigningAlgs: Array<string>, requestObjectEncryptionAlgs: Array<string>, requestObjectEncryptionEncs: Array<string>, requestUris: Array<string>, tokenEndpointAuthSigningAlgs: Array<string>, initiateLoginUri: string | null };
 
@@ -2099,6 +2099,8 @@ export const ConsoleAccountThemeDocument = new TypedDocumentString(`
   account {
     id
     theme
+    locale
+    zoneInfo
   }
 }
     `) as unknown as TypedDocumentString<ConsoleAccountThemeQuery, ConsoleAccountThemeQueryVariables>;

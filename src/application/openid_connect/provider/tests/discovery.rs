@@ -78,6 +78,9 @@ async fn assembles_discovery_document_from_issuer_and_capabilities() {
     assert_eq!(metadata.frontchannel_logout_session_supported, Some(true));
     assert_eq!(metadata.backchannel_logout_supported, Some(true));
     assert_eq!(metadata.backchannel_logout_session_supported, Some(true));
+    assert!(metadata.service_documentation.is_none());
+    assert!(metadata.op_policy_uri.is_none());
+    assert!(metadata.op_tos_uri.is_none());
     assert_eq!(
         metadata.response_types_supported,
         vec![

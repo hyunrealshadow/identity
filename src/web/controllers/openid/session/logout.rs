@@ -77,6 +77,16 @@ pub async fn redirect_or_page_response(
     response
 }
 
+fn signed_out_title(ctx: &AppState, headers: &HeaderMap) -> String {
+    let locale = identity_infrastructure::i18n::resolve_locale_from_headers(headers);
+    let translated = ctx.resources().i18n().t(&locale, "page-signed-out");
+    if translated == "page-signed-out" {
+        "Signed out".to_owned()
+    } else {
+        translated
+    }
+}
+
 pub(super) async fn render_logout_page(
     ctx: &AppState,
     headers: &HeaderMap,
@@ -84,13 +94,14 @@ pub(super) async fn render_logout_page(
     set_cookie: Option<String>,
 ) -> Response {
     let nonce = generate_csp_nonce();
+    let title = signed_out_title(ctx, headers);
     let (data, csp) = match outcome {
         LogoutOutcome::FrontChannel {
             notifications,
             post_logout_redirect_uri,
         } => {
             let data = LogoutPageData {
-                title: "Signed out".to_owned(),
+                title,
                 frontchannel_notifications: notifications
                     .iter()
                     .map(|n| FrontChannelNotificationView {
@@ -105,7 +116,7 @@ pub(super) async fn render_logout_page(
         }
         LogoutOutcome::LoggedOut => (
             LogoutPageData {
-                title: "Signed out".to_owned(),
+                title,
                 frontchannel_notifications: vec![],
                 post_logout_redirect_uri: None,
                 nonce,
@@ -475,6 +486,23 @@ mod tests {
         assert!(body.contains("<title>Signed out"), "{body}");
         assert!(body.contains("https://rp.example.test/logout"));
 
+        assert_eq!(response.status_code, Some(StatusCode::OK));
+    }
+
+    #[tokio::test]
+    async fn frontchannel_logout_renders_chinese_title() {
+        let state = test_app_state_with_mock_settings().await;
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::ACCEPT_LANGUAGE,
+            http::HeaderValue::from_static("zh-CN"),
+        );
+
+        let mut response =
+            render_logout_page(&state, &headers, LogoutOutcome::LoggedOut, None).await;
+        let body = response.take_string().await.unwrap();
+
+        assert!(body.contains("<title>已退出登录"), "{body}");
         assert_eq!(response.status_code, Some(StatusCode::OK));
     }
 }

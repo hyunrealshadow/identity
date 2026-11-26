@@ -25,7 +25,7 @@ export function themeFromAccount(value: string | null | undefined): ThemePrefere
  */
 export function AccountThemeSync() {
   const { status, sessionVersion } = useAuth()
-  const { locale } = useLocale()
+  const { locale, applyAccountLocale, applyAccountTimeZone } = useLocale()
   const request = useGraphQL()
   const query = useQuery({
     queryKey: consoleQueryKeys.read(sessionVersion, locale, ConsoleAccountThemeDocument, {}),
@@ -43,6 +43,12 @@ export function AccountThemeSync() {
   })
   const account = query.data?.data?.account
   const theme = account ? themeFromAccount(account.theme) : null
+
+  useEffect(() => {
+    if (!account) return
+    applyAccountLocale(account.locale)
+    applyAccountTimeZone(account.zoneInfo)
+  }, [account, applyAccountLocale, applyAccountTimeZone])
 
   useEffect(() => {
     // A runtime configuration older than the `user.read` request is rejected
