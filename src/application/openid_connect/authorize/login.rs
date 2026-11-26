@@ -1,5 +1,5 @@
 use super::AuthorizeService;
-use crate::error::codes::{auth, authorize_http};
+use crate::error::codes::auth;
 use crate::error::{AppError, codes::authorize};
 use chrono::{DateTime, Utc};
 use identity_domain::{
@@ -44,7 +44,7 @@ impl AuthorizeService {
             .load_continue_context_by_login(protected_login_oid)
             .await?;
         if context.expires_at <= Utc::now() || context.completed_at.is_some() {
-            return Err(authorize_http::error::ContinueInteractionUnavailable.into_error());
+            return Err(authorize::error::InteractionUnavailable.into_error());
         }
         if context.stored.interaction.selection_source == Some(SelectionSource::Reauthentication)
             || !matches!(
@@ -75,7 +75,7 @@ impl AuthorizeService {
             .load_continue_context_by_login(protected_login_oid)
             .await?;
         if context.expires_at <= Utc::now() || context.completed_at.is_some() {
-            return Err(authorize_http::error::ContinueInteractionUnavailable.into_error());
+            return Err(authorize::error::InteractionUnavailable.into_error());
         }
         if context.login.status != LoginStatus::EXPIRED {
             return Err(auth::error::InvalidLoginState.into_error());

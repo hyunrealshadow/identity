@@ -152,7 +152,7 @@ fn validate_client_mutation_id(value: Option<&str>) -> Result<(), AppError> {
     if value.chars().count() > MAX_CLIENT_MUTATION_ID_LENGTH {
         return Err(
             rbac_codes::error::InvalidClientMutationId::new(MAX_CLIENT_MUTATION_ID_LENGTH)
-                .with_field("clientMutationId"),
+                .with_field("client_mutation_id"),
         );
     }
     Ok(())
@@ -294,12 +294,12 @@ fn validate_new_scope_code(value: &str) -> Result<String, AppError> {
 fn dedupe_limit_roles(role_oids: Vec<RoleOid>) -> Result<Vec<RoleOid>, AppError> {
     if role_oids.is_empty() {
         return Err(rbac_codes::error::ValidationFailed::new()
-            .field("roleIds")
-            .with_field("roleIds"));
+            .field("role_ids")
+            .with_field("role_ids"));
     }
     if role_oids.len() > MAX_USER_ROLES {
         return Err(
-            rbac_codes::error::UserRoleLimitExceeded::new(MAX_USER_ROLES).with_field("roleIds"),
+            rbac_codes::error::UserRoleLimitExceeded::new(MAX_USER_ROLES).with_field("role_ids"),
         );
     }
     Ok(role_oids
@@ -432,22 +432,22 @@ fn map_repository_error(error: RbacManagementRepositoryError) -> AppError {
         Error::NotFound(kind) => not_found_error(kind),
         Error::VersionConflict { current_version } => {
             rbac_codes::error::VersionConflict::new(current_version.to_string())
-                .with_field("expectedVersion")
+                .with_field("expected_version")
         }
         Error::UserVersionStale { current_version } => {
             rbac_codes::error::UserVersionStale::new(current_version.to_string())
-                .with_field("expectedUserVersion")
+                .with_field("expected_user_version")
         }
         Error::PolicyVersionStale { current_version } => {
             rbac_codes::error::PolicyVersionStale::new(current_version.to_string())
-                .with_field("expectedVersion")
+                .with_field("expected_version")
         }
         Error::Duplicate(kind) => duplicate_error(kind),
         Error::Protected(kind) => protected_error(kind),
         Error::ScopeNotBusiness { scope } => {
             authorization::error::BusinessScopeBoundaryViolation::new(scope)
                 .reason_code("not_business")
-                .with_field("scopeIds")
+                .with_field("scope_ids")
         }
         Error::ClientGrantNotAllowed { scope } => {
             // The field path names the rejected scope so the form can mark it.
@@ -462,21 +462,21 @@ fn map_repository_error(error: RbacManagementRepositoryError) -> AppError {
         }
         Error::RoleDisabled { role_oid } => rbac_codes::error::RoleDisabled::new()
             .role_id(role_oid.to_string())
-            .with_field("roleIds"),
+            .with_field("role_ids"),
         Error::RoleNotAssigned { role_oid } => rbac_codes::error::RoleNotAssigned::new()
             .role_id(role_oid.to_string())
-            .with_field("roleIds"),
+            .with_field("role_ids"),
         Error::EmptyUpdate => rbac_codes::error::EmptyUpdate::new().into(),
         Error::BuiltInIdentityConflict => rbac_codes::error::BuiltInIdentityConflict::new().into(),
         Error::DelegationCeilingExceeded { permission } => {
             rbac_codes::error::DelegationCeilingExceeded::new()
                 .permission(permission)
-                .with_field("permissionIds")
+                .with_field("permission_ids")
         }
         Error::InvalidBuiltInPermissionReference { permission } => {
             rbac_codes::error::InvalidBuiltInPermissionReference::new()
                 .permission(permission)
-                .with_field("permissionIds")
+                .with_field("permission_ids")
         }
     }
 }

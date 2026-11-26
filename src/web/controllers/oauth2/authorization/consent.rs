@@ -47,7 +47,7 @@ impl ConsentQuery {
         match (self.login_id.as_deref(), self.user_code.as_deref()) {
             (Some(_), None) => Ok(None),
             (None, Some(user_code)) => Ok(Some(user_code)),
-            _ => Err(authorize_http::error::ContinueInteractionUnavailable.into()),
+            _ => Err(authorize::error::InteractionUnavailable.into()),
         }
     }
 }
@@ -101,9 +101,7 @@ async fn consent_get(depot: &mut Depot, req: &mut Request) -> WebResult {
     let loaded = load_consent_context(&ctx, &login_id).await?;
 
     if loaded.stored.interaction.consent_state != ConsentState::Pending {
-        return Err(authorize_http::error::ContinueInteractionUnavailable
-            .into_error()
-            .into());
+        return Err(authorize::error::InteractionUnavailable.into_error().into());
     }
 
     let session = loaded
@@ -186,9 +184,7 @@ async fn consent_post(depot: &mut Depot, req: &mut Request) -> WebResult {
             }
             Ok(handle_consent_decision(ctx, login_id.to_owned(), payload.decision).await?)
         }
-        _ => Err(authorize_http::error::ContinueInteractionUnavailable
-            .into_error()
-            .into()),
+        _ => Err(authorize::error::InteractionUnavailable.into_error().into()),
     }
 }
 
@@ -200,7 +196,7 @@ pub(super) async fn handle_consent_decision(
     let loaded = load_consent_context(&ctx, &login_id).await?;
 
     if loaded.stored.interaction.consent_state != ConsentState::Pending {
-        return Err(authorize_http::error::ContinueInteractionUnavailable.into());
+        return Err(authorize::error::InteractionUnavailable.into());
     }
 
     if !has_selected_session(loaded.selected_session_oid, &loaded.active_sessions) {

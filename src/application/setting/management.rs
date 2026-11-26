@@ -405,15 +405,15 @@ impl InstanceSettingService {
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
             PUSHED_AUTHORIZATION_LIFETIME_RANGE.check(
                 command.pushed_authorization_request_lifetime_seconds,
-                "pushedAuthorizationRequestLifetimeSeconds",
+                "pushed_authorization_request_lifetime_seconds",
             )?;
             DEVICE_AUTHORIZATION_LIFETIME_RANGE.check(
                 command.device_authorization_request_lifetime_seconds,
-                "deviceAuthorizationRequestLifetimeSeconds",
+                "device_authorization_request_lifetime_seconds",
             )?;
             DEVICE_POLLING_INTERVAL_RANGE.check(
                 command.device_authorization_polling_interval_seconds,
-                "deviceAuthorizationPollingIntervalSeconds",
+                "device_authorization_polling_interval_seconds",
             )?;
             let build = move |state: &InstanceSettingsState| {
                 let mut next = state.openid_connect.clone();
@@ -453,14 +453,14 @@ impl InstanceSettingService {
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
             let hashing = &command.password_hashing;
             ARGON2_TIME_COST_RANGE
-                .check(i64::from(hashing.time_cost), "passwordHashing.timeCost")?;
+                .check(i64::from(hashing.time_cost), "password_hashing.time_cost")?;
             ARGON2_MEMORY_COST_RANGE.check(
                 i64::from(hashing.memory_cost_kib),
-                "passwordHashing.memoryCostKib",
+                "password_hashing.memory_cost_kib",
             )?;
             ARGON2_PARALLELISM_RANGE.check(
                 i64::from(hashing.parallelism),
-                "passwordHashing.parallelism",
+                "password_hashing.parallelism",
             )?;
             let options = HashOptions::Argon2(Argon2Options {
                 variant: Argon2Variant::Argon2id,
@@ -471,11 +471,11 @@ impl InstanceSettingService {
             });
             PASSWORD_MAX_AGE_DAYS_RANGE.check(
                 i64::from(command.password_max_age_days),
-                "passwordMaxAgeDays",
+                "password_max_age_days",
             )?;
             PASSWORD_HISTORY_COUNT_RANGE.check(
                 i64::from(command.password_history_count),
-                "passwordHistoryCount",
+                "password_history_count",
             )?;
             let max_age_days = command.password_max_age_days;
             let history_count = command.password_history_count;
@@ -493,21 +493,21 @@ impl InstanceSettingService {
                     && !state.email_delivery.is_configured()
                 {
                     return Err(instance::error::EmailDeliveryNotConfigured
-                        .with_field("emailSignInEnabled"));
+                        .with_field("email_sign_in_enabled"));
                 }
                 if password_reset
                     && !state.password_reset_enabled
                     && !state.email_delivery.is_configured()
                 {
                     return Err(instance::error::EmailDeliveryNotConfigured
-                        .with_field("passwordResetEnabled"));
+                        .with_field("password_reset_enabled"));
                 }
                 if registration
                     && !state.registration_enabled
                     && !state.email_delivery.is_configured()
                 {
                     return Err(instance::error::EmailDeliveryNotConfigured
-                        .with_field("registrationEnabled"));
+                        .with_field("registration_enabled"));
                 }
                 Ok(SettingChanges::default()
                     .set::<PasswordHashSetting>(&options)?
@@ -582,7 +582,7 @@ pub(crate) fn validate_client_mutation_id(value: Option<&str>) -> Result<(), App
     if value.is_some_and(|value| value.chars().count() > MAX_CLIENT_MUTATION_ID_LENGTH) {
         return Err(
             instance::error::InvalidClientMutationId::new(MAX_CLIENT_MUTATION_ID_LENGTH)
-                .with_field("clientMutationId"),
+                .with_field("client_mutation_id"),
         );
     }
     Ok(())
@@ -597,7 +597,7 @@ pub(super) fn map_repository_error(error: InstanceSettingRepositoryError) -> App
         Error::LastRecoverableAdministrator => authorization::error::LastOwnerProtected.into(),
         Error::VersionConflict { current_version } => instance::error::VersionConflict::new()
             .current_version(current_version)
-            .with_field("expectedVersion"),
+            .with_field("expected_version"),
         Error::Invalid(error) => error,
     }
 }
@@ -660,7 +660,7 @@ mod tests {
     #[test]
     fn out_of_range_values_name_their_field_and_bounds() {
         let error = DEVICE_POLLING_INTERVAL_RANGE
-            .check(0, "deviceAuthorizationPollingIntervalSeconds")
+            .check(0, "device_authorization_polling_interval_seconds")
             .unwrap_err();
         assert_eq!(
             error.code(),

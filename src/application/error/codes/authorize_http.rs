@@ -13,8 +13,6 @@ define_error_codes! {
         InternalClientLoginRequired = 22003 { kind: Validation },
         /// Consent request references an account with no matching active session.
         ConsentSessionNotFound = 22004 { kind: Validation },
-        /// Authorization request interaction has expired or already completed.
-        ContinueInteractionUnavailable = 22005 { kind: Gone },
         /// The domain the login application is served from is not configured.
         LoginDomainNotConfigured = 22006 { kind: Internal, required: [interaction] },
     }

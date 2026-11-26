@@ -88,7 +88,8 @@ fn authorize_code_to_oauth(code: AuthorizeErrorCode) -> OAuthErrorCode {
         | AuthorizeErrorCode::ImplicitUserNotFound
         | AuthorizeErrorCode::IdTokenHintIssuerInvalid
         | AuthorizeErrorCode::AuthzInteractionConflict
-        | AuthorizeErrorCode::InitiateLoginUriNotRegistered => OAuthErrorCode::InvalidRequest,
+        | AuthorizeErrorCode::InitiateLoginUriNotRegistered
+        | AuthorizeErrorCode::InteractionUnavailable => OAuthErrorCode::InvalidRequest,
     }
 }
 

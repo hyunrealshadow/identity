@@ -15,7 +15,7 @@ use crate::{
     rbac::model::{DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE},
 };
 
-pub(crate) const RBAC_CURSOR_PURPOSE: &str = "graphql:cursor:rbac";
+pub(crate) const RBAC_CURSOR_PURPOSE: &str = "cursor:rbac";
 const RBAC_CURSOR_VERSION: u8 = 1;
 
 pub(crate) const CURSOR_KIND_RESOURCE: u8 = 1;

@@ -608,7 +608,7 @@ fn validate_client_mutation_id(value: Option<&str>) -> Result<(), AppError> {
         return Err(group_codes::error::InvalidClientMutationId::new(
             MAX_CLIENT_MUTATION_ID_LENGTH,
         )
-        .with_field("clientMutationId"));
+        .with_field("client_mutation_id"));
     }
     Ok(())
 }
@@ -641,7 +641,7 @@ fn normalize_filter_text(
 fn dedupe_limit_roles(role_oids: Vec<RoleOid>) -> Result<Vec<RoleOid>, AppError> {
     if role_oids.len() > MAX_GROUP_ROLES {
         return Err(
-            group_codes::error::InvalidCollectionSize::new(MAX_GROUP_ROLES).with_field("roleIds"),
+            group_codes::error::InvalidCollectionSize::new(MAX_GROUP_ROLES).with_field("role_ids"),
         );
     }
     Ok(role_oids
@@ -704,18 +704,18 @@ fn map_repository_error(error: GroupManagementRepositoryError) -> AppError {
         Error::CorruptRecord => group_codes::error::StorageFailed.into_error(),
         Error::NotFound(kind) => not_found_error(kind),
         Error::VersionConflict { current_version } => {
-            group_codes::error::VersionConflict::new(current_version).with_field("expectedVersion")
+            group_codes::error::VersionConflict::new(current_version).with_field("expected_version")
         }
         Error::BuiltInProtected => group_codes::error::BuiltInProtected::new().into_error(),
         Error::GroupDisabled => group_codes::error::Disabled.into_error(),
-        Error::RoleDisabled { .. } => group_codes::error::RoleDisabled.with_field("roleIds"),
+        Error::RoleDisabled { .. } => group_codes::error::RoleDisabled.with_field("role_ids"),
         Error::DelegationCeilingExceeded { scope } => {
-            group_codes::error::DelegationCeilingExceeded::new(scope).with_field("roleIds")
+            group_codes::error::DelegationCeilingExceeded::new(scope).with_field("role_ids")
         }
         Error::MembershipAlreadyActive => {
-            group_codes::error::MembershipAlreadyActive.with_field("userId")
+            group_codes::error::MembershipAlreadyActive.with_field("user_id")
         }
-        Error::MembershipNotActive => group_codes::error::MembershipNotActive.with_field("userId"),
+        Error::MembershipNotActive => group_codes::error::MembershipNotActive.with_field("user_id"),
         Error::InvalidMetadata { field } => {
             group_codes::error::InvalidMetadata::new(field).into_error()
         }

@@ -52,14 +52,14 @@ impl LoginService {
         password_policy::validate_password(
             new_password,
             &[&user.name, &user.email],
-            "newPassword",
+            "new_password",
         )?;
         let snapshot = self.settings.snapshot();
         password_policy::validate_breached_password(
             self.breach_checker.as_ref(),
             &snapshot,
             new_password,
-            "newPassword",
+            "new_password",
         )
         .await?;
         let credential = self
@@ -81,7 +81,7 @@ impl LoginService {
             .await?
         {
             return Err(common::error::ValidationFailed
-                .with_field_error("newPassword", auth::error::PasswordUnchanged));
+                .with_field_error("new_password", auth::error::PasswordUnchanged));
         }
         let history_count = snapshot.get::<PasswordHistoryCountSetting>();
         let keep_history = history_count.saturating_sub(1);
@@ -95,7 +95,7 @@ impl LoginService {
                 .await?
             {
                 return Err(common::error::ValidationFailed.with_field_error(
-                    "newPassword",
+                    "new_password",
                     auth::error::PasswordReused::new(history_count),
                 ));
             }

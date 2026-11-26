@@ -453,7 +453,7 @@ impl KeyManagementService {
                 .key_algorithm_for_new_key(command.key_algorithm)
                 .ok_or_else(|| {
                     instance::error::UnsupportedKeyAlgorithm::new(algorithm.as_str())
-                        .with_field("keyAlgorithm")
+                        .with_field("key_algorithm")
                 })?;
             let data = self
                 .key_generator

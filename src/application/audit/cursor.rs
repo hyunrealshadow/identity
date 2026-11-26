@@ -11,7 +11,7 @@ use crate::{
     error::{AppError, codes::audit},
 };
 
-pub const AUDIT_CURSOR_PURPOSE: &str = "graphql:cursor:audit";
+pub const AUDIT_CURSOR_PURPOSE: &str = "cursor:audit";
 const AUDIT_CURSOR_VERSION: u8 = 1;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

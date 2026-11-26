@@ -167,5 +167,7 @@ define_error_codes! {
         InitiateLoginUriNotRegistered = 23067 { kind: Validation },
         /// Client registration does not permit a grant required by the request.
         ClientGrantNotAllowed = 23068 { kind: Validation },
+        /// The authorization interaction has expired or already completed.
+        InteractionUnavailable = 23069 { kind: Gone },
     }
 }

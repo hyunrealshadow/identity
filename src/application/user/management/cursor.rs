@@ -18,7 +18,7 @@ use crate::{
     },
 };
 
-pub(crate) const USER_CURSOR_PURPOSE: &str = "graphql:cursor:user";
+pub(crate) const USER_CURSOR_PURPOSE: &str = "cursor:user";
 const USER_CURSOR_VERSION: u8 = 1;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

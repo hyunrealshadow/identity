@@ -1,4 +1,4 @@
-import { AuthErrorCode, AuthorizeHttpErrorCode } from '@identity/graphql-access'
+import { AuthErrorCode, AuthorizeErrorCode } from '@identity/graphql-access'
 import { withUiLocales } from './ui-locale'
 import {
   errorMessage,
@@ -231,7 +231,7 @@ export async function restartLoginResponse(
     return navigationResponse(request, `/login?${search}`)
   } catch (error) {
     const restartUnavailable =
-      error instanceof IdentityApiError && error.code === AuthorizeHttpErrorCode.ContinueInteractionUnavailable
+      error instanceof IdentityApiError && error.code === AuthorizeErrorCode.InteractionUnavailable
     return formErrorResponse(
       request,
       pathname,

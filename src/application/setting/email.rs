@@ -519,16 +519,16 @@ impl InstanceSettingService {
                 return Err(invalid(instance::error::InvalidEmailAddress, "host"));
             }
             if command.enabled || !sender_address.is_empty() {
-                required(&sender_address, "senderAddress")?;
+                required(&sender_address, "sender_address")?;
                 if !sender_address.validate_email() {
                     return Err(invalid(
                         instance::error::InvalidEmailAddress,
-                        "senderAddress",
+                        "sender_address",
                     ));
                 }
             }
             if let Some(name) = &sender_name {
-                check_length(name, 255, "senderName")?;
+                check_length(name, 255, "sender_name")?;
             }
             let authentication = self.prepare_authentication(command.authentication).await?;
             let port = u16::try_from(command.port).unwrap_or(587);

@@ -161,7 +161,7 @@ mod tests {
     }
 
     fn validate(password: &str, identifiers: &[&str]) -> Result<(), AppError> {
-        validate_password(password, identifiers, "newPassword")
+        validate_password(password, identifiers, "new_password")
     }
 
     #[test]

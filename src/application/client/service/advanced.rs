@@ -26,7 +26,7 @@ use crate::{
     },
 };
 
-const PREFIX: &str = "advancedSettings";
+const PREFIX: &str = "advanced_settings";
 
 fn field(name: &str) -> String {
     format!("{PREFIX}.{name}")
@@ -137,19 +137,19 @@ pub(crate) fn validate_advanced_settings(
 ) -> Result<ClientAdvancedSettings, AppError> {
     let frontchannel_logout_uri = uri(
         settings.frontchannel_logout_uri,
-        "frontchannelLogoutUri",
+        "frontchannel_logout_uri",
         web_uri,
     )?;
     let backchannel_logout_uri = uri(
         settings.backchannel_logout_uri,
-        "backchannelLogoutUri",
+        "backchannel_logout_uri",
         web_uri,
     )?;
     if settings.frontchannel_logout_session_required && frontchannel_logout_uri.is_none() {
-        return Err(client::error::LogoutUriRequired.with_field(field("frontchannelLogoutUri")));
+        return Err(client::error::LogoutUriRequired.with_field(field("frontchannel_logout_uri")));
     }
     if settings.backchannel_logout_session_required && backchannel_logout_uri.is_none() {
-        return Err(client::error::LogoutUriRequired.with_field(field("backchannelLogoutUri")));
+        return Err(client::error::LogoutUriRequired.with_field(field("backchannel_logout_uri")));
     }
 
     let mut contacts = Vec::new();
@@ -167,21 +167,21 @@ pub(crate) fn validate_advanced_settings(
     {
         return Err(
             client::error::InvalidDefaultMaxAge::new(MAX_DEFAULT_MAX_AGE_SECONDS)
-                .with_field(field("defaultMaxAge")),
+                .with_field(field("default_max_age")),
         );
     }
 
     let default_acr_values = bounded_list(
         settings.default_acr_values,
         MAX_DEFAULT_ACR_VALUES,
-        "defaultAcrValues",
+        "default_acr_values",
     )?;
     if let Some(acr) = default_acr_values.iter().find(|acr| {
         !acr.parse::<AuthenticationContextClass>()
             .is_ok_and(|class| options.acr_values.contains(&class))
     }) {
         return Err(
-            client::error::UnsupportedAcrValue::new(acr).with_field(field("defaultAcrValues"))
+            client::error::UnsupportedAcrValue::new(acr).with_field(field("default_acr_values"))
         );
     }
 
@@ -192,8 +192,8 @@ pub(crate) fn validate_advanced_settings(
         &options.id_token_encryption_encs,
         &current.id_token_encrypted_response_algs,
         &current.id_token_encrypted_response_encs,
-        "idTokenEncryptedResponseAlgs",
-        "idTokenEncryptedResponseEncs",
+        "id_token_encrypted_response_algs",
+        "id_token_encrypted_response_encs",
     )?;
     let (userinfo_encrypted_response_algs, userinfo_encrypted_response_encs) = encryption_pair(
         settings.userinfo_encrypted_response_algs,
@@ -202,8 +202,8 @@ pub(crate) fn validate_advanced_settings(
         &options.userinfo_encryption_encs,
         &current.userinfo_encrypted_response_algs,
         &current.userinfo_encrypted_response_encs,
-        "userinfoEncryptedResponseAlgs",
-        "userinfoEncryptedResponseEncs",
+        "userinfo_encrypted_response_algs",
+        "userinfo_encrypted_response_encs",
     )?;
     let (request_object_encryption_algs, request_object_encryption_encs) = encryption_pair(
         settings.request_object_encryption_algs,
@@ -212,13 +212,13 @@ pub(crate) fn validate_advanced_settings(
         &options.request_object_encryption_encs,
         &current.request_object_encryption_algs,
         &current.request_object_encryption_encs,
-        "requestObjectEncryptionAlgs",
-        "requestObjectEncryptionEncs",
+        "request_object_encryption_algs",
+        "request_object_encryption_encs",
     )?;
 
     let mut request_uris = Vec::new();
-    for raw in bounded_list(settings.request_uris, MAX_REQUEST_URIS, "requestUris")? {
-        if let Some(value) = uri(Some(raw), "requestUris", web_uri)? {
+    for raw in bounded_list(settings.request_uris, MAX_REQUEST_URIS, "request_uris")? {
+        if let Some(value) = uri(Some(raw), "request_uris", web_uri)? {
             request_uris.push(value);
         }
     }
@@ -228,15 +228,15 @@ pub(crate) fn validate_advanced_settings(
         frontchannel_logout_uri,
         backchannel_logout_session_required: settings.backchannel_logout_session_required,
         backchannel_logout_uri,
-        logo_uri: uri(settings.logo_uri, "logoUri", web_uri)?,
-        client_uri: uri(settings.client_uri, "clientUri", web_uri)?,
-        policy_uri: uri(settings.policy_uri, "policyUri", web_uri)?,
-        tos_uri: uri(settings.tos_uri, "tosUri", web_uri)?,
+        logo_uri: uri(settings.logo_uri, "logo_uri", web_uri)?,
+        client_uri: uri(settings.client_uri, "client_uri", web_uri)?,
+        policy_uri: uri(settings.policy_uri, "policy_uri", web_uri)?,
+        tos_uri: uri(settings.tos_uri, "tos_uri", web_uri)?,
         contacts,
         subject_type: settings.subject_type,
         sector_identifier_uri: uri(
             settings.sector_identifier_uri,
-            "sectorIdentifierUri",
+            "sector_identifier_uri",
             https_uri,
         )?,
         default_max_age: settings.default_max_age,
@@ -246,7 +246,7 @@ pub(crate) fn validate_advanced_settings(
             settings.id_token_signed_response_algs,
             &options.id_token_signing_algs,
             &current.id_token_signed_response_algs,
-            "idTokenSignedResponseAlgs",
+            "id_token_signed_response_algs",
         )?,
         id_token_encrypted_response_algs,
         id_token_encrypted_response_encs,
@@ -254,7 +254,7 @@ pub(crate) fn validate_advanced_settings(
             settings.userinfo_signed_response_algs,
             &options.userinfo_signing_algs,
             &current.userinfo_signed_response_algs,
-            "userinfoSignedResponseAlgs",
+            "userinfo_signed_response_algs",
         )?,
         userinfo_encrypted_response_algs,
         userinfo_encrypted_response_encs,
@@ -262,7 +262,7 @@ pub(crate) fn validate_advanced_settings(
             settings.request_object_signing_algs,
             &options.request_object_signing_algs,
             &current.request_object_signing_algs,
-            "requestObjectSigningAlgs",
+            "request_object_signing_algs",
         )?,
         request_object_encryption_algs,
         request_object_encryption_encs,
@@ -271,9 +271,9 @@ pub(crate) fn validate_advanced_settings(
             settings.token_endpoint_auth_signing_algs,
             &options.token_endpoint_auth_signing_algs,
             &current.token_endpoint_auth_signing_algs,
-            "tokenEndpointAuthSigningAlgs",
+            "token_endpoint_auth_signing_algs",
         )?,
-        initiate_login_uri: uri(settings.initiate_login_uri, "initiateLoginUri", https_uri)?,
+        initiate_login_uri: uri(settings.initiate_login_uri, "initiate_login_uri", https_uri)?,
     })
 }
 
@@ -302,23 +302,23 @@ pub(crate) async fn validate_subject_identifier(
         if settings.subject_type == SubjectType::Pairwise && redirect_hosts(redirect_uris).len() > 1
         {
             return Err(
-                client::error::SectorIdentifierRequired.with_field(field("sectorIdentifierUri"))
+                client::error::SectorIdentifierRequired.with_field(field("sector_identifier_uri"))
             );
         }
         return Ok(());
     };
     let sector = Url::parse(sector).map_err(|_| {
-        client::error::InvalidMetadataUri::new(sector).with_field(field("sectorIdentifierUri"))
+        client::error::InvalidMetadataUri::new(sector).with_field(field("sector_identifier_uri"))
     })?;
     let listed = fetch_sector_redirect_uris(&sector).await.map_err(|error| {
         client::error::SectorIdentifierUnavailable
-            .with_field(field("sectorIdentifierUri"))
+            .with_field(field("sector_identifier_uri"))
             .with_source(error)
     })?;
     if sector_redirect_uris_include_registered_redirects(&listed, redirect_uris) {
         Ok(())
     } else {
-        Err(client::error::SectorIdentifierMismatch.with_field(field("sectorIdentifierUri")))
+        Err(client::error::SectorIdentifierMismatch.with_field(field("sector_identifier_uri")))
     }
 }
 

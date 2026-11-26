@@ -434,7 +434,7 @@ impl ClientManagementService {
                 Some(expiry) => expiry,
                 None => {
                     let expires_at = command.expires_at.ok_or_else(|| {
-                        client::error::PublicKeyExpiryRequired.with_field("expiresAt")
+                        client::error::PublicKeyExpiryRequired.with_field("expires_at")
                     })?;
                     validate_key_expiry(expires_at)?;
                     expires_at
@@ -590,7 +590,7 @@ fn validate_client_mutation_id(value: Option<&str>) -> Result<(), AppError> {
     if value.is_some_and(|value| value.chars().count() > MAX_CLIENT_MUTATION_ID_LENGTH) {
         return Err(
             client::error::InvalidClientMutationId::new(MAX_CLIENT_MUTATION_ID_LENGTH)
-                .with_field("clientMutationId"),
+                .with_field("client_mutation_id"),
         );
     }
     Ok(())
@@ -636,7 +636,7 @@ fn validate_secret_lifetime(days: u32) -> Result<(), AppError> {
             MIN_SECRET_LIFETIME_DAYS,
             MAX_SECRET_LIFETIME_DAYS,
         )
-        .with_field("lifetimeDays"));
+        .with_field("lifetime_days"));
     }
     Ok(())
 }
@@ -706,7 +706,10 @@ pub(crate) fn validate_settings(
         .iter()
         .any(|platform| platform.platform == OpenIdConnectClientPlatformType::Native);
     let mut post_logout_redirect_uris = Vec::new();
-    for raw in bounded(settings.post_logout_redirect_uris, "postLogoutRedirectUris")? {
+    for raw in bounded(
+        settings.post_logout_redirect_uris,
+        "post_logout_redirect_uris",
+    )? {
         let uri = parse_uri(
             &raw,
             |url| {
@@ -715,7 +718,7 @@ pub(crate) fn validate_settings(
                         && OpenIdConnectClientPlatformType::Native.allows_redirect_uri_scheme(url)
             },
             |uri| client::error::InvalidPostLogoutRedirectUri::new(uri).into_error(),
-            "postLogoutRedirectUris",
+            "post_logout_redirect_uris",
         )?;
         if !post_logout_redirect_uris.contains(&uri) {
             post_logout_redirect_uris.push(uri);
@@ -726,7 +729,7 @@ pub(crate) fn validate_settings(
     for grant in settings.grant_types {
         if !MANAGEABLE_GRANT_TYPES.contains(&grant) {
             return Err(
-                client::error::UnsupportedGrantType::new(grant.as_str()).with_field("grantTypes")
+                client::error::UnsupportedGrantType::new(grant.as_str()).with_field("grant_types")
             );
         }
         if !grant_types.contains(&grant) {
@@ -734,13 +737,13 @@ pub(crate) fn validate_settings(
         }
     }
     if grant_types.is_empty() {
-        return Err(client::error::InvalidGrantTypes.with_field("grantTypes"));
+        return Err(client::error::InvalidGrantTypes.with_field("grant_types"));
     }
     if grant_types.contains(&GrantType::RefreshToken)
         && !grant_types.contains(&GrantType::AuthorizationCode)
         && !grant_types.contains(&GrantType::DeviceCode)
     {
-        return Err(client::error::RefreshTokenRequiresInteractiveGrant.with_field("grantTypes"));
+        return Err(client::error::RefreshTokenRequiresInteractiveGrant.with_field("grant_types"));
     }
     if grant_types.contains(&GrantType::AuthorizationCode) && platforms.is_empty() {
         return Err(client::error::RedirectUriRequired.with_field("platforms.redirectUris"));
@@ -777,13 +780,13 @@ fn validate_key_expiry(expires_at: chrono::DateTime<Utc>) -> Result<(), AppError
             MIN_PUBLIC_KEY_LIFETIME_DAYS,
             MAX_PUBLIC_KEY_LIFETIME_DAYS,
         )
-        .with_field("expiresAt"));
+        .with_field("expires_at"));
     }
     Ok(())
 }
 
 fn parse_jwks_uri(raw: &str) -> Result<Url, AppError> {
-    let invalid = || client::error::InvalidJwksUri.with_field("jwksUri");
+    let invalid = || client::error::InvalidJwksUri.with_field("jwks_uri");
     let raw = raw.trim();
     if raw.is_empty() || raw.len() > MAX_URI_LENGTH {
         return Err(invalid());
@@ -821,7 +824,7 @@ async fn fetch_client_jwks(
     reader: &dyn ClientPublicKeyReader,
     jwks_uri: &Url,
 ) -> Result<Vec<PublicJwk>, AppError> {
-    let unavailable = || client::error::JwksUnavailable.with_field("jwksUri");
+    let unavailable = || client::error::JwksUnavailable.with_field("jwks_uri");
     let client = remote_http_client(RemoteFetchPolicy::new(
         DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
         TimeDuration::from_secs(5),
@@ -893,7 +896,7 @@ fn map_repository_error(error: ClientManagementRepositoryError) -> AppError {
         Error::NotFound(ClientEntityKind::Client) => client::error::ClientNotFound.into(),
         Error::NotFound(ClientEntityKind::Credential) => client::error::CredentialNotFound.into(),
         Error::VersionConflict { current_version } => {
-            client::error::VersionConflict::new(current_version).with_field("expectedVersion")
+            client::error::VersionConflict::new(current_version).with_field("expected_version")
         }
         Error::BuiltInProtected => client::error::BuiltInProtected.into(),
         Error::CredentialNotSecret => client::error::CredentialNotSecret.into(),

@@ -240,7 +240,7 @@ async fn accepting_sets_a_policy_conforming_password_once() {
     let (service, repository, token) = service();
     let error = service.accept(&token, "short").await.unwrap_err();
     let field = error.validation().unwrap().fields().first().unwrap();
-    assert_eq!(field.field(), "newPassword");
+    assert_eq!(field.field(), "new_password");
     assert_eq!(field.code(), AuthErrorCode::PasswordTooShort.code());
     // The username is too similar to be a password.
     assert!(service.accept(&token, "invited").await.is_err());

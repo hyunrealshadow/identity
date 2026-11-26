@@ -72,7 +72,7 @@ impl InstanceOverviewService {
     ) -> Result<InstanceUserOverviewView, AppError> {
         let time_zone = TimeZone::parse(time_zone).map_err(|_| {
             user_management::error::ValidationFailed::new()
-                .with_field_error("timeZone", common::error::InvalidTimeZone)
+                .with_field_error("time_zone", common::error::InvalidTimeZone)
         })?;
         let window = NewUserWindow::ending_at_in_zone(generated_at, time_zone);
         let counts = self
@@ -340,7 +340,7 @@ mod tests {
         assert_eq!(error.kind(), ErrorKind::Validation);
         assert_eq!(error.code(), 16000);
         let field = &error.validation().unwrap().fields()[0];
-        assert_eq!(field.field(), "timeZone");
+        assert_eq!(field.field(), "time_zone");
         assert_eq!(field.code(), 10010);
     }
 }

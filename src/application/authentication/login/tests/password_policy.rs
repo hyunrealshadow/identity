@@ -206,7 +206,7 @@ async fn a_recent_password_cannot_be_reused() {
     let reused = flow.change("older-password-two").await.unwrap_err();
     let field = &reused.validation().unwrap().fields()[0];
     assert_eq!(field.code(), AuthErrorCode::PasswordReused.code());
-    assert_eq!(field.field(), "newPassword");
+    assert_eq!(field.field(), "new_password");
 
     flow.change("a-new-sufficiently-long-password")
         .await

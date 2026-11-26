@@ -2772,16 +2772,6 @@
     "module": "openid_connect.authorize_http"
   },
   {
-    "code": 22005,
-    "group": "AuthorizeHttpErrorCode",
-    "name": "ContinueInteractionUnavailable",
-    "kind": "gone",
-    "fluentKey": "E22005",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize_http"
-  },
-  {
     "code": 22006,
     "group": "AuthorizeHttpErrorCode",
     "name": "LoginDomainNotConfigured",
@@ -3497,6 +3487,16 @@
     "name": "ClientGrantNotAllowed",
     "kind": "validation",
     "fluentKey": "E23068",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23069,
+    "group": "AuthorizeErrorCode",
+    "name": "InteractionUnavailable",
+    "kind": "gone",
+    "fluentKey": "E23069",
     "requiredParams": [],
     "optionalParams": [],
     "module": "openid_connect.authorize"

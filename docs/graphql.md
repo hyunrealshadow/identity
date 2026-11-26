@@ -246,7 +246,9 @@ Responses use a single envelope:
   audit facts. `traceId` appears only when a trusted trace context exists; it is
   never fabricated.
 - Field-level validation failures appear in `extensions` of the corresponding
-  error so clients can attach them to inputs.
+  error so clients can attach them to inputs. Application code names fields
+  in snake_case (`expected_version`); every transport reports the
+  lowerCamelCase input spelling (`expectedVersion`).
 - Guards and transactional authentication checks return the same standard
   authentication challenge, which is what lets a client complete MFA in the
   existing browser popup and continue.

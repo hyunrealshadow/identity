@@ -228,7 +228,7 @@ impl RbacManagementService {
                 return Err(rbac_codes::error::RolePermissionLimitExceeded::new(
                     MAX_ROLE_PERMISSIONS,
                 )
-                .with_field("permissionIds"));
+                .with_field("permission_ids"));
             }
             let scope_oids = command
                 .scope_oids

@@ -268,13 +268,13 @@ impl InvitationService {
 
     async fn accept_inner(&self, token: &str, password: &str) -> Result<(), AppError> {
         let user = self.matching_user(token).await?;
-        validate_password(password, &[&user.name, &user.email], "newPassword")?;
+        validate_password(password, &[&user.name, &user.email], "new_password")?;
         let snapshot = self.settings.snapshot();
         validate_breached_password(
             self.breach_checker.as_ref(),
             &snapshot,
             password,
-            "newPassword",
+            "new_password",
         )
         .await?;
         let options = snapshot.get::<PasswordHashSetting>();

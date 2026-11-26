@@ -68,3 +68,4 @@ E23065 = 加密响应失败
 E23066 = 不支持 response_mode：{ $response_mode }
 E23067 = 客户端未注册 initiate_login_uri
 E23068 = 该客户端无法使用请求的授权流程
+E23069 = 该授权交互已不可继续使用

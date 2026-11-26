@@ -178,7 +178,7 @@ fn normalize_zone_info(
 }
 
 fn invalid_time_zone() -> AppError {
-    account::error::ValidationFailed.with_field_error("zoneInfo", common::error::InvalidTimeZone)
+    account::error::ValidationFailed.with_field_error("zone_info", common::error::InvalidTimeZone)
 }
 
 pub(super) fn map_identifier_error(error: UserRepositoryError) -> AppError {
@@ -255,7 +255,7 @@ mod tests {
 
         assert_eq!(error.code(), 15000);
         let field = &error.validation().unwrap().fields()[0];
-        assert_eq!(field.field(), "zoneInfo");
+        assert_eq!(field.field(), "zone_info");
         assert_eq!(field.code(), 10010);
     }
 }

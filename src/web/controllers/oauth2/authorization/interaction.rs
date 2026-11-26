@@ -4,9 +4,7 @@ use std::{
 };
 
 use chrono::Utc;
-use identity_application::{
-    error::codes::authorize_http, openid_connect::authorize::ContinueContext,
-};
+use identity_application::{error::codes::authorize, openid_connect::authorize::ContinueContext};
 use identity_domain::auth::{SessionOid, acr_satisfies_any};
 use uuid::Uuid;
 
@@ -215,7 +213,7 @@ pub(super) async fn load_active_interaction(
         .load_continue_context_by_login(login_id)
         .await?;
     if continue_context.expires_at <= Utc::now() || continue_context.completed_at.is_some() {
-        return Err(authorize_http::error::ContinueInteractionUnavailable.into());
+        return Err(authorize::error::InteractionUnavailable.into());
     }
     Ok(continue_context)
 }

@@ -352,7 +352,7 @@ mod tests {
 
     use super::{JsonWebResult, WebResult, render_app_error, write_error_response};
     use crate::{
-        application::error::codes::{authorize_http, common, install},
+        application::error::codes::{authorize, common, install},
         infrastructure::{
             i18n::build_i18n, i18n::init_error_i18n, test_app_state_with_mock_settings,
         },
@@ -360,9 +360,7 @@ mod tests {
 
     #[handler]
     async fn direct_app_error() -> WebResult<()> {
-        Err(authorize_http::error::ContinueInteractionUnavailable
-            .into_error()
-            .into())
+        Err(authorize::error::InteractionUnavailable.into_error().into())
     }
 
     #[handler]

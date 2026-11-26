@@ -387,13 +387,13 @@ impl LoginService {
         else {
             return Err(account::error::UsernameInvalid.with_field("username"));
         };
-        validate_password(password, &[&username, &verifier.email], "newPassword")?;
+        validate_password(password, &[&username, &verifier.email], "new_password")?;
         let snapshot = self.settings.snapshot();
         validate_breached_password(
             self.breach_checker.as_ref(),
             &snapshot,
             password,
-            "newPassword",
+            "new_password",
         )
         .await?;
         let options = snapshot.get::<PasswordHashSetting>();

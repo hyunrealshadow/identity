@@ -311,7 +311,7 @@ fn normalize_zone_info(
 
 fn invalid_time_zone() -> AppError {
     user_management::error::ValidationFailed::new()
-        .with_field_error("zoneInfo", common::error::InvalidTimeZone)
+        .with_field_error("zone_info", common::error::InvalidTimeZone)
 }
 
 /// Convert the management patch into the existing domain patch.
@@ -396,7 +396,7 @@ mod tests {
 
         assert_eq!(error.code(), 16000);
         let field = &error.validation().unwrap().fields()[0];
-        assert_eq!(field.field(), "zoneInfo");
+        assert_eq!(field.field(), "zone_info");
         assert_eq!(field.code(), 10010);
     }
 }

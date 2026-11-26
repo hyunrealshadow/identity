@@ -150,13 +150,36 @@ pub fn field_errors(
                 .fields()
                 .iter()
                 .map(|field| LocalizedFieldError {
-                    field: field.field().to_owned(),
+                    field: client_field_path(field.field()),
                     code: field.code(),
                     message: code_message(i18n, locale, field.code(), field.params()),
                 })
                 .collect()
         })
         .unwrap_or_default()
+}
+
+/// Application field paths are snake_case (`names.0.locale`); clients see the
+/// lowerCamelCase spelling of their inputs (`expectedVersion`).
+fn client_field_path(path: &str) -> String {
+    path.split('.')
+        .map(|segment| {
+            let mut out = String::with_capacity(segment.len());
+            let mut upper = false;
+            for ch in segment.chars() {
+                if ch == '_' && !out.is_empty() {
+                    upper = true;
+                } else if upper {
+                    out.extend(ch.to_uppercase());
+                    upper = false;
+                } else {
+                    out.push(ch);
+                }
+            }
+            out
+        })
+        .collect::<Vec<_>>()
+        .join(".")
 }
 
 /// The authorization challenge a client can satisfy, named after the bearer
@@ -282,6 +305,17 @@ mod tests {
             field_errors(&I18n::disabled(), &langid!("en-US"), &error)[0].message,
             "An unexpected error occurred. Please try again."
         );
+    }
+
+    #[test]
+    fn field_paths_use_the_client_input_spelling() {
+        assert_eq!(client_field_path("expected_version"), "expectedVersion");
+        assert_eq!(client_field_path("names.0.locale"), "names.0.locale");
+        assert_eq!(
+            client_field_path("platforms.redirect_uris"),
+            "platforms.redirectUris"
+        );
+        assert_eq!(client_field_path("roleIds"), "roleIds");
     }
 
     #[test]

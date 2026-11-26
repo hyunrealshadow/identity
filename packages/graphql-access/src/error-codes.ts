@@ -173,6 +173,7 @@ export const AuthorizeErrorCode = {
   ResponseModeInvalid: 23066,
   InitiateLoginUriNotRegistered: 23067,
   ClientGrantNotAllowed: 23068,
+  InteractionUnavailable: 23069,
 } as const
 
 export const AuthorizeHttpErrorCode = {
@@ -181,7 +182,6 @@ export const AuthorizeHttpErrorCode = {
   RequiredParamMissing: 22002,
   InternalClientLoginRequired: 22003,
   ConsentSessionNotFound: 22004,
-  ContinueInteractionUnavailable: 22005,
   LoginDomainNotConfigured: 22006,
 } as const
 

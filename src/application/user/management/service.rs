@@ -780,7 +780,7 @@ fn validate_client_mutation_id(value: Option<&str>) -> Result<(), AppError> {
     if value.chars().count() > MAX_CLIENT_MUTATION_ID_LENGTH {
         return Err(
             user_management::error::ValidationFailed::new().with_field_error(
-                "clientMutationId",
+                "client_mutation_id",
                 user_management::error::InvalidClientMutationId::new(MAX_CLIENT_MUTATION_ID_LENGTH),
             ),
         );
@@ -820,7 +820,8 @@ fn normalize_filter(filter: UserFilter) -> Result<NormalizedFilter, AppError> {
         && from >= before
     {
         return Err(
-            user_management::error::InvalidDateRange::new("createdFrom").with_field("createdFrom")
+            user_management::error::InvalidDateRange::new("created_from")
+                .with_field("created_from"),
         );
     }
     Ok(NormalizedFilter {
@@ -864,7 +865,7 @@ fn map_mutation_outcome(
         }
         UserManagementMutationOutcome::VersionConflict { current_version } => Err(
             user_management::error::VersionConflict::new(current_version)
-                .with_field("expectedVersion"),
+                .with_field("expected_version"),
         ),
         UserManagementMutationOutcome::LastOwnerProtected => {
             Err(AppError::from(OwnerProtectionError::LastOwnerProtected))

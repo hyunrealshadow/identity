@@ -379,7 +379,7 @@ async fn a_rejected_username_or_password_keeps_the_link_usable() {
         .await
         .unwrap_err();
     assert_eq!(
-        field_code(&error, "newPassword"),
+        field_code(&error, "new_password"),
         Some(AuthErrorCode::PasswordTooShort.code())
     );
     let error = flow

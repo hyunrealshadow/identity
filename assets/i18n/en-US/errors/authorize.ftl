@@ -68,3 +68,4 @@ E23065 = Failed to encrypt the response.
 E23066 = Unsupported response_mode: { $response_mode }.
 E23067 = The client has no registered initiate_login_uri.
 E23068 = This client cannot use the requested authorization flow.
+E23069 = This authorization interaction is no longer available.

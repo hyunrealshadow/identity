@@ -212,7 +212,7 @@ fn parse_time_zone(raw: Option<&str>) -> Result<TimeZone, AppError> {
     match trimmed {
         None => Ok(TimeZone::parse("UTC").expect("UTC is always valid")),
         Some(value) => TimeZone::parse(value)
-            .map_err(|_| audit::error::InvalidTimeZone::new(value).with_field("timeZone")),
+            .map_err(|_| audit::error::InvalidTimeZone::new(value).with_field("time_zone")),
     }
 }
 
