@@ -3,7 +3,7 @@ import { Card, CardContent } from '@identity/ui/components/card'
 import { Lock } from 'lucide-react'
 
 import { useTranslator, type MessageKey } from '#/lib/i18n'
-import type { RbacScope } from '#/modules/user-management/lib/rbac-scope'
+import type { RbacScope } from '#/lib/rbac-scope'
 
 export function RbacAccessRestricted({
   title,

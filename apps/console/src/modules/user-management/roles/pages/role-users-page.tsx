@@ -33,21 +33,21 @@ import { useWorkspace } from '#/lib/workspace'
 import {
   type RbacNotice,
   RbacNoticeAlert,
-} from '#/modules/user-management/components/rbac-feedback'
-import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
-import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
+} from '#/components/rbac-feedback'
+import { ConsoleWorkspaceGate } from '#/components/workspace-gate'
+import { RbacAccessRestricted } from '#/components/role-access'
 import { AssignmentStatusChip } from '#/modules/user-management/roles/components/role-status'
 
 import {
   sameVariable,
   useConsoleQuery,
 } from '#/lib/graphql/use-console-query'
-import { cursorPage } from '#/modules/user-management/lib/cursor-page'
+import { cursorPage } from '#/lib/cursor-page'
 
-import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
+import { rbacScope } from '#/lib/rbac-scope'
 import { FIRST_PAGE } from '#/modules/user-management/lib/relation-search'
 import type { RoleUsersSearch } from '#/modules/user-management/roles/lib/role-users-search'
-import { UserSelectField } from '#/modules/user-management/users/components/user-form-fields'
+import { UserSelectField } from '#/components/form-fields'
 
 type UserStatus = 'any' | 'active' | 'revoked'
 
@@ -319,6 +319,8 @@ export function RoleUsersPage({
         ) : null}
         <DataTable
           label={t('roleUsersTableLabel')}
+          loading={assignments.refreshing}
+          loadingLabel={t('tableLoading')}
           minWidth={820}
           columns={[
             {
@@ -389,36 +391,28 @@ export function RoleUsersPage({
                     </span>
                   </DataTable.Cell>
                   <DataTable.Cell>
-                    {edge.enabled ? (
-                      scope.assignmentsWrite ? (
-                        <RevokeRoleFromUserDialog
-                          assignment={{
-                            userId: user.id,
-                            roleId,
-                            userVersion: user.version,
-                          }}
-                          label={user.username}
-                          onRevoked={() => {
-                            setNotice({
-                              kind: 'success',
-                              title: t('roleUserRevokedTitle'),
-                              description: t('roleUserRevokedDescription'),
-                            })
-                            void assignments.refresh()
-                          }}
-                          onReload={() => void assignments.refresh()}
-                          reloadPending={assignments.refreshing}
-                        />
-                      ) : (
-                        <span className="text-xs text-muted-foreground">
-                          {t('roleUsersNoWritePermission')}
-                        </span>
-                      )
-                    ) : (
-                      <span className="text-xs text-muted-foreground">
-                        {formatDateTime(edge.revokedAt, locale, timeZone)}
-                      </span>
-                    )}
+                    <RevokeRoleFromUserDialog
+                      assignment={{
+                        userId: user.id,
+                        roleId,
+                        userVersion: user.version,
+                      }}
+                      label={user.username}
+                      canView={scope.usersRead}
+                      canRevoke={
+                        edge.enabled && !edge.revokedAt && scope.assignmentsWrite
+                      }
+                      onRevoked={() => {
+                        setNotice({
+                          kind: 'success',
+                          title: t('roleUserRevokedTitle'),
+                          description: t('roleUserRevokedDescription'),
+                        })
+                        void assignments.refresh()
+                      }}
+                      onReload={() => void assignments.refresh()}
+                      reloadPending={assignments.refreshing}
+                    />
                   </DataTable.Cell>
                 </DataTable.Row>
               )

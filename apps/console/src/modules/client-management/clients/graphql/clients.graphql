@@ -183,14 +183,16 @@ query ConsoleClientScopes(
   }
 }
 
-query ConsoleProtocolScopes($first: Int) {
+query ConsoleProtocolScopes($first: Int, $after: String) {
   scopes(
     filter: { protocolOnly: true, enabled: true }
     orderBy: CODE_ASC
     first: $first
+    after: $after
   ) {
     pageInfo {
       hasNextPage
+      endCursor
     }
     edges {
       node {

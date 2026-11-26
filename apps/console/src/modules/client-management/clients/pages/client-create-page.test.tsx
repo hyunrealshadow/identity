@@ -21,7 +21,7 @@ vi.mock('#/lib/workspace', () => ({ useWorkspace: () => ({ data: null }) }))
 vi.mock('../lib/client-scope', () => ({
   clientScope: () => ({ create: true, secretCreate: true }),
 }))
-vi.mock('#/modules/user-management/components/workspace-gate', () => ({
+vi.mock('#/components/workspace-gate', () => ({
   ConsoleWorkspaceGate: ({ children }: { children: React.ReactNode }) => children,
 }))
 vi.mock('../hooks/client-mutations', () => ({

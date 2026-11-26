@@ -14,7 +14,7 @@ import {
 } from 'lucide-react'
 import { useMemo, useState, type ReactNode } from 'react'
 
-import { AccountAvatar } from '#/components/account-avatar'
+import { AccountAvatar } from '@identity/ui/components/account-avatar'
 import { useBreadcrumbLabel } from '#/components/app-breadcrumbs'
 import { AsyncState } from '#/components/async-state'
 import { CopyableValue } from '#/components/copy-button'

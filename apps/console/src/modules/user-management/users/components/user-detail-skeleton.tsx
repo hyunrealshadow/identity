@@ -3,7 +3,7 @@ import { Card, CardContent } from '@identity/ui/components/card'
 import { Skeleton } from '@identity/ui/components/skeleton'
 import type { ReactNode } from 'react'
 
-import { UserSelectField } from './user-form-fields'
+import { UserSelectField } from '#/components/form-fields'
 
 import { useTranslator } from '#/lib/i18n'
 

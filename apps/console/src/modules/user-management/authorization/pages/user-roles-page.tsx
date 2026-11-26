@@ -40,19 +40,19 @@ import {
 import {
   RbacNoticeAlert,
   type RbacNotice,
-} from '#/modules/user-management/components/rbac-feedback'
-import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
-import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
-import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
+} from '#/components/rbac-feedback'
+import { ConsoleWorkspaceGate } from '#/components/workspace-gate'
+import { resolveLocalizedText } from '#/lib/localized-metadata'
+import { RbacAccessRestricted } from '#/components/role-access'
 import { AssignmentStatusChip } from '#/modules/user-management/roles/components/role-status'
 
 import {
   sameVariable,
   useConsoleQuery,
 } from '#/lib/graphql/use-console-query'
-import { cursorPage } from '#/modules/user-management/lib/cursor-page'
+import { cursorPage } from '#/lib/cursor-page'
 
-import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
+import { rbacScope } from '#/lib/rbac-scope'
 import { FIRST_PAGE } from '#/modules/user-management/lib/relation-search'
 import type { UserRolesSearch } from '#/modules/user-management/authorization/lib/user-authorization-search'
 import { useUserDetailContext } from '#/modules/user-management/users/components/user-detail-context'
@@ -63,7 +63,7 @@ import {
   type AuthorizationSourceFilterValue,
 } from '#/modules/user-management/authorization/components/authorization-source-filter'
 import { useAuthorizationLabels } from '#/modules/user-management/authorization/hooks/use-authorization-labels'
-import { UserSelectField } from '#/modules/user-management/users/components/user-form-fields'
+import { UserSelectField } from '#/components/form-fields'
 
 type AssignmentStatus = 'any' | 'active' | 'revoked'
 
@@ -506,39 +506,47 @@ export function UserRolesPage({
                     </span>
                   </DataTable.Cell>
                   <DataTable.Cell>
-                    {edge.source === 'GROUP' ? (
-                      <span className="text-xs text-muted-foreground">
-                        {t('userRolesInheritedNotRevocable')}
-                      </span>
-                    ) : edge.enabled ? (
-                      scope.assignmentsWrite ? (
-                        <RevokeUserRoleDialog
-                          assignment={{
-                            userId,
-                            roleId: role.id,
-                            userVersion: connection?.userVersion,
-                          }}
-                          label={roleName}
-                          onRevoked={() => {
-                            setNotice({
-                              kind: 'success',
-                              title: t('userRolesRevokedTitle'),
-                              description: t('userRolesRevokedDescription'),
-                            })
-                          }}
-                          onReload={() => void assignments.refresh()}
-                          reloadPending={assignments.refreshing}
-                        />
-                      ) : (
-                        <span className="text-xs text-muted-foreground">
-                          {t('userRolesNoWritePermission')}
-                        </span>
-                      )
-                    ) : (
-                      <span className="text-xs text-muted-foreground">
-                        {formatDateTime(edge.revokedAt, locale, timeZone)}
-                      </span>
-                    )}
+                    <RevokeUserRoleDialog
+                      assignment={{
+                        userId,
+                        roleId: role.id,
+                        userVersion: connection?.userVersion,
+                      }}
+                      label={roleName}
+                      canView={scope.rolesRead}
+                      canRevoke={
+                        edge.source !== 'GROUP' &&
+                        edge.enabled &&
+                        scope.assignmentsWrite
+                      }
+                      extraActions={
+                        edge.source === 'GROUP' &&
+                        edge.groupId &&
+                        scope.groupsRead
+                          ? [
+                              {
+                                id: 'view-group',
+                                label: t('tableActionViewGroup'),
+                                section: 'navigate',
+                                onAction: () =>
+                                  void navigate({
+                                    to: '/groups/$groupId',
+                                    params: { groupId: edge.groupId! },
+                                  }),
+                              },
+                            ]
+                          : []
+                      }
+                      onRevoked={() => {
+                        setNotice({
+                          kind: 'success',
+                          title: t('userRolesRevokedTitle'),
+                          description: t('userRolesRevokedDescription'),
+                        })
+                      }}
+                      onReload={() => void assignments.refresh()}
+                      reloadPending={assignments.refreshing}
+                    />
                   </DataTable.Cell>
                 </DataTable.Row>
               )

@@ -9,15 +9,15 @@ import { useEffect, useState } from 'react'
 import { AsyncState } from '#/components/async-state'
 import type { MessageKey } from '#/lib/i18n'
 import { useLocale, useTranslator } from '#/lib/i18n'
-import { PermissionBuiltInChip } from '#/modules/user-management/roles/components/role-status'
+import { PermissionBuiltInChip } from '#/components/built-in-chip'
 import type { PermissionNode } from '#/modules/user-management/roles/hooks/use-role-membership'
 import {
   permissionDisplayDescription,
   permissionDisplayName,
   permissionIsBuiltIn,
   withPermissionDisplayFields,
-} from '#/modules/user-management/roles/lib/role-localization'
-import type { StagedPermission } from '#/modules/user-management/roles/lib/permission-selection'
+} from '#/lib/localized-display'
+import type { StagedPermission } from '#/lib/permission-selection'
 
 type RowStatus = 'assigned' | 'assigned-disabled' | 'added' | 'removed'
 

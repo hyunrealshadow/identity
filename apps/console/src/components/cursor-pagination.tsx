@@ -55,7 +55,7 @@ export function CursorPagination({
         : t('tableRangeSummary', { from, to, total: totalCount })
     }
     return totalCount === undefined
-      ? t('rbacPageCount', { count: pageCount })
+      ? t('paginationPageCount', { count: pageCount })
       : t('tablePageSummary', { total: totalCount })
   }
 

@@ -18,19 +18,19 @@ import { useCursorPagination } from '#/lib/use-cursor-pagination'
 import { useUrlFilters } from '#/lib/use-url-filters'
 import { useWorkspace } from '#/lib/workspace'
 import { useResourceContext } from '../../components/resource-detail-shell'
-import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
-import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
-import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
-import { PermissionBuiltInChip } from '#/modules/user-management/roles/components/role-status'
+import { ConsoleWorkspaceGate } from '#/components/workspace-gate'
+import { rbacScope } from '#/lib/rbac-scope'
+import { RbacAccessRestricted } from '#/components/role-access'
+import { PermissionBuiltInChip } from '#/components/built-in-chip'
 import {
   UserTextField,
   UserSelectField,
-} from '#/modules/user-management/users/components/user-form-fields'
+} from '#/components/form-fields'
 import {
   permissionDisplayDescription,
   permissionDisplayName,
   withPermissionDisplayFields,
-} from '#/modules/user-management/roles/lib/role-localization'
+} from '#/lib/localized-display'
 import { usePermissionList } from '../hooks/use-permissions'
 import {
   PERMISSION_PAGE_SIZE,

@@ -3,6 +3,8 @@ export interface LocalizedValue {
   value: string
 }
 
+export type LocalizedEntry = LocalizedValue
+
 const FALLBACK_LOCALE = 'en-US'
 
 function sameLocale(left: string, right: string): boolean {
@@ -39,6 +41,8 @@ export function resolveLocalizedValue(
   }
   return undefined
 }
+
+export const resolveLocalizedText = resolveLocalizedValue
 
 export function canonicalResourceLocale(value: string | null | undefined): string {
   try {

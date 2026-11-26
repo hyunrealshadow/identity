@@ -44,13 +44,19 @@ vi.mock('#/lib/workspace', () => ({
   }),
 }))
 vi.mock('#/lib/graphql/use-console-query', () => ({
+  sameVariable: () => () => true,
   useConsoleQuery: () => ({
     status: 'ready',
     data: {
       user: {
         id: 'User:target',
         sessions: {
-          pageInfo: { hasNextPage: false, endCursor: null },
+          pageInfo: {
+            hasPreviousPage: false,
+            hasNextPage: false,
+            startCursor: null,
+            endCursor: null,
+          },
           edges: mocks.sessions.map((node) => ({ cursor: node.id, node })),
         },
       },

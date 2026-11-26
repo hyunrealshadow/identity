@@ -3,7 +3,7 @@ import { FileText, Send } from 'lucide-react'
 
 import { PageHeader } from '#/components/page-header'
 import { useTranslator } from '#/lib/i18n'
-import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
+import { ConsoleWorkspaceGate } from '#/components/workspace-gate'
 import { SectionTabs, type SectionTab } from '../../components/section-tabs'
 import { InstanceSettingsProvider } from '../../settings/components/instance-settings-context'
 

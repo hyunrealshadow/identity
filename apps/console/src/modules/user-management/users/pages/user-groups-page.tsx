@@ -40,24 +40,24 @@ import {
 import {
   RbacNoticeAlert,
   type RbacNotice,
-} from '#/modules/user-management/components/rbac-feedback'
-import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
+} from '#/components/rbac-feedback'
+import { ConsoleWorkspaceGate } from '#/components/workspace-gate'
 import {
   GroupKindChip,
   GroupStatusChip,
 } from '#/modules/user-management/groups/components/group-status'
 
-import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
+import { resolveLocalizedText } from '#/lib/localized-metadata'
 import {
   sameVariable,
   useConsoleQuery,
 } from '#/lib/graphql/use-console-query'
-import { cursorPage } from '#/modules/user-management/lib/cursor-page'
+import { cursorPage } from '#/lib/cursor-page'
 
-import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
-import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
+import { rbacScope } from '#/lib/rbac-scope'
+import { RbacAccessRestricted } from '#/components/role-access'
 import { useUserDetailContext } from '#/modules/user-management/users/components/user-detail-context'
-import { UserTextField } from '#/modules/user-management/users/components/user-form-fields'
+import { UserTextField } from '#/components/form-fields'
 import {
   USER_GROUPS_PAGE_SIZE,
   userGroupsAppliedFilters,
@@ -480,11 +480,13 @@ export function UserGroupsPage({
                   <GroupStatusChip enabled={node.enabled} />
                 </DataTable.Cell>
                 <DataTable.Cell>
-                  {readyUser && scope.groupMembershipsWrite ? (
+                  {readyUser ? (
                     <RemoveGroupMembershipDialog
                       group={node}
                       userId={readyUser.id}
                       username={readyUser.username}
+                      canView={scope.groupsRead}
+                      canRemove={scope.groupMembershipsWrite}
                       onRemoved={() => {
                         setNotice({
                           kind: 'success',
@@ -496,11 +498,7 @@ export function UserGroupsPage({
                       onReload={() => void memberships.refresh()}
                       reloadPending={memberships.refreshing}
                     />
-                  ) : (
-                    <span className="text-xs text-muted-foreground">
-                      {t('userGroupsNoWritePermission')}
-                    </span>
-                  )}
+                  ) : null}
                 </DataTable.Cell>
               </DataTable.Row>
             ))}

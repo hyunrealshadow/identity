@@ -22,14 +22,14 @@ import { useLocale, useTranslator } from '#/lib/i18n'
 import { useCursorPagination } from '#/lib/use-cursor-pagination'
 import { useUrlFilters } from '#/lib/use-url-filters'
 import { useWorkspace } from '#/lib/workspace'
-import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
+import { ConsoleWorkspaceGate } from '#/components/workspace-gate'
 import { useConsoleQuery } from '#/lib/graphql/use-console-query'
-import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
-import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
+import { rbacScope } from '#/lib/rbac-scope'
+import { RbacAccessRestricted } from '#/components/role-access'
 import {
   UserSelectField,
   UserTextField,
-} from '#/modules/user-management/users/components/user-form-fields'
+} from '#/components/form-fields'
 import {
   RESOURCES_PAGE_SIZE,
   resourcesAppliedFilters,

@@ -42,24 +42,24 @@ import {
   RbacMutationFeedback,
   RbacNoticeAlert,
   type RbacNotice,
-} from '#/modules/user-management/components/rbac-feedback'
-import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
+} from '#/components/rbac-feedback'
+import { ConsoleWorkspaceGate } from '#/components/workspace-gate'
 import { RoleStateDialog } from '../components/role-state-dialog'
-import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
+import { RbacAccessRestricted } from '#/components/role-access'
 import { useRoleMutations } from '#/modules/user-management/roles/hooks/role-mutations'
 import {
   roleDisplayDescription,
   roleDisplayName,
   roleIsBuiltIn,
   withRoleDisplayFields,
-} from '#/modules/user-management/roles/lib/role-localization'
+} from '#/lib/localized-display'
 
 import { clearDraft, readDraft, writeDraft } from '#/lib/draft-storage'
 import {
   rbacFieldErrors,
   type RbacFeedbackState,
-} from '#/modules/user-management/lib/rbac-errors'
-import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
+} from '#/lib/rbac-errors'
+import { rbacScope } from '#/lib/rbac-scope'
 
 type LocalField = 'metadata'
 

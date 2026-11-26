@@ -14,17 +14,17 @@ import {
 } from '#/generated/graphql'
 import { useLocale, useTranslator } from '#/lib/i18n'
 import { useWorkspace } from '#/lib/workspace'
-import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
+import { resolveLocalizedText } from '#/lib/localized-metadata'
 import {
   sameVariable,
   useConsoleQuery,
 } from '#/lib/graphql/use-console-query'
-import { cursorPage } from '#/modules/user-management/lib/cursor-page'
-import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
+import { cursorPage } from '#/lib/cursor-page'
+import { rbacScope } from '#/lib/rbac-scope'
 import {
   RoleBuiltInChip,
   RoleStatusChip,
-} from '#/modules/user-management/roles/components/role-status'
+} from '#/components/built-in-chip'
 
 export function PermissionRoleReferences({
   permissionId,
@@ -88,6 +88,8 @@ export function PermissionRoleReferences({
             {query.partial ? <ErrorDetails issues={query.errors} /> : null}
             <DataTable
               label={t('permissionsRolesTitle')}
+              loading={query.refreshing}
+              loadingLabel={t('tableLoading')}
               minWidth={420}
               columns={[
                 {

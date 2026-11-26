@@ -17,9 +17,9 @@ import {
   GroupKindChip,
   GroupStatusChip,
 } from '#/modules/user-management/groups/components/group-status'
-import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
+import { resolveLocalizedText } from '#/lib/localized-metadata'
 import { useConsoleQuery } from '#/lib/graphql/use-console-query'
-import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
+import { rbacScope } from '#/lib/rbac-scope'
 
 type TabPath =
   '/groups/$groupId' | '/groups/$groupId/members' | '/groups/$groupId/roles'

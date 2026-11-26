@@ -1,5 +1,4 @@
 const enUS = {
-  rbacPageCount: '{count} items on this page',
   rbacLabelsUnavailable: 'Some permission details could not be loaded',
 
   rbacApiResource: 'API resource',

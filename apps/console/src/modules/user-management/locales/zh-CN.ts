@@ -1,7 +1,6 @@
 import type enUS from './en-US'
 
 const zhCN = {
-  rbacPageCount: '本页 {count} 项',
   rbacLabelsUnavailable: '部分权限信息加载失败',
 
   rbacApiResource: 'API 资源',

@@ -4,7 +4,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { UserPlus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
-import { TableRowActions } from '#/components/table-row-actions'
+import { TableRowActions, type TableRowAction } from '#/components/table-row-actions'
 import { toast } from '#/lib/toast'
 import {
   ConsoleGroupsDocument,
@@ -24,11 +24,11 @@ import {
   RelationPagination,
 } from '../../components/relation-picker'
 import { useConsoleQuery } from '#/lib/graphql/use-console-query'
-import { cursorPage } from '../../lib/cursor-page'
+import { cursorPage } from '#/lib/cursor-page'
 import { useDialogDraft } from '../../lib/dialog-draft'
 import { useRelationMutation } from '../../lib/relation-mutation'
 import { useGroupMemberMutations } from '../hooks/use-group-members'
-import { resolveLocalizedText } from '../lib/groups-search'
+import { resolveLocalizedText } from '#/lib/localized-metadata'
 import { GroupKindChip, GroupStatusChip } from './group-status'
 import { UserStatusBadges } from '../../users/components/user-status'
 
@@ -347,6 +347,8 @@ function RemoveMembershipDialog({
   label,
   description,
   fromUser,
+  canView = true,
+  canRemove = true,
   onRemoved,
   onReload,
   reloadPending,
@@ -357,6 +359,8 @@ function RemoveMembershipDialog({
   label: string
   description: string
   fromUser: boolean
+  canView?: boolean
+  canRemove?: boolean
   onRemoved: () => void
 }) {
   const t = useTranslator()
@@ -364,87 +368,96 @@ function RemoveMembershipDialog({
   const state = useOverlayState()
   const mutation = useRelationMutation()
   const mutations = useGroupMemberMutations()
-  return (
-    <>
-      <TableRowActions
-        subject={label}
-        actions={[
+  const actions: TableRowAction[] = [
+    ...(canView
+      ? [
           {
             id: 'view',
             label: t(fromUser ? 'tableActionViewGroup' : 'tableActionViewUser'),
-            section: 'open',
+            section: 'open' as const,
             onAction: () =>
               void (fromUser
                 ? navigate({ to: '/groups/$groupId', params: { groupId } })
                 : navigate({ to: '/users/$userId', params: { userId } })),
           },
+        ]
+      : []),
+    ...(canRemove
+      ? [
           {
             id: 'remove',
             label: t('tableActionRemove'),
-            section: 'danger',
+            section: 'danger' as const,
             onAction: () => {
               mutation.setFeedback(null)
               state.open()
             },
             isDisabled: !version,
           },
-        ]}
-      />
-      <RelationDialog
-        state={state}
-        mutation={mutation}
-        size="md"
-        danger
-        title={t(
-          fromUser ? 'userGroupsRemoveTitle' : 'groupMembersRemoveTitle',
-        )}
-        confirm={t(
-          fromUser ? 'userGroupsRemoveConfirm' : 'groupMembersRemoveConfirm',
-        )}
-        disabled={!version}
-        onReload={onReload}
-        reloadPending={reloadPending}
-        conflictTitleKey={fromUser ? 'userGroupsConflictTitle' : undefined}
-        conflictDescriptionKey={
-          fromUser ? 'userGroupsConflictDescription' : undefined
-        }
-        onSubmit={() =>
-          void mutation.run(async () => {
-            const result = await mutations.remove({
-              groupId,
-              userId,
-              expectedVersion: version,
-            })
-            if (
-              !mutation.accept(
-                result,
-                result.data?.removeGroupMember,
-                'missing_remove_group_member_payload',
+        ]
+      : []),
+  ]
+  if (actions.length === 0) return null
+  return (
+    <>
+      <TableRowActions subject={label} actions={actions} />
+      {canRemove ? (
+        <RelationDialog
+          state={state}
+          mutation={mutation}
+          size="md"
+          danger
+          title={t(
+            fromUser ? 'userGroupsRemoveTitle' : 'groupMembersRemoveTitle',
+          )}
+          confirm={t(
+            fromUser ? 'userGroupsRemoveConfirm' : 'groupMembersRemoveConfirm',
+          )}
+          disabled={!version}
+          onReload={onReload}
+          reloadPending={reloadPending}
+          conflictTitleKey={fromUser ? 'userGroupsConflictTitle' : undefined}
+          conflictDescriptionKey={
+            fromUser ? 'userGroupsConflictDescription' : undefined
+          }
+          onSubmit={() =>
+            void mutation.run(async () => {
+              const result = await mutations.remove({
+                groupId,
+                userId,
+                expectedVersion: version,
+              })
+              if (
+                !mutation.accept(
+                  result,
+                  result.data?.removeGroupMember,
+                  'missing_remove_group_member_payload',
+                )
               )
-            )
-              return
-            state.close()
-            toast.success(
-              t(
-                fromUser
-                  ? 'userGroupsRemovedToast'
-                  : 'groupMembersRemovedToast',
-              ),
-              {
-                description: t(
+                return
+              state.close()
+              toast.success(
+                t(
                   fromUser
-                    ? 'userGroupsRemovedCommitted'
-                    : 'groupMembersRemovedCommitted',
+                    ? 'userGroupsRemovedToast'
+                    : 'groupMembersRemovedToast',
                 ),
-              },
-            )
-            if (result.partial) toast.warning(t('rbacPartialMutationNote'))
-            onRemoved()
-          }, 'remove_group_member_request_failed')
-        }
-      >
-        <p className="text-sm leading-6 text-muted-foreground">{description}</p>
-      </RelationDialog>
+                {
+                  description: t(
+                    fromUser
+                      ? 'userGroupsRemovedCommitted'
+                      : 'groupMembersRemovedCommitted',
+                  ),
+                },
+              )
+              if (result.partial) toast.warning(t('rbacPartialMutationNote'))
+              onRemoved()
+            }, 'remove_group_member_request_failed')
+          }
+        >
+          <p className="text-sm leading-6 text-muted-foreground">{description}</p>
+        </RelationDialog>
+      ) : null}
     </>
   )
 }
@@ -489,12 +502,16 @@ export function RemoveMemberDialog({
   userId,
   username,
   groupVersion,
+  canView,
+  canRemove,
   ...callbacks
 }: Callbacks & {
   groupId: string
   userId: string
   username: string
   groupVersion: string
+  canView?: boolean
+  canRemove?: boolean
   onRemoved: () => void
 }) {
   const t = useTranslator()
@@ -507,6 +524,8 @@ export function RemoveMemberDialog({
       label={label}
       description={t('groupMembersRemoveDescription', { user: label })}
       fromUser={false}
+      canView={canView}
+      canRemove={canRemove}
       {...callbacks}
     />
   )
@@ -515,11 +534,15 @@ export function RemoveGroupMembershipDialog({
   group,
   userId,
   username,
+  canView,
+  canRemove,
   ...callbacks
 }: Callbacks & {
   group: MembershipGroup
   userId: string
   username: string
+  canView?: boolean
+  canRemove?: boolean
   onRemoved: () => void
 }) {
   const t = useTranslator()
@@ -536,6 +559,8 @@ export function RemoveGroupMembershipDialog({
         group: label,
       })}
       fromUser
+      canView={canView}
+      canRemove={canRemove}
       {...callbacks}
     />
   )

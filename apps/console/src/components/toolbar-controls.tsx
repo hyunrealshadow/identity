@@ -18,7 +18,7 @@ import {
 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 
-import { AccountAvatar } from '#/components/account-avatar'
+import { AccountAvatar } from '@identity/ui/components/account-avatar'
 import { useLocale, useTranslator, type LocalePreference } from '#/lib/i18n'
 import {
   applyTheme,

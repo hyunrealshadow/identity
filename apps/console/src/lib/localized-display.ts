@@ -1,5 +1,5 @@
 import type { LocalizedEntry } from '#/lib/localized-values'
-import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
+import { resolveLocalizedText } from '#/lib/localized-metadata'
 
 export type LocalizedTextValue = LocalizedEntry
 

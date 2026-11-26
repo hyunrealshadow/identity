@@ -22,11 +22,11 @@ import {
 import { useLocale, useTranslator } from '#/lib/i18n'
 import { toast } from '#/lib/toast'
 
-import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
+import { resolveLocalizedText } from '#/lib/localized-metadata'
 
 import { useRoleMutations } from '#/modules/user-management/roles/hooks/role-mutations'
 import { useConsoleQuery } from '#/lib/graphql/use-console-query'
-import { cursorPage } from '#/modules/user-management/lib/cursor-page'
+import { cursorPage } from '#/lib/cursor-page'
 import { clearDraft } from '#/lib/draft-storage'
 import { useDialogDraft } from '../../lib/dialog-draft'
 

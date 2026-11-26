@@ -16,10 +16,10 @@ import { RoleDetailTabs } from '#/modules/user-management/components/detail-tabs
 import {
   RoleBuiltInChip,
   RoleStatusChip,
-} from '#/modules/user-management/roles/components/role-status'
-import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
+} from '#/components/built-in-chip'
+import { resolveLocalizedText } from '#/lib/localized-metadata'
 import { useConsoleQuery } from '#/lib/graphql/use-console-query'
-import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
+import { rbacScope } from '#/lib/rbac-scope'
 
 type TabPath =
   | '/roles/$roleId'

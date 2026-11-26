@@ -26,10 +26,8 @@ import {
   type MutationFeedbackState,
 } from '#/modules/user-management/users/lib/user-errors'
 import { MutationFeedback } from '#/modules/user-management/users/components/user-feedback'
-import {
-  UserProfileFields,
-  UserTextField,
-} from '#/modules/user-management/users/components/user-form-fields'
+import { UserTextField } from '#/components/form-fields'
+import { UserProfileFields } from '#/modules/user-management/users/components/user-form-fields'
 import {
   createDraftFromEmpty,
   createDraftSnapshot,

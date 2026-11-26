@@ -7,7 +7,7 @@ import {
   selectionDiff,
   togglePermission,
   type PermissionMembershipState,
-} from '#/modules/user-management/roles/lib/permission-selection'
+} from '#/lib/permission-selection'
 
 const complete: PermissionMembershipState = {
   status: 'ready',

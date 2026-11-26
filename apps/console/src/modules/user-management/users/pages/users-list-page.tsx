@@ -37,7 +37,7 @@ import { UserStatusBadges } from '#/modules/user-management/users/components/use
 import {
   UserSelectField,
   UserTextField,
-} from '#/modules/user-management/users/components/user-form-fields'
+} from '#/components/form-fields'
 import {
   useUsers,
   type UserSummary,

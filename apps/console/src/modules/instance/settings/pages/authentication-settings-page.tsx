@@ -10,8 +10,8 @@ import {
 } from '#/components/settings-section'
 import { useTranslator, type MessageKey } from '#/lib/i18n'
 import { toast } from '#/lib/toast'
-import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
-import { rbacFieldErrors, type RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
+import { RbacMutationFeedback } from '#/components/rbac-feedback'
+import { rbacFieldErrors, type RbacFeedbackState } from '#/lib/rbac-errors'
 import { SettingsFieldError, SettingsFormFooter } from '../components/settings-form-footer'
 import {
   useInstanceSettings,

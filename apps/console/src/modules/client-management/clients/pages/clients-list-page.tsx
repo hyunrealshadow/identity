@@ -24,14 +24,14 @@ import { useLocale, useTranslator } from '#/lib/i18n'
 import { useCursorPagination } from '#/lib/use-cursor-pagination'
 import { useUrlFilters } from '#/lib/use-url-filters'
 import { useWorkspace } from '#/lib/workspace'
-import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
-import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
+import { ConsoleWorkspaceGate } from '#/components/workspace-gate'
+import { resolveLocalizedText } from '#/lib/localized-metadata'
 import { useConsoleQuery } from '#/lib/graphql/use-console-query'
-import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
+import { RbacAccessRestricted } from '#/components/role-access'
 import {
   UserSelectField,
   UserTextField,
-} from '#/modules/user-management/users/components/user-form-fields'
+} from '#/components/form-fields'
 import {
   ClientDeleteDialog,
   ClientStateDialog,

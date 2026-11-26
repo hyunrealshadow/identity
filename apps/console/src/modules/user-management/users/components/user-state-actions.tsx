@@ -13,7 +13,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@identity/ui/components/dropdown-menu'
-import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
+import { useOverlayState, type OverlayState } from '@identity/ui/hooks/use-overlay-state'
 import { Ellipsis, LockOpen, Power, PowerOff, Trash2, TriangleAlert } from 'lucide-react'
 import { useRef, useState } from 'react'
 
@@ -32,8 +32,6 @@ import type {
 import { useTranslator, type MessageKey } from '#/lib/i18n'
 
 export type UserStateAction = 'enable' | 'disable' | 'unlock' | 'delete'
-
-type OverlayState = ReturnType<typeof useOverlayState>
 
 interface ActionMeta {
   title: MessageKey

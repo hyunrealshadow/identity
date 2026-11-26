@@ -17,6 +17,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { AsyncState } from '#/components/async-state'
 import { ConfirmationDialog } from '#/components/confirmation-dialog'
 import { CopyableValue } from '#/components/copy-button'
+import { CursorPagination } from '#/components/cursor-pagination'
 import { TableRowActions } from '#/components/table-row-actions'
 import {
   ConsoleUserSessionsDocument,
@@ -25,16 +26,21 @@ import {
 } from '#/generated/graphql'
 import type { EmailDeliveryFailure, UserRequiredAction } from '#/generated/graphql'
 import { useAuth } from '#/lib/auth/context'
+import { cursorPage } from '#/lib/cursor-page'
 import { formatDateTime } from '#/lib/format'
 import {
   failureDescriptionKey,
   failureTitleKey,
 } from '#/lib/graphql/presentation'
 import type { GraphQLFailure, GraphQLIssue, GraphQLStepUp } from '#/lib/graphql/transport'
-import { useConsoleQuery } from '#/lib/graphql/use-console-query'
+import { sameVariable, useConsoleQuery } from '#/lib/graphql/use-console-query'
 import { useLocale, useTranslator, type MessageKey } from '#/lib/i18n'
 import { useRuntimeConfig } from '#/lib/runtime-config'
 import { toast } from '#/lib/toast'
+import {
+  useCursorPagination,
+  type PageCursor,
+} from '#/lib/use-cursor-pagination'
 import { useWorkspace } from '#/lib/workspace'
 import { useUserDetailContext } from '../components/user-detail-context'
 import { MutationFeedback } from '../components/user-feedback'
@@ -48,8 +54,7 @@ type Session = NonNullable<
   ConsoleUserSessionsQuery['user']
 >['sessions']['edges'][number]['node']
 
-/** At most this many sessions are listed; revoking all covers the rest. */
-const SESSION_PAGE_SIZE = 50
+const SESSION_PAGE_SIZE = 20
 
 /** While an invitation email is queued, its status is read again this often, a few times. */
 const QUEUED_REFRESH_MS = 3_000
@@ -163,14 +168,32 @@ export function UserSecurityPage() {
     [workspace.data?.effectivePermissions],
   )
   const mutations = useUserMutations()
-  const variables = useMemo(
-    () => (user ? { userId: user.id, first: SESSION_PAGE_SIZE } : null),
-    [user?.id],
+  const [sessionCursor, setSessionCursor] = useState<PageCursor>({})
+  const variables = useMemo<ConsoleUserSessionsQueryVariables | null>(
+    () =>
+      user
+        ? {
+            userId: user.id,
+            ...cursorPage(SESSION_PAGE_SIZE, sessionCursor.after, sessionCursor.before),
+          }
+        : null,
+    [user?.id, sessionCursor.after, sessionCursor.before],
   )
   const sessionsQuery = useConsoleQuery<
     ConsoleUserSessionsQuery,
     ConsoleUserSessionsQueryVariables
-  >(ConsoleUserSessionsDocument, variables, Boolean(variables), 'missing_user_sessions')
+  >(
+    ConsoleUserSessionsDocument,
+    variables,
+    Boolean(variables),
+    'missing_user_sessions',
+    { keepPreviousData: sameVariable('userId') },
+  )
+  const sessionPagination = useCursorPagination({
+    search: sessionCursor,
+    variables: variables ?? { userId: '', first: SESSION_PAGE_SIZE },
+    onNavigate: setSessionCursor,
+  })
   const [confirm, setConfirm] = useState<Confirm | null>(null)
   const [pending, setPending] = useState(false)
   const [feedback, setFeedback] = useState<MutationFeedbackState | null>(null)
@@ -190,6 +213,7 @@ export function UserSecurityPage() {
   const isRefreshing = detail.refreshing
   useEffect(() => {
     queuedRefreshes.current = 0
+    setSessionCursor({})
   }, [userId, invitationSentAt])
   useEffect(() => {
     if (invitationStatus !== 'QUEUED') {
@@ -219,8 +243,8 @@ export function UserSecurityPage() {
   const hasSecondFactor = Boolean(
     methods && (methods.authenticatorApp || methods.recoveryCodes || methods.passkey),
   )
-  const sessions = sessionsQuery.data?.user?.sessions.edges.map((edge) => edge.node) ?? []
-  const moreSessions = sessionsQuery.data?.user?.sessions.pageInfo.hasNextPage ?? false
+  const sessionsConnection = sessionsQuery.data?.user?.sessions ?? null
+  const sessions = sessionsConnection?.edges.map((edge) => edge.node) ?? []
 
   function ask(next: Confirm) {
     setFeedback(null)
@@ -507,9 +531,7 @@ export function UserSecurityPage() {
               {t('usersSessionsTitle')}
             </h2>
             <p className="mt-0.5 max-w-2xl text-xs leading-5 text-muted-foreground">
-              {t(moreSessions ? 'usersSessionsDescriptionMore' : 'usersSessionsDescription', {
-                count: SESSION_PAGE_SIZE,
-              })}
+              {t('usersSessionsDescription')}
             </p>
           </div>
           {scope.sessions && sessions.length ? (
@@ -585,6 +607,15 @@ export function UserSecurityPage() {
             </DataTable.Body>
           </DataTable>
         )}
+        {sessionsConnection ? (
+          <CursorPagination
+            label={t('usersSessionsTitle')}
+            pageCount={sessions.length}
+            controller={sessionPagination}
+            pageInfo={sessionsConnection.pageInfo}
+            isDisabled={sessionsQuery.refreshing || sessionsQuery.status !== 'ready'}
+          />
+        ) : null}
       </section>
 
       <ConfirmationDialog

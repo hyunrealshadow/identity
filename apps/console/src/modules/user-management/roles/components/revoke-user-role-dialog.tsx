@@ -1,7 +1,7 @@
 import { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
 import { useNavigate } from '@tanstack/react-router'
 
-import { TableRowActions } from '#/components/table-row-actions'
+import { TableRowActions, type TableRowAction } from '#/components/table-row-actions'
 import { useTranslator } from '#/lib/i18n'
 import { toast } from '#/lib/toast'
 import { RelationDialog } from '../../components/relation-dialog'
@@ -17,6 +17,9 @@ interface Props {
   }
   /** Display name of the other endpoint: the role on a user, or the user on a role. */
   label: string
+  canView?: boolean
+  canRevoke?: boolean
+  extraActions?: TableRowAction[]
   onRevoked: () => void
   onReload: () => void
   reloadPending: boolean
@@ -25,6 +28,9 @@ interface Props {
 function RevokeAssignmentDialog({
   assignment,
   label,
+  canView = true,
+  canRevoke = true,
+  extraActions = [],
   perspective,
   onRevoked,
   onReload,
@@ -37,83 +43,93 @@ function RevokeAssignmentDialog({
   const mutations = useRoleMutations()
   const fromUser = perspective === 'user'
   const userVersion = assignment.userVersion
-  return (
-    <>
-      <TableRowActions
-        subject={label}
-        actions={[
+  const actions: TableRowAction[] = [
+    ...(canView
+      ? [
           {
             id: 'view',
             label: t(fromUser ? 'tableActionViewRole' : 'tableActionViewUser'),
-            section: 'open',
+            section: 'open' as const,
             onAction: () =>
               void (fromUser
                 ? navigate({ to: '/roles/$roleId', params: { roleId: assignment.roleId } })
                 : navigate({ to: '/users/$userId', params: { userId: assignment.userId } })),
           },
+        ]
+      : []),
+    ...extraActions,
+    ...(canRevoke
+      ? [
           {
             id: 'revoke',
             label: t('tableActionRevoke'),
-            section: 'danger',
+            section: 'danger' as const,
             onAction: () => {
               mutation.setFeedback(null)
               state.open()
             },
           },
-        ]}
-      />
-      <RelationDialog
-        state={state}
-        mutation={mutation}
-        size="md"
-        danger
-        disabled={!userVersion}
-        title={t(fromUser ? 'userRolesRevokeTitle' : 'roleUsersRevokeTitle')}
-        confirm={t(
-          fromUser ? 'userRolesRevokeConfirm' : 'roleUsersRevokeConfirm',
-        )}
-        onReload={onReload}
-        reloadPending={reloadPending}
-        onSubmit={() =>
-          void mutation.run(async () => {
-            if (!userVersion) return
-            const result = await mutations.revokeUserRoles({
-              userId: assignment.userId,
-              roleIds: [assignment.roleId],
-              expectedUserVersion: userVersion,
-            })
-            const payload = result.data?.revokeUserRoles
-            if (
-              !mutation.accept(
-                result,
-                payload,
-                'missing_revoke_user_roles_payload',
+        ]
+      : []),
+  ]
+  if (actions.length === 0) return null
+  return (
+    <>
+      <TableRowActions subject={label} actions={actions} />
+      {canRevoke ? (
+        <RelationDialog
+          state={state}
+          mutation={mutation}
+          size="md"
+          danger
+          disabled={!userVersion}
+          title={t(fromUser ? 'userRolesRevokeTitle' : 'roleUsersRevokeTitle')}
+          confirm={t(
+            fromUser ? 'userRolesRevokeConfirm' : 'roleUsersRevokeConfirm',
+          )}
+          onReload={onReload}
+          reloadPending={reloadPending}
+          onSubmit={() =>
+            void mutation.run(async () => {
+              if (!userVersion) return
+              const result = await mutations.revokeUserRoles({
+                userId: assignment.userId,
+                roleIds: [assignment.roleId],
+                expectedUserVersion: userVersion,
+              })
+              const payload = result.data?.revokeUserRoles
+              if (
+                !mutation.accept(
+                  result,
+                  payload,
+                  'missing_revoke_user_roles_payload',
+                )
               )
-            )
-              return
-            state.close()
-            toast.success(
-              t(fromUser ? 'userRolesRevokedToast' : 'roleUserRevokedToast'),
-              {
-                description: t(
-                  fromUser
-                    ? 'userRolesRevokedCommitted'
-                    : 'roleUserRevokedCommitted',
-                  { count: payload.revokedCount },
-                ),
-              },
-            )
-            if (result.partial) toast.warning(t('rbacPartialMutationNote'))
-            onRevoked()
-          }, 'revoke_user_roles_request_failed')
-        }
-      >
-        <p className="text-sm leading-6 text-muted-foreground">
-          {fromUser
-            ? t('userRolesRevokeDescription', { role: label })
-            : t('roleUsersRevokeDescription', { user: label })}
-        </p>
-      </RelationDialog>
+                return
+              state.close()
+              toast.success(
+                t(fromUser ? 'userRolesRevokedToast' : 'roleUserRevokedToast'),
+                {
+                  description: t(
+                    fromUser
+                      ? 'userRolesRevokedCommitted'
+                      : 'roleUserRevokedCommitted',
+                    { count: payload.revokedCount },
+                  ),
+                },
+              )
+              if (result.partial) toast.warning(t('rbacPartialMutationNote'))
+              onRevoked()
+            }, 'revoke_user_roles_request_failed')
+          }
+        >
+          <p className="text-sm leading-6 text-muted-foreground">
+            {fromUser
+              ? t('userRolesRevokeDescription', { role: label })
+              : t('roleUsersRevokeDescription', { user: label })}
+          </p>
+        </RelationDialog>
+      ) : null}
     </>
   )
 }

@@ -27,9 +27,9 @@ import {
   useConsoleQuery,
   type ConsoleQueryState,
 } from '#/lib/graphql/use-console-query'
-import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
-import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
-import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
+import { resolveLocalizedText } from '#/lib/localized-metadata'
+import { ConsoleWorkspaceGate } from '#/components/workspace-gate'
+import { RbacAccessRestricted } from '#/components/role-access'
 import { clientScope, type ClientScope } from '../lib/client-scope'
 import { ClientBuiltInChip, ClientStatusChip } from './client-status'
 

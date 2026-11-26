@@ -25,16 +25,16 @@ import {
   type LocalizedValues,
 } from '#/lib/localized-values'
 import { useWorkspace } from '#/lib/workspace'
-import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
-import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
-import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
+import { RbacMutationFeedback } from '#/components/rbac-feedback'
+import { ConsoleWorkspaceGate } from '#/components/workspace-gate'
+import { RbacAccessRestricted } from '#/components/role-access'
 import { useRoleMutations } from '#/modules/user-management/roles/hooks/role-mutations'
 import { clearDraft, readDraft, writeDraft } from '#/lib/draft-storage'
 import {
   rbacFieldErrors,
   type RbacFeedbackState,
-} from '#/modules/user-management/lib/rbac-errors'
-import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
+} from '#/lib/rbac-errors'
+import { rbacScope } from '#/lib/rbac-scope'
 
 const DRAFT_KEY = 'identity.console.role-create.draft'
 

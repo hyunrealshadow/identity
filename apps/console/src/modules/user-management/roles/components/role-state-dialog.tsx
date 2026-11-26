@@ -6,22 +6,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@identity/ui/components/dialog'
-import type { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
+import type { OverlayState } from '@identity/ui/hooks/use-overlay-state'
 import { useEffect, useRef, useState } from 'react'
 
 import type { RoleStateInput } from '#/generated/graphql'
 import { useLocale, useTranslator } from '#/lib/i18n'
 import { toast } from '#/lib/toast'
-import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
-import type { RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
+import { RbacMutationFeedback } from '#/components/rbac-feedback'
+import type { RbacFeedbackState } from '#/lib/rbac-errors'
 import { useRoleMutations } from '../hooks/role-mutations'
 import {
   roleDisplayName,
   roleIsBuiltIn,
   type RoleDisplayFields,
-} from '../lib/role-localization'
-
-type OverlayState = ReturnType<typeof useOverlayState>
+} from '#/lib/localized-display'
 
 /** What the state dialog needs, from either the role list or its detail. */
 export type RoleLifecycleTarget = RoleDisplayFields & { id: string; version: string }

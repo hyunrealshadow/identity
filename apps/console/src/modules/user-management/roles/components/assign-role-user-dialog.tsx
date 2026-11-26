@@ -31,9 +31,9 @@ import { useRoleMutations } from '#/modules/user-management/roles/hooks/role-mut
 import {
   roleDisplayName,
   withRoleDisplayFields,
-} from '#/modules/user-management/roles/lib/role-localization'
+} from '#/lib/localized-display'
 import { useConsoleQuery } from '#/lib/graphql/use-console-query'
-import { cursorPage } from '#/modules/user-management/lib/cursor-page'
+import { cursorPage } from '#/lib/cursor-page'
 import { clearDraft } from '#/lib/draft-storage'
 import { useDialogDraft } from '../../lib/dialog-draft'
 

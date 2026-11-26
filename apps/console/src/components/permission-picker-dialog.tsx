@@ -30,20 +30,20 @@ import {
   failureTitleKey,
 } from '#/lib/graphql/presentation'
 import { useLocale, useTranslator } from '#/lib/i18n'
-import { PermissionBuiltInChip } from '#/modules/user-management/roles/components/role-status'
+import { PermissionBuiltInChip } from '#/components/built-in-chip'
 import {
   permissionDisplayDescription,
   permissionDisplayName,
   permissionIsBuiltIn,
   withPermissionDisplayFields,
-} from '#/modules/user-management/roles/lib/role-localization'
-import type { StagedPermission } from '#/modules/user-management/roles/lib/permission-selection'
+} from '#/lib/localized-display'
+import type { StagedPermission } from '#/lib/permission-selection'
 import { useConsoleQuery } from '#/lib/graphql/use-console-query'
-import { cursorPage } from '#/modules/user-management/lib/cursor-page'
+import { cursorPage } from '#/lib/cursor-page'
 import {
   UserSelectField,
   UserTextField,
-} from '#/modules/user-management/users/components/user-form-fields'
+} from '#/components/form-fields'
 
 const CATALOG_PAGE_SIZE = 100
 const RESOURCE_PAGE_SIZE = 10

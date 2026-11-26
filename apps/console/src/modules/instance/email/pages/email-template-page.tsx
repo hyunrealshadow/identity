@@ -23,8 +23,8 @@ import { useLocale, useTranslator } from '#/lib/i18n'
 import { MAX_TRANSLATIONS } from '#/lib/localized-values'
 import { toast } from '#/lib/toast'
 import { translationLocaleLabel } from '#/lib/translation-locales'
-import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
-import type { RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
+import { RbacMutationFeedback } from '#/components/rbac-feedback'
+import type { RbacFeedbackState } from '#/lib/rbac-errors'
 import { SettingsFormFooter } from '../../settings/components/settings-form-footer'
 import {
   useInstanceSettings,

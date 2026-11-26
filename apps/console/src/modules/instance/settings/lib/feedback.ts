@@ -1,5 +1,5 @@
 import type { GraphQLResult } from '#/lib/graphql/transport'
-import type { RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
+import type { RbacFeedbackState } from '#/lib/rbac-errors'
 
 /** Feedback for a mutation that returned no payload. */
 export function mutationFeedback(

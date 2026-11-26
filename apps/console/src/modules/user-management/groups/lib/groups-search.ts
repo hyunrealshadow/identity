@@ -1,10 +1,6 @@
 import type { GroupFilter, GroupOrder } from '#/generated/graphql'
 import { parsePageSize } from '#/lib/page-size'
-import { cursorPage } from '#/modules/user-management/lib/cursor-page'
-import {
-  resolveLocalizedValue,
-  type LocalizedValue,
-} from '#/modules/user-management/lib/localized-metadata'
+import { cursorPage } from '#/lib/cursor-page'
 
 export const GROUP_PAGE_SIZE = 10
 
@@ -143,17 +139,4 @@ export function previousGroupsPage(
 
 export function groupsSearchKey(search: GroupsSearch): string {
   return JSON.stringify(normalizeGroupsSearch({ ...search }))
-}
-
-export type LocalizedEntry = LocalizedValue
-
-/**
- * Display text never participates in authorization. Resolution follows the
- * wording locale, its parent tags, en-US, then the first non-empty entry.
- */
-export function resolveLocalizedText(
-  entries: ReadonlyArray<LocalizedEntry> | null | undefined,
-  locale: string,
-): string | undefined {
-  return resolveLocalizedValue(entries, locale)
 }

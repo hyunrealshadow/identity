@@ -49,10 +49,10 @@ import {
   RbacMutationFeedback,
   RbacNoticeAlert,
   type RbacNotice,
-} from '#/modules/user-management/components/rbac-feedback'
-import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
+} from '#/components/rbac-feedback'
+import { ConsoleWorkspaceGate } from '#/components/workspace-gate'
 import { clearDraft, readDraft, writeDraft } from '#/lib/draft-storage'
-import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
+import { rbacScope } from '#/lib/rbac-scope'
 import {
   clearPendingPermissionStateConfirmation,
   readPendingPermissionStateConfirmation,
@@ -71,14 +71,14 @@ import {
   restorePermissionUpdateDraft,
   type PermissionUpdateDraft,
 } from '#/modules/client-management/resources/permissions/lib/permissions-draft'
-import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
-import { PermissionBuiltInChip } from '#/modules/user-management/roles/components/role-status'
+import { RbacAccessRestricted } from '#/components/role-access'
+import { PermissionBuiltInChip } from '#/components/built-in-chip'
 import {
   permissionDisplayDescription,
   permissionDisplayName,
   permissionIsBuiltIn,
   withPermissionDisplayFields,
-} from '#/modules/user-management/roles/lib/role-localization'
+} from '#/lib/localized-display'
 
 type LocalField = 'metadata'
 

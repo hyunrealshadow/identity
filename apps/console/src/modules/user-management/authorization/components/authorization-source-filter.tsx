@@ -1,7 +1,7 @@
 import type { AuthorizationSource } from '#/generated/graphql'
 import { useTranslator } from '#/lib/i18n'
-import type { RbacScope } from '#/modules/user-management/lib/rbac-scope'
-import { UserSelectField } from '#/modules/user-management/users/components/user-form-fields'
+import type { RbacScope } from '#/lib/rbac-scope'
+import { UserSelectField } from '#/components/form-fields'
 
 export type AuthorizationSourceFilterValue = 'any' | AuthorizationSource
 

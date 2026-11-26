@@ -29,19 +29,19 @@ import {
 } from '#/lib/i18n'
 import { useUrlFilters } from '#/lib/use-url-filters'
 import { useWorkspace } from '#/lib/workspace'
-import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
+import { ConsoleWorkspaceGate } from '#/components/workspace-gate'
 import {
   GroupKindChip,
   GroupStatusChip,
 } from '#/modules/user-management/groups/components/group-status'
-import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
+import { resolveLocalizedText } from '#/lib/localized-metadata'
 import {
   sameVariable,
   useConsoleQuery,
 } from '#/lib/graphql/use-console-query'
-import { cursorPage } from '#/modules/user-management/lib/cursor-page'
-import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
-import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
+import { cursorPage } from '#/lib/cursor-page'
+import { rbacScope } from '#/lib/rbac-scope'
+import { RbacAccessRestricted } from '#/components/role-access'
 import {
   DEFAULT_ROLE_GROUPS_FILTER,
   roleGroupsAppliedFilters,
@@ -56,7 +56,7 @@ import zhCN from '#/modules/user-management/roles/locales/zh-CN'
 import {
   UserSelectField,
   UserTextField,
-} from '#/modules/user-management/users/components/user-form-fields'
+} from '#/components/form-fields'
 
 const PAGE_SIZE = 5
 
@@ -412,6 +412,7 @@ export function RoleGroupsPage({
 
             <RoleGroupsTable
               edges={edges}
+              loading={groups.refreshing}
               emptyState={
                 filtered ? (
                   <AsyncState
@@ -439,6 +440,7 @@ export function RoleGroupsPage({
           <footer className="border-t border-border pt-4">
             <RoleGroupsPagination
               connection={connection}
+              disabled={groups.refreshing}
               onNext={goNext}
               onPrevious={goPrevious}
             />
@@ -451,9 +453,11 @@ export function RoleGroupsPage({
 
 function RoleGroupsTable({
   edges,
+  loading,
   emptyState,
 }: {
   edges: RoleGroupsConnection['edges']
+  loading: boolean
   emptyState: ReactNode
 }) {
   const navigate = useNavigate()
@@ -463,6 +467,8 @@ function RoleGroupsTable({
   return (
     <DataTable
       label={tr('roleGroupsTableLabel')}
+      loading={loading}
+      loadingLabel={t('tableLoading')}
       minWidth={760}
       columns={[
         {
@@ -555,10 +561,12 @@ function RoleGroupsTable({
 
 function RoleGroupsPagination({
   connection,
+  disabled,
   onNext,
   onPrevious,
 }: {
   connection: RoleGroupsConnection
+  disabled: boolean
   onNext: (cursor: string | null) => void
   onPrevious: (cursor: string | null) => void
 }) {
@@ -577,7 +585,7 @@ function RoleGroupsPagination({
         <Button
           variant="ghost"
           size="sm"
-          disabled={!pageInfo.hasPreviousPage || !pageInfo.startCursor}
+          disabled={disabled || !pageInfo.hasPreviousPage || !pageInfo.startCursor}
           onClick={() => onPrevious(pageInfo.startCursor)}
         >
           <ChevronLeft aria-hidden="true" />
@@ -586,7 +594,7 @@ function RoleGroupsPagination({
         <Button
           variant="ghost"
           size="sm"
-          disabled={!pageInfo.hasNextPage || !pageInfo.endCursor}
+          disabled={disabled || !pageInfo.hasNextPage || !pageInfo.endCursor}
           onClick={() => onNext(pageInfo.endCursor)}
         >
           {tr('roleGroupsNextPage')}

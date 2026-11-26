@@ -1,6 +1,6 @@
 import type { ClientOrder } from '#/generated/graphql'
 import { parsePageSize } from '#/lib/page-size'
-import { cursorPage } from '#/modules/user-management/lib/cursor-page'
+import { cursorPage } from '#/lib/cursor-page'
 
 export interface ClientsSearch {
   q?: string

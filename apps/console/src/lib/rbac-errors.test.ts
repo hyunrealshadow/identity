@@ -5,7 +5,7 @@ import {
   hasFieldErrors,
   rbacConflict,
   rbacFieldErrors,
-} from '#/modules/user-management/lib/rbac-errors'
+} from '#/lib/rbac-errors'
 
 describe('RBAC error presentation', () => {
   it('recognizes version and authorization-generation conflicts', () => {

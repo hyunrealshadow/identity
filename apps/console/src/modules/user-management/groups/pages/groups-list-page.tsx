@@ -41,11 +41,12 @@ import {
 import { formatDateTime } from '#/lib/format'
 import { useLocale, useTranslator } from '#/lib/i18n'
 import { useWorkspace } from '#/lib/workspace'
-import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
+import { ConsoleWorkspaceGate } from '#/components/workspace-gate'
 import {
   GroupKindChip,
   GroupStatusChip,
 } from '#/modules/user-management/groups/components/group-status'
+import { resolveLocalizedText } from '#/lib/localized-metadata'
 import {
   isGroupOrder,
   groupsFilterDraft,
@@ -55,18 +56,17 @@ import {
   groupsFormSearch,
   groupsSearchKey,
   hasGroupFilters,
-  resolveLocalizedText,
   type GroupsFilterDraft,
   type GroupsFilters,
   type GroupsSearch,
 } from '#/modules/user-management/groups/lib/groups-search'
 import { useConsoleQuery } from '#/lib/graphql/use-console-query'
-import { rbacScope, type RbacScope } from '#/modules/user-management/lib/rbac-scope'
-import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
+import { rbacScope, type RbacScope } from '#/lib/rbac-scope'
+import { RbacAccessRestricted } from '#/components/role-access'
 import {
   UserSelectField,
   UserTextField,
-} from '#/modules/user-management/users/components/user-form-fields'
+} from '#/components/form-fields'
 
 type GroupRow = NonNullable<ConsoleGroupsQuery['groups']>['edges'][number]['node']
 

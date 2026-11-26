@@ -9,7 +9,7 @@ import type {
   ClientOAuthVersion,
 } from '#/generated/graphql'
 import { useTranslator, type MessageKey } from '#/lib/i18n'
-import { UserTextAreaField } from '#/modules/user-management/users/components/user-form-fields'
+import { UserTextAreaField } from '#/components/form-fields'
 import {
   SELECTABLE_GRANT_TYPES,
   type ClientSettingsDraft,

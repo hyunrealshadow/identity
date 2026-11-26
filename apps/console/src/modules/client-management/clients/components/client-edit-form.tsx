@@ -8,7 +8,7 @@ import { Info, Save } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 import { useTranslator } from '#/lib/i18n'
-import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
+import { RbacMutationFeedback } from '#/components/rbac-feedback'
 import type { ClientEditor } from '../hooks/use-client-editor'
 import { useClientDetail, type ConsoleClient } from './client-detail-shell'
 

@@ -9,7 +9,7 @@ import {
   roleIsBuiltIn,
   withPermissionDisplayFields,
   withRoleDisplayFields,
-} from '#/modules/user-management/roles/lib/role-localization'
+} from '#/lib/localized-display'
 
 describe('role localized display text', () => {
   it('prefers exact and parent translations, then independent default text', () => {

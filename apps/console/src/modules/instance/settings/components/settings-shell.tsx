@@ -3,7 +3,7 @@ import { Globe, KeyRound, LockKeyhole, ShieldCheck, SlidersHorizontal } from 'lu
 
 import { PageHeader } from '#/components/page-header'
 import { useTranslator } from '#/lib/i18n'
-import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
+import { ConsoleWorkspaceGate } from '#/components/workspace-gate'
 import { SectionTabs, type SectionTab } from '../../components/section-tabs'
 import { InstanceSettingsProvider, useInstanceSettings } from './instance-settings-context'
 

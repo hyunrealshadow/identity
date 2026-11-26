@@ -1,6 +1,6 @@
 import type { ResourceOrder } from '#/generated/graphql'
 import { parsePageSize } from '#/lib/page-size'
-import { cursorPage } from '#/modules/user-management/lib/cursor-page'
+import { cursorPage } from '#/lib/cursor-page'
 
 export const RESOURCES_PAGE_SIZE = 10
 

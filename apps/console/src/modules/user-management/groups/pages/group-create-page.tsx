@@ -20,8 +20,8 @@ import { PageHeader } from '#/components/page-header'
 import type { CreateGroupInput } from '#/generated/graphql'
 import { useTranslator, type MessageKey } from '#/lib/i18n'
 import { useWorkspace } from '#/lib/workspace'
-import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
-import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
+import { RbacMutationFeedback } from '#/components/rbac-feedback'
+import { ConsoleWorkspaceGate } from '#/components/workspace-gate'
 import { useGroupMutations } from '#/modules/user-management/groups/hooks/group-mutations'
 import {
   emptyGroupDraft,
@@ -34,9 +34,9 @@ import { clearDraft, readDraft, writeDraft } from '#/lib/draft-storage'
 import {
   rbacFieldErrors,
   type RbacFeedbackState,
-} from '#/modules/user-management/lib/rbac-errors'
-import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
-import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
+} from '#/lib/rbac-errors'
+import { rbacScope } from '#/lib/rbac-scope'
+import { RbacAccessRestricted } from '#/components/role-access'
 
 const DRAFT_KEY = 'identity.console.group-create.draft'
 

@@ -14,7 +14,7 @@ import type {
 import type { GraphQLRequester } from '#/lib/graphql/requester'
 import { useGraphQL } from '#/lib/graphql/use-graphql'
 import { useLocale } from '#/lib/i18n'
-import type { PermissionMembershipState } from '#/modules/user-management/roles/lib/permission-selection'
+import type { PermissionMembershipState } from '#/lib/permission-selection'
 
 export const ROLE_MEMBERSHIP_PAGE_SIZE = 25
 const MAX_MEMBERSHIP_PAGES = 200

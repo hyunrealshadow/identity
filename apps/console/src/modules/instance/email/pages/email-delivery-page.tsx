@@ -15,8 +15,8 @@ import {
 import { fieldErrorMap } from '#/lib/graphql/transport'
 import { useTranslator, type MessageKey } from '#/lib/i18n'
 import { toast } from '#/lib/toast'
-import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
-import type { RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
+import { RbacMutationFeedback } from '#/components/rbac-feedback'
+import type { RbacFeedbackState } from '#/lib/rbac-errors'
 import { SettingsFieldError, SettingsFormFooter } from '../../settings/components/settings-form-footer'
 import {
   useInstanceSettings,

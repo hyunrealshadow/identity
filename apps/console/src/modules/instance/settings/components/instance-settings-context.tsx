@@ -19,8 +19,8 @@ import { failureDescriptionKey, failureTitleKey } from '#/lib/graphql/presentati
 import { useConsoleQuery, type ConsoleQueryState } from '#/lib/graphql/use-console-query'
 import { useTranslator } from '#/lib/i18n'
 import { useWorkspace } from '#/lib/workspace'
-import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
-import { keyScope, type KeyScope } from '../../keys/lib/key-scope'
+import { RbacAccessRestricted } from '#/components/role-access'
+import { keyScope, type KeyScope } from '#/lib/key-scope'
 import type { InstanceSettings } from '../lib/settings-form'
 import { settingsScope, type SettingsScope } from '../lib/settings-scope'
 

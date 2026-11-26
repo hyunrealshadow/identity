@@ -1,19 +1,17 @@
-import type { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
+import type { OverlayState } from '@identity/ui/hooks/use-overlay-state'
 import { useEffect, useState } from 'react'
 
 import { ConfirmationDialog } from '#/components/confirmation-dialog'
 import { useLocale, useTranslator } from '#/lib/i18n'
 import { toast } from '#/lib/toast'
-import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
+import { RbacMutationFeedback } from '#/components/rbac-feedback'
 import {
   resolveLocalizedText,
   type LocalizedEntry,
-} from '#/modules/user-management/groups/lib/groups-search'
-import type { RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
+} from '#/lib/localized-metadata'
+import type { RbacFeedbackState } from '#/lib/rbac-errors'
 import { useClientMutations } from '../hooks/client-mutations'
 import { mutationFeedback } from '../hooks/use-client-editor'
-
-type OverlayState = ReturnType<typeof useOverlayState>
 
 /** What the lifecycle dialogs need, from either the client list or its detail. */
 export interface ClientLifecycleTarget {

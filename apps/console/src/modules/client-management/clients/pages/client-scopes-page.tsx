@@ -7,20 +7,13 @@ import { Button } from '@identity/ui/components/button'
 import { Switch } from '@identity/ui/components/switch'
 import { DataTable } from '@identity/ui/data-table'
 import { useNavigate } from '@tanstack/react-router'
-import { Info, Save, TriangleAlert } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { Info, Save } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
 
 import { AsyncState } from '#/components/async-state'
+import { NumberedPagination } from '#/components/numbered-pagination'
 import { SettingsGroup, SettingsRow } from '#/components/settings-section'
 import { TableRowActions } from '#/components/table-row-actions'
-import {
-  ConsoleClientScopesDocument,
-  ConsoleProtocolScopesDocument,
-  type ConsoleClientScopesQuery,
-  type ConsoleClientScopesQueryVariables,
-  type ConsoleProtocolScopesQuery,
-  type ConsoleProtocolScopesQueryVariables,
-} from '#/generated/graphql'
 import {
   failureDescriptionKey,
   failureTitleKey,
@@ -28,21 +21,17 @@ import {
 import { useLocale, useTranslator } from '#/lib/i18n'
 import { toast } from '#/lib/toast'
 import { useWorkspace } from '#/lib/workspace'
-import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
-import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
-import {
-  sameVariable,
-  useConsoleQuery,
-} from '#/lib/graphql/use-console-query'
-import type { RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
-import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
-import { PermissionPickerDialog } from '#/modules/user-management/roles/components/permission-picker-dialog'
-import type { StagedPermission } from '#/modules/user-management/roles/lib/permission-selection'
+import { RbacMutationFeedback } from '#/components/rbac-feedback'
+import { resolveLocalizedText } from '#/lib/localized-metadata'
+import type { RbacFeedbackState } from '#/lib/rbac-errors'
+import { rbacScope } from '#/lib/rbac-scope'
+import { PermissionPickerDialog } from '#/components/permission-picker-dialog'
+import type { StagedPermission } from '#/lib/permission-selection'
 import { useClientDetail } from '../components/client-detail-shell'
 import { useClientMutations } from '../hooks/client-mutations'
+import { useClientScopes, type ClientScopeEdge } from '../hooks/use-client-scopes'
 
-/** One page covers every realistic client; larger sets are read-only here. */
-const PAGE_SIZE = 100
+const API_SCOPE_PAGE_SIZE = 20
 
 /** Display order for login scopes; codes not listed follow alphabetically. */
 const PROTOCOL_SCOPE_ORDER: readonly string[] = [
@@ -69,8 +58,8 @@ interface ScopeRow {
   clientGranted: boolean
 }
 
-function rowsFrom(data: ConsoleClientScopesQuery | null): ScopeRow[] {
-  return (data?.client?.scopes.edges ?? []).map((edge) => ({
+function rowsFrom(edges: ClientScopeEdge[]): ScopeRow[] {
+  return edges.map((edge) => ({
     id: edge.node.id,
     code: edge.node.code,
     name: edge.node.name,
@@ -103,31 +92,10 @@ export function ClientScopesPage() {
   const detail = useClientDetail()
   const { clientId, scope } = detail
   const mutations = useClientMutations()
-  const variables = useMemo<ConsoleClientScopesQueryVariables>(
-    () => ({ id: clientId, orderBy: 'CODE_ASC', first: PAGE_SIZE }),
-    [clientId],
-  )
-  const query = useConsoleQuery<ConsoleClientScopesQuery, ConsoleClientScopesQueryVariables>(
-    ConsoleClientScopesDocument,
-    variables,
-    true,
-    'missing_client_scopes',
-    { keepPreviousData: sameVariable('id') },
-  )
-  const protocolVariables = useMemo<ConsoleProtocolScopesQueryVariables>(
-    () => ({ first: PAGE_SIZE }),
-    [],
-  )
-  const protocolCatalog = useConsoleQuery<
-    ConsoleProtocolScopesQuery,
-    ConsoleProtocolScopesQueryVariables
-  >(
-    ConsoleProtocolScopesDocument,
-    rbac.scopesRead ? protocolVariables : null,
-    rbac.scopesRead,
-    'missing_protocol_scopes',
-  )
-  const server = useMemo(() => rowsFrom(query.data), [query.data])
+  const { scopes: query, protocolCatalog } = useClientScopes(clientId, rbac.scopesRead)
+  const [page, setPage] = useState(1)
+  useEffect(() => setPage(1), [clientId])
+  const server = useMemo(() => rowsFrom(query.edges), [query.edges])
   // Local edits live apart from the server rows so a refetch (for example
   // after reauthentication) cannot discard them; `null` means "unchanged".
   const [draft, setDraft] = useState<ScopeRow[] | null>(null)
@@ -146,13 +114,13 @@ export function ClientScopesPage() {
         requestId={query.requestId}
         traceId={query.traceId}
         issues={query.errors}
-        onRetry={() => void query.refresh()}
+        onRetry={() => void query.reload()}
       />
     )
   }
 
-  const client = query.data?.client ?? null
-  const complete = client ? !client.scopes.pageInfo.hasNextPage : false
+  const client = query.client
+  const complete = query.complete
   const editable =
     scope.scopesWrite && !detail.client?.builtIn && complete && Boolean(client)
   const signature = (list: ScopeRow[]) =>
@@ -160,6 +128,14 @@ export function ClientScopesPage() {
   const dirty = signature(rows) !== signature(server)
   const assignedIds = new Set(rows.map((row) => row.id))
   const apiRows = rows.filter((row) => row.resourceId)
+  const apiPages = Math.max(1, Math.ceil(apiRows.length / API_SCOPE_PAGE_SIZE))
+  const currentApiPage = Math.min(page, apiPages)
+  const pagedApiRows = apiRows.slice(
+    (currentApiPage - 1) * API_SCOPE_PAGE_SIZE,
+    currentApiPage * API_SCOPE_PAGE_SIZE,
+  )
+  const apiFrom = apiRows.length === 0 ? 0 : (currentApiPage - 1) * API_SCOPE_PAGE_SIZE + 1
+  const apiTo = Math.min(currentApiPage * API_SCOPE_PAGE_SIZE, apiRows.length)
   const protocolRows = rows.filter((row) => !row.resourceId)
   const rejected = rejectedScopeCodes(feedback)
   // The catalog lists every selectable protocol scope; assigned ones the
@@ -172,13 +148,13 @@ export function ClientScopesPage() {
     names: ReadonlyArray<{ locale: string; value: string }>
     description: string
   }> = [
-    ...(protocolCatalog.data?.scopes.edges ?? []).map((edge) => ({
-      id: edge.node.id,
-      code: edge.node.code,
-      name: edge.node.name,
-      names: edge.node.names,
+    ...protocolCatalog.items.map((node) => ({
+      id: node.id,
+      code: node.code,
+      name: node.name,
+      names: node.names,
       description:
-        resolveLocalizedText(edge.node.descriptions, locale) ?? edge.node.description,
+        resolveLocalizedText(node.descriptions, locale) ?? node.description,
     })),
   ]
   for (const row of protocolRows) {
@@ -271,6 +247,7 @@ export function ClientScopesPage() {
       toast.success(t('clientsScopesSavedToast'), {
         description: t('clientsScopesSavedWithdrawn'),
       })
+      void query.reload()
     } finally {
       setPending(false)
     }
@@ -285,19 +262,11 @@ export function ClientScopesPage() {
         <AlertTitle>{t('clientsScopesExplainTitle')}</AlertTitle>
         <AlertDescription>{t('clientsScopesExplainDescription')}</AlertDescription>
       </Alert>
-      {client && !complete ? (
-        <Alert className="console-card border border-border text-warning">
-          <TriangleAlert aria-hidden="true" />
-          <AlertDescription>
-            {t('clientsScopesTooMany', { count: PAGE_SIZE })}
-          </AlertDescription>
-        </Alert>
-      ) : null}
       {feedback ? (
         <RbacMutationFeedback
           feedback={feedback}
           onReload={() => {
-            void query.refresh()
+            void query.reload()
             void detail.query.refresh()
           }}
           reloadPending={query.refreshing}
@@ -389,7 +358,7 @@ export function ClientScopesPage() {
               <AsyncState kind="empty" compact title={t('clientsScopesEmpty')} />
             )}
           >
-            {apiRows.map((row) => {
+            {pagedApiRows.map((row) => {
               const invalid = rejected.has(row.code)
               return (
                 <DataTable.Row key={row.id} id={row.id}>
@@ -467,6 +436,24 @@ export function ClientScopesPage() {
             })}
           </DataTable.Body>
         </DataTable>
+        {apiRows.length > API_SCOPE_PAGE_SIZE ? (
+          <div className="mt-3">
+            <NumberedPagination
+              label={t('clientsScopesTitle')}
+              summary={t('tableRangeSummary', {
+                from: apiFrom,
+                to: apiTo,
+                total: apiRows.length,
+              })}
+              page={currentApiPage}
+              pages={Array.from({ length: apiPages }, (_, index) => index + 1)}
+              onPageChange={setPage}
+              previousLabel={t('previousPage')}
+              nextLabel={t('nextPage')}
+              pageLabel={(number) => t('tableGoToPage', { page: number })}
+            />
+          </div>
+        ) : null}
       </section>
       {editable ? (
         <div className="flex flex-wrap items-center justify-end gap-3">

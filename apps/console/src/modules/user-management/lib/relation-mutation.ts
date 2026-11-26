@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 
 import type { GraphQLResult } from '#/lib/graphql/transport'
-import type { RbacFeedbackState } from './rbac-errors'
+import type { RbacFeedbackState } from '#/lib/rbac-errors'
 
 /** Shared request state; commands, CAS targets and success effects stay in the feature. */
 export function useRelationMutation() {

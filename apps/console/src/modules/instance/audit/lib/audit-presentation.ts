@@ -1,6 +1,6 @@
 import type { AuditEventFieldsFragment } from '#/generated/graphql'
 import type { MessageKey } from '#/lib/i18n'
-import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
+import { resolveLocalizedText } from '#/lib/localized-metadata'
 import {
   AUDIT_ACTION_LABELS,
   AUDIT_ACTOR_KIND_LABELS,

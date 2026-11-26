@@ -6,21 +6,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@identity/ui/components/dialog'
-import type { useOverlayState } from '@identity/ui/hooks/use-overlay-state'
+import type { OverlayState } from '@identity/ui/hooks/use-overlay-state'
 import { useRef, useState } from 'react'
 
 import type { GroupStateInput, SetGroupEnabledInput } from '#/generated/graphql'
 import { useLocale, useTranslator } from '#/lib/i18n'
 import { toast } from '#/lib/toast'
-import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
+import { RbacMutationFeedback } from '#/components/rbac-feedback'
 import { useGroupMutations } from '#/modules/user-management/groups/hooks/group-mutations'
 import {
   resolveLocalizedText,
   type LocalizedEntry,
-} from '#/modules/user-management/groups/lib/groups-search'
-import type { RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
-
-type OverlayState = ReturnType<typeof useOverlayState>
+} from '#/lib/localized-metadata'
+import type { RbacFeedbackState } from '#/lib/rbac-errors'
 
 /** What the lifecycle dialogs need, from either the group list or its detail. */
 export interface GroupLifecycleTarget {

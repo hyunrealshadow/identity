@@ -1040,10 +1040,11 @@ export type ConsoleClientScopesQuery = { client: { id: string, version: string, 
 
 export type ConsoleProtocolScopesQueryVariables = Exact<{
   first?: number | null | undefined;
+  after?: string | null | undefined;
 }>;
 
 
-export type ConsoleProtocolScopesQuery = { scopes: { pageInfo: { hasNextPage: boolean }, edges: Array<{ node: { id: string, code: string, name: string, description: string, names: Array<{ locale: string, value: string }>, descriptions: Array<{ locale: string, value: string }> } }> } };
+export type ConsoleProtocolScopesQuery = { scopes: { pageInfo: { hasNextPage: boolean, endCursor: string | null }, edges: Array<{ node: { id: string, code: string, name: string, description: string, names: Array<{ locale: string, value: string }>, descriptions: Array<{ locale: string, value: string }> } }> } };
 
 export type ConsoleCreateClientMutationVariables = Exact<{
   input: CreateClientInput;
@@ -1726,10 +1727,12 @@ export type ConsoleUserSessionsQueryVariables = Exact<{
   userId: string | number;
   first?: number | null | undefined;
   after?: string | null | undefined;
+  last?: number | null | undefined;
+  before?: string | null | undefined;
 }>;
 
 
-export type ConsoleUserSessionsQuery = { user: { id: string, sessions: { pageInfo: { hasNextPage: boolean, endCursor: string | null }, edges: Array<{ cursor: string, node: { id: string, deviceName: string | null, deviceType: string | null, osName: string | null, osVersion: string | null, browserName: string | null, browserVersion: string | null, ipAddress: string | null, lastActiveAt: string | null, createdAt: string } }> } } | null };
+export type ConsoleUserSessionsQuery = { user: { id: string, sessions: { pageInfo: { hasPreviousPage: boolean, hasNextPage: boolean, startCursor: string | null, endCursor: string | null }, edges: Array<{ cursor: string, node: { id: string, deviceName: string | null, deviceType: string | null, osName: string | null, osVersion: string | null, browserName: string | null, browserVersion: string | null, ipAddress: string | null, lastActiveAt: string | null, createdAt: string } }> } } | null };
 
 export type ConsoleResetUserPasswordMutationVariables = Exact<{
   input: UserStateInput;
@@ -2273,14 +2276,16 @@ export const ConsoleClientScopesDocument = new TypedDocumentString(`
 }
     `) as unknown as TypedDocumentString<ConsoleClientScopesQuery, ConsoleClientScopesQueryVariables>;
 export const ConsoleProtocolScopesDocument = new TypedDocumentString(`
-    query ConsoleProtocolScopes($first: Int) {
+    query ConsoleProtocolScopes($first: Int, $after: String) {
   scopes(
     filter: { protocolOnly: true, enabled: true }
     orderBy: CODE_ASC
     first: $first
+    after: $after
   ) {
     pageInfo {
       hasNextPage
+      endCursor
     }
     edges {
       node {
@@ -4495,12 +4500,14 @@ export const ConsoleUserGroupsDocument = new TypedDocumentString(`
 }
     `) as unknown as TypedDocumentString<ConsoleUserGroupsQuery, ConsoleUserGroupsQueryVariables>;
 export const ConsoleUserSessionsDocument = new TypedDocumentString(`
-    query ConsoleUserSessions($userId: ID!, $first: Int, $after: String) {
+    query ConsoleUserSessions($userId: ID!, $first: Int, $after: String, $last: Int, $before: String) {
   user(id: $userId) {
     id
-    sessions(first: $first, after: $after) {
+    sessions(first: $first, after: $after, last: $last, before: $before) {
       pageInfo {
+        hasPreviousPage
         hasNextPage
+        startCursor
         endCursor
       }
       edges {

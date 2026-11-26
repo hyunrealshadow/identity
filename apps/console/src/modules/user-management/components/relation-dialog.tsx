@@ -1,3 +1,4 @@
+import type { OverlayState } from '@identity/ui/hooks/use-overlay-state'
 import { Button } from '@identity/ui/components/button'
 import {
   Dialog,
@@ -9,17 +10,9 @@ import {
 import type { ReactNode } from 'react'
 
 import { useTranslator, type MessageKey } from '#/lib/i18n'
-import { rbacConflict } from '../lib/rbac-errors'
+import { rbacConflict } from '#/lib/rbac-errors'
 import type { useRelationMutation } from '../lib/relation-mutation'
-import { RbacMutationFeedback } from './rbac-feedback'
-
-type OverlayState = {
-  isOpen: boolean
-  setOpen: (open: boolean) => void
-  open: () => void
-  close: () => void
-  toggle: () => void
-}
+import { RbacMutationFeedback } from '#/components/rbac-feedback'
 
 export function RelationDialog({
   state,

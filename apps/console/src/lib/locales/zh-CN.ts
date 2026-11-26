@@ -39,6 +39,7 @@ const shared = {
   tableLoading: '正在加载表格数据',
   tableGoToPage: '第 {page} 页',
   tablePageSummary: '总共 {total} 条',
+  paginationPageCount: '本页 {count} 项',
   tableRangeSummary: '第 {from}-{to} 条/总共 {total} 条',
   tableRangeOnlySummary: '第 {from}-{to} 条',
   tablePageSize: '每页条数',

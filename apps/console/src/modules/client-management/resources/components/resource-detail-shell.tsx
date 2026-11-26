@@ -24,7 +24,7 @@ import {
 import { useTranslator } from '#/lib/i18n'
 import { useWorkspace } from '#/lib/workspace'
 import { useConsoleQuery } from '#/lib/graphql/use-console-query'
-import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
+import { rbacScope } from '#/lib/rbac-scope'
 
 type Resource = NonNullable<ConsoleResourceQuery['resource']>
 const ResourceContext = createContext<{

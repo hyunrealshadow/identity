@@ -33,20 +33,20 @@ import {
 import { formatDateTime } from '#/lib/format'
 import { useLocale, useTranslator } from '#/lib/i18n'
 import { useWorkspace } from '#/lib/workspace'
-import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
-import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
+import { ConsoleWorkspaceGate } from '#/components/workspace-gate'
+import { RbacAccessRestricted } from '#/components/role-access'
 import {
   RoleBuiltInChip,
   RoleStatusChip,
-} from '#/modules/user-management/roles/components/role-status'
+} from '#/components/built-in-chip'
 import {
   roleDisplayDescription,
   roleDisplayName,
   roleIsBuiltIn,
   withRoleDisplayFields,
-} from '#/modules/user-management/roles/lib/role-localization'
+} from '#/lib/localized-display'
 import { useConsoleQuery } from '#/lib/graphql/use-console-query'
-import { rbacScope, type RbacScope } from '#/modules/user-management/lib/rbac-scope'
+import { rbacScope, type RbacScope } from '#/lib/rbac-scope'
 import {
   isRoleOrder,
   rolesFilterDraft,
@@ -62,7 +62,7 @@ import {
 import {
   UserSelectField,
   UserTextField,
-} from '#/modules/user-management/users/components/user-form-fields'
+} from '#/components/form-fields'
 
 type RoleRow = NonNullable<ConsoleRolesQuery['roles']>['edges'][number]['node']
 

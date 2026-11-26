@@ -29,25 +29,23 @@ import { useWorkspace } from '#/lib/workspace'
 import {
   RbacNoticeAlert,
   type RbacNotice,
-} from '#/modules/user-management/components/rbac-feedback'
-import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
+} from '#/components/rbac-feedback'
+import { ConsoleWorkspaceGate } from '#/components/workspace-gate'
 import { useGroupRoles } from '#/modules/user-management/groups/hooks/use-group-roles'
-import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
+import { resolveLocalizedText } from '#/lib/localized-metadata'
 
-import { cursorPage } from '#/modules/user-management/lib/cursor-page'
+import { cursorPage } from '#/lib/cursor-page'
 
-import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
+import { rbacScope } from '#/lib/rbac-scope'
 import { FIRST_PAGE } from '#/modules/user-management/lib/relation-search'
 import type { GroupRolesSearch } from '#/modules/user-management/groups/lib/group-relations-search'
-import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
-import {
-  AssignmentStatusChip,
-  RoleBuiltInChip,
-} from '#/modules/user-management/roles/components/role-status'
+import { RbacAccessRestricted } from '#/components/role-access'
+import { RoleBuiltInChip } from '#/components/built-in-chip'
+import { AssignmentStatusChip } from '#/modules/user-management/roles/components/role-status'
 import {
   UserSelectField,
   UserTextField,
-} from '#/modules/user-management/users/components/user-form-fields'
+} from '#/components/form-fields'
 
 
 type RelationStatus = 'any' | 'enabled' | 'disabled'
@@ -297,6 +295,8 @@ export function GroupRolesPage({
             ) : null}
             <DataTable
               label={t('groupRolesTableLabel')}
+              loading={roles.refreshing}
+              loadingLabel={t('tableLoading')}
               minWidth={820}
               columns={[
                 {

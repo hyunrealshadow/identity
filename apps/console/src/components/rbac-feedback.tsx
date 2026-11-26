@@ -19,7 +19,7 @@ import {
   hasFieldErrors,
   rbacConflict,
   type RbacFeedbackState,
-} from '#/modules/user-management/lib/rbac-errors'
+} from '#/lib/rbac-errors'
 
 export function RbacMutationFeedback({
   feedback,

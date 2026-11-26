@@ -38,8 +38,8 @@ import {
   RbacMutationFeedback,
   RbacNoticeAlert,
   type RbacNotice,
-} from '#/modules/user-management/components/rbac-feedback'
-import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
+} from '#/components/rbac-feedback'
+import { ConsoleWorkspaceGate } from '#/components/workspace-gate'
 import { useGroupMutations } from '#/modules/user-management/groups/hooks/group-mutations'
 import {
   GroupDeleteDialog,
@@ -55,15 +55,15 @@ import {
   type GroupSource,
   type GroupTextDraft,
 } from '#/modules/user-management/groups/lib/groups-draft'
-import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
+import { resolveLocalizedText } from '#/lib/localized-metadata'
 
 import { clearDraft, readDraft, writeDraft } from '#/lib/draft-storage'
 import {
   rbacFieldErrors,
   type RbacFeedbackState,
-} from '#/modules/user-management/lib/rbac-errors'
-import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
-import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
+} from '#/lib/rbac-errors'
+import { rbacScope } from '#/lib/rbac-scope'
+import { RbacAccessRestricted } from '#/components/role-access'
 
 type GroupNode = NonNullable<ConsoleGroupQuery['group']>
 

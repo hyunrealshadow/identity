@@ -9,4 +9,4 @@ export {
   rbacFieldErrors as permissionFieldErrors,
   type RbacConflict,
   type RbacFeedbackState,
-} from '#/modules/user-management/lib/rbac-errors'
+} from '#/lib/rbac-errors'

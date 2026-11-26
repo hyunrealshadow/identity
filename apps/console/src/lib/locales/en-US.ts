@@ -38,6 +38,7 @@ const shared = {
   tableLoading: 'Loading table data',
   tableGoToPage: 'Go to page {page}',
   tablePageSummary: '{total} items',
+  paginationPageCount: '{count} items on this page',
   tableRangeSummary: '{from}–{to} of {total}',
   tableRangeOnlySummary: '{from}–{to}',
   tablePageSize: 'Rows per page',

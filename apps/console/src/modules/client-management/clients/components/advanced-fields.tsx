@@ -31,11 +31,11 @@ import type { ClientSubjectType } from '#/generated/graphql'
 import { useTranslator, type MessageKey } from '#/lib/i18n'
 import { useWorkspace } from '#/lib/workspace'
 import { fieldAffordance } from '#/lib/graphql/affordances'
-import { keyScope } from '#/modules/instance/keys/lib/key-scope'
+import { keyScope } from '#/lib/key-scope'
 import {
   UserTextAreaField,
   UserTextField,
-} from '#/modules/user-management/users/components/user-form-fields'
+} from '#/components/form-fields'
 import type { ClientKeyCoverage } from '../hooks/use-client-key-coverage'
 import type { ClientMetadataOptions } from '../hooks/use-client-metadata-options'
 import {

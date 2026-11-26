@@ -1,6 +1,6 @@
 import type { KeyStatus, KeyUse } from '#/generated/graphql'
 import { parsePageSize } from '#/lib/page-size'
-import { cursorPage } from '#/modules/user-management/lib/cursor-page'
+import { cursorPage } from '#/lib/cursor-page'
 
 export interface KeysSearch {
   /** `all` also lists expired and revoked keys. */

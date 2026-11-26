@@ -39,7 +39,7 @@ import type {
 import { formatPreciseDateTime } from '#/lib/format'
 import type { GraphQLIssue } from '#/lib/graphql/transport'
 import { useLocale, useTranslator, type MessageKey } from '#/lib/i18n'
-import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
+import { resolveLocalizedText } from '#/lib/localized-metadata'
 import { auditQueryValue } from '../lib/audit-catalog'
 import {
   AUDIT_ACTOR_KIND_LABELS,

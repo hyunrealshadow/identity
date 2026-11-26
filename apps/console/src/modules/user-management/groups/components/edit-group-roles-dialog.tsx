@@ -36,14 +36,14 @@ import {
 } from '#/lib/graphql/presentation'
 import { useLocale, useTranslator } from '#/lib/i18n'
 
-import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
+import { RbacMutationFeedback } from '#/components/rbac-feedback'
 
 import { useGroupRoleMutations } from '#/modules/user-management/groups/hooks/use-group-roles'
-import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
-import { RoleBuiltInChip } from '#/modules/user-management/roles/components/role-status'
-import type { RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
+import { resolveLocalizedText } from '#/lib/localized-metadata'
+import { RoleBuiltInChip } from '#/components/built-in-chip'
+import type { RbacFeedbackState } from '#/lib/rbac-errors'
 import { useConsoleQuery } from '#/lib/graphql/use-console-query'
-import { cursorPage } from '#/modules/user-management/lib/cursor-page'
+import { cursorPage } from '#/lib/cursor-page'
 import { clearDraft, readDraft, writeDraft } from '#/lib/draft-storage'
 
 const ROLE_PICKER_PAGE_SIZE = 5

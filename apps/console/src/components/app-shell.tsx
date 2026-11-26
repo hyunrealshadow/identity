@@ -17,7 +17,7 @@ import {
   NavigationLinks,
   SidebarCollapseButton,
 } from '#/components/app-navigation'
-import { AccountAvatar } from '#/components/account-avatar'
+import { AccountAvatar } from '@identity/ui/components/account-avatar'
 import { useAuth } from '#/lib/auth/context'
 import { currentReturnTo } from '#/lib/auth/return-to'
 import type { IdTokenClaims } from '#/lib/auth/session'

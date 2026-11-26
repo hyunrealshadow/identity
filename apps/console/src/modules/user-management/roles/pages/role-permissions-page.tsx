@@ -8,7 +8,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { Check, CircleCheck, Save, TriangleAlert } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
-import { UserSelectField } from '#/modules/user-management/users/components/user-form-fields'
+import { UserSelectField } from '#/components/form-fields'
 import { AsyncState } from '#/components/async-state'
 import { ConfirmationDialog } from '#/components/confirmation-dialog'
 import { ErrorDetails } from '#/components/error-details'
@@ -21,10 +21,10 @@ import {
 import { useLocale, useTranslator, type MessageKey } from '#/lib/i18n'
 import { toast } from '#/lib/toast'
 import { useWorkspace } from '#/lib/workspace'
-import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
-import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
-import { PermissionPickerDialog } from '#/modules/user-management/roles/components/permission-picker-dialog'
-import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
+import { RbacMutationFeedback } from '#/components/rbac-feedback'
+import { ConsoleWorkspaceGate } from '#/components/workspace-gate'
+import { PermissionPickerDialog } from '#/components/permission-picker-dialog'
+import { RbacAccessRestricted } from '#/components/role-access'
 import { RolePermissionTable } from '#/modules/user-management/roles/components/role-permission-table'
 import { useRoleMembership } from '#/modules/user-management/roles/hooks/use-role-membership'
 import { useRoleMutations } from '#/modules/user-management/roles/hooks/role-mutations'
@@ -32,7 +32,7 @@ import {
   roleDisplayName,
   roleIsBuiltIn,
   withRoleDisplayFields,
-} from '#/modules/user-management/roles/lib/role-localization'
+} from '#/lib/localized-display'
 import {
   initialPermissionSelection,
   rolePermissionSubmitAvailability,
@@ -40,11 +40,11 @@ import {
   togglePermission,
   type PermissionMembershipState,
   type StagedPermission,
-} from '#/modules/user-management/roles/lib/permission-selection'
+} from '#/lib/permission-selection'
 
 import { clearDraft, readDraft, writeDraft } from '#/lib/draft-storage'
-import { type RbacFeedbackState as FeedbackState } from '#/modules/user-management/lib/rbac-errors'
-import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
+import { type RbacFeedbackState as FeedbackState } from '#/lib/rbac-errors'
+import { rbacScope } from '#/lib/rbac-scope'
 
 function permissionDraftKey(roleId: string): string {
   return `identity.console.role-permissions.${roleId}.draft`

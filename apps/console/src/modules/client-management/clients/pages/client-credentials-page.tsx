@@ -35,14 +35,14 @@ import {
 import { useConsoleQuery } from '#/lib/graphql/use-console-query'
 import { useLocale, useTranslator, type MessageKey } from '#/lib/i18n'
 import { toast } from '#/lib/toast'
-import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
-import type { RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
-import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
+import { RbacMutationFeedback } from '#/components/rbac-feedback'
+import type { RbacFeedbackState } from '#/lib/rbac-errors'
+import { RbacAccessRestricted } from '#/components/role-access'
 import {
   UserSelectField,
   UserTextAreaField,
   UserTextField,
-} from '#/modules/user-management/users/components/user-form-fields'
+} from '#/components/form-fields'
 import { useClientDetail } from '../components/client-detail-shell'
 import { useClientMutations } from '../hooks/client-mutations'
 import {

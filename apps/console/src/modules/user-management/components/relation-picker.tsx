@@ -15,7 +15,7 @@ import {
   type PageCursor,
 } from '#/lib/use-cursor-pagination'
 import type { ConsoleQueryState } from '#/lib/graphql/use-console-query'
-import { UserTextField } from '../users/components/user-form-fields'
+import { UserTextField } from '#/components/form-fields'
 
 interface Connection {
   edges: readonly unknown[]

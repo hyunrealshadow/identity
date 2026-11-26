@@ -18,10 +18,10 @@ import { useTranslator, type MessageKey } from '#/lib/i18n'
 import { toast } from '#/lib/toast'
 import { localizedMetadata, type LocalizedValues } from '#/lib/localized-values'
 import { useWorkspace } from '#/lib/workspace'
-import { RbacMutationFeedback } from '#/modules/user-management/components/rbac-feedback'
-import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
+import { RbacMutationFeedback } from '#/components/rbac-feedback'
+import { ConsoleWorkspaceGate } from '#/components/workspace-gate'
 import { clearDraft, readDraft, writeDraft } from '#/lib/draft-storage'
-import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
+import { rbacScope } from '#/lib/rbac-scope'
 import {
   permissionFieldErrors,
   type RbacFeedbackState,
@@ -32,8 +32,8 @@ import {
   restorePermissionCreateDraft,
   type PermissionCreateDraft,
 } from '#/modules/client-management/resources/permissions/lib/permissions-draft'
-import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
-import { UserTextField } from '#/modules/user-management/users/components/user-form-fields'
+import { RbacAccessRestricted } from '#/components/role-access'
+import { UserTextField } from '#/components/form-fields'
 
 const createDraftKey = (resourceId: string) =>
   `identity.console.resource.${resourceId}.permission-create.draft`

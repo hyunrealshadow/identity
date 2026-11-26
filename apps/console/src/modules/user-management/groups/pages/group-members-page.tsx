@@ -35,18 +35,18 @@ import { useWorkspace } from '#/lib/workspace'
 import {
   RbacNoticeAlert,
   type RbacNotice,
-} from '#/modules/user-management/components/rbac-feedback'
-import { ConsoleWorkspaceGate } from '#/modules/user-management/components/workspace-gate'
+} from '#/components/rbac-feedback'
+import { ConsoleWorkspaceGate } from '#/components/workspace-gate'
 import { useGroupMembers } from '#/modules/user-management/groups/hooks/use-group-members'
-import { resolveLocalizedText } from '#/modules/user-management/groups/lib/groups-search'
+import { resolveLocalizedText } from '#/lib/localized-metadata'
 
-import { cursorPage } from '#/modules/user-management/lib/cursor-page'
+import { cursorPage } from '#/lib/cursor-page'
 
-import { rbacScope } from '#/modules/user-management/lib/rbac-scope'
+import { rbacScope } from '#/lib/rbac-scope'
 import { FIRST_PAGE } from '#/modules/user-management/lib/relation-search'
 import type { GroupMembersSearch } from '#/modules/user-management/groups/lib/group-relations-search'
-import { RbacAccessRestricted } from '#/modules/user-management/roles/components/role-access'
-import { UserSelectField } from '#/modules/user-management/users/components/user-form-fields'
+import { RbacAccessRestricted } from '#/components/role-access'
+import { UserSelectField } from '#/components/form-fields'
 
 
 type GroupNode = NonNullable<ConsoleGroupMembersQuery['group']>
@@ -300,6 +300,8 @@ export function GroupMembersPage({
     return (
       <DataTable
         label={t('groupMembersTableLabel')}
+        loading={members.refreshing}
+        loadingLabel={t('tableLoading')}
         minWidth={900}
         columns={[
           {
@@ -367,35 +369,27 @@ export function GroupMembersPage({
                 ) : null}
               </DataTable.Cell>
               <DataTable.Cell>
-                {edge.enabled && !edge.revokedAt ? (
-                  scope.groupMembershipsWrite ? (
-                    <RemoveMemberDialog
-                      groupId={readyGroup.id}
-                      userId={edge.node.id}
-                      username={edge.node.username}
-                      groupVersion={readyGroup.version}
-                      onRemoved={() => {
-                        setNotice({
-                          kind: 'success',
-                          title: t('groupMembersRemovedToast'),
-                          description: t('groupMembersRemovedCommitted'),
-                        })
-                      }}
-                      onReload={() => void members.refresh()}
-                      reloadPending={members.refreshing}
-                    />
-                  ) : (
-                    <span className="text-xs text-muted-foreground">
-                      {t('groupMembersNoWritePermission')}
-                    </span>
-                  )
-                ) : (
-                  <span className="text-xs text-muted-foreground">
-                    {t('groupMembersRevokedAt', {
-                      date: formatDateTime(edge.revokedAt, locale, timeZone),
-                    })}
-                  </span>
-                )}
+                <RemoveMemberDialog
+                  groupId={readyGroup.id}
+                  userId={edge.node.id}
+                  username={edge.node.username}
+                  groupVersion={readyGroup.version}
+                  canView={scope.usersRead}
+                  canRemove={
+                    edge.enabled &&
+                    !edge.revokedAt &&
+                    scope.groupMembershipsWrite
+                  }
+                  onRemoved={() => {
+                    setNotice({
+                      kind: 'success',
+                      title: t('groupMembersRemovedToast'),
+                      description: t('groupMembersRemovedCommitted'),
+                    })
+                  }}
+                  onReload={() => void members.refresh()}
+                  reloadPending={members.refreshing}
+                />
               </DataTable.Cell>
             </DataTable.Row>
           ))}

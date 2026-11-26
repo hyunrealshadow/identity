@@ -9,7 +9,7 @@ import {
   type LocalizedDraft,
 } from '#/lib/localized-values'
 import { toast } from '#/lib/toast'
-import type { RbacFeedbackState } from '#/modules/user-management/lib/rbac-errors'
+import type { RbacFeedbackState } from '#/lib/rbac-errors'
 import type { ConsoleClient } from '../components/client-detail-shell'
 import {
   advancedDraftFromClient,
