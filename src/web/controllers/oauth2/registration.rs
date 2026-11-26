@@ -1,3 +1,4 @@
+use crate::error::{error_message, with_request_catalog};
 use http::{HeaderValue, StatusCode, header};
 use identity_application::{
     error::{
@@ -16,9 +17,9 @@ use unic_langid::LanguageIdentifier;
 use super::pipeline::{Endpoint, Extract, RequireState, get, take};
 use crate::{
     controllers::response::{
-        app_state, error_message, insert_no_store_headers, json_response, parse_param, render_json,
+        app_state, insert_no_store_headers, json_response, parse_param, render_json,
     },
-    infrastructure::i18n::{I18n, error_i18n, resolve_locale_from_headers},
+    infrastructure::i18n::I18n,
 };
 
 fn registration_code_to_rfc7591(code: registration::RegistrationErrorCode) -> &'static str {
@@ -111,31 +112,9 @@ impl From<AppError> for RegistrationWebError {
 #[async_trait]
 impl Writer for RegistrationWebError {
     async fn write(self, req: &mut Request, _depot: &mut Depot, res: &mut Response) {
-        match error_i18n() {
-            Some(i18n) => {
-                let locale = resolve_locale_from_headers(req.headers());
-                *res = registration_error_response(self.0, i18n, &locale);
-            }
-            None => {
-                let rfc_error = registration_rfc_error_code(&self.0);
-                let status = registration_error_status(&self.0);
-                let error_body = json!({
-                    "error": rfc_error,
-                    "error_description": self.0.code().to_string()
-                });
-                let mut response = json_response(status, error_body);
-                response
-                    .headers_mut()
-                    .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
-                if status == StatusCode::UNAUTHORIZED {
-                    response.headers_mut().insert(
-                        header::WWW_AUTHENTICATE,
-                        HeaderValue::from_static("Bearer error=\"invalid_token\""),
-                    );
-                }
-                *res = response;
-            }
-        }
+        *res = with_request_catalog(req.headers(), |i18n, locale| {
+            registration_error_response(self.0, i18n, locale)
+        });
     }
 }
 

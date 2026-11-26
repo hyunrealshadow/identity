@@ -21,6 +21,7 @@ use url::form_urlencoded::parse;
 use self::schema::{ApiSchema, RESOURCE_AUDIENCE, RequestContext, build_schema};
 use crate::{
     controllers::response::{accepts_html, app_state, insert_no_store_headers},
+    error::step_up_www_authenticate,
     infrastructure::i18n::resolve_locale_from_headers,
     middleware::{RequestCorrelation, security_headers_middleware},
 };
@@ -308,22 +309,11 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
 }
 
 fn step_up_challenge(response: &AsyncGraphqlResponse) -> Option<String> {
-    let challenge = response
+    response
         .errors
         .iter()
-        .find_map(|error| error.source::<StepUpChallenge>())?;
-    let mut parameters = vec![
-        "Bearer realm=\"graphql\"".to_owned(),
-        "error=\"insufficient_user_authentication\"".to_owned(),
-        "error_description=\"A different authentication level or more recent authentication is required\"".to_owned(),
-    ];
-    if let Some(acr) = challenge.acr {
-        parameters.push(format!("acr_values=\"{}\"", acr.as_str()));
-    }
-    if let Some(max_age) = challenge.max_age_secs {
-        parameters.push(format!("max_age=\"{max_age}\""));
-    }
-    Some(parameters.join(", "))
+        .find_map(|error| error.source::<StepUpChallenge>())
+        .map(|challenge| step_up_www_authenticate("graphql", challenge))
 }
 
 async fn parse_graphql_request(

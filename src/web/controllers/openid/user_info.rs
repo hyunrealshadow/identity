@@ -1,3 +1,4 @@
+use crate::error::{error_message, with_request_catalog};
 use http::{HeaderValue, StatusCode, header};
 use identity_application::openid_connect::{dto::UserInfoClaims, user_info::TokenClaims};
 use salvo::{
@@ -15,10 +16,8 @@ use crate::{
         codes::openid_connect::{self, OpenIdConnectErrorCode},
         kind::ErrorKind,
     },
-    controllers::response::{
-        AppResponse, app_state, error_message, insert_no_store_headers, json_response,
-    },
-    infrastructure::i18n::{I18n, error_i18n, resolve_locale_from_headers},
+    controllers::response::{AppResponse, app_state, insert_no_store_headers, json_response},
+    infrastructure::i18n::I18n,
 };
 
 #[derive(Debug, Deserialize)]
@@ -272,30 +271,9 @@ impl From<AppError> for UserinfoWebError {
 #[async_trait]
 impl Writer for UserinfoWebError {
     async fn write(self, req: &mut Request, _depot: &mut Depot, res: &mut Response) {
-        match error_i18n() {
-            Some(i18n) => {
-                let locale = resolve_locale_from_headers(req.headers());
-                *res = userinfo_error_response(self.0, i18n, &locale);
-            }
-            None => {
-                let rfc_error = userinfo_rfc_error_code(&self.0);
-                let status = userinfo_error_status(&self.0);
-                let error_body = json!({
-                    "error": rfc_error,
-                    "error_description": self.0.code().to_string()
-                });
-                let mut response = json_response(status, error_body);
-                response
-                    .headers_mut()
-                    .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
-                if let Ok(value) = HeaderValue::from_str(&format!("Bearer error=\"{rfc_error}\"")) {
-                    response
-                        .headers_mut()
-                        .insert(header::WWW_AUTHENTICATE, value);
-                }
-                *res = response;
-            }
-        }
+        *res = with_request_catalog(req.headers(), |i18n, locale| {
+            userinfo_error_response(self.0, i18n, locale)
+        });
     }
 }
 

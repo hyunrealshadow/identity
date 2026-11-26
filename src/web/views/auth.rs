@@ -27,6 +27,9 @@ pub struct ErrorDetail {
     /// Field-specific validation errors. Omitted for non-validation errors.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub fields: Vec<FieldErrorDetail>,
+    /// What the caller can do to be allowed; same shape as GraphQL errors.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub challenge: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Serialize)]
@@ -46,12 +49,18 @@ impl BusinessErrorResponse {
                 code,
                 message: message.into(),
                 fields: Vec::new(),
+                challenge: None,
             },
         }
     }
 
     pub fn with_fields(mut self, fields: Vec<FieldErrorDetail>) -> Self {
         self.error.fields = fields;
+        self
+    }
+
+    pub fn with_challenge(mut self, challenge: Option<serde_json::Value>) -> Self {
+        self.error.challenge = challenge;
         self
     }
 }

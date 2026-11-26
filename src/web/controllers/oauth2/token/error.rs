@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 
+use crate::error::{error_message, log_app_error, request_error_message, with_request_catalog};
 use http::{HeaderMap, HeaderValue, StatusCode, header};
 use identity_application::error::{
     AppError, ErrorCode,
@@ -12,8 +13,8 @@ use unic_langid::LanguageIdentifier;
 
 use super::super::error::Rfc6749Error;
 use crate::{
-    controllers::response::{error_message, insert_no_store_headers, json_response, log_app_error},
-    infrastructure::i18n::{I18n, error_i18n, resolve_locale_from_headers},
+    controllers::response::{insert_no_store_headers, json_response},
+    infrastructure::i18n::I18n,
 };
 
 /// RFC 6749 §5.2 token error response.
@@ -75,23 +76,9 @@ impl Rfc6749Error for TokenWebError {
 impl Writer for TokenWebError {
     async fn write(self, req: &mut Request, _depot: &mut Depot, res: &mut Response) {
         log_app_error(&self.0, "token endpoint request failed");
-        match error_i18n() {
-            Some(i18n) => {
-                let locale = resolve_locale_from_headers(req.headers());
-                let response = token_error_response(self, i18n, &locale);
-                *res = response;
-            }
-            None => {
-                let status = self.rfc6749_status();
-                let body = TokenErrorResponse {
-                    error: self.rfc6749_error_code(),
-                    error_description: self.0.code().to_string(),
-                };
-                let mut response = json_response(status, body);
-                insert_no_store_headers(&mut response);
-                *res = response;
-            }
-        }
+        *res = with_request_catalog(req.headers(), |i18n, locale| {
+            token_error_response(self, i18n, locale)
+        });
     }
 }
 
@@ -290,9 +277,7 @@ fn inspection_error_response(
         "server_error" => StatusCode::INTERNAL_SERVER_ERROR,
         _ => StatusCode::BAD_REQUEST,
     };
-    let description = error_i18n()
-        .map(|i18n| error_message(i18n, &resolve_locale_from_headers(headers), &error))
-        .unwrap_or_else(|| error.code().to_string());
+    let description = request_error_message(headers, &error);
     let mut response = json_response(
         status,
         TokenErrorResponse {

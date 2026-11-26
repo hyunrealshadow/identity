@@ -335,6 +335,18 @@ public API or bound separately.
 Transport details, the access policy vocabulary, the error envelope, and the
 management scope catalog are documented in the [GraphQL API](graphql.md).
 
+### Error bodies
+
+OAuth and OpenID Connect endpoints answer with their protocol error
+(`error`, `error_description`) and status. Other JSON endpoints, including the
+login interaction and internal workload APIs, use
+`{ "error": { "code", "message", "fields"?, "challenge"? } }`, and browsers that
+accept HTML receive an error page instead. Every transport, GraphQL included,
+takes the numeric code, localized message and field errors from the same
+catalog, falls back to the generic internal message when the catalog lacks an
+entry, and reports the same `challenge` object; a step-up rejection also sends
+the RFC 9470 `WWW-Authenticate` challenge with HTTP 401.
+
 ### Internal workload API
 
 The separate internal listener requires workload authentication for every

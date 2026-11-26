@@ -16,9 +16,9 @@ use tracing::{Instrument, field::Empty, info_span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
-use crate::{application::error::codes::common, controllers::response::render_app_error_json};
+use crate::{application::error::codes::common, controllers::response::write_error_response};
 
-fn render_workload_unauthorized(res: &mut Response, invalid_token: bool) {
+fn render_workload_unauthorized(req: &Request, res: &mut Response, invalid_token: bool) {
     let challenge = if invalid_token {
         HeaderValue::from_static("Bearer realm=\"identity-internal\", error=\"invalid_token\"")
     } else {
@@ -26,7 +26,7 @@ fn render_workload_unauthorized(res: &mut Response, invalid_token: bool) {
     };
     res.headers_mut()
         .insert(header::WWW_AUTHENTICATE, challenge);
-    render_app_error_json(res, common::error::Unauthorized.into());
+    write_error_response(res, req.headers(), common::error::Unauthorized.into());
 }
 
 #[derive(Clone)]
@@ -57,12 +57,12 @@ impl Handler for RequireWorkload {
             .and_then(|value| value.strip_prefix("Bearer "))
             .filter(|value| !value.is_empty());
         let Some(token) = token else {
-            render_workload_unauthorized(res, false);
+            render_workload_unauthorized(req, res, false);
             ctrl.skip_rest();
             return;
         };
         let Some(workload) = self.authenticator.authenticate(token).await else {
-            render_workload_unauthorized(res, true);
+            render_workload_unauthorized(req, res, true);
             ctrl.skip_rest();
             return;
         };
@@ -79,9 +79,14 @@ pub fn authenticated_workload(depot: &Depot) -> Option<AuthenticatedWorkload> {
 
 /// Installation and operational controls belong to the Login workload.
 #[handler]
-pub async fn require_login_workload(depot: &mut Depot, res: &mut Response, ctrl: &mut FlowCtrl) {
+pub async fn require_login_workload(
+    req: &mut Request,
+    depot: &mut Depot,
+    res: &mut Response,
+    ctrl: &mut FlowCtrl,
+) {
     if authenticated_workload(depot) != Some(AuthenticatedWorkload(BuiltInWorkload::Login)) {
-        render_app_error_json(res, common::error::Forbidden.into());
+        write_error_response(res, req.headers(), common::error::Forbidden.into());
         ctrl.skip_rest();
     }
 }

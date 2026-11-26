@@ -1,5 +1,6 @@
 use std::{borrow::Cow, collections::BTreeMap, str};
 
+use crate::error::request_error_message;
 use http::{HeaderMap, HeaderValue, StatusCode, header};
 use identity_application::{
     error::{
@@ -28,11 +29,8 @@ use super::{
     error::authorize_oauth_error_code,
     request::parse_authorize_pairs,
 };
-use crate::{
-    controllers::response::{
-        AppResponse, app_state, error_message, insert_no_store_headers, json_response,
-    },
-    infrastructure::i18n::{error_i18n, resolve_locale_from_headers},
+use crate::controllers::response::{
+    AppResponse, app_state, insert_no_store_headers, json_response,
 };
 
 pub struct ParWebError {
@@ -75,15 +73,7 @@ impl Writer for ParWebError {
     async fn write(self, req: &mut Request, _: &mut Depot, res: &mut Response) {
         let code = self.rfc6749_error_code();
         let status = self.rfc6749_status();
-        let description = error_i18n()
-            .map(|i18n| {
-                error_message(
-                    i18n,
-                    &resolve_locale_from_headers(req.headers()),
-                    &self.error,
-                )
-            })
-            .unwrap_or_else(|| self.error.code().to_string());
+        let description = request_error_message(req.headers(), &self.error);
         *res = json_response(
             status,
             json!({ "error": code, "error_description": description }),

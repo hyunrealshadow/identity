@@ -1,5 +1,6 @@
 use std::error::Error;
 
+use crate::error::error_http_status;
 use http::StatusCode;
 use identity_application::error::{AppError, ErrorDiagnostics};
 use identity_domain::key::{AsymmetricKeyAlgorithm, JwaSigningAlgorithm};
@@ -7,7 +8,6 @@ use salvo::{Depot, Request, Router, handler};
 use serde::{Deserialize, Serialize};
 use tracing::{error, warn};
 
-use super::response::error_http_status;
 use crate::{
     application::install::InstallInput,
     web::controllers::response::{

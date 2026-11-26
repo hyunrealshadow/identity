@@ -1,3 +1,4 @@
+use crate::error::{error_message, log_app_error, with_request_catalog};
 use http::StatusCode;
 use identity_application::{
     error::{
@@ -19,11 +20,8 @@ use super::super::{
     token::is_client_auth_token_error,
 };
 use crate::{
-    controllers::response::{
-        AppResponse, app_state, error_message, insert_no_store_headers, json_response,
-        log_app_error,
-    },
-    infrastructure::i18n::{I18n, error_i18n, resolve_locale_from_headers},
+    controllers::response::{AppResponse, app_state, insert_no_store_headers, json_response},
+    infrastructure::i18n::I18n,
 };
 
 /// RFC 8628 搂3.2 request: a form POST carrying the client's credentials and an
@@ -126,22 +124,9 @@ impl From<AppError> for DeviceAuthorizationWebError {
 impl Writer for DeviceAuthorizationWebError {
     async fn write(self, req: &mut Request, _depot: &mut Depot, res: &mut Response) {
         log_app_error(&self.0, "device authorization request failed");
-        match error_i18n() {
-            Some(i18n) => {
-                let locale = resolve_locale_from_headers(req.headers());
-                *res = device_error_response(self.0, i18n, &locale);
-            }
-            None => {
-                let status = device_error_status(&self.0);
-                let body = DeviceAuthorizationErrorResponse {
-                    error: device_error_code(&self.0),
-                    error_description: self.0.code().to_string(),
-                };
-                let mut response = json_response(status, body);
-                insert_no_store_headers(&mut response);
-                *res = response;
-            }
-        }
+        *res = with_request_catalog(req.headers(), |i18n, locale| {
+            device_error_response(self.0, i18n, locale)
+        });
     }
 }
 

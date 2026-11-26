@@ -2,14 +2,14 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use http::StatusCode;
 use identity_application::observability::{BusinessEvent, EventSeverity, EventValue, event_sink};
-use salvo::{Depot, Response, Router, handler};
+use salvo::{Depot, Request, Response, Router, handler};
 use sea_orm::{ConnectionTrait, sea_query::Query};
 use serde::Serialize;
 
 use crate::{
     boot::AppState,
     infrastructure::config::{HealthConfig, ServerConfig},
-    web::controllers::response::{app_state, render_app_error_json, render_json},
+    web::controllers::response::{app_state, render_json, write_error_response},
 };
 
 /// Whether the last probe result matched the current one. Only transitions are
@@ -40,11 +40,11 @@ pub fn router(config: &HealthConfig) -> Router {
 }
 
 #[handler]
-async fn health_handler(depot: &mut Depot, res: &mut Response) {
+async fn health_handler(req: &mut Request, depot: &mut Depot, res: &mut Response) {
     let state = match app_state(depot) {
         Ok(state) => state,
         Err(error) => {
-            render_app_error_json(res, error);
+            write_error_response(res, req.headers(), error);
             return;
         }
     };

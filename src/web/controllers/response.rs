@@ -1,90 +1,31 @@
-use std::{error::Error as StdError, mem};
+use std::mem;
 
 use http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header};
-use identity_application::error::ErrorDiagnostics;
 use salvo::{
     Depot, FlowCtrl, Request, Response, Writer, async_trait, handler, prelude::Json, writing::Text,
 };
 use serde::{Serialize, de::DeserializeOwned};
-use tracing::{Level, error, event};
+use tracing::error;
 use unic_langid::LanguageIdentifier;
 
 use crate::{
-    application::error::{AppError, codes::common, kind::ErrorKind, params::ErrorParams},
+    application::error::{AppError, codes::common},
     boot::AppState,
     infrastructure::{
-        i18n::{I18n, error_i18n, resolve_locale_from_headers},
+        i18n::{I18n, resolve_locale_from_headers},
         web::tera as web_tera,
     },
-    web::views::{
-        auth::{BusinessErrorResponse, FieldErrorDetail},
-        oauth2::ErrorPageData,
+    web::{
+        error::{
+            challenge, error_http_status, error_message, field_errors, log_app_error,
+            step_up_www_authenticate, with_request_catalog,
+        },
+        views::{
+            auth::{BusinessErrorResponse, FieldErrorDetail},
+            oauth2::ErrorPageData,
+        },
     },
 };
-
-pub fn error_http_status(kind: ErrorKind) -> StatusCode {
-    match kind {
-        ErrorKind::NotFound => StatusCode::NOT_FOUND,
-        ErrorKind::Unauthorized => StatusCode::UNAUTHORIZED,
-        ErrorKind::Forbidden => StatusCode::FORBIDDEN,
-        ErrorKind::Conflict => StatusCode::CONFLICT,
-        ErrorKind::Validation => StatusCode::UNPROCESSABLE_ENTITY,
-        ErrorKind::RateLimit => StatusCode::TOO_MANY_REQUESTS,
-        ErrorKind::Gone => StatusCode::GONE,
-        ErrorKind::Internal => StatusCode::INTERNAL_SERVER_ERROR,
-    }
-}
-
-pub fn error_message(i18n: &I18n, locale: &LanguageIdentifier, error: &AppError) -> String {
-    localized_error_message(i18n, locale, error.code(), error.params())
-}
-
-pub fn app_error_log_level(error: &AppError) -> Level {
-    match error.kind() {
-        ErrorKind::Internal => Level::ERROR,
-        ErrorKind::Unauthorized | ErrorKind::Forbidden | ErrorKind::RateLimit => Level::WARN,
-        ErrorKind::NotFound | ErrorKind::Conflict | ErrorKind::Validation | ErrorKind::Gone => {
-            Level::DEBUG
-        }
-    }
-}
-
-pub fn log_app_error(error: &AppError, message: &'static str) {
-    let diagnostics = ErrorDiagnostics::from_error(error);
-    macro_rules! log {
-        ($level:expr) => {
-            event!(
-                $level,
-                error_code = error.code(),
-                error_kind = ?error.kind(),
-                error = %error,
-                has_source = error.source().is_some(),
-                error_cause = %diagnostics.cause,
-                error_operation = diagnostics.operation,
-                stacktrace = diagnostics.backtrace.map(ToString::to_string),
-                "{message}"
-            )
-        };
-    }
-    match app_error_log_level(error) {
-        Level::ERROR => log!(Level::ERROR),
-        Level::WARN => log!(Level::WARN),
-        _ => log!(Level::DEBUG),
-    }
-}
-
-fn localized_error_message(
-    i18n: &I18n,
-    locale: &LanguageIdentifier,
-    code: u32,
-    params: &ErrorParams,
-) -> String {
-    if params.is_empty() {
-        i18n.t_code(locale, code)
-    } else {
-        i18n.t_code_with_params(locale, code, params)
-    }
-}
 
 pub fn accepts_html(headers: &HeaderMap) -> bool {
     headers
@@ -202,18 +143,9 @@ impl Writer for AppResponse {
 #[async_trait]
 impl Writer for WebError {
     async fn write(self, req: &mut Request, depot: &mut Depot, res: &mut Response) {
-        if accepts_html(req.headers())
-            && let Ok(ctx) = app_state(depot)
-        {
-            render_error_page(res, req.headers(), &ctx, self.0);
-            return;
-        }
-
-        if let Some(i18n) = error_i18n() {
-            let locale = resolve_locale_from_headers(req.headers());
-            write_error_response(res, i18n, &locale, self.0);
-        } else {
-            render_unlocalized_app_error(res, self.0);
+        match app_state(depot) {
+            Ok(ctx) => render_app_error(res, req.headers(), &ctx, self.0),
+            Err(_) => write_error_response(res, req.headers(), self.0),
         }
     }
 }
@@ -221,12 +153,7 @@ impl Writer for WebError {
 #[async_trait]
 impl Writer for JsonWebError {
     async fn write(self, req: &mut Request, _depot: &mut Depot, res: &mut Response) {
-        if let Some(i18n) = error_i18n() {
-            let locale = resolve_locale_from_headers(req.headers());
-            write_error_response(res, i18n, &locale, self.0);
-        } else {
-            render_unlocalized_app_error(res, self.0);
-        }
+        write_error_response(res, req.headers(), self.0);
     }
 }
 
@@ -276,51 +203,48 @@ pub fn parse_param<T: DeserializeOwned>(req: &Request, name: &str) -> Result<T, 
         .ok_or_else(|| common::error::InvalidRequest.into_error())
 }
 
-pub fn write_error_response(
+/// Write the standard JSON error body in the request's language.
+pub fn write_error_response(res: &mut Response, headers: &HeaderMap, error: AppError) {
+    log_app_error(&error, "application request failed");
+    with_request_catalog(headers, |i18n, locale| {
+        write_localized_error(res, i18n, locale, &error);
+    });
+}
+
+fn write_localized_error(
     res: &mut Response,
     i18n: &I18n,
     locale: &LanguageIdentifier,
-    error: AppError,
+    error: &AppError,
 ) {
     let status = error_http_status(error.kind());
-
-    log_app_error(&error, "application request failed");
-
-    let message = error_message(i18n, locale, &error);
-    let fields = error
-        .validation()
-        .map(|validation| {
-            validation
-                .fields()
-                .iter()
-                .map(|field_error| FieldErrorDetail {
-                    field: field_error.field().to_owned(),
-                    code: field_error.code(),
-                    message: localized_error_message(
-                        i18n,
-                        locale,
-                        field_error.code(),
-                        field_error.params(),
-                    ),
-                })
-                .collect()
+    if status == StatusCode::UNAUTHORIZED
+        && let Some(step_up) = error.step_up()
+        && let Ok(value) = HeaderValue::from_str(&step_up_www_authenticate("identity", &step_up))
+    {
+        res.headers_mut().insert(header::WWW_AUTHENTICATE, value);
+    }
+    let fields = field_errors(i18n, locale, error)
+        .into_iter()
+        .map(|field| FieldErrorDetail {
+            field: field.field,
+            code: field.code,
+            message: field.message,
         })
-        .unwrap_or_default();
-    let body = BusinessErrorResponse::new(error.code(), message).with_fields(fields);
+        .collect();
+    let body = BusinessErrorResponse::new(error.code(), error_message(i18n, locale, error))
+        .with_fields(fields)
+        .with_challenge(challenge(error));
     render_json(res, status, body);
 }
 
+/// Render an error as an HTML page for browsers that accept one, otherwise
+/// as the standard JSON error body.
 pub fn render_app_error(res: &mut Response, headers: &HeaderMap, ctx: &AppState, error: AppError) {
     if accepts_html(headers) {
         render_error_page(res, headers, ctx, error);
-        return;
-    }
-
-    if let Some(i18n) = error_i18n() {
-        let locale = resolve_locale_from_headers(headers);
-        write_error_response(res, i18n, &locale, error);
     } else {
-        render_unlocalized_app_error(res, error);
+        write_error_response(res, headers, error);
     }
 }
 
@@ -338,47 +262,19 @@ pub fn render_error_page(res: &mut Response, headers: &HeaderMap, ctx: &AppState
         None,
         Some(error.code()),
         i18n.t(&locale, "error-page-title"),
-        message,
+        message.clone(),
     );
 
     match web_tera::render_view(ctx, headers, "error.html", data) {
         Ok(body) => render_html(res, status, body),
         Err(e) => {
             error!(error = %e, "render_error_page: template render failed");
-            let body = BusinessErrorResponse::new(error.code(), error.to_string());
-            render_json(res, StatusCode::INTERNAL_SERVER_ERROR, body);
+            render_json(
+                res,
+                status,
+                BusinessErrorResponse::new(error.code(), message),
+            );
         }
-    }
-}
-
-fn render_unlocalized_app_error(res: &mut Response, error: AppError) {
-    log_app_error(&error, "application request failed without localization");
-    let status = error_http_status(error.kind());
-    let message = error.code().to_string();
-    let fields = error
-        .validation()
-        .map(|validation| {
-            validation
-                .fields()
-                .iter()
-                .map(|field_error| FieldErrorDetail {
-                    field: field_error.field().to_owned(),
-                    code: field_error.code(),
-                    message: field_error.code().to_string(),
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-    let body = BusinessErrorResponse::new(error.code(), message).with_fields(fields);
-    render_json(res, status, body);
-}
-
-pub fn render_app_error_json(res: &mut Response, error: AppError) {
-    if let Some(i18n) = error_i18n() {
-        let locale = i18n.fallback_locale().clone();
-        write_error_response(res, i18n, &locale, error);
-    } else {
-        render_unlocalized_app_error(res, error);
     }
 }
 
@@ -389,7 +285,7 @@ pub fn render_not_found(req: &Request, depot: &Depot, res: &mut Response) {
     let status = StatusCode::NOT_FOUND;
     let error = common::error::NotFound.into_error();
     let Ok(ctx) = app_state(depot) else {
-        render_app_error_json(res, error);
+        write_error_response(res, req.headers(), error);
         return;
     };
     let i18n = ctx.resources().i18n();
@@ -447,85 +343,23 @@ pub async fn not_found_fallback(
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        io::{Error, ErrorKind, Result as IoResult, Write},
-        sync::{Arc, Mutex},
-    };
+    use std::io::{Error, ErrorKind};
 
     use http::StatusCode;
-    use identity_application::error::{ErrorContext, ErrorDiagnostics};
+    use identity_application::error::{ErrorDiagnostics, StepUpChallenge};
+    use identity_domain::auth::AuthenticationContextClass;
     use salvo::{
         Router, Service, handler,
         test::{ResponseExt, TestClient},
     };
-    use tracing::{Level, subscriber::with_default};
-    use tracing_subscriber::fmt;
 
-    use super::{JsonWebResult, WebResult, log_app_error, render_app_error};
+    use super::{JsonWebResult, WebResult, render_app_error, write_error_response};
     use crate::{
         application::error::codes::{authorize_http, common, install},
         infrastructure::{
             i18n::init_error_i18n, test_app_state_with_mock_settings, web::tera::build_i18n,
         },
     };
-
-    #[test]
-    fn logs_distinguish_internal_failures_rejections_and_validation() {
-        #[derive(Clone)]
-        struct Capture(Arc<Mutex<Vec<u8>>>);
-        impl Write for Capture {
-            fn write(&mut self, bytes: &[u8]) -> IoResult<usize> {
-                self.0.lock().unwrap().extend_from_slice(bytes);
-                Ok(bytes.len())
-            }
-            fn flush(&mut self) -> IoResult<()> {
-                Ok(())
-            }
-        }
-        let bytes = Arc::new(Mutex::new(Vec::new()));
-        let writer = Capture(bytes.clone());
-        let subscriber = fmt()
-            .with_ansi(false)
-            .without_time()
-            .with_max_level(Level::TRACE)
-            .with_writer(move || writer.clone())
-            .finish();
-        with_default(subscriber, || {
-            let error = common::error::InternalError.with_source(ErrorContext::new(
-                "client_authorization.lock_refresh_family",
-                Error::other("database unavailable"),
-            ));
-            log_app_error(&error, "internal-test");
-            log_app_error(&common::error::Unauthorized.into(), "rejection-test");
-            log_app_error(&common::error::InvalidRequest.into(), "validation-test");
-        });
-        let output = String::from_utf8(bytes.lock().unwrap().clone()).unwrap();
-        let internal = output
-            .lines()
-            .find(|line| line.contains("internal-test"))
-            .unwrap();
-        assert!(internal.contains("ERROR") && internal.contains("has_source=true"));
-        assert!(internal.contains("database unavailable"));
-        assert_eq!(internal.matches("database unavailable").count(), 1);
-        assert!(internal.contains("error_operation=\"client_authorization.lock_refresh_family\""));
-        assert!(internal.contains("stacktrace="));
-        assert!(!internal.contains("error_file=") && !internal.contains("app_error_line="));
-        // Backtrace frames may print function types such as `fn() -> T`, so
-        // only the structured fields before the stack trace are checked for a
-        // flattened source chain.
-        let (fields, _) = internal.split_once("stacktrace=").unwrap();
-        assert!(!fields.contains("source_chain") && !fields.contains(" -> "));
-        let rejection = output
-            .lines()
-            .find(|line| line.contains("rejection-test"))
-            .unwrap();
-        assert!(rejection.contains("WARN") && rejection.contains("has_source=false"));
-        let validation = output
-            .lines()
-            .find(|line| line.contains("validation-test"))
-            .unwrap();
-        assert!(validation.contains("DEBUG"));
-    }
 
     #[handler]
     async fn direct_app_error() -> WebResult<()> {
@@ -579,7 +413,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn render_app_error_json_respects_accept_language() {
+    async fn json_errors_follow_the_request_language() {
         init_error_i18n(build_i18n().expect("i18n should load from assets/i18n"));
         let ctx = test_app_state_with_mock_settings().await;
         let mut headers = http::HeaderMap::new();
@@ -602,6 +436,41 @@ mod tests {
         assert_eq!(response.status_code, Some(StatusCode::UNPROCESSABLE_ENTITY));
         let body = response.take_string().await.unwrap();
         assert!(body.contains("\"message\":\"邮箱地址格式无效\""), "{body}");
+    }
+
+    #[tokio::test]
+    async fn json_errors_carry_the_step_up_challenge_and_header() {
+        init_error_i18n(build_i18n().expect("i18n should load from assets/i18n"));
+        let error = common::error::Unauthorized
+            .into_error()
+            .with_step_up(StepUpChallenge {
+                acr: Some(AuthenticationContextClass::MultiFactor),
+                max_age_secs: Some(300),
+            });
+        let mut response = salvo::Response::new();
+
+        write_error_response(&mut response, &http::HeaderMap::new(), error);
+
+        assert_eq!(response.status_code, Some(StatusCode::UNAUTHORIZED));
+        let header = response
+            .headers()
+            .get(http::header::WWW_AUTHENTICATE)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_owned();
+        assert!(header.contains("error=\"insufficient_user_authentication\""));
+        assert!(header.contains("max_age=\"300\""));
+        let body: serde_json::Value =
+            serde_json::from_str(&response.take_string().await.unwrap()).unwrap();
+        assert_eq!(
+            body["error"]["challenge"],
+            serde_json::json!({
+                "error": "insufficient_user_authentication",
+                "acrValues": "aal2",
+                "maxAge": 300
+            })
+        );
     }
 
     #[test]

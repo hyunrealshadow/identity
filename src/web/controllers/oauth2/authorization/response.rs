@@ -1,3 +1,4 @@
+use crate::error::{error_message, log_app_error};
 use http::{HeaderMap, StatusCode, header::HeaderName};
 use identity_domain::openid_connect::{AuthorizationRequestData, ResponseType, ScopeSet};
 use salvo::{Depot, Request, Response, Writer, async_trait};
@@ -15,10 +16,7 @@ use crate::{
     application::error::{AppError, codes::authorize},
     boot::AppState,
     controllers::{
-        response::{
-            WebError, app_state, error_message, log_app_error, redirect_to_response,
-            render_app_error, render_html,
-        },
+        response::{WebError, app_state, redirect_to_response, render_app_error, render_html},
         shared::{generate_csp_nonce, inline_script_csp_header_value, login_redirect},
     },
     domain::openid_connect::{

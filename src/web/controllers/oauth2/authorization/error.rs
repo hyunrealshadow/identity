@@ -1,3 +1,4 @@
+use crate::error::error_message;
 use http::{HeaderMap, StatusCode};
 use identity_application::error::{
     AppError, ErrorCode,
@@ -6,8 +7,6 @@ use identity_application::error::{
 };
 use identity_domain::openid_connect::{OAuthErrorCode, OAuthErrorResponse};
 use identity_infrastructure::{AppState, i18n::resolve_locale_from_headers};
-
-use crate::controllers::response::error_message;
 
 pub(super) fn authorize_error_status(kind: ErrorKind) -> StatusCode {
     match kind {

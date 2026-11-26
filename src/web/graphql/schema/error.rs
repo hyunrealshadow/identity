@@ -8,15 +8,13 @@
 use std::{error::Error as StdError, sync::Arc};
 
 use async_graphql::{Context, Error, ErrorExtensionValues, Value};
-use identity_application::error::{
-    AppError, code::AppErrorCode, codes::graphql::GraphqlErrorCode, params::ErrorParams,
-};
+use identity_application::error::AppError;
 use serde_json::{Value as SerdeJsonValue, json};
 use unic_langid::{LanguageIdentifier, langid};
 
 use super::context::RequestContext;
 use crate::{
-    controllers::response::log_app_error,
+    error::{challenge, error_message, field_errors, log_app_error},
     infrastructure::i18n::{I18n, error_i18n},
 };
 
@@ -48,37 +46,11 @@ pub(super) fn internal_error(
 /// Render `error` for `locale`. The error is also kept as the GraphQL error
 /// source so the transport can derive protocol headers from typed details.
 pub(crate) fn project(i18n: &I18n, locale: &LanguageIdentifier, error: &AppError) -> Error {
-    let text = message(i18n, locale, error.code(), error.params());
-    let fields = error
-        .validation()
-        .map(|validation| {
-            validation
-                .fields()
-                .iter()
-                .map(|field| {
-                    json!({
-                        "field": field.field(),
-                        "code": field.code(),
-                        "message": message(i18n, locale, field.code(), field.params()),
-                    })
-                })
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
+    let fields = field_errors(i18n, locale, error)
+        .into_iter()
+        .map(|field| json!({ "field": field.field, "code": field.code, "message": field.message }))
+        .collect::<Vec<_>>();
     let mut extensions = ErrorExtensionValues::default();
-    apply_extensions(&mut extensions, error, fields);
-    Error {
-        message: text,
-        source: error.step_up().map(|challenge| Arc::new(challenge) as _),
-        extensions: Some(extensions),
-    }
-}
-
-fn apply_extensions(
-    extensions: &mut ErrorExtensionValues,
-    error: &AppError,
-    fields: Vec<SerdeJsonValue>,
-) {
     extensions.set("kind", error.kind().as_str());
     extensions.set("code", error.code());
     if let Some(challenge) = challenge(error) {
@@ -91,58 +63,10 @@ fn apply_extensions(
         "fields",
         Value::from_json(SerdeJsonValue::Array(fields)).unwrap_or(Value::Null),
     );
-}
-
-/// The authorization challenge a client can satisfy, named after the bearer
-/// token error codes of RFC 9470 and RFC 6750. `code` stays the catalog code.
-fn challenge(error: &AppError) -> Option<SerdeJsonValue> {
-    if let Some(step_up) = error.step_up() {
-        let mut challenge = json!({ "error": "insufficient_user_authentication" });
-        if let Some(acr) = step_up.acr {
-            challenge["acrValues"] = json!(acr.as_str());
-        }
-        if let Some(max_age) = step_up.max_age_secs {
-            challenge["maxAge"] = json!(max_age);
-        }
-        return Some(challenge);
-    }
-    let scopes = error.required_scopes();
-    (!scopes.is_empty()).then(|| json!({ "error": "insufficient_scope", "scopes": scopes }))
-}
-
-/// Catalog message for `code`, or the generic internal message when the
-/// catalog lacks it, so raw `E<code>` keys never reach clients.
-fn message(i18n: &I18n, locale: &LanguageIdentifier, code: u32, params: &ErrorParams) -> String {
-    render(i18n, locale, code, params).unwrap_or_else(|| {
-        render(
-            i18n,
-            locale,
-            GraphqlErrorCode::Internal.code(),
-            &ErrorParams::new(),
-        )
-        .unwrap_or_else(|| static_generic_message(locale))
-    })
-}
-
-fn render(
-    i18n: &I18n,
-    locale: &LanguageIdentifier,
-    code: u32,
-    params: &ErrorParams,
-) -> Option<String> {
-    let rendered = if params.is_empty() {
-        i18n.t_code(locale, code)
-    } else {
-        i18n.t_code_with_params(locale, code, params)
-    };
-    (rendered != format!("E{code}")).then_some(rendered)
-}
-
-fn static_generic_message(locale: &LanguageIdentifier) -> String {
-    if locale.language.as_str() == "zh" {
-        "发生意外错误，请重试".to_owned()
-    } else {
-        "An unexpected error occurred. Please try again.".to_owned()
+    Error {
+        message: error_message(i18n, locale, error),
+        source: error.step_up().map(|challenge| Arc::new(challenge) as _),
+        extensions: Some(extensions),
     }
 }
 

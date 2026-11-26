@@ -6,6 +6,7 @@ extern crate self as web;
 
 pub mod controllers;
 pub mod cors;
+pub mod error;
 pub mod graphql;
 pub mod health;
 pub mod middleware;
