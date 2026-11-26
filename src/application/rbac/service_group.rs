@@ -25,7 +25,7 @@ use crate::{
     },
     observability::{BusinessEvent, EventSink, EventValue, NoopEventSink, error_outcome},
     rbac::{
-        cursor::{CURSOR_KIND_ACCOUNT_GROUP, PageArguments, encode_cursor, prepare_page},
+        cursor::{CURSOR_KIND_ACCOUNT_GROUP, PageArguments, encode_cursors, prepare_page},
         group::{
             AccountGroupPage, AccountGroupPageItem, AccountGroupPageRequest, AddGroupMemberCommand,
             CreateGroupCommand, DeleteGroupCommand, DeleteGroupResult, GroupFilter,
@@ -140,21 +140,28 @@ impl GroupManagementService {
             })
             .await
             .map_err(map_repository_error)?;
-        let mut items = Vec::with_capacity(data.items.len());
-        for entry in data.items {
-            let cursor = encode_cursor(
-                self.data_protector.as_ref(),
-                CURSOR_KIND_ACCOUNT_GROUP,
-                order.as_u8(),
-                &prepared.filter_fingerprint,
-                &entry.sort_key,
-            )
-            .await?;
-            items.push(AccountGroupPageItem {
+        let sort_keys = data
+            .items
+            .iter()
+            .map(|entry| &entry.sort_key)
+            .collect::<Vec<_>>();
+        let cursors = encode_cursors(
+            self.data_protector.as_ref(),
+            CURSOR_KIND_ACCOUNT_GROUP,
+            order.as_u8(),
+            &prepared.filter_fingerprint,
+            &sort_keys,
+        )
+        .await?;
+        let items = data
+            .items
+            .into_iter()
+            .zip(cursors)
+            .map(|(entry, cursor)| AccountGroupPageItem {
                 record: entry.record,
                 cursor,
-            });
-        }
+            })
+            .collect();
         Ok(AccountGroupPage {
             items,
             has_previous_page: data.has_previous_page,
@@ -199,21 +206,28 @@ impl GroupManagementService {
             })
             .await
             .map_err(map_repository_error)?;
-        let mut items = Vec::with_capacity(data.items.len());
-        for entry in data.items {
-            let cursor = encode_cursor(
-                self.data_protector.as_ref(),
-                CURSOR_KIND_GROUP,
-                order.as_u8(),
-                &prepared.filter_fingerprint,
-                &entry.sort_key,
-            )
-            .await?;
-            items.push(GroupPageItem {
+        let sort_keys = data
+            .items
+            .iter()
+            .map(|entry| &entry.sort_key)
+            .collect::<Vec<_>>();
+        let cursors = encode_cursors(
+            self.data_protector.as_ref(),
+            CURSOR_KIND_GROUP,
+            order.as_u8(),
+            &prepared.filter_fingerprint,
+            &sort_keys,
+        )
+        .await?;
+        let items = data
+            .items
+            .into_iter()
+            .zip(cursors)
+            .map(|(entry, cursor)| GroupPageItem {
                 record: entry.record,
                 cursor,
-            });
-        }
+            })
+            .collect();
         Ok(GroupPage {
             items,
             has_previous_page: data.has_previous_page,
@@ -255,21 +269,28 @@ impl GroupManagementService {
             })
             .await
             .map_err(map_repository_error)?;
-        let mut items = Vec::with_capacity(data.items.len());
-        for entry in data.items {
-            let cursor = encode_cursor(
-                self.data_protector.as_ref(),
-                CURSOR_KIND_GROUP_MEMBERSHIP,
-                order.as_u8(),
-                &prepared.filter_fingerprint,
-                &entry.sort_key,
-            )
-            .await?;
-            items.push(GroupMembershipPageItem {
+        let sort_keys = data
+            .items
+            .iter()
+            .map(|entry| &entry.sort_key)
+            .collect::<Vec<_>>();
+        let cursors = encode_cursors(
+            self.data_protector.as_ref(),
+            CURSOR_KIND_GROUP_MEMBERSHIP,
+            order.as_u8(),
+            &prepared.filter_fingerprint,
+            &sort_keys,
+        )
+        .await?;
+        let items = data
+            .items
+            .into_iter()
+            .zip(cursors)
+            .map(|(entry, cursor)| GroupMembershipPageItem {
                 record: entry.record,
                 cursor,
-            });
-        }
+            })
+            .collect();
         Ok(GroupMembershipPage {
             items,
             has_previous_page: data.has_previous_page,
@@ -311,21 +332,28 @@ impl GroupManagementService {
             })
             .await
             .map_err(map_repository_error)?;
-        let mut items = Vec::with_capacity(data.items.len());
-        for entry in data.items {
-            let cursor = encode_cursor(
-                self.data_protector.as_ref(),
-                CURSOR_KIND_GROUP_ROLE,
-                order.as_u8(),
-                &prepared.filter_fingerprint,
-                &entry.sort_key,
-            )
-            .await?;
-            items.push(GroupRolePageItem {
+        let sort_keys = data
+            .items
+            .iter()
+            .map(|entry| &entry.sort_key)
+            .collect::<Vec<_>>();
+        let cursors = encode_cursors(
+            self.data_protector.as_ref(),
+            CURSOR_KIND_GROUP_ROLE,
+            order.as_u8(),
+            &prepared.filter_fingerprint,
+            &sort_keys,
+        )
+        .await?;
+        let items = data
+            .items
+            .into_iter()
+            .zip(cursors)
+            .map(|(entry, cursor)| GroupRolePageItem {
                 record: entry.record,
                 cursor,
-            });
-        }
+            })
+            .collect();
         Ok(GroupRolePage {
             items,
             has_previous_page: data.has_previous_page,

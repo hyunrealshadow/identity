@@ -22,11 +22,12 @@ use uuid::Uuid;
 
 use super::super::{
     account::{UserGlobalId, UserNode},
-    resource::support::{decode_oid, decode_oids, page_args},
+    resource::support::{decode_oid, decode_oids},
     role::types::{RoleNode, decode_role_oid as decode_role_oid_from_id},
 };
 use crate::graphql::schema::{
     authorization::request_context,
+    connection::page_args,
     management_guard::ManagementGuard,
     modules::relation::{
         GroupMemberConnectionName, GroupMemberEdgeName, GroupRoleConnectionName, GroupRoleEdgeName,
@@ -278,7 +279,7 @@ impl GroupNode {
         guard = "ManagementGuard::new(ManagementScope::GroupMembersRead, ManagementTarget::instance()).and(ManagementGuard::new(ManagementScope::UsersRead, ManagementTarget::instance()))",
         directive = access::apply(ManagementGuard::policy(ManagementScope::GroupMembersRead)),
         directive = access::apply(ManagementGuard::policy(ManagementScope::UsersRead)),
-        complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
+        complexity = "crate::graphql::schema::connection::page_complexity(first, last, child_complexity)"
     )]
     #[allow(clippy::too_many_arguments)]
     async fn members(
@@ -309,7 +310,7 @@ impl GroupNode {
         guard = "ManagementGuard::new(ManagementScope::RoleAssignmentsRead, ManagementTarget::instance()).and(ManagementGuard::new(ManagementScope::RolesRead, ManagementTarget::instance()))",
         directive = access::apply(ManagementGuard::policy(ManagementScope::RoleAssignmentsRead)),
         directive = access::apply(ManagementGuard::policy(ManagementScope::RolesRead)),
-        complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
+        complexity = "crate::graphql::schema::connection::page_complexity(first, last, child_complexity)"
     )]
     #[allow(clippy::too_many_arguments)]
     async fn roles(

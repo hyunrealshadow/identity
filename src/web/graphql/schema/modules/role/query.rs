@@ -18,14 +18,10 @@ use super::{
 use crate::graphql::schema::{
     RequestContext,
     authorization::request_context,
-    connection,
-    connection::ConnectionTotal,
+    connection::{self, ConnectionTotal, OpaqueCursor, PageArgs, page_args},
     error::app_error,
     management_guard::ManagementGuard,
-    modules::resource::{
-        support::{PageArgs, RbacConnectionCursor, decode_oid, page_args},
-        types::ResourceGlobalId,
-    },
+    modules::resource::{support::decode_oid, types::ResourceGlobalId},
 };
 
 #[derive(Default)]
@@ -49,7 +45,7 @@ impl RoleQuery {
     #[graphql(
         guard = "ManagementGuard::new(ManagementScope::RolesRead, ManagementTarget::instance())",
         directive = access::apply(ManagementGuard::policy(ManagementScope::RolesRead)),
-        complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
+        complexity = "crate::graphql::schema::connection::page_complexity(first, last, child_complexity)"
     )]
     #[allow(clippy::too_many_arguments)]
     async fn roles(
@@ -61,7 +57,7 @@ impl RoleQuery {
         after: Option<String>,
         #[graphql(validator(minimum = 1, maximum = 100))] last: Option<i32>,
         before: Option<String>,
-    ) -> Result<Connection<RbacConnectionCursor, RoleNode, ConnectionTotal>> {
+    ) -> Result<Connection<OpaqueCursor, RoleNode, ConnectionTotal>> {
         let page = page_args(ctx, first, after, last, before)?;
         let request = request_context(ctx)?;
         load_role_connection(
@@ -81,7 +77,7 @@ pub(crate) async fn load_role_connection(
     filter: RoleFilter,
     order: RoleOrder,
     page: PageArgs,
-) -> Result<Connection<RbacConnectionCursor, RoleNode, ConnectionTotal>> {
+) -> Result<Connection<OpaqueCursor, RoleNode, ConnectionTotal>> {
     let filter = filter.into_application(ctx)?;
     let page = integration::list_roles(request, filter.clone(), order.into(), page)
         .await
@@ -100,7 +96,7 @@ pub(crate) async fn load_role_connection(
         Connection::with_additional_fields(page.has_previous_page, page.has_next_page, additional);
     connection.edges.extend(page.items.into_iter().map(|item| {
         Edge::new(
-            RbacConnectionCursor::from_backend(item.cursor),
+            OpaqueCursor::from_backend(item.cursor),
             RoleNode::new(item.record),
         )
     }));
@@ -154,7 +150,7 @@ pub(crate) async fn load_effective_permission_connection(
     );
     connection.edges.extend(page.items.into_iter().map(|item| {
         EffectivePermissionEdge::new(
-            RbacConnectionCursor::from_backend(item.cursor),
+            OpaqueCursor::from_backend(item.cursor),
             EffectivePermissionNode::new(item.record),
         )
     }));

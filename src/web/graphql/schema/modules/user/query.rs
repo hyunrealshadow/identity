@@ -8,14 +8,12 @@ use identity_domain::global_id::GlobalId;
 use identity_domain::{authorization::ManagementScope, user::UserOid};
 
 use super::{
-    cursor::UserConnectionCursor,
     integration,
     types::{UserFilter, UserOrder},
 };
 use crate::graphql::schema::{
     authorization::request_context,
-    connection,
-    connection::ConnectionTotal,
+    connection::{self, ConnectionTotal, OpaqueCursor, page_args},
     error::app_error,
     management_guard::ManagementGuard,
     modules::account::{UserGlobalId, UserNode},
@@ -57,7 +55,7 @@ impl UserManagementQuery {
     #[graphql(
         guard = "ManagementGuard::new(ManagementScope::UsersRead, ManagementTarget::instance())",
         directive = access::apply(ManagementGuard::policy(ManagementScope::UsersRead)),
-        complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
+        complexity = "crate::graphql::schema::connection::page_complexity(first, last, child_complexity)"
     )]
     #[allow(clippy::too_many_arguments)]
     async fn users(
@@ -69,17 +67,18 @@ impl UserManagementQuery {
         after: Option<String>,
         #[graphql(validator(minimum = 1, maximum = 100))] last: Option<i32>,
         before: Option<String>,
-    ) -> Result<Connection<UserConnectionCursor, UserNode, ConnectionTotal>> {
+    ) -> Result<Connection<OpaqueCursor, UserNode, ConnectionTotal>> {
+        let args = page_args(ctx, first, after, last, before)?;
         let request = request_context(ctx)?;
         let filter = filter.unwrap_or_default();
         let page = integration::list_users(
             request,
             filter.clone(),
             order_by.unwrap_or_else(UserOrder::default_order),
-            first.map(|value| value as u32),
-            after,
-            last.map(|value| value as u32),
-            before,
+            args.first,
+            args.after,
+            args.last,
+            args.before,
         )
         .await
         .map_err(|error| app_error(ctx, error))?;
@@ -97,7 +96,7 @@ impl UserManagementQuery {
         );
         connection.edges.extend(page.items.into_iter().map(|item| {
             Edge::new(
-                UserConnectionCursor::from_backend(item.cursor),
+                OpaqueCursor::from_backend(item.cursor),
                 UserNode::managed(item.user),
             )
         }));

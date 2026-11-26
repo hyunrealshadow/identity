@@ -1,4 +1,5 @@
-use super::{super::resource::support::RbacConnectionCursor, types::ScopeNode};
+use super::types::ScopeNode;
+use crate::graphql::schema::connection::OpaqueCursor;
 use async_graphql::{
     Object,
     connection::{CursorType, PageInfo},
@@ -57,12 +58,12 @@ impl ScopeConnection {
 }
 
 pub(crate) struct ScopeEdge {
-    cursor: RbacConnectionCursor,
+    cursor: OpaqueCursor,
     node: ScopeNode,
 }
 
 impl ScopeEdge {
-    pub(crate) fn new(cursor: RbacConnectionCursor, node: ScopeNode) -> Self {
+    pub(crate) fn new(cursor: OpaqueCursor, node: ScopeNode) -> Self {
         Self { cursor, node }
     }
 }

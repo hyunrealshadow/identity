@@ -25,7 +25,7 @@ impl Query {
         let mut connection = ScopeConnection::new(false, true, 150);
         for index in 0..first {
             connection.edges.push(ScopeEdge::new(
-                RbacConnectionCursor::from_backend(format!("cursor-{index}")),
+                OpaqueCursor::from_backend(format!("cursor-{index}")),
                 ScopeNode::new(ScopeRecord {
                     oid: ScopeOid(Uuid::new_v4()),
                     resource_oid: None,

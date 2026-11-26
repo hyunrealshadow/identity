@@ -14,8 +14,8 @@ use identity_application::{
 };
 use identity_domain::rbac::ResourceOid;
 
-use super::support::{PageArgs, request_authority};
-use crate::graphql::schema::RequestContext;
+use super::support::request_authority;
+use crate::graphql::schema::{RequestContext, connection::PageArgs};
 
 pub(crate) async fn find_resource(
     request: &RequestContext,

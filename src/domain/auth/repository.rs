@@ -52,11 +52,7 @@ pub struct SessionSortKey {
 }
 
 /// Direction of a cursor page request.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum SessionPageDirection {
-    Forward,
-    Backward,
-}
+pub type SessionPageDirection = crate::pagination::PageDirection;
 
 /// One page of sessions with the cursors needed by the adapter.
 #[derive(Debug)]

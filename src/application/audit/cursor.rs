@@ -4,11 +4,11 @@ use identity_domain::{
     time_zone::TimeZone,
 };
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 use crate::{
     data_protection::DataProtector,
     error::{AppError, codes::audit},
+    pagination::{protect_json_cursors, sha256_hex, unprotect_json_cursor},
 };
 
 pub const AUDIT_CURSOR_PURPOSE: &str = "cursor:audit";
@@ -37,16 +37,14 @@ pub fn audit_filter_hash(
     time_zone: TimeZone,
     order: AuditEventOrder,
 ) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(normalized_query.as_bytes());
-    hasher.update([0]);
-    hasher.update(time_zone.name().as_bytes());
-    hasher.update([
-        0,
-        encode_order_field(order.field),
-        encode_order_dir(order.direction),
-    ]);
-    hex_encode(&hasher.finalize())
+    let mut bytes = Vec::with_capacity(normalized_query.len() + time_zone.name().len() + 4);
+    bytes.extend_from_slice(normalized_query.as_bytes());
+    bytes.push(0);
+    bytes.extend_from_slice(time_zone.name().as_bytes());
+    bytes.push(0);
+    bytes.push(encode_order_field(order.field));
+    bytes.push(encode_order_dir(order.direction));
+    sha256_hex(&bytes)
 }
 
 pub async fn encode_cursors(
@@ -63,9 +61,9 @@ pub async fn encode_cursors(
     let order_field = encode_order_field(order.field);
     let order_direction = encode_order_dir(order.direction);
 
-    let mut plaintexts = Vec::with_capacity(keys.len());
-    for key in keys {
-        let payload = AuditCursorPayload {
+    let payloads = keys
+        .iter()
+        .map(|key| AuditCursorPayload {
             version: AUDIT_CURSOR_VERSION,
             filter_hash: filter_hash.to_owned(),
             snapshot_at_micros,
@@ -73,13 +71,10 @@ pub async fn encode_cursors(
             order_direction,
             occurred_at_micros: key.occurred_at.timestamp_micros(),
             id: key.id,
-        };
-        let bytes = serde_json::to_vec(&payload).map_err(AppError::internal)?;
-        plaintexts.push(bytes);
-    }
+        })
+        .collect::<Vec<_>>();
 
-    protector
-        .protect_many(AUDIT_CURSOR_PURPOSE, &plaintexts)
+    protect_json_cursors(protector, AUDIT_CURSOR_PURPOSE, &payloads)
         .await
         .map_err(AppError::internal)
 }
@@ -90,16 +85,9 @@ pub async fn decode_cursor(
     expected_filter_hash: &str,
     expected_order: AuditEventOrder,
 ) -> Result<DecodedAuditCursor, AppError> {
-    let trimmed = token.trim();
-    if trimmed.is_empty() {
-        return Err(audit::error::InvalidCursor.into());
-    }
-    let bytes = protector
-        .unprotect(AUDIT_CURSOR_PURPOSE, trimmed)
+    let payload: AuditCursorPayload = unprotect_json_cursor(protector, AUDIT_CURSOR_PURPOSE, token)
         .await
         .map_err(|_| audit::error::InvalidCursor)?;
-    let payload: AuditCursorPayload =
-        serde_json::from_slice(&bytes).map_err(|_| audit::error::InvalidCursor)?;
 
     if payload.version != AUDIT_CURSOR_VERSION
         || payload.filter_hash != expected_filter_hash
@@ -134,14 +122,4 @@ const fn encode_order_dir(direction: AuditEventOrderDirection) -> u8 {
         AuditEventOrderDirection::Asc => 0,
         AuditEventOrderDirection::Desc => 1,
     }
-}
-
-fn hex_encode(bytes: &[u8]) -> String {
-    const HEX: &[u8; 16] = b"0123456789abcdef";
-    let mut out = String::with_capacity(bytes.len() * 2);
-    for &b in bytes {
-        out.push(HEX[(b >> 4) as usize] as char);
-        out.push(HEX[(b & 0x0f) as usize] as char);
-    }
-    out
 }

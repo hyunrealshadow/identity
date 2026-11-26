@@ -6,7 +6,7 @@ use identity_application::{
 use identity_domain::audit::{AuditEvent, AuditEventOid, AuditEventOrder};
 
 use super::types::AuditEventOrder as GraphqlAuditEventOrder;
-use crate::graphql::schema::{RequestContext, modules::resource::support::PageArgs};
+use crate::graphql::schema::{RequestContext, connection::PageArgs};
 
 pub(super) async fn list_events(
     request: &RequestContext,

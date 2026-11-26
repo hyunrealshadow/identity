@@ -30,7 +30,7 @@ use crate::{
         cursor::{
             CURSOR_KIND_ACCOUNT_PERMISSION, CURSOR_KIND_ACCOUNT_ROLE, CURSOR_KIND_CLIENT_SCOPE,
             CURSOR_KIND_EFFECTIVE, CURSOR_KIND_RESOURCE, CURSOR_KIND_ROLE, CURSOR_KIND_SCOPE,
-            CURSOR_KIND_USER_ROLE, CURSOR_KIND_USER_ROLE_GRANT, PageArguments, encode_cursor,
+            CURSOR_KIND_USER_ROLE, CURSOR_KIND_USER_ROLE_GRANT, PageArguments, encode_cursors,
             prepare_page,
         },
         model::{

@@ -7,24 +7,18 @@ const PLAINTEXT_SIZE: usize = 17;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct SessionCursor {
-    last_active_micros: i64,
+    last_active_at: DateTime<Utc>,
     id: i64,
 }
 
 impl SessionCursor {
     pub(super) fn new(last_active_at: DateTime<Utc>, id: i64) -> Self {
-        Self {
-            last_active_micros: last_active_at.timestamp_micros(),
-            id,
-        }
+        Self { last_active_at, id }
     }
 
     pub(super) fn into_sort_key(self) -> SessionSortKey {
         SessionSortKey {
-            last_active_at: Utc
-                .timestamp_micros(self.last_active_micros)
-                .single()
-                .expect("validated session cursor timestamp"),
+            last_active_at: self.last_active_at,
             id: self.id,
         }
     }
@@ -36,7 +30,7 @@ impl CursorPayload for SessionCursor {
     fn encode(&self) -> Vec<u8> {
         let mut bytes = Vec::with_capacity(PLAINTEXT_SIZE);
         bytes.push(VERSION);
-        bytes.extend_from_slice(&self.last_active_micros.to_be_bytes());
+        bytes.extend_from_slice(&self.last_active_at.timestamp_micros().to_be_bytes());
         bytes.extend_from_slice(&self.id.to_be_bytes());
         bytes
     }
@@ -45,19 +39,17 @@ impl CursorPayload for SessionCursor {
         if bytes.len() != PLAINTEXT_SIZE || bytes[0] != VERSION {
             return Err(InvalidCursor);
         }
-        let cursor = Self {
-            last_active_micros: i64::from_be_bytes(bytes[1..9].try_into().unwrap()),
-            id: i64::from_be_bytes(bytes[9..17].try_into().unwrap()),
-        };
-        if cursor.id <= 0
-            || Utc
-                .timestamp_micros(cursor.last_active_micros)
-                .single()
-                .is_none()
-        {
+        let micros_bytes: [u8; 8] = bytes[1..9].try_into().map_err(|_| InvalidCursor)?;
+        let id_bytes: [u8; 8] = bytes[9..17].try_into().map_err(|_| InvalidCursor)?;
+        let id = i64::from_be_bytes(id_bytes);
+        if id <= 0 {
             return Err(InvalidCursor);
         }
-        Ok(cursor)
+        let last_active_at = Utc
+            .timestamp_micros(i64::from_be_bytes(micros_bytes))
+            .single()
+            .ok_or(InvalidCursor)?;
+        Ok(Self { last_active_at, id })
     }
 }
 

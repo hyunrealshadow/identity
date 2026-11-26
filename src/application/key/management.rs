@@ -41,7 +41,7 @@ use crate::{
     observability::{BusinessEvent, EventSink, EventValue, NoopEventSink, error_outcome},
     rbac::{
         RbacManagementAuthority,
-        cursor::{PageArguments, RbacPageDirection, RbacSortKey, encode_cursor, prepare_page},
+        cursor::{PageArguments, RbacPageDirection, RbacSortKey, encode_cursors, prepare_page},
     },
     setting::management::validate_client_mutation_id,
 };
@@ -402,24 +402,32 @@ impl KeyManagementService {
             })
             .await
             .map_err(map_repository_error)?;
-        let mut items = Vec::with_capacity(data.items.len());
-        for record in data.items {
-            let cursor = encode_cursor(
-                self.data_protector.as_ref(),
-                CURSOR_KIND_KEY,
-                KEY_ORDER_CREATED_AT_DESC,
-                &prepared.filter_fingerprint,
-                &RbacSortKey::CreatedAt {
-                    created_at: record.created_at,
-                    tie: crate::rbac::cursor::RbacTie::Oid(Uuid::from(record.oid)),
-                },
-            )
-            .await?;
-            items.push(ManagedKeyPageItem {
+        let sort_keys = data
+            .items
+            .iter()
+            .map(|record| RbacSortKey::CreatedAt {
+                created_at: record.created_at,
+                tie: crate::rbac::cursor::RbacTie::Oid(Uuid::from(record.oid)),
+            })
+            .collect::<Vec<_>>();
+        let sort_key_refs = sort_keys.iter().collect::<Vec<_>>();
+        let cursors = encode_cursors(
+            self.data_protector.as_ref(),
+            CURSOR_KIND_KEY,
+            KEY_ORDER_CREATED_AT_DESC,
+            &prepared.filter_fingerprint,
+            &sort_key_refs,
+        )
+        .await?;
+        let items = data
+            .items
+            .into_iter()
+            .zip(cursors)
+            .map(|(record, cursor)| ManagedKeyPageItem {
                 view: self.view(record, now),
                 cursor,
-            });
-        }
+            })
+            .collect();
         Ok(ManagedKeyPage {
             items,
             has_previous_page: data.has_previous_page,

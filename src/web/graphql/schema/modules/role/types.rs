@@ -16,11 +16,8 @@ use super::super::{
         query,
         types::{GroupFilter, GroupNode, GroupOrder, LocalizedTextInput, LocalizedTextNode},
     },
-    localized, resource,
-    resource::{
-        support,
-        support::{RbacConnectionCursor, decode_oid, page_args},
-    },
+    localized,
+    resource::support::{decode_oid, decode_oids},
     role::user_role::{RoleUserConnection, UserRoleOrder, load_role_users},
     scope::{
         connection::ScopeConnection,
@@ -29,7 +26,9 @@ use super::super::{
     },
 };
 use crate::graphql::schema::{
-    authorization::request_context, connection::ConnectionTotal, management_guard::ManagementGuard,
+    authorization::request_context,
+    connection::{ConnectionTotal, OpaqueCursor, page_args},
+    management_guard::ManagementGuard,
 };
 
 pub(crate) use identity_domain::global_id::kind::Role as RoleGlobalId;
@@ -155,7 +154,7 @@ impl RoleNode {
         guard = "ManagementGuard::new(ManagementScope::GroupsRead, ManagementTarget::instance()).and(ManagementGuard::new(ManagementScope::RoleAssignmentsRead, ManagementTarget::instance()))",
         directive = access::apply(ManagementGuard::policy(ManagementScope::GroupsRead)),
         directive = access::apply(ManagementGuard::policy(ManagementScope::RoleAssignmentsRead)),
-        complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
+        complexity = "crate::graphql::schema::connection::page_complexity(first, last, child_complexity)"
     )]
     #[allow(clippy::too_many_arguments)]
     async fn groups(
@@ -167,10 +166,10 @@ impl RoleNode {
         after: Option<String>,
         #[graphql(validator(minimum = 1, maximum = 100))] last: Option<i32>,
         before: Option<String>,
-    ) -> GraphqlResult<Connection<RbacConnectionCursor, GroupNode, ConnectionTotal>> {
+    ) -> GraphqlResult<Connection<OpaqueCursor, GroupNode, ConnectionTotal>> {
         let mut filter = filter.unwrap_or_default();
         filter.role_id = Some(self.id.clone());
-        let page = support::page_args(ctx, first, after, last, before)?;
+        let page = page_args(ctx, first, after, last, before)?;
         query::load_group_connection(
             ctx,
             request_context(ctx)?,
@@ -186,7 +185,7 @@ impl RoleNode {
     #[graphql(
         guard = "ManagementGuard::new(ManagementScope::ScopesRead, ManagementTarget::instance())",
         directive = access::apply(ManagementGuard::policy(ManagementScope::ScopesRead)),
-        complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * (1 + child_complexity)"
+        complexity = "crate::graphql::schema::connection::nested_page_complexity(first, last, child_complexity)"
     )]
     #[allow(clippy::too_many_arguments)]
     async fn permissions(
@@ -218,7 +217,7 @@ impl RoleNode {
         guard = "ManagementGuard::new(ManagementScope::RoleAssignmentsRead, ManagementTarget::instance()).and(ManagementGuard::new(ManagementScope::UsersRead, ManagementTarget::instance()))",
         directive = access::apply(ManagementGuard::policy(ManagementScope::RoleAssignmentsRead)),
         directive = access::apply(ManagementGuard::policy(ManagementScope::UsersRead)),
-        complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
+        complexity = "crate::graphql::schema::connection::page_complexity(first, last, child_complexity)"
     )]
     #[allow(clippy::too_many_arguments)]
     async fn users(
@@ -347,6 +346,5 @@ pub(crate) fn decode_role_oid(ctx: &Context<'_>, id: &ID) -> GraphqlResult<RoleO
 }
 
 pub(crate) fn decode_scope_ids(ctx: &Context<'_>, ids: &[ID]) -> GraphqlResult<Vec<ScopeOid>> {
-    resource::support::decode_oids::<ScopeGlobalId>(ctx, ids)
-        .map(|ids| ids.into_iter().map(ScopeOid).collect())
+    decode_oids::<ScopeGlobalId>(ctx, ids).map(|ids| ids.into_iter().map(ScopeOid).collect())
 }

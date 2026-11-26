@@ -16,7 +16,6 @@ use super::super::{
         query,
         types::{GroupFilter, GroupNode, GroupOrder},
     },
-    resource::{support, support::RbacConnectionCursor},
     role::{
         connection::EffectivePermissionConnection,
         query as role_query,
@@ -30,7 +29,9 @@ use super::super::{
 };
 use crate::graphql::cursor::ProtectedCursor;
 use crate::graphql::schema::{
-    authorization::request_context, connection::ConnectionTotal, management_guard::ManagementGuard,
+    authorization::request_context,
+    connection::{self, ConnectionTotal, OpaqueCursor},
+    management_guard::ManagementGuard,
 };
 use identity_application::authorization::ManagementTarget;
 use identity_application::user::CredentialType;
@@ -105,7 +106,7 @@ impl UserNode {
         guard = "ManagementGuard::new(ManagementScope::GroupsRead, ManagementTarget::instance()).and(ManagementGuard::new(ManagementScope::GroupMembersRead, ManagementTarget::instance()))",
         directive = access::apply(ManagementGuard::policy(ManagementScope::GroupsRead)),
         directive = access::apply(ManagementGuard::policy(ManagementScope::GroupMembersRead)),
-        complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
+        complexity = "crate::graphql::schema::connection::page_complexity(first, last, child_complexity)"
     )]
     #[allow(clippy::too_many_arguments)]
     async fn groups(
@@ -117,10 +118,10 @@ impl UserNode {
         after: Option<String>,
         #[graphql(validator(minimum = 1, maximum = 100))] last: Option<i32>,
         before: Option<String>,
-    ) -> GraphqlResult<Connection<RbacConnectionCursor, GroupNode, ConnectionTotal>> {
+    ) -> GraphqlResult<Connection<OpaqueCursor, GroupNode, ConnectionTotal>> {
         let mut filter = filter.unwrap_or_default();
         filter.user_id = Some(self.id.clone());
-        let page = support::page_args(ctx, first, after, last, before)?;
+        let page = connection::page_args(ctx, first, after, last, before)?;
         query::load_group_connection(
             ctx,
             request_context(ctx)?,
@@ -140,7 +141,7 @@ impl UserNode {
         guard = "ManagementGuard::new(ManagementScope::RoleAssignmentsRead, ManagementTarget::instance()).and(ManagementGuard::new(ManagementScope::RolesRead, ManagementTarget::instance()))",
         directive = access::apply(ManagementGuard::policy(ManagementScope::RoleAssignmentsRead)),
         directive = access::apply(ManagementGuard::policy(ManagementScope::RolesRead)),
-        complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
+        complexity = "crate::graphql::schema::connection::page_complexity(first, last, child_complexity)"
     )]
     #[allow(clippy::too_many_arguments)]
     async fn roles(
@@ -154,7 +155,7 @@ impl UserNode {
         #[graphql(validator(minimum = 1, maximum = 100))] last: Option<i32>,
         before: Option<String>,
     ) -> GraphqlResult<UserRoleConnection> {
-        let page = support::page_args(ctx, first, after, last, before)?;
+        let page = connection::page_args(ctx, first, after, last, before)?;
         load_user_roles(
             ctx,
             request_context(ctx)?,
@@ -170,7 +171,7 @@ impl UserNode {
     #[graphql(
         guard = "ManagementGuard::new(ManagementScope::RoleAssignmentsRead, ManagementTarget::instance())",
         directive = access::apply(ManagementGuard::policy(ManagementScope::RoleAssignmentsRead)),
-        complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * (1 + child_complexity)"
+        complexity = "crate::graphql::schema::connection::nested_page_complexity(first, last, child_complexity)"
     )]
     #[allow(clippy::too_many_arguments)]
     /// Permissions the user holds on one API resource. `source` keeps only
@@ -187,7 +188,7 @@ impl UserNode {
         #[graphql(validator(minimum = 1, maximum = 100))] last: Option<i32>,
         before: Option<String>,
     ) -> GraphqlResult<EffectivePermissionConnection> {
-        let page = support::page_args(ctx, first, after, last, before)?;
+        let page = connection::page_args(ctx, first, after, last, before)?;
         let resource = role_query::decode_resource_oid(ctx, &resource_id)?;
         role_query::load_effective_permission_connection(
             ctx,
@@ -393,15 +394,15 @@ impl UserNode {
     /// The user's active sessions, most recently active first.
     #[graphql(
         directive = access::apply(ManagementGuard::policy(ManagementScope::UsersRead)),
-        complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
+        complexity = "crate::graphql::schema::connection::page_complexity(first, last, child_complexity)"
     )]
     async fn sessions(
         &self,
         ctx: &Context<'_>,
         after: Option<String>,
         before: Option<String>,
-        #[graphql(validator(minimum = 1))] first: Option<i32>,
-        #[graphql(validator(minimum = 1))] last: Option<i32>,
+        #[graphql(validator(minimum = 1, maximum = 100))] first: Option<i32>,
+        #[graphql(validator(minimum = 1, maximum = 100))] last: Option<i32>,
     ) -> GraphqlResult<Connection<ProtectedCursor<SessionCursor>, SessionNode>> {
         self.ensure_management_metadata(ctx).await?;
         session_connection(

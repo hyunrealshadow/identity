@@ -181,21 +181,20 @@ fn active_session_page_query(user_oid: Uuid) -> SelectTwo<session::Entity, user:
 }
 
 fn build_session_page(
-    mut items: Vec<SessionPageItem>,
+    items: Vec<SessionPageItem>,
     limit: usize,
     direction: SessionPageDirection,
     has_after_cursor: bool,
     has_before_cursor: bool,
 ) -> SessionPage {
-    let has_more = items.len() > limit;
-    items.truncate(limit);
-    if direction == SessionPageDirection::Backward {
-        items.reverse();
-    }
-    let (has_previous_page, has_next_page) = match direction {
-        SessionPageDirection::Forward => (has_after_cursor, has_more || has_before_cursor),
-        SessionPageDirection::Backward => (has_more || has_after_cursor, has_before_cursor),
-    };
+    let (items, has_previous_page, has_next_page) =
+        identity_domain::pagination::finalize_keyset_page(
+            direction,
+            items,
+            limit,
+            has_after_cursor,
+            has_before_cursor,
+        );
     SessionPage {
         items,
         has_previous_page,

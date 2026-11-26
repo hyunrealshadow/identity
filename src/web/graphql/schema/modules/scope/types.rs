@@ -18,7 +18,7 @@ use uuid::Uuid;
 use super::super::{
     resource::{
         integration,
-        support::{RbacConnectionCursor, decode_oid, page_args},
+        support::decode_oid,
         types,
         types::{ResourceGlobalId, ResourceNode},
     },
@@ -28,7 +28,9 @@ use super::super::{
     },
 };
 use crate::graphql::schema::{
-    authorization::request_context, connection::ConnectionTotal, error::app_error,
+    authorization::request_context,
+    connection::{ConnectionTotal, OpaqueCursor, page_args},
+    error::app_error,
     management_guard::ManagementGuard,
 };
 use async_graphql::connection::Connection;
@@ -241,7 +243,7 @@ impl ScopeNode {
     #[graphql(
         guard = "ManagementGuard::new(ManagementScope::RolesRead, ManagementTarget::instance())",
         directive = access::apply(ManagementGuard::policy(ManagementScope::RolesRead)),
-        complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
+        complexity = "crate::graphql::schema::connection::page_complexity(first, last, child_complexity)"
     )]
     async fn roles(
         &self,
@@ -250,7 +252,7 @@ impl ScopeNode {
         after: Option<String>,
         #[graphql(validator(minimum = 1, maximum = 100))] last: Option<i32>,
         before: Option<String>,
-    ) -> GraphqlResult<Connection<RbacConnectionCursor, RoleNode, ConnectionTotal>> {
+    ) -> GraphqlResult<Connection<OpaqueCursor, RoleNode, ConnectionTotal>> {
         let page = page_args(ctx, first, after, last, before)?;
         load_role_connection(
             ctx,

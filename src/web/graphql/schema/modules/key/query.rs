@@ -11,10 +11,9 @@ use super::types::{KeyFilter, KeyNode, SigningKeyAlgorithm};
 use crate::graphql::schema::{
     access::access,
     authorization::request_context,
-    connection::{self, ConnectionTotal},
+    connection::{self, ConnectionTotal, OpaqueCursor, page_args},
     error::app_error,
     management_guard::ManagementGuard,
-    modules::resource::support::{RbacConnectionCursor, page_args},
 };
 
 #[derive(Default)]
@@ -39,7 +38,7 @@ impl KeyQuery {
     #[graphql(
         guard = "ManagementGuard::new(ManagementScope::KeysRead, ManagementTarget::instance())",
         directive = access::apply(ManagementGuard::policy(ManagementScope::KeysRead)),
-        complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
+        complexity = "crate::graphql::schema::connection::page_complexity(first, last, child_complexity)"
     )]
     async fn keys(
         &self,
@@ -49,7 +48,7 @@ impl KeyQuery {
         after: Option<String>,
         #[graphql(validator(minimum = 1, maximum = 100))] last: Option<i32>,
         before: Option<String>,
-    ) -> Result<Connection<RbacConnectionCursor, KeyNode, ConnectionTotal>> {
+    ) -> Result<Connection<OpaqueCursor, KeyNode, ConnectionTotal>> {
         let page = page_args(ctx, first, after, last, before)?;
         let request = request_context(ctx)?;
         let filter = filter.unwrap_or_default().into_application();
@@ -80,7 +79,7 @@ impl KeyQuery {
             .edges
             .extend(result.items.into_iter().map(|item| {
                 Edge::new(
-                    RbacConnectionCursor::from_backend(item.cursor),
+                    OpaqueCursor::from_backend(item.cursor),
                     KeyNode::new(item.view),
                 )
             }));

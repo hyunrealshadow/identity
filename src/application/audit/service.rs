@@ -14,6 +14,7 @@ use super::cursor::{audit_filter_hash, decode_cursor, encode_cursors};
 use crate::{
     data_protection::DataProtector,
     error::{AppError, codes::audit},
+    pagination::{PaginationError, RawPageArgs, validate_page_arguments},
 };
 
 pub const DEFAULT_AUDIT_PAGE_SIZE: usize = 20;
@@ -158,49 +159,29 @@ impl AuditQueryService {
 fn validate_pagination(
     request: &AuditEventPageRequest,
 ) -> Result<(AuditEventPageDirection, Option<&str>, usize), AppError> {
-    if request.first.is_some() && request.last.is_some() {
-        return Err(audit::error::InvalidPageSize::new(MAX_AUDIT_PAGE_SIZE).into());
-    }
-    if request.first.is_some() && request.before.is_some() {
-        return Err(audit::error::InvalidCursor.into());
-    }
-    if request.last.is_some() && request.after.is_some() {
-        return Err(audit::error::InvalidCursor.into());
-    }
-    if request.after.is_some() && request.before.is_some() {
-        return Err(audit::error::InvalidCursor.into());
-    }
-
-    let direction = if request.last.is_some() || request.before.is_some() {
-        AuditEventPageDirection::Backward
-    } else {
-        AuditEventPageDirection::Forward
-    };
-
-    let raw_limit = match direction {
-        AuditEventPageDirection::Forward => request.first,
-        AuditEventPageDirection::Backward => request.last,
-    };
-
-    let limit = match raw_limit {
-        None => DEFAULT_AUDIT_PAGE_SIZE,
-        Some(value) if value < 1 || value as usize > MAX_AUDIT_PAGE_SIZE => {
-            let field = if request.first.is_some() {
-                "first"
-            } else {
-                "last"
-            };
-            return Err(audit::error::InvalidPageSize::new(MAX_AUDIT_PAGE_SIZE).with_field(field));
+    let validated = validate_page_arguments(
+        RawPageArgs::from_i32(
+            request.first,
+            request.after.as_deref(),
+            request.last,
+            request.before.as_deref(),
+        ),
+        DEFAULT_AUDIT_PAGE_SIZE,
+        MAX_AUDIT_PAGE_SIZE,
+    )
+    .map_err(|error| match error {
+        PaginationError::ConflictingArguments { both_sizes: true } => {
+            audit::error::InvalidPageSize::new(MAX_AUDIT_PAGE_SIZE).into()
         }
-        Some(value) => value as usize,
-    };
-
-    let cursor = match direction {
-        AuditEventPageDirection::Forward => request.after.as_deref(),
-        AuditEventPageDirection::Backward => request.before.as_deref(),
-    };
-
-    Ok((direction, cursor, limit))
+        PaginationError::ConflictingArguments { both_sizes: false } => {
+            audit::error::InvalidCursor.into()
+        }
+        PaginationError::InvalidPageSize { field, max } => {
+            audit::error::InvalidPageSize::new(max).with_field(field)
+        }
+    })?;
+    let cursor = validated.after.or(validated.before);
+    Ok((validated.direction, cursor, validated.limit))
 }
 
 fn normalize_query(raw: Option<&str>) -> String {

@@ -7,11 +7,13 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 use crate::{
     data_protection::DataProtector,
     error::{AppError, codes::user_management},
+    pagination::{
+        CursorCodecError, cursor_fingerprint, protect_json_cursors, unprotect_json_cursor,
+    },
     user::management::{
         model::{UserFilter, UserOrder},
         repository::UserSortKey,
@@ -80,49 +82,60 @@ pub(crate) fn filter_fingerprint(filter: &NormalizedFilter, order: UserOrder) ->
         created_before: &filter.created_before,
         order: order.as_u8(),
     };
-    let encoded = serde_json::to_vec(&payload).unwrap_or_default();
-    let digest = Sha256::digest(encoded);
-    let mut value = String::with_capacity(digest.len() * 2);
-    for byte in digest {
-        use std::fmt::Write as _;
-        let _ = write!(value, "{byte:02x}");
-    }
-    value
+    cursor_fingerprint(&payload).unwrap_or_default()
 }
 
-pub(crate) async fn encode_cursor(
+fn map_cursor_codec_error(error: CursorCodecError) -> AppError {
+    match error {
+        CursorCodecError::EmptyToken => user_management::error::InvalidCursor.into_error(),
+        CursorCodecError::Serialize(source) | CursorCodecError::Deserialize(source) => {
+            user_management::error::InvalidCursor
+                .into_error()
+                .with_source(source)
+        }
+        CursorCodecError::Protect(source) | CursorCodecError::Unprotect(source) => {
+            user_management::error::InvalidCursor
+                .into_error()
+                .with_source(source)
+        }
+    }
+}
+
+pub(crate) async fn encode_cursors(
     protector: &dyn DataProtector,
     filter: &NormalizedFilter,
     order: UserOrder,
-    sort_key: &UserSortKey,
-) -> Result<String, AppError> {
-    let payload = match sort_key {
-        UserSortKey::CreatedAt { created_at, id } => CursorPayload {
-            v: USER_CURSOR_VERSION,
-            order: order.as_u8(),
-            filter: filter_fingerprint(filter, order),
-            id: *id,
-            created_at_micros: Some(created_at.timestamp_micros()),
-            name_normalized: None,
-        },
-        UserSortKey::Username {
-            name_normalized,
-            id,
-        } => CursorPayload {
-            v: USER_CURSOR_VERSION,
-            order: order.as_u8(),
-            filter: filter_fingerprint(filter, order),
-            id: *id,
-            created_at_micros: None,
-            name_normalized: Some(name_normalized.clone()),
-        },
-    };
-    let bytes =
-        serde_json::to_vec(&payload).map_err(user_management::error::InvalidCursor::map_source())?;
-    protector
-        .protect(USER_CURSOR_PURPOSE, &bytes)
+    sort_keys: &[&UserSortKey],
+) -> Result<Vec<String>, AppError> {
+    let fingerprint = filter_fingerprint(filter, order);
+    let order_code = order.as_u8();
+    let payloads = sort_keys
+        .iter()
+        .map(|sort_key| match sort_key {
+            UserSortKey::CreatedAt { created_at, id } => CursorPayload {
+                v: USER_CURSOR_VERSION,
+                order: order_code,
+                filter: fingerprint.clone(),
+                id: *id,
+                created_at_micros: Some(created_at.timestamp_micros()),
+                name_normalized: None,
+            },
+            UserSortKey::Username {
+                name_normalized,
+                id,
+            } => CursorPayload {
+                v: USER_CURSOR_VERSION,
+                order: order_code,
+                filter: fingerprint.clone(),
+                id: *id,
+                created_at_micros: None,
+                name_normalized: Some(name_normalized.clone()),
+            },
+        })
+        .collect::<Vec<_>>();
+    protect_json_cursors(protector, USER_CURSOR_PURPOSE, &payloads)
         .await
-        .map_err(user_management::error::InvalidCursor::map_source())
+        .map_err(map_cursor_codec_error)
 }
 
 pub(crate) async fn decode_cursor(
@@ -132,12 +145,9 @@ pub(crate) async fn decode_cursor(
     token: &str,
 ) -> Result<UserSortKey, AppError> {
     let invalid = || user_management::error::InvalidCursor.into_error();
-    let bytes = protector
-        .unprotect(USER_CURSOR_PURPOSE, token)
+    let payload: CursorPayload = unprotect_json_cursor(protector, USER_CURSOR_PURPOSE, token)
         .await
-        .map_err(user_management::error::InvalidCursor::map_source())?;
-    let payload: CursorPayload = serde_json::from_slice(&bytes)
-        .map_err(user_management::error::InvalidCursor::map_source())?;
+        .map_err(map_cursor_codec_error)?;
     if payload.v != USER_CURSOR_VERSION
         || payload.order != order.as_u8()
         || payload.filter != filter_fingerprint(filter, order)

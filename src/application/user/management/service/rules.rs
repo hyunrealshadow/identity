@@ -15,17 +15,6 @@ pub(super) fn reject_self_credential_action(
     Ok(())
 }
 
-pub(super) fn page_conflict() -> AppError {
-    user_management::error::PageArgumentsConflict.into()
-}
-
-pub(super) fn validate_page_size(value: u32, field: &'static str) -> Result<usize, AppError> {
-    if !(1..=MAX_PAGE_SIZE).contains(&value) {
-        return Err(user_management::error::PageSizeInvalid::new(MAX_PAGE_SIZE).with_field(field));
-    }
-    Ok(value as usize)
-}
-
 /// Normalize an optional audit annotation shared by every user management
 /// mutation. Blank input becomes an empty reason; over-long supplied text is
 /// rejected.

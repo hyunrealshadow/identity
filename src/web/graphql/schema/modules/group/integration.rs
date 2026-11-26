@@ -13,8 +13,8 @@ use identity_application::{
 };
 use identity_domain::rbac::GroupOid;
 
-use super::super::resource::support::{PageArgs, request_authority};
-use crate::graphql::schema::RequestContext;
+use super::super::resource::support::request_authority;
+use crate::graphql::schema::{RequestContext, connection::PageArgs};
 
 pub(crate) async fn find_group(
     request: &RequestContext,

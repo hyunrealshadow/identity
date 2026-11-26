@@ -40,21 +40,28 @@ impl RbacManagementService {
             })
             .await
             .map_err(map_repository_error)?;
-        let mut items = Vec::with_capacity(data.items.len());
-        for entry in data.items {
-            let cursor = encode_cursor(
-                self.data_protector.as_ref(),
-                CURSOR_KIND_USER_ROLE_GRANT,
-                order.as_u8(),
-                &prepared.filter_fingerprint,
-                &entry.sort_key,
-            )
-            .await?;
-            items.push(UserRoleGrantPageItem {
+        let sort_keys = data
+            .items
+            .iter()
+            .map(|entry| &entry.sort_key)
+            .collect::<Vec<_>>();
+        let cursors = encode_cursors(
+            self.data_protector.as_ref(),
+            CURSOR_KIND_USER_ROLE_GRANT,
+            order.as_u8(),
+            &prepared.filter_fingerprint,
+            &sort_keys,
+        )
+        .await?;
+        let items = data
+            .items
+            .into_iter()
+            .zip(cursors)
+            .map(|(entry, cursor)| UserRoleGrantPageItem {
                 grant: entry.grant,
                 cursor,
-            });
-        }
+            })
+            .collect();
         Ok(UserRoleGrantPage {
             items,
             has_previous_page: data.has_previous_page,
@@ -139,21 +146,28 @@ impl RbacManagementService {
             })
             .await
             .map_err(map_repository_error)?;
-        let mut items = Vec::with_capacity(data.items.len());
-        for entry in data.items {
-            let cursor = encode_cursor(
-                self.data_protector.as_ref(),
-                CURSOR_KIND_ACCOUNT_ROLE,
-                order.as_u8(),
-                &prepared.filter_fingerprint,
-                &entry.sort_key,
-            )
-            .await?;
-            items.push(AccountRolePageItem {
+        let sort_keys = data
+            .items
+            .iter()
+            .map(|entry| &entry.sort_key)
+            .collect::<Vec<_>>();
+        let cursors = encode_cursors(
+            self.data_protector.as_ref(),
+            CURSOR_KIND_ACCOUNT_ROLE,
+            order.as_u8(),
+            &prepared.filter_fingerprint,
+            &sort_keys,
+        )
+        .await?;
+        let items = data
+            .items
+            .into_iter()
+            .zip(cursors)
+            .map(|(entry, cursor)| AccountRolePageItem {
                 grant: entry.grant,
                 cursor,
-            });
-        }
+            })
+            .collect();
         Ok(AccountRolePage {
             items,
             has_previous_page: data.has_previous_page,
@@ -201,21 +215,28 @@ impl RbacManagementService {
             })
             .await
             .map_err(map_repository_error)?;
-        let mut items = Vec::with_capacity(data.items.len());
-        for entry in data.items {
-            let cursor = encode_cursor(
-                self.data_protector.as_ref(),
-                CURSOR_KIND_USER_ROLE,
-                order.as_u8(),
-                &prepared.filter_fingerprint,
-                &entry.sort_key,
-            )
-            .await?;
-            items.push(UserRolePageItem {
+        let sort_keys = data
+            .items
+            .iter()
+            .map(|entry| &entry.sort_key)
+            .collect::<Vec<_>>();
+        let cursors = encode_cursors(
+            self.data_protector.as_ref(),
+            CURSOR_KIND_USER_ROLE,
+            order.as_u8(),
+            &prepared.filter_fingerprint,
+            &sort_keys,
+        )
+        .await?;
+        let items = data
+            .items
+            .into_iter()
+            .zip(cursors)
+            .map(|(entry, cursor)| UserRolePageItem {
                 record: entry.record,
                 cursor,
-            });
-        }
+            })
+            .collect();
         Ok(UserRolePage {
             items,
             has_previous_page: data.has_previous_page,
@@ -271,21 +292,28 @@ impl RbacManagementService {
             })
             .await
             .map_err(map_repository_error)?;
-        let mut items = Vec::with_capacity(data.items.len());
-        for entry in data.items {
-            let cursor = encode_cursor(
-                self.data_protector.as_ref(),
-                CURSOR_KIND_EFFECTIVE,
-                order.as_u8(),
-                &prepared.filter_fingerprint,
-                &entry.sort_key,
-            )
-            .await?;
-            items.push(EffectivePermissionPageItem {
+        let sort_keys = data
+            .items
+            .iter()
+            .map(|entry| &entry.sort_key)
+            .collect::<Vec<_>>();
+        let cursors = encode_cursors(
+            self.data_protector.as_ref(),
+            CURSOR_KIND_EFFECTIVE,
+            order.as_u8(),
+            &prepared.filter_fingerprint,
+            &sort_keys,
+        )
+        .await?;
+        let items = data
+            .items
+            .into_iter()
+            .zip(cursors)
+            .map(|(entry, cursor)| EffectivePermissionPageItem {
                 record: entry.record,
                 cursor,
-            });
-        }
+            })
+            .collect();
         Ok(EffectivePermissionPage {
             items,
             has_previous_page: data.has_previous_page,
@@ -341,21 +369,28 @@ impl RbacManagementService {
             })
             .await
             .map_err(map_repository_error)?;
-        let mut items = Vec::with_capacity(data.items.len());
-        for entry in data.items {
-            let cursor = encode_cursor(
-                self.data_protector.as_ref(),
-                CURSOR_KIND_ACCOUNT_PERMISSION,
-                order.as_u8(),
-                &prepared.filter_fingerprint,
-                &entry.sort_key,
-            )
-            .await?;
-            items.push(AccountPermissionPageItem {
+        let sort_keys = data
+            .items
+            .iter()
+            .map(|entry| &entry.sort_key)
+            .collect::<Vec<_>>();
+        let cursors = encode_cursors(
+            self.data_protector.as_ref(),
+            CURSOR_KIND_ACCOUNT_PERMISSION,
+            order.as_u8(),
+            &prepared.filter_fingerprint,
+            &sort_keys,
+        )
+        .await?;
+        let items = data
+            .items
+            .into_iter()
+            .zip(cursors)
+            .map(|(entry, cursor)| AccountPermissionPageItem {
                 record: entry.record,
                 cursor,
-            });
-        }
+            })
+            .collect();
         Ok(AccountPermissionPage {
             items,
             has_previous_page: data.has_previous_page,

@@ -16,12 +16,9 @@ use identity_application::authorization::ManagementTarget;
 use identity_domain::{authorization::ManagementScope, user::UserOid};
 use uuid::Uuid;
 
-use super::{
-    account::UserNode, resource::support::RbacConnectionCursor,
-    user::integration as user_integration,
-};
+use super::{account::UserNode, user::integration as user_integration};
 use crate::graphql::schema::{
-    access::access, authorization::request_context, error::app_error,
+    access::access, authorization::request_context, connection::OpaqueCursor, error::app_error,
     management_guard::ManagementGuard,
 };
 
@@ -83,7 +80,7 @@ impl RelationFacts {
 
 /// Connection whose edges carry relation facts and point at the related node.
 pub(crate) type RelationConnection<Node, Fields, Name, EdgeName> =
-    Connection<RbacConnectionCursor, Node, Fields, RelationFacts, Name, EdgeName>;
+    Connection<OpaqueCursor, Node, Fields, RelationFacts, Name, EdgeName>;
 
 /// Current version of the single parent whose relations a connection lists.
 /// Callers pass it as the expected version when changing those relations.

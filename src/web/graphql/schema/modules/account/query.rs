@@ -12,10 +12,10 @@ use super::{
 };
 use crate::graphql::schema::{
     authorization::{ScopeGuard, UserPrincipalGuard, request_context},
+    connection::page_args,
     error::app_error,
     modules::{
         group::types::GroupOrder,
-        resource::support::page_args,
         role::user_role::{AuthorizationSource, EffectivePermissionOrder, UserRoleOrder},
     },
 };
@@ -59,7 +59,7 @@ impl AccountQuery {
     #[graphql(
         guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::UserRead))",
         directive = access::apply(ScopeGuard::policy(ApiScope::UserRead)),
-        complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * (1 + child_complexity)"
+        complexity = "crate::graphql::schema::connection::nested_page_complexity(first, last, child_complexity)"
     )]
     async fn account_groups(
         &self,
@@ -86,7 +86,7 @@ impl AccountQuery {
     #[graphql(
         guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::UserRead))",
         directive = access::apply(ScopeGuard::policy(ApiScope::UserRead)),
-        complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * (1 + child_complexity)"
+        complexity = "crate::graphql::schema::connection::nested_page_complexity(first, last, child_complexity)"
     )]
     #[allow(clippy::too_many_arguments)]
     async fn account_roles(
@@ -116,7 +116,7 @@ impl AccountQuery {
     #[graphql(
         guard = "UserPrincipalGuard.and(ScopeGuard::new(ApiScope::UserRead))",
         directive = access::apply(ScopeGuard::policy(ApiScope::UserRead)),
-        complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * (1 + child_complexity)"
+        complexity = "crate::graphql::schema::connection::nested_page_complexity(first, last, child_complexity)"
     )]
     #[allow(clippy::too_many_arguments)]
     async fn account_permissions(

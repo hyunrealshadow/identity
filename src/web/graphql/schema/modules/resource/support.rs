@@ -1,14 +1,13 @@
 //! Shared adapter support for the flat business-RBAC roots.
 //!
-//! Global IDs, cursor wrapping, page-argument validation and request authority
-//! construction are identical for every RBAC functional module. Keeping them in
-//! one place prevents one root from silently accepting a different page shape or
-//! authority snapshot than its siblings.
+//! Global IDs, audit reasons, and request authority construction are identical
+//! for every RBAC functional module. Keeping them in one place prevents one
+//! root from silently accepting a different shape or authority snapshot than
+//! its siblings.
 
 use std::{collections::BTreeSet, result::Result as StdResult};
 
-use crate::graphql::cursor::InvalidCursor;
-use async_graphql::{Context, ID, Result, connection::CursorType};
+use async_graphql::{Context, ID, Result};
 use identity_application::{
     error::{
         AppError,
@@ -23,75 +22,6 @@ use identity_domain::{
 use uuid::Uuid;
 
 use crate::graphql::schema::{RequestContext, error::app_error};
-
-const MAX_CURSOR_LENGTH: usize = 512;
-
-/// Opaque, service-minted RBAC cursor.
-///
-/// The application service binds the token to the normalized filter and order;
-/// the adapter only enforces the same syntactic bounds as the P2 user cursor.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct RbacConnectionCursor(String);
-
-impl RbacConnectionCursor {
-    pub(crate) fn from_backend(token: String) -> Self {
-        Self(token)
-    }
-}
-
-impl CursorType for RbacConnectionCursor {
-    type Error = InvalidCursor;
-
-    fn decode_cursor(value: &str) -> StdResult<Self, Self::Error> {
-        if value.is_empty()
-            || value.len() > MAX_CURSOR_LENGTH
-            || !value
-                .bytes()
-                .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
-        {
-            return Err(InvalidCursor);
-        }
-        Ok(Self(value.to_owned()))
-    }
-
-    fn encode_cursor(&self) -> String {
-        self.0.clone()
-    }
-}
-
-#[derive(Debug, Clone, Default)]
-pub(crate) struct PageArgs {
-    pub(crate) first: Option<u32>,
-    pub(crate) after: Option<String>,
-    pub(crate) last: Option<u32>,
-    pub(crate) before: Option<String>,
-}
-
-/// Reject conflicting page arguments before reaching the application service.
-///
-/// Native validators already bound `first`/`last` to 1..=100. The service
-/// repeats the same checks so a non-GraphQL caller cannot bypass them.
-pub(crate) fn page_args(
-    ctx: &Context<'_>,
-    first: Option<i32>,
-    after: Option<String>,
-    last: Option<i32>,
-    before: Option<String>,
-) -> Result<PageArgs> {
-    let conflict = first.is_some() && last.is_some()
-        || after.is_some() && before.is_some()
-        || first.is_some() && before.is_some()
-        || last.is_some() && after.is_some();
-    if conflict {
-        return Err(app_error(ctx, rbac::error::PageArgumentsConflict));
-    }
-    Ok(PageArgs {
-        first: first.map(|value| value as u32),
-        after,
-        last: last.map(|value| value as u32),
-        before,
-    })
-}
 
 pub(crate) fn decode_oid<T: GlobalIdType>(ctx: &Context<'_>, id: &ID) -> Result<Uuid> {
     GlobalId::<T>::decode(id.as_str())
@@ -170,31 +100,4 @@ pub(crate) async fn request_authority(
         request.claims.client_oid,
         boundary,
     ))
-}
-
-#[cfg(test)]
-mod tests {
-    use async_graphql::connection::CursorType;
-
-    use super::RbacConnectionCursor;
-
-    #[test]
-    fn cursor_wrapper_preserves_the_application_token() {
-        let token = "Abc-123_xyz".to_owned();
-        let cursor = RbacConnectionCursor::from_backend(token.clone());
-        assert_eq!(cursor.encode_cursor(), token);
-        assert_eq!(
-            RbacConnectionCursor::decode_cursor(&token)
-                .expect("valid token")
-                .encode_cursor(),
-            token
-        );
-    }
-
-    #[test]
-    fn cursor_wrapper_rejects_invalid_syntax() {
-        assert!(RbacConnectionCursor::decode_cursor("").is_err());
-        assert!(RbacConnectionCursor::decode_cursor("not/a/cursor").is_err());
-        assert!(RbacConnectionCursor::decode_cursor(&"a".repeat(513)).is_err());
-    }
 }

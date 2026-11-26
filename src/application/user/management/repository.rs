@@ -38,11 +38,7 @@ pub enum UserSortKey {
     Username { name_normalized: String, id: i64 },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum UserPageDirection {
-    Forward,
-    Backward,
-}
+pub type UserPageDirection = crate::pagination::PageDirection;
 
 /// Normalized query consumed by the repository. Filters are already trimmed,
 /// lower-cased and length-checked.

@@ -55,10 +55,7 @@ pub(crate) enum CursorComparison {
 
 #[must_use]
 pub(crate) fn order_is_descending(order_descending: bool, direction: RbacPageDirection) -> bool {
-    match direction {
-        RbacPageDirection::Forward => order_descending,
-        RbacPageDirection::Backward => !order_descending,
-    }
+    direction.order_is_descending(order_descending)
 }
 
 #[must_use]
@@ -68,10 +65,7 @@ pub(crate) fn page_flags(
     after_present: bool,
     before_present: bool,
 ) -> (bool, bool) {
-    match direction {
-        RbacPageDirection::Forward => (after_present, has_more),
-        RbacPageDirection::Backward => (has_more, before_present),
-    }
+    direction.page_flags(has_more, after_present, before_present)
 }
 
 /// Build the stable `(sort column, unique tie-breaker)` keyset predicate.

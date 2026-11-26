@@ -8,11 +8,13 @@ use identity_domain::authorization::ManagementScope;
 
 use super::{
     integration,
-    support::{RbacConnectionCursor, page_args},
     types::{ResourceFilter, ResourceNode, ResourceOrder, decode_resource_oid},
 };
 use crate::graphql::schema::{
-    authorization::request_context, error::app_error, management_guard::ManagementGuard,
+    authorization::request_context,
+    connection::{OpaqueCursor, page_args},
+    error::app_error,
+    management_guard::ManagementGuard,
 };
 
 #[derive(Default)]
@@ -36,7 +38,7 @@ impl ResourceQuery {
     #[graphql(
         guard = "ManagementGuard::new(ManagementScope::ResourcesRead, ManagementTarget::instance())",
         directive = access::apply(ManagementGuard::policy(ManagementScope::ResourcesRead)),
-        complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
+        complexity = "crate::graphql::schema::connection::page_complexity(first, last, child_complexity)"
     )]
     #[allow(clippy::too_many_arguments)]
     async fn resources(
@@ -48,7 +50,7 @@ impl ResourceQuery {
         after: Option<String>,
         #[graphql(validator(minimum = 1, maximum = 100))] last: Option<i32>,
         before: Option<String>,
-    ) -> Result<Connection<RbacConnectionCursor, ResourceNode>> {
+    ) -> Result<Connection<OpaqueCursor, ResourceNode>> {
         let page = page_args(ctx, first, after, last, before)?;
         let request = request_context(ctx)?;
         let page = integration::list_resources(
@@ -63,7 +65,7 @@ impl ResourceQuery {
         let mut connection = Connection::new(page.has_previous_page, page.has_next_page);
         connection.edges.extend(page.items.into_iter().map(|item| {
             Edge::new(
-                RbacConnectionCursor::from_backend(item.cursor),
+                OpaqueCursor::from_backend(item.cursor),
                 ResourceNode::new(item.record),
             )
         }));

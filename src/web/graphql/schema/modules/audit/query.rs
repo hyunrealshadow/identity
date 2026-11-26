@@ -21,14 +21,10 @@ use super::{
 use crate::graphql::schema::{
     access::access,
     authorization::request_context,
-    connection::{self, ConnectionTotal},
+    connection::{self, ConnectionTotal, OpaqueCursor, page_args},
     error::app_error,
     management_guard::ManagementGuard,
-    modules::{
-        client,
-        resource::support::{RbacConnectionCursor, page_args},
-        user,
-    },
+    modules::{client, user},
 };
 
 #[derive(Default)]
@@ -52,7 +48,7 @@ impl AuditQuery {
     #[graphql(
         guard = "ManagementGuard::new(ManagementScope::AuditRead, ManagementTarget::instance())",
         directive = access::apply(ManagementGuard::policy(ManagementScope::AuditRead)),
-        complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
+        complexity = "crate::graphql::schema::connection::page_complexity(first, last, child_complexity)"
     )]
     #[allow(clippy::too_many_arguments)]
     async fn audit_events(
@@ -65,7 +61,7 @@ impl AuditQuery {
         after: Option<String>,
         #[graphql(validator(minimum = 1, maximum = 100))] last: Option<i32>,
         before: Option<String>,
-    ) -> Result<Connection<RbacConnectionCursor, AuditEventNode, ConnectionTotal>> {
+    ) -> Result<Connection<OpaqueCursor, AuditEventNode, ConnectionTotal>> {
         let page = page_args(ctx, first, after, last, before)?;
         let request = request_context(ctx)?;
         let order = order_by.unwrap_or_else(AuditEventOrder::default_order);
@@ -163,7 +159,7 @@ impl AuditQuery {
                     client_loaded: want_clients,
                 };
                 Edge::new(
-                    RbacConnectionCursor::from_backend(item.cursor),
+                    OpaqueCursor::from_backend(item.cursor),
                     AuditEventNode::with_preloaded_actor(item.event, preloaded),
                 )
             }));

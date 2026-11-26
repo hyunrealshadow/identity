@@ -25,7 +25,7 @@ use uuid::Uuid;
 use super::{
     super::{
         group::types::{LocalizedTextInput, LocalizedTextNode},
-        resource::support::{decode_oid, page_args},
+        resource::support::decode_oid,
         scope::{
             client::{ClientScopeConnection, load_client_scopes},
             types::ScopeOrder,
@@ -34,7 +34,8 @@ use super::{
     integration,
 };
 use crate::graphql::schema::{
-    authorization::request_context, error::app_error, management_guard::ManagementGuard,
+    authorization::request_context, connection::page_args, error::app_error,
+    management_guard::ManagementGuard,
 };
 
 pub(crate) use identity_domain::global_id::kind::Client as ClientGlobalId;
@@ -522,7 +523,7 @@ impl ClientNode {
     #[graphql(
         guard = "ManagementGuard::new(ManagementScope::ClientsRead, ManagementTarget::instance())",
         directive = access::apply(ManagementGuard::policy(ManagementScope::ClientsRead)),
-        complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * (1 + child_complexity)"
+        complexity = "crate::graphql::schema::connection::nested_page_complexity(first, last, child_complexity)"
     )]
     #[allow(clippy::too_many_arguments)]
     async fn scopes(

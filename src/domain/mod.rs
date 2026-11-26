@@ -11,6 +11,7 @@ pub mod global_id;
 pub mod instance_overview;
 pub mod key;
 pub mod openid_connect;
+pub mod pagination;
 pub mod rbac;
 pub mod time_zone;
 pub mod user;

@@ -23,8 +23,7 @@ use identity_application::{
         UserInvitationOutcome, UserManagementAuthority, UserManagementMutationOutcome,
         UserManagementPageData, UserManagementPageEntry, UserManagementQuery,
         UserManagementRepository, UserManagementRepositoryError, UserOrder as ManagementUserOrder,
-        UserPageDirection, UserSortKey, UserStateTransaction,
-        repository::RevokeUserSessionsTransaction,
+        UserSortKey, UserStateTransaction, repository::RevokeUserSessionsTransaction,
     },
 };
 use identity_domain::audit::{AuditAction, AuditField, AuditRecord};
@@ -185,10 +184,9 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
             ));
         }
 
-        let descending = match query.direction {
-            UserPageDirection::Forward => query.order.is_descending(),
-            UserPageDirection::Backward => !query.order.is_descending(),
-        };
+        let descending = query
+            .direction
+            .order_is_descending(query.order.is_descending());
         let (created_order, id_order, name_order) = if descending {
             (Order::Desc, Order::Desc, Order::Desc)
         } else {
@@ -207,12 +205,14 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
             .all(&self.db)
             .await
             .map_err(storage)?;
-        let has_more = rows.len() > query.limit;
-        let mut rows = rows;
-        rows.truncate(query.limit);
-        if query.direction == UserPageDirection::Backward {
-            rows.reverse();
-        }
+        let (rows, has_previous_page, has_next_page) =
+            identity_domain::pagination::finalize_keyset_page(
+                query.direction,
+                rows,
+                query.limit,
+                query.after.is_some(),
+                query.before.is_some(),
+            );
 
         let mut items = Vec::with_capacity(rows.len());
         for model in rows {
@@ -235,10 +235,6 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
             items.push(UserManagementPageEntry { sort_key, record });
         }
 
-        let (has_previous_page, has_next_page) = match query.direction {
-            UserPageDirection::Forward => (query.after.is_some(), has_more),
-            UserPageDirection::Backward => (has_more, query.before.is_some()),
-        };
         Ok(UserManagementPageData {
             items,
             has_previous_page,

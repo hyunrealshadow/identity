@@ -12,11 +12,9 @@ use super::{
 };
 use crate::graphql::schema::{
     authorization::request_context,
-    connection,
-    connection::ConnectionTotal,
+    connection::{self, ConnectionTotal, OpaqueCursor, page_args},
     error::app_error,
     management_guard::ManagementGuard,
-    modules::resource::support::{RbacConnectionCursor, page_args},
 };
 
 #[derive(Default)]
@@ -39,7 +37,7 @@ impl ClientQuery {
     #[graphql(
         guard = "ManagementGuard::new(ManagementScope::ClientsRead, ManagementTarget::instance())",
         directive = access::apply(ManagementGuard::policy(ManagementScope::ClientsRead)),
-        complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
+        complexity = "crate::graphql::schema::connection::page_complexity(first, last, child_complexity)"
     )]
     #[allow(clippy::too_many_arguments)]
     async fn clients(
@@ -51,7 +49,7 @@ impl ClientQuery {
         after: Option<String>,
         #[graphql(validator(minimum = 1, maximum = 100))] last: Option<i32>,
         before: Option<String>,
-    ) -> Result<Connection<RbacConnectionCursor, ClientNode, ConnectionTotal>> {
+    ) -> Result<Connection<OpaqueCursor, ClientNode, ConnectionTotal>> {
         let page = page_args(ctx, first, after, last, before)?;
         let request = request_context(ctx)?;
         let filter = filter.unwrap_or_default();
@@ -76,7 +74,7 @@ impl ClientQuery {
         );
         connection.edges.extend(page.items.into_iter().map(|item| {
             Edge::new(
-                RbacConnectionCursor::from_backend(item.cursor),
+                OpaqueCursor::from_backend(item.cursor),
                 ClientNode::new(item.record),
             )
         }));

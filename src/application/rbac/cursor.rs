@@ -6,12 +6,15 @@
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 use crate::{
     data_protection::DataProtector,
     error::{AppError, codes::rbac},
+    pagination::{
+        CursorCodecError, PaginationError, RawPageArgs, cursor_fingerprint, protect_json_cursors,
+        unprotect_json_cursor, validate_page_arguments,
+    },
     rbac::model::{DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE},
 };
 
@@ -49,11 +52,7 @@ pub enum RbacSortKey {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum RbacPageDirection {
-    Forward,
-    Backward,
-}
+pub type RbacPageDirection = crate::pagination::PageDirection;
 
 #[derive(Debug, Clone)]
 pub(crate) struct PreparedPage {
@@ -78,14 +77,7 @@ struct CursorPayload {
 
 #[must_use]
 pub(crate) fn filter_fingerprint<T: Serialize>(kind: u8, order: u8, filter: &T) -> String {
-    let encoded = serde_json::to_vec(&(kind, order, filter)).unwrap_or_default();
-    let digest = Sha256::digest(encoded);
-    let mut value = String::with_capacity(digest.len() * 2);
-    for byte in digest {
-        use std::fmt::Write as _;
-        let _ = write!(value, "{byte:02x}");
-    }
-    value
+    cursor_fingerprint(&(kind, order, filter)).unwrap_or_default()
 }
 
 fn tie_payload(tie: &RbacTie) -> (Option<i64>, Option<String>) {
@@ -95,13 +87,7 @@ fn tie_payload(tie: &RbacTie) -> (Option<i64>, Option<String>) {
     }
 }
 
-pub(crate) async fn encode_cursor(
-    protector: &dyn DataProtector,
-    kind: u8,
-    order: u8,
-    filter: &str,
-    sort_key: &RbacSortKey,
-) -> Result<String, AppError> {
+fn build_payload(kind: u8, order: u8, filter: &str, sort_key: &RbacSortKey) -> CursorPayload {
     let (created_at_micros, text, tie_id, tie_oid) = match sort_key {
         RbacSortKey::CreatedAt { created_at, tie } => {
             let (tie_id, tie_oid) = tie_payload(tie);
@@ -112,7 +98,7 @@ pub(crate) async fn encode_cursor(
             (None, Some(value.clone()), tie_id, tie_oid)
         }
     };
-    let payload = CursorPayload {
+    CursorPayload {
         v: RBAC_CURSOR_VERSION,
         kind,
         order,
@@ -121,12 +107,35 @@ pub(crate) async fn encode_cursor(
         text,
         tie_id,
         tie_oid,
-    };
-    let bytes = serde_json::to_vec(&payload).map_err(rbac::error::InvalidCursor::map_source())?;
-    protector
-        .protect(RBAC_CURSOR_PURPOSE, &bytes)
+    }
+}
+
+fn map_cursor_codec_error(error: CursorCodecError) -> AppError {
+    match error {
+        CursorCodecError::EmptyToken => rbac::error::InvalidCursor.into_error(),
+        CursorCodecError::Serialize(source) | CursorCodecError::Deserialize(source) => {
+            rbac::error::InvalidCursor.into_error().with_source(source)
+        }
+        CursorCodecError::Protect(source) | CursorCodecError::Unprotect(source) => {
+            rbac::error::InvalidCursor.into_error().with_source(source)
+        }
+    }
+}
+
+pub(crate) async fn encode_cursors(
+    protector: &dyn DataProtector,
+    kind: u8,
+    order: u8,
+    filter: &str,
+    sort_keys: &[&RbacSortKey],
+) -> Result<Vec<String>, AppError> {
+    let payloads = sort_keys
+        .iter()
+        .map(|sort_key| build_payload(kind, order, filter, sort_key))
+        .collect::<Vec<_>>();
+    protect_json_cursors(protector, RBAC_CURSOR_PURPOSE, &payloads)
         .await
-        .map_err(rbac::error::InvalidCursor::map_source())
+        .map_err(map_cursor_codec_error)
 }
 
 pub(crate) async fn decode_cursor(
@@ -137,12 +146,9 @@ pub(crate) async fn decode_cursor(
     token: &str,
 ) -> Result<RbacSortKey, AppError> {
     let invalid = || rbac::error::InvalidCursor.into_error();
-    let bytes = protector
-        .unprotect(RBAC_CURSOR_PURPOSE, token)
+    let payload: CursorPayload = unprotect_json_cursor(protector, RBAC_CURSOR_PURPOSE, token)
         .await
-        .map_err(|error| invalid().with_source(error))?;
-    let payload: CursorPayload =
-        serde_json::from_slice(&bytes).map_err(|error| invalid().with_source(error))?;
+        .map_err(map_cursor_codec_error)?;
     if payload.v != RBAC_CURSOR_VERSION
         || payload.kind != kind
         || payload.order != order
@@ -180,66 +186,38 @@ pub(crate) async fn prepare_page<T: Serialize>(
     filter: &T,
     page: PageArguments,
 ) -> Result<PreparedPage, AppError> {
-    let PageArguments {
-        first,
-        after,
-        last,
-        before,
-    } = page;
-    if first.is_some() && last.is_some() {
-        return Err(page_conflict());
-    }
-    if after.is_some() && before.is_some() {
-        return Err(page_conflict());
-    }
-    if first.is_some() && before.is_some() {
-        return Err(page_conflict());
-    }
-    if last.is_some() && after.is_some() {
-        return Err(page_conflict());
-    }
-
-    let backward = last.is_some() || (first.is_none() && before.is_some());
-    let limit = match (first, last) {
-        (Some(first), None) => validate_page_size(first, "first")?,
-        (None, Some(last)) => validate_page_size(last, "last")?,
-        (None, None) => DEFAULT_PAGE_SIZE as usize,
-        (Some(_), Some(_)) => return Err(page_conflict()),
-    };
-    let direction = if backward {
-        RbacPageDirection::Backward
-    } else {
-        RbacPageDirection::Forward
-    };
+    let validated = validate_page_arguments(
+        RawPageArgs::from_u32(
+            page.first,
+            page.after.as_deref(),
+            page.last,
+            page.before.as_deref(),
+        ),
+        DEFAULT_PAGE_SIZE as usize,
+        MAX_PAGE_SIZE as usize,
+    )
+    .map_err(|error| match error {
+        PaginationError::ConflictingArguments { .. } => {
+            rbac::error::PageArgumentsConflict.into_error()
+        }
+        PaginationError::InvalidPageSize { field, max } => {
+            rbac::error::PageSizeInvalid::new(max).with_field(field)
+        }
+    })?;
     let fingerprint = filter_fingerprint(kind, order, filter);
-    let after = match (direction, after.as_deref()) {
-        (RbacPageDirection::Forward, Some(token)) => {
-            Some(decode_cursor(protector, kind, order, &fingerprint, token).await?)
-        }
-        _ => None,
+    let after = match validated.after {
+        Some(token) => Some(decode_cursor(protector, kind, order, &fingerprint, token).await?),
+        None => None,
     };
-    let before = match (direction, before.as_deref()) {
-        (RbacPageDirection::Backward, Some(token)) => {
-            Some(decode_cursor(protector, kind, order, &fingerprint, token).await?)
-        }
-        _ => None,
+    let before = match validated.before {
+        Some(token) => Some(decode_cursor(protector, kind, order, &fingerprint, token).await?),
+        None => None,
     };
     Ok(PreparedPage {
         filter_fingerprint: fingerprint,
-        direction,
+        direction: validated.direction,
         after,
         before,
-        limit,
+        limit: validated.limit,
     })
-}
-
-fn page_conflict() -> AppError {
-    rbac::error::PageArgumentsConflict.into_error()
-}
-
-fn validate_page_size(value: u32, field: &'static str) -> Result<usize, AppError> {
-    if !(1..=MAX_PAGE_SIZE).contains(&value) {
-        return Err(rbac::error::PageSizeInvalid::new(MAX_PAGE_SIZE).with_field(field));
-    }
-    Ok(value as usize)
 }

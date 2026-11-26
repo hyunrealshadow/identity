@@ -26,7 +26,7 @@ use super::{
     super::{
         account::{UserGlobalId, UserNode},
         group::{integration as group_integration, types as group_types, types::GroupNode},
-        resource::support::{PageArgs, RbacConnectionCursor, decode_oid},
+        resource::support::decode_oid,
         resource::types as resource_types,
         role::{integration, types::RoleNode},
         scope::types as scope_types,
@@ -36,6 +36,7 @@ use super::{
 use crate::graphql::schema::{
     RequestContext,
     authorization::{ScopeGuard, UserPrincipalGuard, request_context},
+    connection::{OpaqueCursor, PageArgs},
     error::app_error,
     management_guard::ManagementGuard,
     modules::{
@@ -49,7 +50,7 @@ use crate::graphql::schema::{
 
 /// `User.roles`: role nodes with the source of each role on its edge.
 pub(crate) type UserRoleConnection = async_graphql::connection::Connection<
-    RbacConnectionCursor,
+    OpaqueCursor,
     RoleNode,
     UserVersionFields,
     UserRoleFacts,
@@ -332,7 +333,7 @@ pub(crate) async fn load_user_roles(
             },
         };
         connection.edges.push(Edge::with_additional_fields(
-            RbacConnectionCursor::from_backend(item.cursor),
+            OpaqueCursor::from_backend(item.cursor),
             RoleNode::new(role.clone()),
             fields,
         ));
@@ -375,7 +376,7 @@ pub(crate) async fn load_role_users(
     for item in page.items {
         if let Some(user) = users.remove(&item.record.user_oid.0) {
             connection.edges.push(Edge::with_additional_fields(
-                RbacConnectionCursor::from_backend(item.cursor),
+                OpaqueCursor::from_backend(item.cursor),
                 UserNode::managed(user),
                 facts(&item.record),
             ));

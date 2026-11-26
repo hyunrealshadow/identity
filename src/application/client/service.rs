@@ -59,7 +59,7 @@ use crate::{
     },
     rbac::{
         RbacManagementAuthority,
-        cursor::{CURSOR_KIND_CLIENT, PageArguments, encode_cursor, prepare_page},
+        cursor::{CURSOR_KIND_CLIENT, PageArguments, encode_cursors, prepare_page},
     },
 };
 
@@ -181,21 +181,28 @@ impl ClientManagementService {
             })
             .await
             .map_err(map_repository_error)?;
-        let mut items = Vec::with_capacity(data.items.len());
-        for entry in data.items {
-            let cursor = encode_cursor(
-                self.data_protector.as_ref(),
-                CURSOR_KIND_CLIENT,
-                order.as_u8(),
-                &prepared.filter_fingerprint,
-                &entry.sort_key,
-            )
-            .await?;
-            items.push(ClientPageItem {
+        let sort_keys = data
+            .items
+            .iter()
+            .map(|entry| &entry.sort_key)
+            .collect::<Vec<_>>();
+        let cursors = encode_cursors(
+            self.data_protector.as_ref(),
+            CURSOR_KIND_CLIENT,
+            order.as_u8(),
+            &prepared.filter_fingerprint,
+            &sort_keys,
+        )
+        .await?;
+        let items = data
+            .items
+            .into_iter()
+            .zip(cursors)
+            .map(|(entry, cursor)| ClientPageItem {
                 record: entry.record,
                 cursor,
-            });
-        }
+            })
+            .collect();
         Ok(ClientPage {
             items,
             has_previous_page: data.has_previous_page,

@@ -1,8 +1,8 @@
-use super::{
-    super::resource::support::RbacConnectionCursor,
-    user_role::{EffectivePermissionNode, EffectivePermissionVersionGuard},
+use super::user_role::{EffectivePermissionNode, EffectivePermissionVersionGuard};
+use crate::graphql::schema::{
+    access::{AccessPolicy, access},
+    connection::OpaqueCursor,
 };
-use crate::graphql::schema::access::{AccessPolicy, access};
 use async_graphql::{
     Object,
     connection::{CursorType, PageInfo},
@@ -62,11 +62,11 @@ impl EffectivePermissionConnection {
     }
 }
 pub(crate) struct EffectivePermissionEdge {
-    cursor: RbacConnectionCursor,
+    cursor: OpaqueCursor,
     node: EffectivePermissionNode,
 }
 impl EffectivePermissionEdge {
-    pub(crate) fn new(cursor: RbacConnectionCursor, node: EffectivePermissionNode) -> Self {
+    pub(crate) fn new(cursor: OpaqueCursor, node: EffectivePermissionNode) -> Self {
         Self { cursor, node }
     }
 }

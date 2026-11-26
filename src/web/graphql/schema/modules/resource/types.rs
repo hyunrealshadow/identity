@@ -14,14 +14,16 @@ use identity_domain::{authorization::ManagementScope, rbac::ResourceOid};
 use uuid::Uuid;
 
 use super::super::{
-    resource::support::{decode_oid, page_args},
+    resource::support::decode_oid,
     scope::{
         connection::ScopeConnection,
         query::load_scope_connection,
         types::{ScopeFilter, ScopeOrder},
     },
 };
-use crate::graphql::schema::{authorization::request_context, management_guard::ManagementGuard};
+use crate::graphql::schema::{
+    authorization::request_context, connection::page_args, management_guard::ManagementGuard,
+};
 
 pub(crate) use identity_domain::global_id::kind::Resource as ResourceGlobalId;
 
@@ -135,7 +137,7 @@ impl ResourceNode {
     #[graphql(
         guard = "ManagementGuard::new(ManagementScope::ScopesRead, ManagementTarget::instance())",
         directive = access::apply(ManagementGuard::policy(ManagementScope::ScopesRead)),
-        complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * (1 + child_complexity)"
+        complexity = "crate::graphql::schema::connection::nested_page_complexity(first, last, child_complexity)"
     )]
     #[allow(clippy::too_many_arguments)]
     async fn permissions(

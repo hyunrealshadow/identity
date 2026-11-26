@@ -33,13 +33,14 @@ use crate::{
         codes::{account, authorization, user_management},
     },
     observability::{BusinessEvent, EventSink, EventValue, NoopEventSink, error_outcome},
+    pagination::{PaginationError, RawPageArgs, validate_page_arguments},
     setting::{PasswordHashSetting, PasswordHistoryCountSetting, SettingsSource},
     user::invitation::{
         InvitationDelivery, Invitee, USER_INVITATION_DELIVERY, UserInvitationRepository,
         UserInvitationStatus,
     },
     user::management::{
-        cursor::{NormalizedFilter, decode_cursor, encode_cursor},
+        cursor::{NormalizedFilter, decode_cursor, encode_cursors},
         model::{
             CreateUserCommand, RevokeUserSessionsCommand, SendUserInvitationCommand,
             UpdateUserCommand, UserFilter, UserManagementAuthority, UserManagementPage,
@@ -50,7 +51,7 @@ use crate::{
             CreateUserTransaction, RevokeUserSessionsTransaction, SendUserInvitationTransaction,
             UpdateUserTransaction, UserIdentifierValue, UserInvitationOutcome,
             UserManagementMutationOutcome, UserManagementQuery, UserManagementRepository,
-            UserManagementRepositoryError, UserPageDirection, UserStateTransaction,
+            UserManagementRepositoryError, UserStateTransaction,
         },
     },
 };
@@ -279,20 +280,22 @@ impl UserManagementService {
             .list_users(query)
             .await
             .map_err(map_repository_error)?;
-        let mut items = Vec::with_capacity(data.items.len());
-        for entry in data.items {
-            let cursor = encode_cursor(
-                self.data_protector.as_ref(),
-                &filter,
-                order,
-                &entry.sort_key,
-            )
-            .await?;
-            items.push(UserManagementPageItem {
+        let sort_keys = data
+            .items
+            .iter()
+            .map(|entry| &entry.sort_key)
+            .collect::<Vec<_>>();
+        let cursors =
+            encode_cursors(self.data_protector.as_ref(), &filter, order, &sort_keys).await?;
+        let items = data
+            .items
+            .into_iter()
+            .zip(cursors)
+            .map(|(entry, cursor)| UserManagementPageItem {
                 record: entry.record,
                 cursor,
-            });
-        }
+            })
+            .collect();
         Ok(UserManagementPage {
             items,
             has_previous_page: data.has_previous_page,
@@ -483,45 +486,37 @@ impl UserManagementService {
         &self,
         request: UserPageRequest,
     ) -> Result<(NormalizedFilter, UserManagementQuery), AppError> {
-        if request.first.is_some() && request.last.is_some() {
-            return Err(page_conflict());
-        }
-        if request.after.is_some() && request.before.is_some() {
-            return Err(page_conflict());
-        }
-        if request.first.is_some() && request.before.is_some() {
-            return Err(page_conflict());
-        }
-        if request.last.is_some() && request.after.is_some() {
-            return Err(page_conflict());
-        }
-
+        let validated = validate_page_arguments(
+            RawPageArgs::from_u32(
+                request.first,
+                request.after.as_deref(),
+                request.last,
+                request.before.as_deref(),
+            ),
+            DEFAULT_PAGE_SIZE as usize,
+            MAX_PAGE_SIZE as usize,
+        )
+        .map_err(|error| match error {
+            PaginationError::ConflictingArguments { .. } => {
+                user_management::error::PageArgumentsConflict.into_error()
+            }
+            PaginationError::InvalidPageSize { field, max } => {
+                user_management::error::PageSizeInvalid::new(max).with_field(field)
+            }
+        })?;
         let filter = normalize_filter(request.filter)?;
-        let backward =
-            request.last.is_some() || (request.first.is_none() && request.before.is_some());
-        let limit = match (request.first, request.last) {
-            (Some(first), None) => validate_page_size(first, "first")?,
-            (None, Some(last)) => validate_page_size(last, "last")?,
-            (None, None) => DEFAULT_PAGE_SIZE as usize,
-            (Some(_), Some(_)) => return Err(page_conflict()),
-        };
-        let direction = if backward {
-            UserPageDirection::Backward
-        } else {
-            UserPageDirection::Forward
-        };
 
-        let after = match (direction, request.after.as_deref()) {
-            (UserPageDirection::Forward, Some(token)) => Some(
+        let after = match validated.after {
+            Some(token) => Some(
                 decode_cursor(self.data_protector.as_ref(), &filter, request.order, token).await?,
             ),
-            _ => None,
+            None => None,
         };
-        let before = match (direction, request.before.as_deref()) {
-            (UserPageDirection::Backward, Some(token)) => Some(
+        let before = match validated.before {
+            Some(token) => Some(
                 decode_cursor(self.data_protector.as_ref(), &filter, request.order, token).await?,
             ),
-            _ => None,
+            None => None,
         };
 
         Ok((
@@ -529,10 +524,10 @@ impl UserManagementService {
             UserManagementQuery {
                 filter: UserFilter::from(&filter),
                 order: request.order,
-                direction,
+                direction: validated.direction,
                 after,
                 before,
-                limit,
+                limit: validated.limit,
             },
         ))
     }

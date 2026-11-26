@@ -13,13 +13,16 @@ use uuid::Uuid;
 use super::{
     super::{
         client::types::{ClientGlobalId, client_global_id},
-        resource::support::{PageArgs, RbacConnectionCursor, decode_oid, normalize_reason},
+        resource::support::{decode_oid, normalize_reason},
     },
     integration, types,
     types::{ScopeGlobalId, ScopeNode, ScopeOrder},
 };
 use crate::graphql::schema::{
-    RequestContext, authorization::request_context, connection, error::app_error,
+    RequestContext,
+    authorization::request_context,
+    connection::{self, OpaqueCursor, PageArgs},
+    error::app_error,
     management_guard::ManagementGuard,
 };
 
@@ -49,7 +52,7 @@ pub(crate) async fn load_client_scopes(
             .items
             .into_iter()
             .map(|item| ClientScopeEdge {
-                cursor: RbacConnectionCursor::from_backend(item.cursor),
+                cursor: OpaqueCursor::from_backend(item.cursor),
                 client_granted: item.client_granted,
                 node: ScopeNode::new(item.record),
             })
@@ -100,7 +103,7 @@ impl ClientScopeConnection {
 }
 
 pub(crate) struct ClientScopeEdge {
-    cursor: RbacConnectionCursor,
+    cursor: OpaqueCursor,
     client_granted: bool,
     node: ScopeNode,
 }

@@ -24,7 +24,7 @@ use super::super::{
     },
     relation::index_by,
     resource::{
-        support::{PageArgs, RbacConnectionCursor, decode_oid},
+        support::decode_oid,
         types::{ResourceGlobalId, resource_global_id},
     },
     role::{
@@ -36,7 +36,7 @@ use super::super::{
 };
 use crate::graphql::schema::{
     RequestContext,
-    connection::{self, ConnectionTotal},
+    connection::{self, ConnectionTotal, OpaqueCursor, PageArgs},
     error::app_error,
 };
 
@@ -101,7 +101,7 @@ impl AccountGroupNode {
 }
 
 pub(crate) struct AccountGroupEdge {
-    cursor: RbacConnectionCursor,
+    cursor: OpaqueCursor,
     joined_at: DateTime<Utc>,
     node: AccountGroupNode,
 }
@@ -218,7 +218,7 @@ impl AccountRoleNode {
 }
 
 pub(crate) struct AccountRoleEdge {
-    cursor: RbacConnectionCursor,
+    cursor: OpaqueCursor,
     source: AuthorizationSource,
     granted_at: DateTime<Utc>,
     group_id: Option<ID>,
@@ -429,7 +429,7 @@ impl AccountPermissionNode {
 }
 
 pub(crate) struct AccountPermissionEdge {
-    cursor: RbacConnectionCursor,
+    cursor: OpaqueCursor,
     node: AccountPermissionNode,
 }
 
@@ -551,7 +551,7 @@ pub(crate) async fn load_account_groups(
         .items
         .into_iter()
         .map(|item| AccountGroupEdge {
-            cursor: RbacConnectionCursor::from_backend(item.cursor),
+            cursor: OpaqueCursor::from_backend(item.cursor),
             joined_at: item.record.joined_at,
             node: AccountGroupNode::from(item.record.group),
         })
@@ -642,7 +642,7 @@ pub(crate) async fn load_account_roles(
             }
         };
         edges.push(AccountRoleEdge {
-            cursor: RbacConnectionCursor::from_backend(item.cursor),
+            cursor: OpaqueCursor::from_backend(item.cursor),
             source: edge_source,
             granted_at,
             group_id,
@@ -762,7 +762,7 @@ pub(crate) async fn load_account_permissions(
             })
             .collect();
         edges.push(AccountPermissionEdge {
-            cursor: RbacConnectionCursor::from_backend(item.cursor),
+            cursor: OpaqueCursor::from_backend(item.cursor),
             node: AccountPermissionNode {
                 permission_id: scope_global_id(ScopeOid(record.permission_oid.0)),
                 resource_id: resource_global_id(record.resource_oid),

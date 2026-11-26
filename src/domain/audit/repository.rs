@@ -6,13 +6,10 @@ use super::{
     model::{AuditEvent, AuditEventOid, AuditEventOrder, AuditEventSortKey},
     query::AuditQueryExpr,
 };
+use crate::pagination::PageDirection;
 
 /// Cursor traversal direction for Relay pagination.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum AuditEventPageDirection {
-    Forward,
-    Backward,
-}
+pub type AuditEventPageDirection = PageDirection;
 
 /// Repository query parameters for one page of security audit events.
 #[derive(Debug, Clone, PartialEq, Eq)]

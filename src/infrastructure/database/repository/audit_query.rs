@@ -13,6 +13,7 @@ use identity_domain::{
         AuditQueryRepositoryError, AuditTarget, AuditTargetKind, AuditTextMatcher,
     },
     global_id::DecodedGlobalId,
+    pagination::finalize_keyset_page,
 };
 use sea_orm::{
     ColumnTrait, Condition, DatabaseConnection, DbErr, EntityTrait, Order, PaginatorTrait,
@@ -22,11 +23,10 @@ use sea_orm::{
 use serde_json::Value;
 use uuid::Uuid;
 
-use super::rbac_management::support::{escape_like, page_flags};
+use super::rbac_management::support::escape_like;
 use crate::database::entity::audit::{
     Column as AuditColumn, Entity as AuditEntity, Model as AuditModel,
 };
-use identity_application::rbac::cursor::RbacPageDirection;
 
 pub struct AuditQueryRepositoryImpl {
     db: DatabaseConnection,
@@ -78,10 +78,7 @@ async fn list(
     query: AuditEventQuery,
 ) -> Result<AuditEventPage, AuditQueryRepositoryError> {
     let ascending = matches!(query.order.direction, AuditEventOrderDirection::Asc);
-    let descending = match query.direction {
-        AuditEventPageDirection::Forward => !ascending,
-        AuditEventPageDirection::Backward => ascending,
-    };
+    let descending = query.direction.order_is_descending(!ascending);
 
     let mut condition = Condition::all().add(compile_expr(&query.expr));
     if let Some(key) = query.cursor {
@@ -103,7 +100,7 @@ async fn list(
 
     let order = if descending { Order::Desc } else { Order::Asc };
     let limit = u64::try_from(query.limit.saturating_add(1)).map_err(|_| corrupt())?;
-    let mut models = AuditEntity::find()
+    let models = AuditEntity::find()
         .filter(condition)
         .order_by(AuditColumn::OccurredAt, order.clone())
         .order_by(AuditColumn::Id, order)
@@ -112,21 +109,17 @@ async fn list(
         .await
         .map_err(storage)?;
 
-    let has_more = models.len() > query.limit;
-    models.truncate(query.limit);
-    if matches!(query.direction, AuditEventPageDirection::Backward) {
-        models.reverse();
-    }
-
-    let cursor_present = query.cursor.is_some();
-    let (has_previous_page, has_next_page) = match query.direction {
-        AuditEventPageDirection::Forward => {
-            page_flags(RbacPageDirection::Forward, has_more, cursor_present, false)
-        }
-        AuditEventPageDirection::Backward => {
-            page_flags(RbacPageDirection::Backward, has_more, false, cursor_present)
-        }
-    };
+    let after_present =
+        matches!(query.direction, AuditEventPageDirection::Forward) && query.cursor.is_some();
+    let before_present =
+        matches!(query.direction, AuditEventPageDirection::Backward) && query.cursor.is_some();
+    let (models, has_previous_page, has_next_page) = finalize_keyset_page(
+        query.direction,
+        models,
+        query.limit,
+        after_present,
+        before_present,
+    );
 
     Ok(AuditEventPage {
         items: models

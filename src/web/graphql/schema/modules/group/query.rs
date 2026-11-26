@@ -24,14 +24,12 @@ use super::{
 use crate::graphql::schema::{
     RequestContext,
     authorization::request_context,
-    connection,
-    connection::ConnectionTotal,
+    connection::{self, ConnectionTotal, OpaqueCursor, PageArgs, page_args},
     error::app_error,
     management_guard::ManagementGuard,
     modules::{
         account::UserNode,
         relation::{RelationFacts, index_by},
-        resource::support::{PageArgs, RbacConnectionCursor, page_args},
         role::{integration as role_integration, types::RoleNode},
         user::integration as user_integration,
     },
@@ -58,7 +56,7 @@ impl GroupQuery {
     #[graphql(
         guard = "ManagementGuard::new(ManagementScope::GroupsRead, ManagementTarget::instance())",
         directive = access::apply(ManagementGuard::policy(ManagementScope::GroupsRead)),
-        complexity = "1 + first.or(last).unwrap_or(20).clamp(1, 100) as usize * child_complexity"
+        complexity = "crate::graphql::schema::connection::page_complexity(first, last, child_complexity)"
     )]
     #[allow(clippy::too_many_arguments)]
     async fn groups(
@@ -70,7 +68,7 @@ impl GroupQuery {
         after: Option<String>,
         #[graphql(validator(minimum = 1, maximum = 100))] last: Option<i32>,
         before: Option<String>,
-    ) -> Result<Connection<RbacConnectionCursor, GroupNode, ConnectionTotal>> {
+    ) -> Result<Connection<OpaqueCursor, GroupNode, ConnectionTotal>> {
         let page = page_args(ctx, first, after, last, before)?;
         let request = request_context(ctx)?;
         load_group_connection(
@@ -90,7 +88,7 @@ pub(crate) async fn load_group_connection(
     filter: GroupFilter,
     order: GroupOrder,
     page: PageArgs,
-) -> Result<Connection<RbacConnectionCursor, GroupNode, ConnectionTotal>> {
+) -> Result<Connection<OpaqueCursor, GroupNode, ConnectionTotal>> {
     ensure_relationship_read_guards(ctx, &filter).await?;
     let filter = filter.into_application(ctx)?;
     let page = integration::list_groups(
@@ -115,7 +113,7 @@ pub(crate) async fn load_group_connection(
         Connection::with_additional_fields(page.has_previous_page, page.has_next_page, additional);
     connection.edges.extend(page.items.into_iter().map(|item| {
         Edge::new(
-            RbacConnectionCursor::from_backend(item.cursor),
+            OpaqueCursor::from_backend(item.cursor),
             GroupNode::new(item.record),
         )
     }));
@@ -181,7 +179,7 @@ pub(crate) async fn load_group_members(
         if let Some(user) = users.remove(&item.record.user_oid.0) {
             let record = item.record;
             connection.edges.push(Edge::with_additional_fields(
-                RbacConnectionCursor::from_backend(item.cursor),
+                OpaqueCursor::from_backend(item.cursor),
                 UserNode::managed(user),
                 RelationFacts {
                     granted_by_user_oid: record.granted_by_user_oid,
@@ -232,7 +230,7 @@ pub(crate) async fn load_group_roles(
         if let Some(role) = roles.remove(&item.record.role_oid.0) {
             let record = item.record;
             connection.edges.push(Edge::with_additional_fields(
-                RbacConnectionCursor::from_backend(item.cursor),
+                OpaqueCursor::from_backend(item.cursor),
                 RoleNode::new(role),
                 RelationFacts {
                     granted_by_user_oid: record.granted_by_user_oid,
