@@ -7,6 +7,7 @@
 
 use std::{collections::BTreeSet, result::Result as StdResult};
 
+use crate::graphql::cursor::InvalidCursor;
 use async_graphql::{Context, ID, Result, connection::CursorType};
 use identity_application::{
     error::{
@@ -19,7 +20,6 @@ use identity_domain::{
     authorization::{ManagementScope, PolicyVersion},
     global_id::{GlobalId, GlobalIdType},
 };
-use identity_infrastructure::graphql::cursor::InvalidCursor;
 use uuid::Uuid;
 
 use crate::graphql::schema::{RequestContext, error::app_error};

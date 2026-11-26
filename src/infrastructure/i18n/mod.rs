@@ -11,6 +11,10 @@ use identity_application::error::params::ErrorParams;
 use unic_langid::{LanguageIdentifier, langid};
 
 pub mod catalog;
+mod loader;
+
+pub use loader::build_i18n;
+pub(crate) use loader::register_list_function;
 
 // Global I18n instance used by `AppError` response rendering to translate error
 // codes without access to `AppState`. Initialised once during startup.

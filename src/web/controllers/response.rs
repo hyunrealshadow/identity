@@ -11,10 +11,7 @@ use unic_langid::LanguageIdentifier;
 use crate::{
     application::error::{AppError, codes::common},
     infrastructure::AppState,
-    infrastructure::{
-        i18n::{I18n, resolve_locale_from_headers},
-        web::tera as web_tera,
-    },
+    infrastructure::i18n::{I18n, resolve_locale_from_headers},
     web::{
         error::{
             challenge, error_http_status, error_message, field_errors, log_app_error,
@@ -265,7 +262,7 @@ pub fn render_error_page(res: &mut Response, headers: &HeaderMap, ctx: &AppState
         message.clone(),
     );
 
-    match web_tera::render_view(ctx, headers, "error.html", data) {
+    match crate::views::render::render_view(ctx, headers, "error.html", data) {
         Ok(body) => render_html(res, status, body),
         Err(e) => {
             error!(error = %e, "render_error_page: template render failed");
@@ -299,7 +296,7 @@ pub fn render_not_found(req: &Request, depot: &Depot, res: &mut Response) {
             i18n.t(&locale, "error-404-title"),
             i18n.t(&locale, "error-404-message"),
         );
-        match web_tera::render_view(&ctx, req.headers(), "error.html", data) {
+        match crate::views::render::render_view(&ctx, req.headers(), "error.html", data) {
             Ok(body) => {
                 render_html(res, status, body);
                 return;
@@ -357,7 +354,7 @@ mod tests {
     use crate::{
         application::error::codes::{authorize_http, common, install},
         infrastructure::{
-            i18n::init_error_i18n, test_app_state_with_mock_settings, web::tera::build_i18n,
+            i18n::build_i18n, i18n::init_error_i18n, test_app_state_with_mock_settings,
         },
     };
 

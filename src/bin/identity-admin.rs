@@ -5,7 +5,7 @@ use identity_domain::{
     user::UserOid,
 };
 use identity_infrastructure::{
-    config::AppConfig, database, database::owner_bootstrap, web::tera::build_i18n,
+    config::AppConfig, database, database::owner_bootstrap, i18n::build_i18n,
 };
 use uuid::Uuid;
 

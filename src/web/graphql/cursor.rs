@@ -46,11 +46,6 @@ impl<T> ProtectedCursor<T> {
         &self.value
     }
 
-    #[must_use]
-    pub fn into_string(self) -> String {
-        self.value
-    }
-
     fn new(value: String) -> Self {
         Self {
             value,

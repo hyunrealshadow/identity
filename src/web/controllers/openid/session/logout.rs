@@ -3,7 +3,9 @@ use identity_application::openid_connect::logout::{
     FrontChannelLogoutNotification, LogoutOutcome, RpInitiatedLogout, RpInitiatedLogoutRequest,
 };
 use identity_domain::auth::SessionOid;
-use identity_infrastructure::{AppState, web::tera};
+use identity_infrastructure::AppState;
+
+use crate::views::render::render_view;
 use salvo::{Depot, Request, Response, handler, handler::HoopedHandler};
 use serde::Deserialize;
 use url::Url;
@@ -114,7 +116,7 @@ pub(super) async fn render_logout_page(
     };
 
     let mut response = Response::new();
-    match tera::render_view(ctx, headers, "openid/logout.html", data) {
+    match render_view(ctx, headers, "openid/logout.html", data) {
         Ok(body) => render_html(&mut response, StatusCode::OK, body),
         Err(error) => render_app_error(&mut response, headers, ctx, error),
     }

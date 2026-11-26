@@ -2,13 +2,13 @@ extern crate identity_application as application;
 extern crate identity_domain as domain;
 extern crate self as infrastructure;
 
+mod assets;
 pub mod auth;
 pub mod config;
 pub mod context;
 pub mod crypto;
 pub mod database;
 pub mod email;
-pub mod graphql;
 pub mod i18n;
 pub mod jobs;
 pub mod lifecycle;
@@ -18,7 +18,7 @@ pub mod resources;
 pub mod services;
 pub mod settings;
 pub mod state;
-pub mod web;
+pub mod templates;
 
 pub use context::AppContext;
 pub use lifecycle::AppLifecycle;

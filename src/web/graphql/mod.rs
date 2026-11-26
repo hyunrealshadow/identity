@@ -42,6 +42,7 @@ use observability::RequestObservation;
 use schema::authorization::EffectivePermissionsProvider;
 use unic_langid::LanguageIdentifier;
 
+pub(crate) mod cursor;
 mod observability;
 mod permissions;
 mod schema;

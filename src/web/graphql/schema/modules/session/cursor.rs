@@ -1,6 +1,6 @@
+use crate::graphql::cursor::{CursorPayload, InvalidCursor};
 use chrono::{DateTime, TimeZone as _, Utc};
 use identity_domain::auth::repository::SessionSortKey;
-use identity_infrastructure::graphql::cursor::{CursorPayload, InvalidCursor};
 
 const VERSION: u8 = 2;
 const PLAINTEXT_SIZE: usize = 17;
@@ -63,8 +63,8 @@ impl CursorPayload for SessionCursor {
 
 #[cfg(test)]
 mod tests {
+    use crate::graphql::cursor::CursorPayload as _;
     use chrono::{TimeZone as _, Utc};
-    use identity_infrastructure::graphql::cursor::CursorPayload as _;
 
     use super::SessionCursor;
 

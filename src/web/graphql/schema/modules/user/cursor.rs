@@ -6,8 +6,8 @@
 //! carries it through async-graphql's `CursorType` after applying the same
 //! syntactic bounds as the shared protected-cursor helper.
 
+use crate::graphql::cursor::InvalidCursor;
 use async_graphql::connection::CursorType;
-use identity_infrastructure::graphql::cursor::InvalidCursor;
 
 const MAX_CURSOR_LENGTH: usize = 512;
 

@@ -1,3 +1,4 @@
+use crate::graphql::cursor::{ProtectedCursor, protect_many, unprotect};
 use crate::graphql::schema::access::access;
 use async_graphql::{
     Context, Object, Result,
@@ -5,7 +6,6 @@ use async_graphql::{
 };
 use identity_application::error::codes::graphql;
 use identity_domain::{auth::repository::SessionPageDirection, openid_connect::ApiScope};
-use identity_infrastructure::graphql::cursor::{ProtectedCursor, protect_many, unprotect};
 use uuid::Uuid;
 
 use super::{cursor::SessionCursor, types::SessionNode};

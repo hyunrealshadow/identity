@@ -22,7 +22,8 @@ use crate::{
         AuthorizationRequest, OAuthErrorCode, OAuthErrorResponse, ResponseMode,
     },
     infrastructure::AppState,
-    infrastructure::{i18n::resolve_locale_from_headers, web::tera as web_tera},
+    infrastructure::i18n::resolve_locale_from_headers,
+    views::render::render_view,
     web::views::oauth2::{ErrorPageData, FormPostField, FormPostPageData},
 };
 
@@ -133,7 +134,7 @@ fn render_form_post_page(
     };
 
     let mut response = Response::new();
-    match web_tera::render_view(ctx, headers, "oauth2/form_post.html", data) {
+    match render_view(ctx, headers, "oauth2/form_post.html", data) {
         Ok(body) => render_html(&mut response, StatusCode::OK, body),
         Err(error) => render_app_error(&mut response, headers, ctx, error),
     }
@@ -191,7 +192,7 @@ pub fn render_authorize_error_page(
     );
 
     let mut response = Response::new();
-    match web_tera::render_view(ctx, headers, "error.html", data) {
+    match render_view(ctx, headers, "error.html", data) {
         Ok(body) => render_html(&mut response, status, body),
         Err(error) => render_app_error(&mut response, headers, ctx, error),
     }

@@ -22,9 +22,10 @@ use identity_infrastructure::{
         seed::{console, console::ConsoleClientSeedConfig},
     },
     i18n,
+    i18n::build_i18n,
     services::AppServices,
     settings::AppRuntimeSettings,
-    web::tera::{build_i18n, build_tera},
+    templates::build_tera,
 };
 use identity_web::router;
 use salvo::test::{ResponseExt, TestClient};

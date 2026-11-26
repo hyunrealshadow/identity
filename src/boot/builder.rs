@@ -31,7 +31,6 @@ use identity_infrastructure::{
     observability,
     services::AppServices,
     settings::AppRuntimeSettings,
-    web::tera as web_tera,
 };
 use sea_orm::DatabaseConnection;
 use tera::Tera;
@@ -95,14 +94,14 @@ impl AppBuilder {
     /// Side-effect: stores the I18n instance in a global `OnceLock` for
     /// `AppError` -> HTTP response conversion.
     pub fn init_i18n_and_templates(mut self) -> AppResult<Self> {
-        let i18n = web_tera::build_i18n()?;
+        let i18n = identity_infrastructure::i18n::build_i18n()?;
         if self.config.console.enabled && i18n.loader().is_none() {
             return Err(
                 Error::other("console management requires both backend error locales").into(),
             );
         }
         init_error_i18n(i18n.clone());
-        let tera = web_tera::build_tera(i18n.loader())?;
+        let tera = identity_infrastructure::templates::build_tera(i18n.loader())?;
         self.i18n = Some(i18n);
         self.tera = Some(tera);
         Ok(self)

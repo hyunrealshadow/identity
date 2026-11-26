@@ -25,9 +25,10 @@ use identity_infrastructure::{
         AppConfig, AppEnvironment, DatabaseConfig, HealthChecksConfig, HealthConfig, LoggerConfig,
         ServerConfig, SettingsConfig,
     },
+    i18n::build_i18n,
     services::AppServices,
     settings::AppRuntimeSettings,
-    web::tera::{build_i18n, build_tera},
+    templates::build_tera,
 };
 use sea_orm::{DatabaseBackend, MockDatabase, MockExecResult, Value};
 use serde_json::{json, to_value};

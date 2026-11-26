@@ -28,13 +28,13 @@ use super::super::{
     session::{SessionCursor, SessionNode, session_connection},
     user::access::ensure_user_management_read,
 };
+use crate::graphql::cursor::ProtectedCursor;
 use crate::graphql::schema::{
     authorization::request_context, connection::ConnectionTotal, management_guard::ManagementGuard,
 };
 use identity_application::authorization::ManagementTarget;
 use identity_application::user::CredentialType;
 use identity_domain::{authorization::ManagementScope, user::UserOid};
-use identity_infrastructure::graphql::cursor::ProtectedCursor;
 
 /// Something the user must do at their next sign-in before it completes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]

@@ -15,10 +15,11 @@ use crate::{
     AppContext, AppLifecycle, AppResources, AppState,
     config::{self, AppEnvironment, HealthChecksConfig},
     database::entity::setting,
+    i18n::build_i18n,
     infrastructure::database::entity::{key::Model, key_jwk::Model as KeyJwkModel},
     services::AppServices,
     settings::AppRuntimeSettings,
-    web::tera::{build_i18n, build_tera},
+    templates::build_tera,
 };
 
 pub async fn test_app_state_with_mock_settings() -> AppState {

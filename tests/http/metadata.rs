@@ -29,9 +29,10 @@ pub(super) async fn runtime_state(console: Option<&str>) -> identity_infrastruct
         AppContext, AppLifecycle, AppResources, AppState,
         config::{AppEnvironment, HealthChecksConfig},
         database::entity::{key, key_jwk, setting},
+        i18n::build_i18n,
         services::AppServices,
         settings::AppRuntimeSettings,
-        web::tera::{build_i18n, build_tera},
+        templates::build_tera,
     };
     use sea_orm::{DatabaseBackend, MockDatabase, Value as DbValue};
     use serde_json::to_value;

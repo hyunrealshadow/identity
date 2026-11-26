@@ -7,8 +7,6 @@ pub use identity_application::error::catalog::{PublicErrorDefinition, public_err
 use std::{fs, path::Path};
 use unic_langid::LanguageIdentifier;
 
-use crate::web::tera as web_tera;
-
 fn validate_sources(
     locale: &str,
     sources: &[String],
@@ -19,7 +17,7 @@ fn validate_sources(
         .parse::<LanguageIdentifier>()
         .map_err(|_| "invalid catalog locale".to_owned())?;
     let mut bundle = FluentBundle::new_concurrent(vec![language]);
-    web_tera::register_list_function(&mut bundle);
+    super::register_list_function(&mut bundle);
     bundle.set_use_isolating(false);
     let mut declared_error_keys = BTreeSet::new();
     for source in sources {

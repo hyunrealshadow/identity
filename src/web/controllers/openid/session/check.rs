@@ -1,5 +1,5 @@
+use crate::views::render::render_view;
 use http::{StatusCode, header::HeaderName};
-use identity_infrastructure::web::tera::render_view;
 use salvo::{Depot, Request, Response, handler, handler::HoopedHandler};
 use serde_json::to_string;
 
