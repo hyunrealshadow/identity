@@ -644,7 +644,7 @@ async fn invitation_guards_delivery_regression_email_updates_disabled_users_and_
                 &db,
                 &format!(
                     "SELECT count(*)::bigint n FROM \"user\" \
-                     WHERE oid='{target}' AND NOT ('CHANGE_PASSWORD' = ANY(required_actions))"
+                     WHERE oid='{target}' AND NOT (required_actions @> '[\"change_password\"]')"
                 ),
             )
             .await,

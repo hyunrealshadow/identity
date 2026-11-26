@@ -1243,15 +1243,7 @@ async fn email_code_admission_is_atomic_and_independent_of_the_account() {
         )
         .await;
         let switch_login = logins.create_pending(client, relation, &[]).await.unwrap();
-        logins
-            .update_status(
-                switch_login.oid,
-                LoginStatus::IDENTIFIER_VERIFIED,
-                Some(switch_user.into()),
-                None,
-            )
-            .await
-            .unwrap();
+        logins.bind_user(switch_login.oid, switch_user).await.unwrap();
         let switch_now = Utc::now();
         let switch_ctx = DeliveryChallengeContext {
             user_oid: Some(switch_user.into()),
