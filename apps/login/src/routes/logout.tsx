@@ -2,8 +2,8 @@ import { createFileRoute } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 
 import { AuthShell } from '#/components/auth-shell'
-import { SignInAgainButton } from '#/components/sign-in-again-button'
-import { beginAuthorization } from '#/lib/authorization-flow'
+import { ProgressiveForm } from '#/components/progressive-form'
+import { SubmitButton } from '#/components/submit-button'
 import { translate } from '#/lib/i18n'
 import { requestLocale } from '#/lib/i18n.server'
 
@@ -27,6 +27,23 @@ const loadSignedOutPage = createServerFn({ method: 'GET' })
  * account session, so it deliberately avoids the account loader.
  */
 export const Route = createFileRoute('/logout')({
+  server: {
+    handlers: {
+      POST: async ({ request }) => {
+        const { startSignIn } = await import('#/lib/oauth.server')
+        const destination = (
+          await startSignIn('/account/profile', { selectAccount: true })
+        ).toString()
+        if (request.headers.get('x-enhanced-form') === '1') {
+          return Response.json({ redirect: destination })
+        }
+        return new Response(null, {
+          status: 303,
+          headers: { location: destination },
+        })
+      },
+    },
+  },
   validateSearch: (search): SignedOutSearch => ({
     ui_locales: optionalString(search.ui_locales),
   }),
@@ -50,14 +67,12 @@ function SignedOutPage() {
       {/* The browser may still remember other accounts. Signing in again after
           an explicit sign-out lets the user choose one instead of silently
           continuing as whichever account remains. */}
-      <SignInAgainButton
-        label={t('signInAgain')}
-        begin={() =>
-          beginAuthorization({
-            data: { returnTo: '/account/profile', selectAccount: true },
-          })
-        }
-      />
+      <ProgressiveForm
+        action="/logout"
+        enhancementErrorMessage={t('temporaryError')}
+      >
+        <SubmitButton className="mt-6 w-full">{t('signInAgain')}</SubmitButton>
+      </ProgressiveForm>
     </AuthShell>
   )
 }

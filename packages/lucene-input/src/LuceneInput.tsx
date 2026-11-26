@@ -53,6 +53,7 @@ export type LuceneInputProps = {
   className?: string
 }
 
+const NO_FIELDS: LuceneField[] = []
 const NO_HISTORY: readonly string[] = []
 const NO_SYNTAX: readonly LuceneSyntaxFeature[] = []
 
@@ -62,7 +63,7 @@ export function LuceneInput({
   onChange,
   onSubmit,
   onDiagnostics,
-  fields = [],
+  fields = NO_FIELDS,
   disallowUnknownFields = false,
   disabledSyntax = NO_SYNTAX,
   locale = 'en',
@@ -81,13 +82,16 @@ export function LuceneInput({
   const hostRef = useRef<HTMLDivElement | null>(null)
   const handleRef = useRef<LuceneEditorHandle | null>(null)
 
+  const mountedRef = useRef(false)
   const onChangeRef = useRef(onChange)
   const onSubmitRef = useRef(onSubmit)
   const onDiagnosticsRef = useRef(onDiagnostics)
 
-  onChangeRef.current = onChange
-  onSubmitRef.current = onSubmit
-  onDiagnosticsRef.current = onDiagnostics
+  useEffect(() => {
+    onChangeRef.current = onChange
+    onSubmitRef.current = onSubmit
+    onDiagnosticsRef.current = onDiagnostics
+  })
 
   const [completionState, setCompletionState] =
     useState<LuceneCompletionDropdownState | null>(null)
@@ -157,52 +161,71 @@ export function LuceneInput({
   }, [])
 
   useEffect(() => {
+    if (!mountedRef.current) return
     handleRef.current?.setValue(value)
   }, [value])
 
   useEffect(() => {
+    if (!mountedRef.current) return
     handleRef.current?.setFields(fields)
   }, [fields])
 
   useEffect(() => {
+    if (!mountedRef.current) return
     handleRef.current?.setDisallowUnknownFields(disallowUnknownFields)
   }, [disallowUnknownFields])
 
   useEffect(() => {
+    if (!mountedRef.current) return
     handleRef.current?.setDisabledSyntax(disabledSyntax)
   }, [disabledSyntax])
 
   useEffect(() => {
+    if (!mountedRef.current) return
     handleRef.current?.setLocale(locale)
   }, [locale])
 
   useEffect(() => {
+    if (!mountedRef.current) return
     handleRef.current?.setTimeZone(timeZone)
   }, [timeZone])
 
   useEffect(() => {
+    if (!mountedRef.current) return
     handleRef.current?.setMessages(messages)
   }, [messages])
 
   useEffect(() => {
+    if (!mountedRef.current) return
     handleRef.current?.setPlaceholder(placeholder)
   }, [placeholder])
 
   useEffect(() => {
+    if (!mountedRef.current) return
     handleRef.current?.setDisabled(disabled)
   }, [disabled])
 
   useEffect(() => {
+    if (!mountedRef.current) return
     handleRef.current?.setReadOnly(readOnly)
   }, [readOnly])
 
   useEffect(() => {
+    if (!mountedRef.current) return
     handleRef.current?.setAriaLabel(ariaLabel)
   }, [ariaLabel])
 
   useEffect(() => {
+    if (!mountedRef.current) return
     handleRef.current?.setHistory(history)
   }, [history])
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
 
   return (
     <div

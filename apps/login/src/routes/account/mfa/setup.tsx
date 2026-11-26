@@ -41,7 +41,7 @@ export const Route = createFileRoute('/account/mfa/setup')({
         } catch (error) {
           await storeAccountFlash({
             error:
-              error instanceof GraphqlRequestError || error instanceof Error
+              error instanceof GraphqlRequestError
                 ? error.message
                 : translate(locale, 'temporaryError'),
           })

@@ -48,6 +48,14 @@ describe('parseStepUpChallenge', () => {
       acrValues: 'aal2',
       maxAge: 3600,
     })
+    expect(
+      parseStepUpChallenge(
+        'bearer error=insufficient_user_authentication, acr_values=aal2, max_age=60',
+      ),
+    ).toEqual({
+      acrValues: 'aal2',
+      maxAge: 60,
+    })
   })
 
   it('ignores ordinary invalid-token challenges', () => {
@@ -254,6 +262,41 @@ describe('identityGraphql', () => {
 
     await expect(identityGraphql('mutation Invalid { updateProfile { clientMutationId } }'))
       .rejects.toMatchObject({ message: 'validation failed' })
+  })
+
+  it('extracts step-up challenge from GraphQL error extensions', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({
+      errors: [{
+        message: 'step up required',
+        extensions: {
+          kind: 'unauthorized',
+          challenge: {
+            error: 'insufficient_user_authentication',
+            acrValues: 'aal2',
+            maxAge: 300,
+          },
+        },
+      }],
+    })))
+
+    const error = await identityGraphql('mutation Sensitive { disableTotp { changed } }')
+      .catch((caught: unknown) => caught)
+
+    expect(error).toBeInstanceOf(GraphqlRequestError)
+    expect((error as GraphqlRequestError).challenge).toEqual({
+      acrValues: 'aal2',
+      maxAge: 300,
+    })
+  })
+
+  it('returns localized temporary error on non-JSON HTTP error responses', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('<html>Bad Gateway</html>', {
+      status: 502,
+      headers: { 'content-type': 'text/html' },
+    })))
+
+    await expect(identityGraphql('query Account { account { id } }'))
+      .rejects.toMatchObject({ message: '请求暂时无法完成，请稍后重试' })
   })
 })
 

@@ -107,17 +107,25 @@ export async function identityGraphql<T>(
       body: JSON.stringify({ query, variables }),
     },
   )
-  const payload = (await response.json()) as {
-    data?: T
-    errors?: Array<GraphqlError>
+  let payload: { data?: T; errors?: Array<GraphqlError> } = {}
+  try {
+    const parsed = await response.json()
+    if (parsed && typeof parsed === 'object') {
+      payload = parsed as { data?: T; errors?: Array<GraphqlError> }
+    }
+  } catch {
+    payload = {}
   }
+  const locale = requestLocale()
   if (response.status === 401) {
-    const challenge = parseStepUpChallenge(
-      response.headers.get('www-authenticate'),
-    )
+    const challenge =
+      parseStepUpChallenge(response.headers.get('www-authenticate')) ??
+      extractStepUpChallenge(payload.errors)
     if (challenge) {
       throw new GraphqlRequestError(
-        payload.errors ?? [{ message: 'Step-up authentication is required' }],
+        payload.errors?.length
+          ? payload.errors
+          : [{ message: translate(locale, 'accountAuthenticationRequired') }],
         challenge,
       )
     }
@@ -125,11 +133,30 @@ export async function identityGraphql<T>(
     return
   }
   if (!response.ok || payload.errors?.length) {
+    const challenge = extractStepUpChallenge(payload.errors)
     throw new GraphqlRequestError(
-      payload.errors ?? [{ message: `GraphQL request failed (${response.status})` }],
+      payload.errors?.length
+        ? payload.errors
+        : [{ message: translate(locale, 'temporaryError') }],
+      challenge,
     )
   }
   return payload.data
+}
+
+function extractStepUpChallenge(
+  errors?: Array<GraphqlError>,
+): StepUpChallenge | undefined {
+  for (const error of errors ?? []) {
+    const challenge = error.extensions?.challenge
+    if (challenge?.error === 'insufficient_user_authentication') {
+      return {
+        acrValues: challenge.acrValues,
+        maxAge: challenge.maxAge,
+      }
+    }
+  }
+  return undefined
 }
 
 function tokenPreflightContext(token: string): PreflightContext | undefined {
@@ -222,13 +249,13 @@ function assertPreflightRejection(result: PreflightResult) {
 export function parseStepUpChallenge(
   value: string | null,
 ): StepUpChallenge | undefined {
-  if (!value?.startsWith('Bearer ')) return
-  const error = quotedParameter(value, 'error')
+  if (!value || !/^Bearer\s+/i.test(value)) return
+  const error = headerParameter(value, 'error')
   if (error !== 'insufficient_user_authentication') return
-  const maxAgeValue = quotedParameter(value, 'max_age')
+  const maxAgeValue = headerParameter(value, 'max_age')
   const maxAge = maxAgeValue === undefined ? undefined : Number(maxAgeValue)
   return {
-    acrValues: quotedParameter(value, 'acr_values'),
+    acrValues: headerParameter(value, 'acr_values'),
     maxAge:
       maxAge !== undefined && Number.isInteger(maxAge) && maxAge >= 0
         ? maxAge
@@ -236,7 +263,11 @@ export function parseStepUpChallenge(
   }
 }
 
-function quotedParameter(value: string, name: string) {
-  const match = value.match(new RegExp(`(?:^|[,\\s])${name}="([^"]*)"`))
-  return match?.[1]
+function headerParameter(value: string, name: string) {
+  const quoted = value.match(new RegExp(`(?:^|[,\\s])${name}="((?:[^"\\\\]|\\\\.)*)"`, 'i'))
+  if (quoted?.[1] !== undefined) {
+    return quoted[1].replace(/\\(.)/g, '$1')
+  }
+  const unquoted = value.match(new RegExp(`(?:^|[,\\s])${name}=([^,\\s"]+)`, 'i'))
+  return unquoted?.[1]
 }

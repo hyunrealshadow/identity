@@ -70,3 +70,14 @@ it.each(['prepare', 'begin', 'finish', 'delete'] as const)('uses ordinary sign-i
   expect(mocks.reauthorize).not.toHaveBeenCalled()
   expect(mocks.restart).toHaveBeenCalledWith('/account/security?confirm=passkeys')
 })
+
+it('returns localized fallback on malformed credential JSON or generic errors without leaking message', async () => {
+  expect(await passkeyAccountAction({ action: 'finish', id: 'c', name: 'Lap', credential: '{bad-json' })).toEqual({
+    error: 'Unable to verify the passkey, try again or use another sign-in method',
+  })
+  mocks.graphql.mockRejectedValueOnce(new Error('internal ECONNREFUSED detail'))
+  const result = await passkeyAccountAction({ action: 'begin' })
+  expect(result).toEqual({
+    error: 'Unable to verify the passkey, try again or use another sign-in method',
+  })
+})

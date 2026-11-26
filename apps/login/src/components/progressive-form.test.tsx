@@ -158,4 +158,30 @@ describe('ProgressiveForm', () => {
     expect(button.hasAttribute('data-pending')).toBe(false)
     expect(button.disabled).toBe(false)
   })
+
+  it('shows enhancement error on non-OK HTTP responses or missing redirect', async () => {
+    const assign = vi.fn()
+    vi.stubGlobal('location', { ...window.location, assign })
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ redirect: '/ok' }), { status: 500 })))
+    render(
+      <ProgressiveForm action="/logout" enhancementErrorMessage="Try again later">
+        <SubmitButton>Sign in again</SubmitButton>
+      </ProgressiveForm>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in again' }))
+    expect(await screen.findByText('Try again later')).not.toBeNull()
+    expect(assign).not.toHaveBeenCalled()
+
+    cleanup()
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({}), { status: 200 })))
+    render(
+      <ProgressiveForm action="/logout" enhancementErrorMessage="Try again later">
+        <SubmitButton>Sign in again</SubmitButton>
+      </ProgressiveForm>,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in again' }))
+    expect(await screen.findByText('Try again later')).not.toBeNull()
+    expect(assign).not.toHaveBeenCalled()
+  })
 })

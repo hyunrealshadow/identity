@@ -99,7 +99,13 @@ export function ProgressiveForm({
         credentials: 'same-origin',
         headers: { 'x-enhanced-form': '1' },
       })
-      const result = (await response.json()) as EnhancedNavigationResponse
+      if (!response.ok) {
+        throw new Error('Enhanced form request failed')
+      }
+      const result = (await response.json()) as Partial<EnhancedNavigationResponse>
+      if (typeof result.redirect !== 'string' || result.redirect.length === 0) {
+        throw new Error('Missing redirect location')
+      }
       window.location.assign(result.redirect)
     } catch {
       setPendingSubmitter(undefined)

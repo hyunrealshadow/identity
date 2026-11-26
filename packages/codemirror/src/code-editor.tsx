@@ -92,8 +92,12 @@ export function CodeEditor(props: CodeEditorProps) {
   const parent = useRef<HTMLDivElement | null>(null)
   const view = useRef<EditorView | null>(null)
   const config = useRef(new Compartment())
+  const placeholderConfig = useRef(new Compartment())
   const propsRef = useRef(props)
-  propsRef.current = props
+
+  useEffect(() => {
+    propsRef.current = props
+  })
 
   useEffect(() => {
     if (!parent.current) return
@@ -107,7 +111,11 @@ export function CodeEditor(props: CodeEditorProps) {
           codeHighlighting(),
           theme,
           EditorView.lineWrapping,
-          placeholder ? placeholderText(placeholder) : [],
+          placeholderConfig.current.of(
+            propsRef.current.placeholder
+              ? placeholderText(propsRef.current.placeholder)
+              : [],
+          ),
           config.current.of(accessibility(propsRef.current)),
           EditorView.updateListener.of((update) => {
             if (!update.docChanged) return
@@ -122,6 +130,14 @@ export function CodeEditor(props: CodeEditorProps) {
       editor.destroy()
       view.current = null
     }
+  }, [])
+
+  useEffect(() => {
+    view.current?.dispatch({
+      effects: placeholderConfig.current.reconfigure(
+        placeholder ? placeholderText(placeholder) : [],
+      ),
+    })
   }, [placeholder])
 
   // Follow the value when it changes from outside, such as another language.

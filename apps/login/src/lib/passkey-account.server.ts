@@ -42,18 +42,24 @@ export async function passkeyAccountAction(input: {
       return { options: result.beginPasskeyRegistration }
     }
     if (input.action === 'finish') {
+      let credential: unknown
+      try {
+        credential = JSON.parse(input.credential ?? 'null')
+      } catch {
+        return { error: translate(locale, 'passkeyFailed') }
+      }
       const result = await identityGraphql<{ finishPasskeyRegistration: boolean }>(
         accountOperations['passkey-finish'].document,
-        { id: input.id, name: input.name, credential: JSON.parse(input.credential ?? "null") }, options,
+        { id: input.id, name: input.name, credential }, options,
       )
       if (!result) throw new AccountSessionExpiredError()
-      if (!result.finishPasskeyRegistration) throw new Error(translate(locale, 'passkeyFailed'))
+      if (!result.finishPasskeyRegistration) return { error: translate(locale, 'passkeyFailed') }
     } else {
       const result = await identityGraphql<{ deletePasskey: boolean }>(
         accountOperations['passkey-delete'].document, { id: input.id }, options,
       )
       if (!result) throw new AccountSessionExpiredError()
-      if (!result.deletePasskey) throw new Error(translate(locale, 'passkeyFailed'))
+      if (!result.deletePasskey) return { error: translate(locale, 'passkeyFailed') }
     }
     return { ok: true }
   } catch (error) {
@@ -73,6 +79,11 @@ export async function passkeyAccountAction(input: {
       })
       return { redirect: response.headers.get('location') ?? '/account/security' }
     }
-    return { error: error instanceof Error ? error.message : translate(locale, 'passkeyFailed') }
+    return {
+      error:
+        error instanceof GraphqlRequestError
+          ? error.message
+          : translate(locale, 'passkeyFailed'),
+    }
   }
 }

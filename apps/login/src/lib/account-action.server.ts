@@ -381,10 +381,7 @@ function accountFlashFromError(
     }
   }
   return {
-    error:
-      error instanceof Error
-        ? error.message
-        : translate(locale, 'temporaryError'),
+    error: translate(locale, 'temporaryError'),
   }
 }
 

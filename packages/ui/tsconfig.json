@@ -7,11 +7,15 @@
     "jsx": "react-jsx",
     "skipLibCheck": true,
     "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true,
     "noEmit": true,
     "verbatimModuleSyntax": true,
     "paths": {
       "@identity/ui/*": ["./src/*"]
     }
   },
-  "include": ["src/components", "src/hooks", "src/lib"]
+  "include": ["src"]
 }

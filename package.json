@@ -10,6 +10,8 @@
     "dev:console": "pnpm --filter console dev",
     "build:console": "pnpm --filter console build",
     "typecheck:console": "pnpm --filter console typecheck",
+    "typecheck:login": "pnpm --filter login typecheck",
+    "typecheck:ui": "pnpm --filter @identity/ui typecheck",
     "test:console": "pnpm --filter console test",
     "graphql:schema": "node scripts/export-graphql-schema.mjs && node packages/graphql-access/generator.mjs",
     "graphql:check": "node scripts/export-graphql-schema.mjs --check && node packages/graphql-access/generator.mjs --check",
