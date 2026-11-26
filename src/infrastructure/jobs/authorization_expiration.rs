@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 use uuid::Uuid;
 
-use super::{already_queued, period_key, schedule, spawn_until_shutdown};
+use super::{BackgroundWorkers, already_queued, period_key, schedule, spawn_until_shutdown};
 use crate::{
     database::repository::client_authorization::expire_due_authorizations_batch, state::AppState,
 };
@@ -73,7 +73,11 @@ async fn handle_expiration_job(_: ExpirationJob, state: Data<AppState>) -> Resul
     Ok(())
 }
 
-pub(super) async fn spawn_expiration_workers(state: AppState, pool: PgPool) -> Result<(), Error> {
+pub(super) async fn spawn_expiration_workers(
+    state: AppState,
+    pool: PgPool,
+    workers: &mut BackgroundWorkers,
+) -> Result<(), Error> {
     let storage = PostgresStorage::<ExpirationJob>::new(&pool)
         .with_config(Config::default().queue(EXPIRATION_QUEUE));
     let now = u64::try_from(chrono::Utc::now().timestamp()).unwrap_or_default();
@@ -83,23 +87,28 @@ pub(super) async fn spawn_expiration_workers(state: AppState, pool: PgPool) -> R
 
     let worker_storage = storage.clone();
     let worker_state = state.clone();
-    spawn_until_shutdown(&state, "authorization-expiration", move || {
+    spawn_until_shutdown(&state, workers, "authorization-expiration", move |signal| {
         WorkerBuilder::new(format!("authorization-expiration-{}", Uuid::new_v4()))
             .backend(worker_storage.clone())
             .data(worker_state.clone())
             .build(handle_expiration_job)
-            .run()
+            .run_until(signal)
     });
 
-    spawn_until_shutdown(&state, "authorization-expiration-scheduler", move || {
-        WorkerBuilder::new(format!(
-            "authorization-expiration-scheduler-{}",
-            Uuid::new_v4()
-        ))
-        .backend(CronScheduler::new(schedule("0 */5 * * * *")))
-        .data(storage.clone())
-        .build(handle_expiration_tick)
-        .run()
-    });
+    spawn_until_shutdown(
+        &state,
+        workers,
+        "authorization-expiration-scheduler",
+        move |signal| {
+            WorkerBuilder::new(format!(
+                "authorization-expiration-scheduler-{}",
+                Uuid::new_v4()
+            ))
+            .backend(CronScheduler::new(schedule("0 */5 * * * *")))
+            .data(storage.clone())
+            .build(handle_expiration_tick)
+            .run_until(signal)
+        },
+    );
     Ok(())
 }

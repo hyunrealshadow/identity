@@ -163,6 +163,32 @@ pub(super) async fn discard(
     Ok(result.rows_affected > 0)
 }
 
+/// Void the account's active challenge link of `purpose` while keeping its
+/// delivery counter intact, so cancelling or confirming cannot reset rate
+/// limits. Returns whether an unvoided challenge existed.
+pub(super) async fn void(
+    connection: &impl ConnectionTrait,
+    user_id: i64,
+    purpose: ChallengePurpose,
+    now: DateTime<Utc>,
+) -> Result<bool, DbErr> {
+    let result = connection
+        .execute_raw(sea_orm::Statement::from_sql_and_values(
+            sea_orm::DbBackend::Postgres,
+            "UPDATE authentication_challenge \
+             SET token_digest = NULL, expires_at = LEAST(expires_at, $3) \
+             WHERE login_id IS NULL AND session_id IS NULL AND user_id = $1 AND purpose = $2 \
+               AND (token_digest IS NOT NULL OR expires_at > $3)",
+            [
+                user_id.into(),
+                purpose.as_str().into(),
+                now.fixed_offset().into(),
+            ],
+        ))
+        .await?;
+    Ok(result.rows_affected() > 0)
+}
+
 /// Record the delivery outcome of the email that carries the link of the
 /// account challenge `oid`. A link replaced since has a new `oid`, so a late
 /// outcome of an older email changes nothing.
@@ -176,7 +202,8 @@ pub async fn record_delivery(
         .execute_raw(sea_orm::Statement::from_sql_and_values(
             sea_orm::DbBackend::Postgres,
             "UPDATE authentication_challenge SET state = jsonb_set(state, '{delivery}', $2) \
-             WHERE oid = $1 AND login_id IS NULL AND session_id IS NULL",
+             WHERE oid = $1 AND login_id IS NULL AND session_id IS NULL \
+               AND COALESCE(state->'delivery'->>'status', 'queued') <> 'delivered'",
             [oid.into(), report.into()],
         ))
         .await?;

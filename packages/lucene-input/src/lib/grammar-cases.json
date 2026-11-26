@@ -295,6 +295,15 @@
       "query": "occurredAt:\"2026-11-19 10:00:00\""
     },
     {
+      "query": "occurredAt:\"2026-11-19 10:00\""
+    },
+    {
+      "query": "occurredAt:2026-11-19T10:00:00.123456Z"
+    },
+    {
+      "query": "occurredAt:2026-11-19T10:00:00+0800"
+    },
+    {
       "query": "actorLabel:-x",
       "tree": {
         "field": "actorLabel",

@@ -187,6 +187,12 @@ pub struct DeliveryChallengeRequest {
     pub code_expires_at: DateTime<Utc>,
     pub required_login_status: Option<LoginStatus>,
     pub verifier: Option<serde_json::Value>,
+    /// Keep any previously stored verifier intact instead of overwriting it
+    /// when a resend's message failed to compose.
+    pub preserve_verifier: bool,
+    /// When set for a user-bound challenge, verify under a row lock that the
+    /// account is still enabled, verified, and owns this address.
+    pub expected_email_normalized: Option<String>,
 }
 
 /// Outcome of an atomic outbound challenge admission.

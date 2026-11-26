@@ -241,7 +241,7 @@ async fn an_invitation_sets_the_first_password_once_and_only_for_its_address() {
             })
             .await
             .unwrap();
-        assert!(matches!(stale, UserInvitationOutcome::AddressChanged));
+        assert!(matches!(stale, UserInvitationOutcome::AddressChanged { .. }));
         assert_eq!(common::queued_emails(&db).await, 2);
         assert!(invitations.find_by_token("digest-stale-address", Utc::now()).await.unwrap().is_none());
         assert!(invitations.find_by_token("digest-second", Utc::now()).await.unwrap().is_some());
@@ -420,6 +420,8 @@ async fn registration_creates_a_verified_account_and_binds_its_login_once() {
                         "email": "New@example.test",
                         "email_normalized": "new@example.test",
                     })),
+                    preserve_verifier: false,
+                    expected_email_normalized: None,
                 },
                 None,
             )
@@ -475,6 +477,179 @@ async fn registration_creates_a_verified_account_and_binds_its_login_once() {
             RegistrationOutcome::LinkInvalid
         );
         assert_eq!(scalar(&db, "SELECT count(*)::bigint n FROM \"user\" WHERE name_normalized='second'").await, 0);
+    })
+    .await;
+}
+
+#[tokio::test]
+#[ignore = "requires explicitly configured PostgreSQL test database"]
+async fn invitation_guards_delivery_regression_email_updates_disabled_users_and_required_actions() {
+    common::isolated(|db| async move {
+        seed::run_all(&db).await.unwrap();
+        client_management::owner(&db).await;
+        let users = UserManagementRepositoryImpl::new(db.clone())
+            .with_email_queue(common::email_queue(&db).await);
+        let invitations = UserInvitationRepositoryImpl::new(db.clone());
+        users
+            .create_user(CreateUserTransaction {
+                username: "invite-guard".to_owned(),
+                username_normalized: "invite-guard".to_owned(),
+                email: "guard@example.test".to_owned(),
+                email_normalized: "guard@example.test".to_owned(),
+                password: None,
+                invitation: Some(issue("digest-guard-1", "guard@example.test")),
+                profile: identity_domain::user::repository::UserProfilePatch::default(),
+                reason: String::new(),
+                authority: user_mgmt_authority(&db, "guard-create").await,
+            })
+            .await
+            .unwrap();
+        let target = user_oid(&db, "invite-guard").await;
+
+        // Delivered status cannot regress to Failed on late retries.
+        let reported = queued_reports(&db).await;
+        assert_eq!(reported.len(), 1);
+        record_delivery(
+            &db,
+            reported[0],
+            &EmailDeliveryReport::delivered(Utc::now()),
+        )
+        .await
+        .unwrap();
+        record_delivery(
+            &db,
+            reported[0],
+            &EmailDeliveryReport::failed(EmailDeliveryFailure::InvalidAddress, Utc::now()),
+        )
+        .await
+        .unwrap();
+        let delivery = invitations
+            .find_for_user(target.into())
+            .await
+            .unwrap()
+            .expect("invitation remains pending")
+            .delivery;
+        assert_eq!(delivery.status, EmailDeliveryStatus::Delivered);
+        assert_eq!(delivery.failure, None);
+
+        // Changing the user's email through management discards the pending invitation.
+        let updated = users
+            .update_user(
+                identity_application::user::management::UpdateUserTransaction {
+                    user_oid: target.into(),
+                    username: None,
+                    email: Some(
+                        identity_application::user::management::UserIdentifierValue {
+                            value: "moved-guard@example.test".to_owned(),
+                            normalized: "moved-guard@example.test".to_owned(),
+                        },
+                    ),
+                    email_verified: None,
+                    required_actions: Some(identity_domain::user::RequiredActions::from_iter([
+                        identity_domain::user::RequiredAction::ChangePassword,
+                    ])),
+                    profile: identity_domain::user::repository::UserProfilePatch::default(),
+                    expected_version: version(&db, target).await,
+                    reason: String::new(),
+                    authority: user_mgmt_authority(&db, "guard-update-email").await,
+                },
+            )
+            .await
+            .unwrap();
+        assert!(matches!(updated, UserManagementMutationOutcome::Success(_)));
+        assert!(
+            invitations
+                .find_for_user(target.into())
+                .await
+                .unwrap()
+                .is_none()
+        );
+        assert_eq!(
+            invitations
+                .accept("digest-guard-1", &password("MOVED"), Utc::now())
+                .await
+                .unwrap(),
+            InvitationAcceptance::Invalid
+        );
+
+        // Disabled accounts refuse new invitations without queuing mail.
+        let disabled = users
+            .set_user_enabled(
+                UserStateTransaction {
+                    user_oid: target.into(),
+                    expected_version: version(&db, target).await,
+                    reason: String::new(),
+                    authority: user_mgmt_authority(&db, "guard-disable").await,
+                },
+                false,
+            )
+            .await
+            .unwrap();
+        assert!(matches!(
+            disabled,
+            UserManagementMutationOutcome::Success(_)
+        ));
+        let disabled_outcome = users
+            .send_user_invitation(SendUserInvitationTransaction {
+                user_oid: target.into(),
+                invitation: issue("digest-guard-disabled", "moved-guard@example.test"),
+                delivery: identity_application::user::invitation::USER_INVITATION_DELIVERY,
+                reason: String::new(),
+                authority: user_mgmt_authority(&db, "guard-send-disabled").await,
+            })
+            .await
+            .unwrap();
+        assert!(matches!(
+            disabled_outcome,
+            UserInvitationOutcome::UserDisabled
+        ));
+        assert_eq!(common::queued_emails(&db).await, 1);
+
+        // Re-enable, re-send, and verify acceptance clears CHANGE_PASSWORD.
+        let enabled = users
+            .set_user_enabled(
+                UserStateTransaction {
+                    user_oid: target.into(),
+                    expected_version: version(&db, target).await,
+                    reason: String::new(),
+                    authority: user_mgmt_authority(&db, "guard-enable").await,
+                },
+                true,
+            )
+            .await
+            .unwrap();
+        assert!(matches!(enabled, UserManagementMutationOutcome::Success(_)));
+        let resent = users
+            .send_user_invitation(SendUserInvitationTransaction {
+                user_oid: target.into(),
+                invitation: issue("digest-guard-2", "moved-guard@example.test"),
+                delivery: identity_application::user::invitation::USER_INVITATION_DELIVERY,
+                reason: String::new(),
+                authority: user_mgmt_authority(&db, "guard-resend").await,
+            })
+            .await
+            .unwrap();
+        assert!(matches!(resent, UserInvitationOutcome::Sent { .. }));
+        assert_eq!(
+            invitations
+                .accept("digest-guard-2", &password("ACCEPTED"), Utc::now())
+                .await
+                .unwrap(),
+            InvitationAcceptance::Accepted {
+                user_oid: target.into()
+            }
+        );
+        assert_eq!(
+            scalar(
+                &db,
+                &format!(
+                    "SELECT count(*)::bigint n FROM \"user\" \
+                     WHERE oid='{target}' AND NOT ('CHANGE_PASSWORD' = ANY(required_actions))"
+                ),
+            )
+            .await,
+            1
+        );
     })
     .await;
 }

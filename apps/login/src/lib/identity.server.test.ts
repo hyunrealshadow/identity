@@ -308,6 +308,30 @@ describe('identityInternalJson', () => {
       new URL('http://identity:5151/internal/workloads/self/runtime-configuration'),
     )
   })
+
+  it('forwards request context headers and lets explicit locale override accept-language', async () => {
+    process.env.IDENTITY_WORKLOAD_TOKEN = 'a'.repeat(32)
+    mocks.forwardRequestContext.mockImplementationOnce((headers: Headers) => {
+      headers.set('accept-language', 'en-US')
+      headers.set('user-agent', 'Forwarded Browser')
+      headers.set('x-forwarded-for', '203.0.113.10')
+      return headers
+    })
+    const fetch = vi.fn().mockResolvedValue(jsonResponse({ ok: true }))
+    vi.stubGlobal('fetch', fetch)
+
+    await identityInternalJson('/internal/invitations/check', {
+      method: 'POST',
+      body: { token: 'abc' },
+      locale: 'zh-CN',
+    })
+
+    const headers = new Headers(fetch.mock.calls[0]?.[1].headers)
+    expect(mocks.forwardRequestContext).toHaveBeenCalledTimes(1)
+    expect(headers.get('user-agent')).toBe('Forwarded Browser')
+    expect(headers.get('x-forwarded-for')).toBe('203.0.113.10')
+    expect(headers.get('accept-language')).toBe('zh-CN')
+  })
 })
 
 function jsonResponse(payload: unknown, status = 200) {

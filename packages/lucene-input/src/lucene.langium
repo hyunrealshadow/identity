@@ -165,7 +165,7 @@ terminal FUZZY returns string: /~(?:\d+\.\d+)?/;
 terminal BOOST returns string: /\^\d+(?:\.\d+)?/;
 
 terminal DATETIME_TERM returns string:
-  /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:?\d{2})(?![^\s:()[\]{}^~"'!&|<>\/])/
+  /\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:?\d{2})(?![^\s:()[\]{}^~"'!&|<>\/])/
 ;
 
 terminal DATE_MATH_TERM returns string:
@@ -177,7 +177,7 @@ terminal DATE_TERM returns string:
 ;
 
 terminal TIME_TERM returns string:
-  /\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?![^\s:()[\]{}^~"'!&|<>\/])/
+  /\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?![^\s:()[\]{}^~"'!&|<>\/])/
 ;
 
 terminal QUOTED_TERM returns string:

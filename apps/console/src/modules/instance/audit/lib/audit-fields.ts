@@ -77,20 +77,119 @@ export function appendLuceneClause(currentQuery: string, field: string, value: s
   return `${trimmed} AND ${formatted}`
 }
 
+function skipOccurredAtClauseValue(query: string, start: number): number {
+  let index = start
+  if (query.startsWith('>=', index) || query.startsWith('<=', index)) {
+    index += 2
+  } else if (query[index] === '>' || query[index] === '<') {
+    index += 1
+  }
+
+  const opener = query[index]
+  if (opener === '(' || opener === '[' || opener === '{') {
+    const closer = opener === '(' ? ')' : opener === '[' ? ']' : '}'
+    let depth = 1
+    let quote: '"' | "'" | null = null
+    index += 1
+    while (index < query.length && depth > 0) {
+      const ch = query[index]
+      if (ch === '\\') {
+        index += 2
+        continue
+      }
+      if (quote) {
+        if (ch === quote) quote = null
+      } else if (ch === '"' || ch === "'") {
+        quote = ch
+      } else if (ch === opener) {
+        depth += 1
+      } else if (ch === closer) {
+        depth -= 1
+      }
+      index += 1
+    }
+    return index
+  }
+
+  if (opener === '"' || opener === "'") {
+    index += 1
+    while (index < query.length) {
+      if (query[index] === '\\') {
+        index += 2
+        continue
+      }
+      if (query[index] === opener) {
+        return index + 1
+      }
+      index += 1
+    }
+    return index
+  }
+
+  while (index < query.length && !/[\s)]/.test(query[index])) {
+    if (query[index] === '\\') {
+      index += 2
+      continue
+    }
+    index += 1
+  }
+  return index
+}
+
+function stripOccurredAtClauses(query: string): string {
+  const parts: string[] = []
+  let index = 0
+  let quote: '"' | "'" | null = null
+
+  while (index < query.length) {
+    const ch = query[index]
+    if (ch === '\\') {
+      parts.push(query.slice(index, index + 2))
+      index += 2
+      continue
+    }
+    if (quote) {
+      if (ch === quote) quote = null
+      parts.push(ch)
+      index += 1
+      continue
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch
+      parts.push(ch)
+      index += 1
+      continue
+    }
+    const prev = index === 0 ? '' : query[index - 1]
+    if (
+      query.startsWith('occurredAt:', index) &&
+      (!prev || /[\s(]/.test(prev))
+    ) {
+      index = skipOccurredAtClauseValue(query, index + 'occurredAt:'.length)
+      parts.push(' ')
+      continue
+    }
+    parts.push(ch)
+    index += 1
+  }
+
+  return parts
+    .join('')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/\b(?:AND|OR)\s+(?:AND|OR)\b/g, (match) => match.split(/\s+/)[0])
+    .replace(/\(\s*(?:AND|OR)\s+/g, '(')
+    .replace(/\s+(?:AND|OR)\s*\)/g, ')')
+    .replace(/^\s*(?:(?:AND|OR)\s+)+|(?:\s+(?:AND|OR))+\s*$/g, '')
+    .trim()
+}
+
 export function applyTimeRangePreset(currentQuery: string, rangeExpr: string): string {
   const clause = `occurredAt:${rangeExpr}`
   const trimmed = currentQuery.trim()
   if (!trimmed) {
     return clause
   }
-  const stripped = trimmed
-    .replace(
-      /(?:^|\s+)(?:AND\s+)?occurredAt:(?:\[[^\]]*\]|\{[^}]*\}|(?:>=|<=|>|<)?(?:"[^"]*"|\S+))/g,
-      ' ',
-    )
-    .replace(/^\s*(?:AND\s+)+|(?:\s+AND)+\s*$/g, '')
-    .replace(/\s{2,}/g, ' ')
-    .trim()
+  const stripped = stripOccurredAtClauses(trimmed)
   if (!stripped) {
     return clause
   }

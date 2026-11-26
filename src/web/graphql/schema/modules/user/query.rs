@@ -32,8 +32,8 @@ impl UserManagementQuery {
     /// Whether new users can be invited to set their own password: email
     /// delivery and the sign-in address are configured.
     #[graphql(
-        guard = "ManagementGuard::new(ManagementScope::UsersRead, ManagementTarget::instance())",
-        directive = access::apply(ManagementGuard::policy(ManagementScope::UsersRead))
+        guard = "ManagementGuard::new(ManagementScope::UsersWrite, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::UsersWrite))
     )]
     async fn user_invitations_available(&self, ctx: &Context<'_>) -> Result<bool> {
         let request = request_context(ctx)?;

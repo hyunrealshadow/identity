@@ -57,12 +57,13 @@ export async function submitRegistration(request: Request) {
     return formErrorResponse(request, pathname, translate(locale, 'missingLoginShort'), { ui_locales: uiLocales })
   }
 
+  let values: Record<string, string | undefined> = { login_id: loginId, ui_locales: uiLocales }
   try {
     if (intent === 'register' && token) {
       const username = String(form.get('username') ?? '').trim()
       const newPassword = String(form.get('new_password') ?? '')
       const confirmPassword = String(form.get('confirm_password') ?? '')
-      const values = { login_id: loginId, ui_locales: uiLocales, username }
+      values = { login_id: loginId, ui_locales: uiLocales, username }
       if (!username || !newPassword) {
         const message = translate(locale, 'challengeRequired')
         return formValidationErrorResponse(
@@ -75,7 +76,7 @@ export async function submitRegistration(request: Request) {
         )
       }
       if (newPassword !== confirmPassword) {
-        const message = translate(locale, 'accountPasswordMismatch')
+        const message = translate(locale, 'installPasswordMismatch')
         return formValidationErrorResponse(request, pathname, message, values, { confirm_password: message }, destination)
       }
       try {
@@ -105,7 +106,7 @@ export async function submitRegistration(request: Request) {
     }
 
     const email = String(form.get('email') ?? '').trim()
-    const values = { login_id: loginId, ui_locales: uiLocales, email }
+    values = { login_id: loginId, ui_locales: uiLocales, email }
     if (!email) {
       const message = translate(locale, 'challengeRequired')
       return formValidationErrorResponse(request, pathname, message, values, { email: message }, destination)
@@ -133,7 +134,6 @@ export async function submitRegistration(request: Request) {
     }
     return navigationResponse(request, loginRegisterDestination(loginId, uiLocales))
   } catch (error) {
-    const values = { login_id: loginId, ui_locales: uiLocales }
     if (isTerminalLoginError(error)) {
       return formErrorResponse(
         request,

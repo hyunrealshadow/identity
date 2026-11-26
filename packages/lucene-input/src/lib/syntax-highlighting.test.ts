@@ -100,4 +100,29 @@ describe('lucene syntax highlighting tokenizer', () => {
       { type: 'term', from: 30, to: 50, text: String.raw`2026-05-15\ 10:30:57` }
     ]);
   });
+
+  it('keeps escaped wildcards as terms, supports colons after operators, and recognizes nanosecond/local datetimes', () => {
+    expect(tokenizeLuceneQuery(String.raw`actor:a\*b actor:a*`)).toEqual([
+      { type: 'field', from: 0, to: 5, text: 'actor' },
+      { type: 'fieldSeparator', from: 5, to: 6, text: ':' },
+      { type: 'term', from: 6, to: 10, text: String.raw`a\*b` },
+      { type: 'field', from: 11, to: 16, text: 'actor' },
+      { type: 'fieldSeparator', from: 16, to: 17, text: ':' },
+      { type: 'wildcard', from: 17, to: 19, text: 'a*' }
+    ]);
+    expect(tokenizeLuceneQuery('title:>a:b')).toEqual([
+      { type: 'field', from: 0, to: 5, text: 'title' },
+      { type: 'fieldSeparator', from: 5, to: 6, text: ':' },
+      { type: 'operator', from: 6, to: 7, text: '>' },
+      { type: 'term', from: 7, to: 10, text: 'a:b' }
+    ]);
+    expect(tokenizeLuceneQuery('ts:2024-01-01T09:00:00.123456789Z ts:"2024-01-01 09:00"')).toEqual([
+      { type: 'field', from: 0, to: 2, text: 'ts' },
+      { type: 'fieldSeparator', from: 2, to: 3, text: ':' },
+      { type: 'date', from: 3, to: 33, text: '2024-01-01T09:00:00.123456789Z' },
+      { type: 'field', from: 34, to: 36, text: 'ts' },
+      { type: 'fieldSeparator', from: 36, to: 37, text: ':' },
+      { type: 'date', from: 37, to: 55, text: '"2024-01-01 09:00"' }
+    ]);
+  });
 });

@@ -499,7 +499,7 @@ impl LoginRepository for LoginRepositoryImpl {
         if result.rows_affected != 1 {
             return Err(LoginRepositoryError::InvalidTransition);
         }
-        challenge::clear_for_binding(&transaction, ChallengeBinding::Login(login_oid))
+        challenge::void_for_login_switch(&transaction, login_oid)
             .await
             .map_err(|e| LoginRepositoryError::UpdateFailed(Box::new(e)))?;
         transaction

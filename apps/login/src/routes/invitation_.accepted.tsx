@@ -7,13 +7,23 @@ import { AuthShell } from '#/components/auth-shell'
 import { translate } from '#/lib/i18n'
 import { requestLocale } from '#/lib/i18n.server'
 
-const loadAcceptedPage = createServerFn({ method: 'GET' }).handler(() => ({
-  locale: requestLocale(),
-}))
+interface AcceptedSearch {
+  ui_locales?: string
+}
+
+const loadAcceptedPage = createServerFn({ method: 'GET' })
+  .validator((data: { uiLocales?: string }) => data)
+  .handler(({ data }) => ({
+    locale: requestLocale(data.uiLocales?.split(' ')),
+  }))
 
 /** Where the browser lands after an invitation was accepted. */
 export const Route = createFileRoute('/invitation_/accepted')({
-  loader: () => loadAcceptedPage(),
+  validateSearch: (search): AcceptedSearch => ({
+    ui_locales: typeof search.ui_locales === 'string' ? search.ui_locales : undefined,
+  }),
+  loaderDeps: ({ search }) => ({ uiLocales: search.ui_locales }),
+  loader: ({ deps }) => loadAcceptedPage({ data: deps }),
   component: InvitationAcceptedPage,
 })
 

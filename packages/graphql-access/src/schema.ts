@@ -1560,7 +1560,16 @@ export const schemaMetadata: SchemaMetadata = {
         "user": {
           "name": "user",
           "returnType": "User",
-          "policies": []
+          "policies": [
+            {
+              "scopes": [
+                "management.user.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
         },
         "userId": {
           "name": "userId",
@@ -4856,7 +4865,7 @@ export const schemaMetadata: SchemaMetadata = {
           "policies": [
             {
               "scopes": [
-                "management.user.read"
+                "management.user.write"
               ],
               "authentication": "AAL2",
               "userOnly": false,
@@ -4932,7 +4941,16 @@ export const schemaMetadata: SchemaMetadata = {
         "user": {
           "name": "user",
           "returnType": "User",
-          "policies": []
+          "policies": [
+            {
+              "scopes": [
+                "management.user.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
         },
         "userId": {
           "name": "userId",
@@ -5679,7 +5697,16 @@ export const schemaMetadata: SchemaMetadata = {
         "user": {
           "name": "user",
           "returnType": "User",
-          "policies": []
+          "policies": [
+            {
+              "scopes": [
+                "management.user.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
         },
         "userId": {
           "name": "userId",
@@ -5892,7 +5919,16 @@ export const schemaMetadata: SchemaMetadata = {
         "user": {
           "name": "user",
           "returnType": "User",
-          "policies": []
+          "policies": [
+            {
+              "scopes": [
+                "management.user.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
         },
         "userId": {
           "name": "userId",
@@ -6488,7 +6524,16 @@ export const schemaMetadata: SchemaMetadata = {
         "user": {
           "name": "user",
           "returnType": "User",
-          "policies": []
+          "policies": [
+            {
+              "scopes": [
+                "management.user.read"
+              ],
+              "authentication": "AAL2",
+              "userOnly": false,
+              "runtime": true
+            }
+          ]
         },
         "userId": {
           "name": "userId",

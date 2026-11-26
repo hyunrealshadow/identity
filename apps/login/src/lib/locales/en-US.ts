@@ -305,6 +305,7 @@ const enUS = {
   registrationSentDescription: 'Open the link in the email to finish creating your account.',
   registrationSentNotice: 'The email is on its way. It may take a minute. If the address already has an account, the email says so instead.',
   registrationResend: 'Send again',
+  registrationResendIn: 'Send again in {seconds}s',
   registrationDetailsTitle: 'Finish creating your account',
   registrationDetailsDescription: 'Choose a username and a password. Then sign in with them to continue.',
   registrationUsernameHint: '3–64 characters: letters, digits, dots, hyphens or underscores, starting and ending with a letter or digit',

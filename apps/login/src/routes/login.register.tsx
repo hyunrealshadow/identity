@@ -193,6 +193,7 @@ function RegisterPage() {
           action={loginRegisterPath}
           className="progressive-form space-y-6"
           enhancementErrorMessage={t('enhancedNavigationError')}
+          validationErrors={data.fields}
           noValidate
         >
           {hidden}
@@ -224,7 +225,7 @@ function RegisterPage() {
           <TextField
             required
             name="confirm_password"
-            label={t('accountConfirmPassword')}
+            label={t('installConfirmPassword')}
             error={data.fields.confirm_password}
             type="password"
             autoComplete="new-password"
@@ -243,6 +244,7 @@ function RegisterPage() {
             action={loginRegisterPath}
             className="progressive-form space-y-6"
             enhancementErrorMessage={t('enhancedNavigationError')}
+            validationErrors={data.fields}
             noValidate
           >
             {hidden}
@@ -262,7 +264,7 @@ function RegisterPage() {
               {!sent
                 ? t('registrationSend')
                 : resendWait > 0
-                  ? translate(data.locale, 'emailCodeResendIn', { seconds: resendWait })
+                  ? translate(data.locale, 'registrationResendIn', { seconds: resendWait })
                   : t('registrationResend')}
             </SubmitButton>
           </ProgressiveForm>

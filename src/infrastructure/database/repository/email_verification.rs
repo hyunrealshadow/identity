@@ -27,6 +27,7 @@ use super::{
     account_challenge::{self, AccountChallenge, AccountChallengeIssue},
     authorization_lifecycle::renew_user_version_in_txn,
     user::user_attribute_changes,
+    user_invitation::discard_invitation_in_txn,
 };
 use crate::{
     database::{
@@ -87,7 +88,8 @@ fn to_domain(row: &Verification, user_oid: Uuid) -> EmailVerification {
 
 /// Whether a stored verification can still be followed for `account`.
 fn usable(row: &Verification, account: &user::Model, now: DateTime<Utc>) -> bool {
-    row.expires_at() > now
+    row.model.token_digest.is_some()
+        && row.expires_at() > now
         && row.state.current_email_normalized == account.email_normalized
         && (row.state.email_normalized != account.email_normalized || !account.email_verified)
 }
@@ -105,13 +107,13 @@ async fn email_taken(
         .is_some())
 }
 
-/// Remove the account's outstanding verification inside a transaction that
-/// changes its address.
+/// Void the account's outstanding verification inside a transaction that
+/// changes or confirms its address, keeping its delivery counter intact.
 pub(crate) async fn discard_for_user_in_txn(
     connection: &impl ConnectionTrait,
     user_id: i64,
 ) -> Result<(), DbErr> {
-    account_challenge::discard(connection, user_id, PURPOSE).await?;
+    account_challenge::void(connection, user_id, PURPOSE, Utc::now()).await?;
     Ok(())
 }
 
@@ -223,7 +225,7 @@ impl EmailVerificationRepository for EmailVerificationRepositoryImpl {
         else {
             return Ok(false);
         };
-        account_challenge::discard(&self.db, account.id, PURPOSE)
+        account_challenge::void(&self.db, account.id, PURPOSE, Utc::now())
             .await
             .map_err(query_failed)
     }
@@ -283,7 +285,20 @@ impl EmailVerificationRepository for EmailVerificationRepositoryImpl {
         }
         active.email_verified = Set(true);
         active.updated_at = Set(Some(now.into()));
-        let mut model = active.update(&txn).await.map_err(query_failed)?;
+        let mut model = match active.update(&txn).await {
+            Ok(model) => model,
+            Err(error) => {
+                let _ = txn.rollback().await;
+                if changed
+                    && email_taken(&self.db, &row.state.email_normalized, account.id)
+                        .await
+                        .map_err(query_failed)?
+                {
+                    return Ok(EmailVerificationOutcome::EmailExists);
+                }
+                return Err(query_failed(error));
+            }
+        };
         model.version = renew_user_version_in_txn(&txn, model.id)
             .await
             .map_err(query_failed)?
@@ -291,6 +306,11 @@ impl EmailVerificationRepository for EmailVerificationRepositoryImpl {
         discard_for_user_in_txn(&txn, model.id)
             .await
             .map_err(query_failed)?;
+        if changed {
+            discard_invitation_in_txn(&txn, model.id)
+                .await
+                .map_err(query_failed)?;
+        }
         audit::record(
             &txn,
             AuditRecord::success(AuditAction::AccountEmailVerify, model.oid)

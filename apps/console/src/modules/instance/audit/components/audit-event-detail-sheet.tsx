@@ -227,7 +227,10 @@ function ChangeValue({ change, t }: { change: AuditEventDetail['changes'][number
   if (change.kind === 'SET') {
     const valueLabels = AUDIT_FIELD_VALUE_LABELS[change.field]
     const itemText = (item: unknown) => {
-      const key = typeof item === 'string' ? valueLabels?.[item] : undefined
+      const key =
+        typeof item === 'string' && valueLabels && Object.hasOwn(valueLabels, item)
+          ? valueLabels[item]
+          : undefined
       return key ? t(key) : auditChangeValueText(item, empty)
     }
     return (

@@ -76,6 +76,34 @@ pub(super) async fn clear_for_binding(
     Ok(())
 }
 
+/// Void challenges bound to `login_oid` when switching accounts: delete
+/// non-delivery challenges (such as WebAuthn/TOTP), while keeping outbound
+/// delivery rows without verifiers so per-login send intervals and caps hold.
+pub(super) async fn void_for_login_switch(
+    db: &impl ConnectionTrait,
+    login_oid: Uuid,
+) -> Result<(), DbErr> {
+    db.execute_raw(Statement::from_sql_and_values(
+        DbBackend::Postgres,
+        r#"DELETE FROM authentication_challenge AS challenge USING "login" AS owner
+           WHERE challenge.login_id = owner.id AND owner.oid = $1 AND challenge.sent_at IS NULL"#,
+        [login_oid.into()],
+    ))
+    .await?;
+    db.execute_raw(Statement::from_sql_and_values(
+        DbBackend::Postgres,
+        r#"UPDATE authentication_challenge AS challenge
+           SET user_id = NULL,
+               token_digest = NULL,
+               state = jsonb_build_object('code_expires_at', to_jsonb(now()))
+           FROM "login" AS owner
+           WHERE challenge.login_id = owner.id AND owner.oid = $1 AND challenge.sent_at IS NOT NULL"#,
+        [login_oid.into()],
+    ))
+    .await?;
+    Ok(())
+}
+
 #[async_trait]
 impl ChallengeRepository for ChallengeRepositoryImpl {
     async fn store(
@@ -148,7 +176,7 @@ impl ChallengeRepository for ChallengeRepositoryImpl {
                 let row = txn
                     .query_one_raw(Statement::from_sql_and_values(
                         DbBackend::Postgres,
-                        r#"SELECT id FROM "user" WHERE oid = $1"#,
+                        r#"SELECT id, email_normalized, email_verified, enabled FROM "user" WHERE oid = $1 FOR UPDATE"#,
                         [user_oid.into()],
                     ))
                     .await
@@ -156,6 +184,18 @@ impl ChallengeRepository for ChallengeRepositoryImpl {
                 let Some(row) = row else {
                     return Ok(DeliveryChallengeAdmission::InvalidState);
                 };
+                if let Some(expected_email) = request.expected_email_normalized.as_deref() {
+                    let email_normalized: String = row
+                        .try_get("", "email_normalized")
+                        .map_err(AppError::internal)?;
+                    let email_verified: bool = row
+                        .try_get("", "email_verified")
+                        .map_err(AppError::internal)?;
+                    let enabled: bool = row.try_get("", "enabled").map_err(AppError::internal)?;
+                    if !enabled || !email_verified || email_normalized != expected_email {
+                        return Ok(DeliveryChallengeAdmission::InvalidState);
+                    }
+                }
                 Some(row.try_get::<i64>("", "id").map_err(AppError::internal)?)
             }
             None => None,
@@ -308,28 +348,47 @@ impl ChallengeRepository for ChallengeRepositoryImpl {
 
         let new_oid = Uuid::new_v4();
         if let Some(existing_id) = existing_id {
-            txn.execute_raw(Statement::from_sql_and_values(
-                DbBackend::Postgres,
-                r#"
-                UPDATE authentication_challenge
-                SET oid = $1, user_id = $2, state = $3, expires_at = $4, created_at = $5,
-                    sent_at = $6, send_count = $7, window_started_at = $8
-                WHERE id = $9
-            "#,
-                [
-                    new_oid.into(),
-                    expected_user_id.into(),
-                    new_state.into(),
-                    row_expires_at.fixed_offset().into(),
-                    request.now.fixed_offset().into(),
-                    counter.sent_at.fixed_offset().into(),
-                    counter.send_count.into(),
-                    counter.window_started_at.fixed_offset().into(),
-                    existing_id.into(),
-                ],
-            ))
-            .await
-            .map_err(AppError::internal)?;
+            if request.preserve_verifier {
+                txn.execute_raw(Statement::from_sql_and_values(
+                    DbBackend::Postgres,
+                    r#"
+                    UPDATE authentication_challenge
+                    SET sent_at = $1, send_count = $2, window_started_at = $3
+                    WHERE id = $4
+                "#,
+                    [
+                        counter.sent_at.fixed_offset().into(),
+                        counter.send_count.into(),
+                        counter.window_started_at.fixed_offset().into(),
+                        existing_id.into(),
+                    ],
+                ))
+                .await
+                .map_err(AppError::internal)?;
+            } else {
+                txn.execute_raw(Statement::from_sql_and_values(
+                    DbBackend::Postgres,
+                    r#"
+                    UPDATE authentication_challenge
+                    SET oid = $1, user_id = $2, state = $3, expires_at = $4, created_at = $5,
+                        sent_at = $6, send_count = $7, window_started_at = $8
+                    WHERE id = $9
+                "#,
+                    [
+                        new_oid.into(),
+                        expected_user_id.into(),
+                        new_state.into(),
+                        row_expires_at.fixed_offset().into(),
+                        request.now.fixed_offset().into(),
+                        counter.sent_at.fixed_offset().into(),
+                        counter.send_count.into(),
+                        counter.window_started_at.fixed_offset().into(),
+                        existing_id.into(),
+                    ],
+                ))
+                .await
+                .map_err(AppError::internal)?;
+            }
         } else {
             txn.execute_raw(Statement::from_sql_and_values(
                 DbBackend::Postgres,

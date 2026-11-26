@@ -1001,12 +1001,17 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
         let version = renew_user_version_in_txn(&txn, updated.id)
             .await
             .map_err(storage)?;
-        // A changed address voids any verification of the previous one; an
-        // address marked verified needs none.
+        // A changed address voids any verification of the previous one and any
+        // outstanding invitation; an address marked verified needs none.
         if updated.email_normalized != model.email_normalized
             || (updated.email_verified && !model.email_verified)
         {
             discard_for_user_in_txn(&txn, updated.id)
+                .await
+                .map_err(storage)?;
+        }
+        if updated.email_normalized != model.email_normalized {
+            discard_invitation_in_txn(&txn, updated.id)
                 .await
                 .map_err(storage)?;
         }
@@ -1476,6 +1481,9 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
             Some(command.user_oid),
         )
         .await?;
+        if !model.enabled {
+            return Ok(UserInvitationOutcome::UserDisabled);
+        }
         if has_password(&txn, model.id).await.map_err(storage)? {
             return Ok(UserInvitationOutcome::HasPassword);
         }
@@ -1495,7 +1503,9 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
                 return Ok(UserInvitationOutcome::TooSoon { available_at });
             }
             InvitationIssueOutcome::AddressChanged => {
-                return Ok(UserInvitationOutcome::AddressChanged);
+                return Ok(UserInvitationOutcome::AddressChanged {
+                    current_version: model.version,
+                });
             }
         }
         append_semantic_audit(

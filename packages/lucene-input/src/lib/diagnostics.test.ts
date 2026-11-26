@@ -488,4 +488,18 @@ describe('lucene diagnostics', () => {
       expect(getLuceneDiagnostics(invalid, fields).some((item) => item.severity === 'error'), invalid).toBe(true);
     }
   });
+
+  it('validates nanosecond fractions, timezone offset bounds, quoted HH:MM, and nested boolean operators', () => {
+    expect(getLuceneDiagnostics('created_at:2024-01-01T09:00:00.123456789+08:00', fields)).toEqual([]);
+    expect(getLuceneDiagnostics('created_at:"2024-01-01 09:00"', fields)).toEqual([]);
+    expect(getLuceneDiagnostics('created_at:2024-01-01T09:00:00+25:00', fields)).toMatchObject([
+      { code: 'invalidFieldValue', severity: 'error', params: { field: 'created_at', expected: 'datetime' } }
+    ]);
+    expect(getLuceneDiagnostics('created_at:2024-01-01T09:00:00+08:99', fields)).toMatchObject([
+      { code: 'invalidFieldValue', severity: 'error', params: { field: 'created_at', expected: 'datetime' } }
+    ]);
+    expect(getLuceneDiagnostics('author:(a OR )', fields)).toMatchObject([
+      { code: 'missingToken', severity: 'error', params: { operator: 'OR' } }
+    ]);
+  });
 });

@@ -7,7 +7,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{error, info};
 use uuid::Uuid;
 
-use super::{already_queued, period_key, schedule, spawn_until_shutdown};
+use super::{BackgroundWorkers, already_queued, period_key, schedule, spawn_until_shutdown};
 use crate::state::AppState;
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
@@ -93,7 +93,11 @@ async fn handle_rotation_job(_: RotationJob, state: Data<AppState>) -> Result<()
     maintain_rotation(&state).await
 }
 
-pub(super) async fn spawn_rotation_workers(state: AppState, pool: PgPool) -> Result<(), Error> {
+pub(super) async fn spawn_rotation_workers(
+    state: AppState,
+    pool: PgPool,
+    workers: &mut BackgroundWorkers,
+) -> Result<(), Error> {
     let storage = PostgresStorage::<RotationJob>::new(&pool)
         .with_config(Config::default().queue(ROTATION_QUEUE));
     let now = u64::try_from(chrono::Utc::now().timestamp()).unwrap_or_default();
@@ -103,20 +107,25 @@ pub(super) async fn spawn_rotation_workers(state: AppState, pool: PgPool) -> Res
 
     let worker_storage = storage.clone();
     let worker_state = state.clone();
-    spawn_until_shutdown(&state, "credential-rotation", move || {
+    spawn_until_shutdown(&state, workers, "credential-rotation", move |signal| {
         WorkerBuilder::new(format!("credential-rotation-{}", Uuid::new_v4()))
             .backend(worker_storage.clone())
             .data(worker_state.clone())
             .build(handle_rotation_job)
-            .run()
+            .run_until(signal)
     });
 
-    spawn_until_shutdown(&state, "credential-rotation-scheduler", move || {
-        WorkerBuilder::new(format!("credential-rotation-scheduler-{}", Uuid::new_v4()))
-            .backend(CronScheduler::new(schedule("@hourly")))
-            .data(storage.clone())
-            .build(handle_rotation_tick)
-            .run()
-    });
+    spawn_until_shutdown(
+        &state,
+        workers,
+        "credential-rotation-scheduler",
+        move |signal| {
+            WorkerBuilder::new(format!("credential-rotation-scheduler-{}", Uuid::new_v4()))
+                .backend(CronScheduler::new(schedule("@hourly")))
+                .data(storage.clone())
+                .build(handle_rotation_tick)
+                .run_until(signal)
+        },
+    );
     Ok(())
 }

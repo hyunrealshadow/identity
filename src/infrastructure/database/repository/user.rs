@@ -17,6 +17,7 @@ use uuid::Uuid;
 
 use super::authorization_lifecycle::{renew_user_version_in_txn, sync_user_authority_in_txn};
 use super::email_verification::discard_for_user_in_txn;
+use super::user_invitation::discard_invitation_in_txn;
 use crate::database::{
     audit,
     entity::{
@@ -351,6 +352,9 @@ impl UserRepositoryImpl {
             Ok(mut model) => {
                 if email_changed {
                     discard_for_user_in_txn(&txn, model.id)
+                        .await
+                        .map_err(|error| UserRepositoryError::QueryFailed(Box::new(error)))?;
+                    discard_invitation_in_txn(&txn, model.id)
                         .await
                         .map_err(|error| UserRepositoryError::QueryFailed(Box::new(error)))?;
                 }

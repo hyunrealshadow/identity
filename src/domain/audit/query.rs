@@ -351,7 +351,7 @@ fn tokenize(src: &str) -> Result<Vec<SpannedToken>, AuditQueryError> {
             continue;
         }
 
-        // A value may contain colons, as in `ipAddress:::1`.
+        // A value may contain colons, as in `ipAddress:fe80::1`.
         let allow_colon = matches!(
             tokens.last().map(|item| &item.token),
             Some(Token::Colon | Token::RangeOpen | Token::Cmp(_) | Token::To)
@@ -505,7 +505,7 @@ fn read_time_prefix(rest: &str) -> Option<usize> {
     if bytes.get(len) == Some(&b'.') {
         let fraction = bytes[len + 1..]
             .iter()
-            .take(3)
+            .take(9)
             .take_while(|byte| byte.is_ascii_digit())
             .count();
         if fraction > 0 {
@@ -894,13 +894,12 @@ impl Parser {
         Some(value)
     }
 
-    fn take_bound(&mut self) -> Result<Option<String>, AuditQueryError> {
+    fn take_bound(&mut self) -> Result<Option<TermValue>, AuditQueryError> {
         let Some(value) = self.take_value() else {
             return Ok(None);
         };
         value.check_supported()?;
-        let text = value.text();
-        Ok((!text.is_empty()).then_some(text))
+        Ok((!value.text().is_empty()).then_some(value))
     }
 
     fn leaf(
@@ -945,6 +944,12 @@ fn build_field_predicate(
     tz: Tz,
 ) -> Result<AuditQueryExpr, AuditQueryError> {
     if field.is_date() {
+        if value.is_bare_star() {
+            return Ok(AuditQueryExpr::OccurredAtRange {
+                min: None,
+                max: None,
+            });
+        }
         return match parse_time_value(&value.text(), reference_now, tz)? {
             ParsedTimeValue::Exact(instant) => Ok(AuditQueryExpr::OccurredAtRange {
                 min: Some(AuditTimeBound {
@@ -968,10 +973,6 @@ fn build_field_predicate(
                     instant: next_day_start,
                     inclusive: false,
                 }),
-            }),
-            ParsedTimeValue::Unbounded => Ok(AuditQueryExpr::OccurredAtRange {
-                min: None,
-                max: None,
             }),
         };
     }
@@ -1077,11 +1078,6 @@ fn build_occurred_at_cmp(
     tz: Tz,
 ) -> Result<AuditQueryExpr, AuditQueryError> {
     let parsed = parse_time_value(raw, reference_now, tz)?;
-    if matches!(parsed, ParsedTimeValue::Unbounded) {
-        return Err(AuditQueryError::InvalidDateValue {
-            value: raw.to_owned(),
-        });
-    }
     let (min, max) = match (op, parsed) {
         (CmpOp::Gte, ParsedTimeValue::Exact(t)) => (
             Some(AuditTimeBound {
@@ -1139,47 +1135,54 @@ fn build_occurred_at_cmp(
                 inclusive: false,
             }),
         ),
-        (_, ParsedTimeValue::Unbounded) => unreachable!(),
     };
     Ok(AuditQueryExpr::OccurredAtRange { min, max })
 }
 
 fn build_occurred_at_range(
-    min_raw: &str,
+    min_term: &TermValue,
     min_inclusive: bool,
-    max_raw: &str,
+    max_term: &TermValue,
     max_inclusive: bool,
     reference_now: DateTime<Utc>,
     tz: Tz,
 ) -> Result<AuditQueryExpr, AuditQueryError> {
-    let min_val = parse_time_value(min_raw, reference_now, tz)?;
-    let max_val = parse_time_value(max_raw, reference_now, tz)?;
+    let min_val = if min_term.is_bare_star() {
+        None
+    } else {
+        Some(parse_time_value(&min_term.text(), reference_now, tz)?)
+    };
+    let max_val = if max_term.is_bare_star() {
+        None
+    } else {
+        Some(parse_time_value(&max_term.text(), reference_now, tz)?)
+    };
 
     let min = match min_val {
-        ParsedTimeValue::Unbounded => None,
-        ParsedTimeValue::Exact(t) => Some(AuditTimeBound {
+        None => None,
+        Some(ParsedTimeValue::Exact(t)) => Some(AuditTimeBound {
             instant: t,
             inclusive: min_inclusive,
         }),
-        ParsedTimeValue::CalendarDay {
+        Some(ParsedTimeValue::CalendarDay {
             start,
             next_day_start,
-        } => Some(AuditTimeBound {
+        }) => Some(AuditTimeBound {
             instant: if min_inclusive { start } else { next_day_start },
             inclusive: true,
         }),
     };
 
     let max = match max_val {
-        ParsedTimeValue::Unbounded => None,
-        ParsedTimeValue::Exact(t) => Some(AuditTimeBound {
+        None => None,
+        Some(ParsedTimeValue::Exact(t)) => Some(AuditTimeBound {
             instant: t,
             inclusive: max_inclusive,
         }),
-        ParsedTimeValue::CalendarDay {
+        Some(ParsedTimeValue::CalendarDay {
             start,
             next_day_start,
-        } => Some(AuditTimeBound {
+        }) => Some(AuditTimeBound {
             instant: if max_inclusive { next_day_start } else { start },
             inclusive: false,
         }),
@@ -1190,7 +1193,7 @@ fn build_occurred_at_range(
             || (lower.instant == upper.instant && (!lower.inclusive || !upper.inclusive)))
     {
         return Err(AuditQueryError::InvalidDateValue {
-            value: format!("{min_raw} TO {max_raw}"),
+            value: format!("{} TO {}", min_term.text(), max_term.text()),
         });
     }
 
@@ -1199,7 +1202,6 @@ fn build_occurred_at_range(
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ParsedTimeValue {
-    Unbounded,
     Exact(DateTime<Utc>),
     CalendarDay {
         start: DateTime<Utc>,
@@ -1212,10 +1214,6 @@ fn parse_time_value(
     reference_now: DateTime<Utc>,
     tz: Tz,
 ) -> Result<ParsedTimeValue, AuditQueryError> {
-    if raw == "*" {
-        return Ok(ParsedTimeValue::Unbounded);
-    }
-
     if raw == "now" || raw.starts_with("now+") || raw.starts_with("now-") || raw.starts_with("now/")
     {
         return parse_date_math(raw, reference_now, tz).map(ParsedTimeValue::Exact);
@@ -1241,6 +1239,12 @@ fn parse_time_value(
 
     if let Ok(dt) = DateTime::parse_from_rfc3339(raw) {
         return Ok(ParsedTimeValue::Exact(dt.with_timezone(&Utc)));
+    }
+
+    for fmt in ["%Y-%m-%dT%H:%M:%S%.f%z", "%Y-%m-%dT%H:%M:%S%z"] {
+        if let Ok(dt) = DateTime::parse_from_str(raw, fmt) {
+            return Ok(ParsedTimeValue::Exact(dt.with_timezone(&Utc)));
+        }
     }
 
     for fmt in [
@@ -1970,6 +1974,82 @@ mod tests {
             r#"foo"bar""#,
             "(actorLabel:a)(targetLabel:b)",
             "actorLabel:a!targetLabel:b",
+        ] {
+            assert!(
+                parse_audit_query(invalid, now, utc()).is_err(),
+                "{invalid:?} should be rejected"
+            );
+        }
+    }
+
+    #[test]
+    fn supports_nanosecond_and_colonless_offset_timestamps_and_rejects_quoted_stars() {
+        let now = Utc.with_ymd_and_hms(2026, 11, 20, 10, 30, 45).unwrap();
+
+        let sub_ms =
+            parse_audit_query("occurredAt:2026-11-20T10:30:45.123456789Z", now, utc()).unwrap();
+        let expected_ns = Utc
+            .with_ymd_and_hms(2026, 11, 20, 10, 30, 45)
+            .unwrap()
+            .with_nanosecond(123_456_789)
+            .unwrap();
+        assert_eq!(
+            sub_ms,
+            AuditQueryExpr::OccurredAtRange {
+                min: Some(AuditTimeBound {
+                    instant: expected_ns,
+                    inclusive: true,
+                }),
+                max: Some(AuditTimeBound {
+                    instant: expected_ns,
+                    inclusive: true,
+                }),
+            }
+        );
+
+        let local_sub_ms =
+            parse_audit_query(r#"occurredAt:"2026-11-20 10:30:45.123456""#, now, utc()).unwrap();
+        assert!(matches!(
+            local_sub_ms,
+            AuditQueryExpr::OccurredAtRange { .. }
+        ));
+
+        let colonless_offset =
+            parse_audit_query("occurredAt:2026-11-20T18:30:45+0800", now, utc()).unwrap();
+        assert_eq!(
+            colonless_offset,
+            AuditQueryExpr::OccurredAtRange {
+                min: Some(AuditTimeBound {
+                    instant: now,
+                    inclusive: true,
+                }),
+                max: Some(AuditTimeBound {
+                    instant: now,
+                    inclusive: true,
+                }),
+            }
+        );
+
+        assert!(matches!(
+            parse_audit_query("occurredAt:*", now, utc()).unwrap(),
+            AuditQueryExpr::OccurredAtRange {
+                min: None,
+                max: None
+            }
+        ));
+        assert!(matches!(
+            parse_audit_query("occurredAt:[* TO now]", now, utc()).unwrap(),
+            AuditQueryExpr::OccurredAtRange {
+                min: None,
+                max: Some(_),
+            }
+        ));
+
+        for invalid in [
+            r#"occurredAt:"*""#,
+            r"occurredAt:\*",
+            r#"occurredAt:["*" TO now]"#,
+            r"occurredAt:[\* TO now]",
         ] {
             assert!(
                 parse_audit_query(invalid, now, utc()).is_err(),

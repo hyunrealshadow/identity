@@ -411,3 +411,67 @@ async fn a_failed_audit_keeps_the_address_and_the_link() {
     })
     .await;
 }
+
+#[tokio::test]
+#[ignore = "requires explicitly configured PostgreSQL test database"]
+async fn canceling_verification_voids_link_without_resetting_rate_limit() {
+    common::isolated(|db| async move {
+        let repository =
+            EmailVerificationRepositoryImpl::new(db.clone(), common::email_queue(&db).await);
+        let user = insert_user(&db, "ada@example.test", false).await;
+
+        assert!(matches!(
+            repository
+                .admit(request(user, "ada@example.test", "first"))
+                .await
+                .unwrap(),
+            EmailVerificationAdmission::Admitted { .. }
+        ));
+        assert!(repository.cancel(user).await.unwrap());
+        assert!(!repository.cancel(user).await.unwrap());
+        assert_eq!(
+            repository
+                .confirm("digest-first", Utc::now())
+                .await
+                .unwrap(),
+            EmailVerificationOutcome::Invalid
+        );
+        assert!(
+            repository
+                .pending(user, Utc::now())
+                .await
+                .unwrap()
+                .is_none()
+        );
+
+        assert!(matches!(
+            repository
+                .admit(request(user, "ada@example.test", "too-soon"))
+                .await
+                .unwrap(),
+            EmailVerificationAdmission::TooSoon { .. }
+        ));
+
+        for send in 2..=MAX_EMAIL_VERIFICATION_SENDS {
+            age_last_send(&db, user).await;
+            assert!(matches!(
+                repository
+                    .admit(request(user, "ada@example.test", &format!("send-{send}")))
+                    .await
+                    .unwrap(),
+                EmailVerificationAdmission::Admitted { .. }
+            ));
+            assert!(repository.cancel(user).await.unwrap());
+        }
+
+        age_last_send(&db, user).await;
+        assert_eq!(
+            repository
+                .admit(request(user, "ada@example.test", "over-limit"))
+                .await
+                .unwrap(),
+            EmailVerificationAdmission::LimitReached
+        );
+    })
+    .await;
+}

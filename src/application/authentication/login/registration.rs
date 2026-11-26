@@ -261,7 +261,7 @@ impl LoginService {
         let snapshot = self.settings.snapshot();
         // A notice or a link, depending on whether the address has an
         // account; the answer is the same either way.
-        let email = render_templated_email(
+        let (email, render_failed) = match render_templated_email(
             dependencies.renderer.as_ref(),
             &snapshot.get::<EmailTemplatesSetting>(),
             EmailTemplateKind::Registration,
@@ -281,9 +281,13 @@ impl LoginService {
                     "locale": locale,
                 })
             },
-        )
-        .inspect_err(|error| warn!(error = %error, "registration email could not be composed"))
-        .ok();
+        ) {
+            Ok(email) => (Some(email), false),
+            Err(error) => {
+                warn!(error = %error, "registration email could not be composed");
+                (None, true)
+            }
+        };
         // The email is queued with the challenge it carries.
         let sent = match dependencies
             .challenges
@@ -299,7 +303,9 @@ impl LoginService {
                     policy: LOGIN_EMAIL_DELIVERY,
                     code_expires_at: expires_at,
                     required_login_status: Some(LoginStatus::CREATED),
-                    verifier: Some(verifier),
+                    verifier: if render_failed { None } else { Some(verifier) },
+                    preserve_verifier: render_failed,
+                    expected_email_normalized: None,
                 },
                 email,
             )

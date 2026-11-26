@@ -42,4 +42,14 @@ describe('date math', () => {
     expect(formatDateMathValue(utcInstant, 'date', { timeZone: 'UTC' })).toBe('2026-11-20');
     expect(formatDateMathValue(utcInstant, 'date', { timeZone: 'Asia/Shanghai' })).toBe('2026-11-21');
   });
+
+  it('rejects overflowing amounts and clamps calendar month-end dates', () => {
+    const jan31 = new Date('2024-01-31T12:00:00Z');
+    expect(evaluateDateMath('now+1M', jan31, 'UTC')?.toISOString()).toBe('2024-02-29T12:00:00.000Z');
+    expect(evaluateDateMath('now-999999999y', jan31, 'UTC')).toBeNull();
+    expect(isDateMathValue('now-999999999y')).toBe(false);
+    // Elapsed durations skip timezone wall-clock shifts (America/New_York spring forward on 2024-03-10 02:00->03:00).
+    const beforeDst = new Date('2024-03-10T06:30:00Z');
+    expect(evaluateDateMath('now+1h', beforeDst, 'America/New_York')?.toISOString()).toBe('2024-03-10T07:30:00.000Z');
+  });
 });

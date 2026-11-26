@@ -221,7 +221,7 @@ impl LoginService {
         };
 
         let expires_at = now + ttl();
-        let email = match recipient.as_ref().zip(generated.as_ref()) {
+        let (email, render_failed) = match recipient.as_ref().zip(generated.as_ref()) {
             Some((user, (code, token))) => {
                 let snapshot = self.settings.snapshot();
                 let locales: Vec<&str> = user
@@ -252,12 +252,12 @@ impl LoginService {
                     },
                 );
                 match rendered {
-                    Ok(email) => Some(email),
+                    Ok(email) => (Some(email), false),
                     // While the login conceals the account, the answer must
                     // not depend on whether an email goes out.
                     Err(error) if concealed => {
                         warn!(error = %error, "sign-in email could not be composed");
-                        None
+                        (None, true)
                     }
                     Err(error) => {
                         return Err(AppError::from_code(AuthErrorCode::EmailDeliveryFailed)
@@ -265,7 +265,7 @@ impl LoginService {
                     }
                 }
             }
-            None => None,
+            None => (None, false),
         };
         // The email is queued with the challenge it carries.
         let sent = match dependencies
@@ -282,7 +282,11 @@ impl LoginService {
                     policy: LOGIN_EMAIL_DELIVERY,
                     code_expires_at: expires_at,
                     required_login_status: Some(LoginStatus::IDENTIFIER_VERIFIED),
-                    verifier,
+                    verifier: if render_failed { None } else { verifier },
+                    preserve_verifier: render_failed,
+                    expected_email_normalized: recipient
+                        .as_ref()
+                        .map(|user| user.email_normalized.clone()),
                 },
                 email,
             )

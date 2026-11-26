@@ -51,6 +51,17 @@ pub(super) async fn adopt_legacy_migration_history(pool: &PgPool) -> Result<(), 
              move the queue's rows to apalis._sqlx_migrations by hand",
         ));
     }
+    let schema: Option<String> = sqlx::query_scalar("SELECT to_regnamespace('apalis')::text")
+        .fetch_one(&mut *txn)
+        .await?;
+    let jobs_table: Option<String> = sqlx::query_scalar("SELECT to_regclass('apalis.jobs')::text")
+        .fetch_one(&mut *txn)
+        .await?;
+    if schema.is_none() || jobs_table.is_none() {
+        return Err(refused(
+            "public._sqlx_migrations has queue history, but the apalis schema or apalis.jobs table is missing",
+        ));
+    }
     let current: Option<String> =
         sqlx::query_scalar("SELECT to_regclass('apalis._sqlx_migrations')::text")
             .fetch_one(&mut *txn)

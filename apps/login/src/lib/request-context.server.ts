@@ -17,9 +17,14 @@ const FORWARDED_CONTEXT_HEADERS = [
  * attribution. Authentication and routing headers are deliberately excluded.
  */
 export function forwardRequestContext(headers: Headers) {
-  for (const name of FORWARDED_CONTEXT_HEADERS) {
-    const value = getRequestHeader(name)
-    if (value) headers.set(name, value)
+  try {
+    for (const name of FORWARDED_CONTEXT_HEADERS) {
+      const value = getRequestHeader(name)
+      if (value) headers.set(name, value)
+    }
+  } catch {
+    // Background/cold-start callers such as runtime configuration refreshes run
+    // outside a TanStack Start request context, so there are no browser headers.
   }
   return headers
 }

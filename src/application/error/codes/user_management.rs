@@ -45,11 +45,16 @@ pub enum UserManagementErrorCode {
     InvitationDeliveryFailed = 16028,
     /// A new user needs either an initial password or an invitation.
     CredentialChoiceRequired = 16029,
+    /// Disabled users must be enabled before sending an invitation.
+    InvitationUserDisabled = 16030,
 }
 
 impl AppErrorCode for UserManagementErrorCode {
     fn required_params(self) -> &'static [&'static str] {
         match self {
+            Self::VersionConflict => &["current_version"],
+            Self::ReasonTooLong | Self::PageSizeInvalid | Self::InvalidClientMutationId => &["max"],
+            Self::InvalidFilter => &["field"],
             Self::InvitationResendTooSoon => &["seconds"],
             _ => &[],
         }
@@ -61,7 +66,8 @@ impl AppErrorCode for UserManagementErrorCode {
             | Self::UserNotDisabled
             | Self::UserHasNoPassword
             | Self::SelfCredentialActionNotAllowed
-            | Self::InvitationNotPending => ErrorKind::Conflict,
+            | Self::InvitationNotPending
+            | Self::InvitationUserDisabled => ErrorKind::Conflict,
             Self::InvitationUnavailable => ErrorKind::Forbidden,
             Self::InvitationResendTooSoon => ErrorKind::RateLimit,
             Self::InvitationDeliveryFailed => ErrorKind::Internal,
@@ -107,6 +113,7 @@ impl AppErrorCode for UserManagementErrorCode {
             Self::InvitationResendTooSoon => 16027,
             Self::InvitationDeliveryFailed => 16028,
             Self::CredentialChoiceRequired => 16029,
+            Self::InvitationUserDisabled => 16030,
         }
     }
 }
@@ -304,6 +311,14 @@ pub const USER_MANAGEMENT_ERROR_INVENTORY: &[UserManagementErrorCodeDefinition] 
         UserManagementErrorCode::CredentialChoiceRequired,
         ErrorKind::Validation,
         "E16029",
+        &[],
+        &[],
+        "user.management",
+    ),
+    entry(
+        UserManagementErrorCode::InvitationUserDisabled,
+        ErrorKind::Conflict,
+        "E16030",
         &[],
         &[],
         "user.management",

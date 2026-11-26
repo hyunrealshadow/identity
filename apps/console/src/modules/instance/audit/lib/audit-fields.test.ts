@@ -60,5 +60,17 @@ describe('audit-fields', () => {
         '[now-7d TO now]',
       ),
     ).toBe('occurredAt:[now-7d TO now] AND action:user_create')
+    expect(
+      applyTimeRangePreset(
+        'occurredAt:(>=2026-11-01 AND <=2026-11-02) OR action:user_create',
+        '[now-7d TO now]',
+      ),
+    ).toBe('occurredAt:[now-7d TO now] AND action:user_create')
+    expect(
+      applyTimeRangePreset(
+        'action:user_create OR occurredAt:(now-1h)',
+        '[now-7d TO now]',
+      ),
+    ).toBe('occurredAt:[now-7d TO now] AND action:user_create')
   })
 })

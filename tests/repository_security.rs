@@ -1085,6 +1085,8 @@ async fn email_code_admission_is_atomic_and_independent_of_the_account() {
                 code_expires_at,
                 required_login_status: Some(LoginStatus::IDENTIFIER_VERIFIED),
                 verifier: None,
+                preserve_verifier: false,
+                expected_email_normalized: None,
             }
         };
 
@@ -1183,7 +1185,8 @@ async fn email_code_admission_is_atomic_and_independent_of_the_account() {
             i64::from(MAX_EMAIL_CODE_SENDS)
         );
 
-        // Satisfied AMR is kept on the login and cleared along with challenges on identity reset.
+        // Satisfied AMR and unverified challenge verifiers are cleared on identity reset,
+        // while the delivery rate-limit counter remains intact.
         logins
             .record_amr(login.oid, &[AMR_EMAIL.to_owned()])
             .await
@@ -1202,17 +1205,112 @@ async fn email_code_admission_is_atomic_and_independent_of_the_account() {
                 .amr
                 .is_empty()
         );
+        let status = challenges
+            .delivery_status(
+                ChallengeBinding::Login(login.oid),
+                ChallengeMethod::EmailOtp,
+                ChallengePurpose::Authentication,
+            )
+            .await
+            .unwrap()
+            .expect("delivery rate-limit state kept across account switch");
+        assert_eq!(status.send_count, MAX_EMAIL_CODE_SENDS);
+        logins
+            .bind_concealed_identifier(login.oid, "another@example.test", None)
+            .await
+            .unwrap();
+        assert_eq!(
+            challenges
+                .admit_delivery(
+                    context,
+                    make_request(later, later + ChronoDuration::minutes(10)),
+                    email(),
+                )
+                .await
+                .unwrap(),
+            DeliveryChallengeAdmission::LimitReached
+        );
+
+        // Switching away from a real bound user also voids any previously issued verifier
+        // while still keeping the login's delivery cadence limit.
+        let switch_user = Uuid::new_v4();
+        sql(
+            &db,
+            &format!(
+                "INSERT INTO \"user\" (oid,name,name_normalized,email,email_normalized,email_verified) \
+                 VALUES ('{switch_user}','switcher','switcher','switcher@example.test','switcher@example.test',true)"
+            ),
+        )
+        .await;
+        let switch_login = logins.create_pending(client, relation, &[]).await.unwrap();
+        logins
+            .update_status(
+                switch_login.oid,
+                LoginStatus::IDENTIFIER_VERIFIED,
+                Some(switch_user.into()),
+                None,
+            )
+            .await
+            .unwrap();
+        let switch_now = Utc::now();
+        let switch_ctx = DeliveryChallengeContext {
+            user_oid: Some(switch_user.into()),
+            binding: ChallengeBinding::Login(switch_login.oid),
+            method: ChallengeMethod::EmailOtp,
+            purpose: ChallengePurpose::Authentication,
+        };
+        assert!(matches!(
+            challenges
+                .admit_delivery(
+                    switch_ctx,
+                    DeliveryChallengeRequest {
+                        now: switch_now,
+                        policy: LOGIN_EMAIL_DELIVERY,
+                        code_expires_at: switch_now + ChronoDuration::minutes(10),
+                        required_login_status: Some(LoginStatus::IDENTIFIER_VERIFIED),
+                        verifier: Some(serde_json::json!({ "code": "123456" })),
+                        preserve_verifier: false,
+                        expected_email_normalized: Some("switcher@example.test".to_owned()),
+                    },
+                    email(),
+                )
+                .await
+                .unwrap(),
+            DeliveryChallengeAdmission::Admitted { .. }
+        ));
+        logins.reset_identity(switch_login.oid).await.unwrap();
         assert!(
             challenges
-                .delivery_status(
-                    ChallengeBinding::Login(login.oid),
-                    ChallengeMethod::EmailOtp,
-                    ChallengePurpose::Authentication,
-                )
+                .latest(ChallengeContext {
+                    user_oid: switch_user,
+                    binding: ChallengeBinding::Login(switch_login.oid),
+                    method: ChallengeMethod::EmailOtp,
+                    purpose: ChallengePurpose::Authentication,
+                })
                 .await
                 .unwrap()
                 .is_none()
         );
+        logins
+            .bind_concealed_identifier(switch_login.oid, "other@example.test", None)
+            .await
+            .unwrap();
+        assert!(matches!(
+            challenges
+                .admit_delivery(
+                    DeliveryChallengeContext {
+                        user_oid: None,
+                        binding: ChallengeBinding::Login(switch_login.oid),
+                        method: ChallengeMethod::EmailOtp,
+                        purpose: ChallengePurpose::Authentication,
+                    },
+                    make_request(switch_now + ChronoDuration::seconds(5), switch_now + ChronoDuration::minutes(10)),
+                    email(),
+                )
+                .await
+                .unwrap(),
+            DeliveryChallengeAdmission::TooSoon { .. }
+        ));
     })
     .await;
 }

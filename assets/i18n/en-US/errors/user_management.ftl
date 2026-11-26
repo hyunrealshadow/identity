@@ -22,3 +22,4 @@ E16026 = This user has no pending invitation.
 E16027 = An invitation was sent recently. You can send another in { $seconds } seconds.
 E16028 = The invitation email could not be sent. Try again later.
 E16029 = Set an initial password or send an invitation.
+E16030 = Enable this user before sending an invitation.

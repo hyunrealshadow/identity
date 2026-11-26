@@ -31,7 +31,7 @@ export function getLuceneDiagnostics(
     ...getBooleanOperatorDiagnostics(tokens, value),
     ...getDisabledSyntaxDiagnostics(tokens, disabled)
   ];
-  diagnostics.push(...getAstStructureDiagnostics(value, tree, diagnostics));
+  diagnostics.push(...getAstStructureDiagnostics(value, tree, diagnostics, disabled));
   diagnostics.push(...getUnparsedDiagnostics(tree, diagnostics));
 
   return localizeDiagnostics(diagnostics, locale, messages);
@@ -161,7 +161,8 @@ function getUnparsedDiagnostics(tree: LuceneSyntaxTree, reported: ComponentDiagn
 function getAstStructureDiagnostics(
   value: string,
   tree: LuceneSyntaxTree,
-  reported: readonly ComponentDiagnostic[]
+  reported: readonly ComponentDiagnostic[],
+  disabled: readonly LuceneSyntaxFeature[]
 ): ComponentDiagnostic[] {
   const diagnostics: ComponentDiagnostic[] = [];
 
@@ -289,7 +290,11 @@ function getAstStructureDiagnostics(
             params: { expected: 'range end' }
           });
         }
-        if (node.closed === false && node.from !== undefined) {
+        if (
+          node.closed === false &&
+          node.from !== undefined &&
+          !(node.inclusive?.[0] === false && disabled.includes('exclusiveRanges'))
+        ) {
           diagnostics.push({
             code: 'missingToken',
             message: '',
@@ -334,9 +339,11 @@ function isSpanCovered(reported: readonly ComponentDiagnostic[], from: number, t
 }
 
 function getBooleanOperatorDiagnostics(tokens: readonly LuceneToken[], value: string): ComponentDiagnostic[] {
+  const diagnostics: ComponentDiagnostic[] = [];
   let previousMeaningful: LuceneToken | undefined;
 
-  for (const token of tokens) {
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index];
     if (!isBooleanOperator(token)) {
       previousMeaningful = token;
       continue;
@@ -348,31 +355,42 @@ function getBooleanOperatorDiagnostics(tokens: readonly LuceneToken[], value: st
     }
 
     if (!previousMeaningful || !canEndExpression(previousMeaningful)) {
-      return [unexpectedToken(token)];
+      diagnostics.push(unexpectedToken(token));
+      previousMeaningful = token;
+      continue;
     }
 
-    const next = nextMeaningfulToken(tokens, token);
+    const next = tokens[index + 1];
     if (!next) {
-      return [
-        {
-          code: 'missingToken',
-          message: '',
-          severity: 'error',
-          from: token.from,
-          to: value.length,
-          params: { expected: 'term', operator: token.text }
-        }
-      ];
+      diagnostics.push({
+        code: 'missingToken',
+        message: '',
+        severity: 'error',
+        from: token.from,
+        to: value.length,
+        params: { expected: 'term', operator: token.text }
+      });
+      previousMeaningful = token;
+      continue;
     }
 
-    if (isBooleanOperator(next) && !isUnaryOperator(next)) {
-      return [unexpectedToken(next)];
+    if (next.type === 'punctuation' && next.text === ')') {
+      diagnostics.push({
+        code: 'missingToken',
+        message: '',
+        severity: 'error',
+        from: token.from,
+        to: token.to,
+        params: { expected: 'term', operator: token.text }
+      });
+      previousMeaningful = token;
+      continue;
     }
 
     previousMeaningful = token;
   }
 
-  return [];
+  return diagnostics;
 }
 
 function isBooleanOperator(token: LuceneToken): boolean {
@@ -395,10 +413,6 @@ function canEndExpression(token: LuceneToken): boolean {
     token.type === 'regex' ||
     token.type === 'wildcard'
   );
-}
-
-function nextMeaningfulToken(tokens: readonly LuceneToken[], current: LuceneToken): LuceneToken | undefined {
-  return tokens.find((token) => token.from >= current.to && token !== current);
 }
 
 function unexpectedToken(token: LuceneToken): ComponentDiagnostic {
@@ -654,7 +668,7 @@ function isDateValue(value: string): boolean {
 }
 
 function isTimeValue(value: string): boolean {
-  const match = /^(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,3})?$/.exec(value);
+  const match = /^(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,9})?$/.exec(value);
   if (!match) {
     return false;
   }
@@ -663,6 +677,25 @@ function isTimeValue(value: string): boolean {
   const minute = Number(match[2]);
   const second = Number(match[3]);
   return hour <= 23 && minute <= 59 && second <= 59;
+}
+
+function isShortTimeValue(value: string): boolean {
+  const match = /^(\d{2}):(\d{2})$/.exec(value);
+  if (!match) {
+    return false;
+  }
+  return Number(match[1]) <= 23 && Number(match[2]) <= 59;
+}
+
+function isValidTimezoneOffset(zone: string): boolean {
+  if (zone === 'Z') {
+    return true;
+  }
+  const match = /^[+-](\d{2}):?(\d{2})$/.exec(zone);
+  if (!match) {
+    return false;
+  }
+  return Number(match[1]) <= 23 && Number(match[2]) <= 59;
 }
 
 function isDatetimeValue(value: string, quoted: boolean): boolean {
@@ -674,13 +707,17 @@ function isDatetimeValue(value: string, quoted: boolean): boolean {
     return false;
   }
 
-  const isoMatch = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?)(Z|[+-]\d{2}:?\d{2})$/.exec(value);
+  const isoMatch = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?)(Z|[+-]\d{2}:?\d{2})$/.exec(value);
   if (isoMatch) {
-    return isDateValue(isoMatch[1]) && isTimeValue(isoMatch[2]);
+    return isDateValue(isoMatch[1]) && isTimeValue(isoMatch[2]) && isValidTimezoneOffset(isoMatch[3]);
   }
 
-  const localMatch = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?)$/.exec(value);
-  return Boolean(localMatch && isDateValue(localMatch[1]) && isTimeValue(localMatch[2]));
+  const localMatch = /^(\d{4}-\d{2}-\d{2}) (\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?)$/.exec(value);
+  return Boolean(
+    localMatch &&
+      isDateValue(localMatch[1]) &&
+      (isTimeValue(localMatch[2]) || isShortTimeValue(localMatch[2]))
+  );
 }
 
 function getGroupDiagnostics(tokens: readonly LuceneToken[]): ComponentDiagnostic[] {

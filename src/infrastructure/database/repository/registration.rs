@@ -79,6 +79,7 @@ impl RegistrationRepository for RegistrationRepositoryImpl {
                      AND owner.expires_at > now()
                      AND challenge.user_id IS NULL
                      AND challenge.method = $3 AND challenge.purpose = $4
+                     AND challenge.state ? 'verifier'
                      AND challenge.expires_at > now()
                    ORDER BY challenge.created_at DESC, challenge.id DESC
                    LIMIT 1"#,
@@ -153,7 +154,9 @@ impl RegistrationRepository for RegistrationRepositoryImpl {
 
         let now = Utc::now();
         let user_oid = Uuid::new_v4();
-        let model = user::ActiveModel {
+        let username_normalized = account.username_normalized.clone();
+        let email_normalized = account.email_normalized.clone();
+        let model = match (user::ActiveModel {
             oid: Set(user_oid),
             name: Set(account.username),
             name_normalized: Set(account.username_normalized),
@@ -169,8 +172,20 @@ impl RegistrationRepository for RegistrationRepositoryImpl {
             ..Default::default()
         }
         .insert(&txn)
-        .await
-        .map_err(internal)?;
+        .await)
+        {
+            Ok(model) => model,
+            Err(error) => {
+                let _ = txn.rollback().await;
+                if identifier_taken(&self.db, "name_normalized", &username_normalized).await? {
+                    return Ok(RegistrationOutcome::UsernameExists);
+                }
+                if identifier_taken(&self.db, "email_normalized", &email_normalized).await? {
+                    return Ok(RegistrationOutcome::EmailExists);
+                }
+                return Err(internal(error));
+            }
+        };
         user_credential::ActiveModel {
             oid: Set(Uuid::new_v4()),
             user_id: Set(model.id),

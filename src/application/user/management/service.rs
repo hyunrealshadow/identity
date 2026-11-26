@@ -196,6 +196,11 @@ impl UserManagementService {
             UserInvitationOutcome::UserNotFound => {
                 return Err(AppError::from_code(UserManagementErrorCode::UserNotFound));
             }
+            UserInvitationOutcome::UserDisabled => {
+                return Err(AppError::from_code(
+                    UserManagementErrorCode::InvitationUserDisabled,
+                ));
+            }
             UserInvitationOutcome::HasPassword => {
                 return Err(AppError::from_code(
                     UserManagementErrorCode::InvitationNotPending,
@@ -209,10 +214,11 @@ impl UserManagementService {
                 );
             }
             // The address changed after the email was written for it.
-            UserInvitationOutcome::AddressChanged => {
-                return Err(AppError::from_code(
-                    UserManagementErrorCode::VersionConflict,
-                ));
+            UserInvitationOutcome::AddressChanged { current_version } => {
+                return Err(
+                    AppError::from_code(UserManagementErrorCode::VersionConflict)
+                        .with_param("current_version", current_version.to_string()),
+                );
             }
         };
         Ok((record, status))

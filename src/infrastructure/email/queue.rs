@@ -31,6 +31,9 @@ pub struct EmailJob {
     /// outcome is recorded there.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub report_to: Option<Uuid>,
+    /// Prior failed delivery attempts already tried by a worker.
+    #[serde(default)]
+    pub prior_attempts: u32,
 }
 
 impl std::fmt::Debug for EmailJob {
@@ -90,6 +93,7 @@ impl EmailQueue {
             expires_at: email.expires_at,
             message,
             report_to,
+            prior_attempts: 0,
         })
         .map_err(failed)?;
         // The columns apalis-postgres writes for a new task; the queue's own
@@ -103,6 +107,31 @@ impl EmailQueue {
                     Ulid::generate().to_string().into(),
                     self.queue.clone().into(),
                     job.into(),
+                ],
+            ))
+            .await?;
+        Ok(())
+    }
+
+    /// Schedule another delivery attempt of an already-queued `job` at `run_at`
+    /// without blocking the worker in memory.
+    pub async fn requeue_after(
+        &self,
+        connection: &impl ConnectionTrait,
+        job: &EmailJob,
+        run_at: DateTime<Utc>,
+    ) -> Result<(), DbErr> {
+        let encoded = serde_json::to_vec(job).map_err(failed)?;
+        connection
+            .execute_raw(Statement::from_sql_and_values(
+                DbBackend::Postgres,
+                "INSERT INTO apalis.jobs (id, job_type, job, status, attempts, max_attempts, run_at, priority) \
+                 VALUES ($1, $2, $3, 'Pending', 0, 1, $4, 0)",
+                [
+                    Ulid::generate().to_string().into(),
+                    self.queue.clone().into(),
+                    encoded.into(),
+                    run_at.fixed_offset().into(),
                 ],
             ))
             .await?;

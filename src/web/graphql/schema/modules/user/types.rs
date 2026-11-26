@@ -10,6 +10,8 @@ use super::{
     super::{account, account::UserNode},
     access::ensure_user_management_read,
 };
+use crate::graphql::schema::{access::access, management_guard::ManagementGuard};
+use identity_domain::authorization::ManagementScope;
 
 /// Stable user-management ordering. Explicit SDL names keep consumers and the
 /// persisted cursor contract independent from Rust identifier conventions.
@@ -162,6 +164,7 @@ pub(super) struct UpdateUserInput {
     pub email_verified: Option<bool>,
     /// Replace what the next sign-in must complete; an empty list clears it.
     /// Omitted, the current actions are kept.
+    #[graphql(validator(max_items = 16))]
     pub required_actions: Option<Vec<account::UserRequiredAction>>,
     pub profile: Option<UserProfilePatchInput>,
     pub expected_version: Uuid,
@@ -242,6 +245,7 @@ impl CreateUserPayload {
         self.version
     }
 
+    #[graphql(directive = access::apply(ManagementGuard::policy(ManagementScope::UsersRead)))]
     async fn user(&self, ctx: &Context<'_>) -> GraphqlResult<Option<&UserNode>> {
         payload_user(ctx, &self.user).await
     }
@@ -280,6 +284,7 @@ impl UpdateUserPayload {
         self.version
     }
 
+    #[graphql(directive = access::apply(ManagementGuard::policy(ManagementScope::UsersRead)))]
     async fn user(&self, ctx: &Context<'_>) -> GraphqlResult<Option<&UserNode>> {
         payload_user(ctx, &self.user).await
     }
@@ -318,6 +323,7 @@ impl UserStatePayload {
         self.version
     }
 
+    #[graphql(directive = access::apply(ManagementGuard::policy(ManagementScope::UsersRead)))]
     async fn user(&self, ctx: &Context<'_>) -> GraphqlResult<Option<&UserNode>> {
         payload_user(ctx, &self.user).await
     }
@@ -459,6 +465,7 @@ impl ResetUserPasswordPayload {
         self.state.version
     }
 
+    #[graphql(directive = access::apply(ManagementGuard::policy(ManagementScope::UsersRead)))]
     async fn user(&self, ctx: &Context<'_>) -> GraphqlResult<Option<&UserNode>> {
         payload_user(ctx, &self.state.user).await
     }
@@ -532,6 +539,7 @@ impl SendUserInvitationPayload {
         &self.state.user_id
     }
 
+    #[graphql(directive = access::apply(ManagementGuard::policy(ManagementScope::UsersRead)))]
     async fn user(&self, ctx: &Context<'_>) -> GraphqlResult<Option<&UserNode>> {
         payload_user(ctx, &self.state.user).await
     }

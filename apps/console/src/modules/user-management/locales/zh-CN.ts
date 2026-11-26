@@ -97,7 +97,6 @@ const zhCN = {
   usersOrderUsernameAsc: '用户名 A-Z',
   usersOrderUsernameDesc: '用户名 Z-A',
   usersSectionAccount: '账户标识',
-  usersCreateAccountDescription: '填写用户名、邮箱地址和初始密码',
   usersFieldUsername: '用户名',
   usersFieldEmail: '邮箱',
   usersFieldPassword: '初始密码',

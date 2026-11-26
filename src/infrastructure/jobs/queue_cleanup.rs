@@ -10,7 +10,7 @@ use sea_orm::sqlx::{self, PgPool};
 use tracing::{debug, error};
 use uuid::Uuid;
 
-use super::{schedule, spawn_until_shutdown};
+use super::{BackgroundWorkers, schedule, spawn_until_shutdown};
 use crate::{email::EMAIL_QUEUE, state::AppState};
 
 /// The queues whose finished runs are kept for a day.
@@ -27,7 +27,7 @@ async fn purge(_: Tick, pool: Data<PgPool>) -> Result<(), BoxDynError> {
     let removed = sqlx::query(
         "DELETE FROM apalis.jobs \
          WHERE (status IN ('Done', 'Killed') OR (status = 'Failed' AND attempts >= max_attempts)) \
-           AND ((job_type = $1) OR (job_type = ANY($2) AND done_at < now() - interval '1 day'))",
+           AND ((job_type = $1) OR (job_type = ANY($2) AND COALESCE(done_at, run_at) < now() - interval '1 day'))",
     )
     .bind(EMAIL_QUEUE)
     .bind(&maintenance)
@@ -35,17 +35,30 @@ async fn purge(_: Tick, pool: Data<PgPool>) -> Result<(), BoxDynError> {
     .await
     .inspect_err(|error| error!(error = %error, "finished jobs could not be removed"))?
     .rows_affected();
-    debug!(removed, "finished jobs removed");
+    let pruned_workers = sqlx::query(
+        "DELETE FROM apalis.workers AS worker \
+         WHERE worker.last_seen < now() - interval '1 day' \
+           AND NOT EXISTS (SELECT 1 FROM apalis.jobs AS job WHERE job.lock_by = worker.id)",
+    )
+    .execute(&*pool)
+    .await
+    .inspect_err(|error| error!(error = %error, "stale worker rows could not be removed"))?
+    .rows_affected();
+    debug!(removed, pruned_workers, "finished jobs removed");
     Ok(())
 }
 
-pub(super) fn spawn_cleanup_worker(state: &AppState, pool: &PgPool) {
+pub(super) fn spawn_cleanup_worker(
+    state: &AppState,
+    pool: &PgPool,
+    workers: &mut BackgroundWorkers,
+) {
     let pool = pool.clone();
-    spawn_until_shutdown(state, "job-cleanup", move || {
+    spawn_until_shutdown(state, workers, "job-cleanup", move |signal| {
         WorkerBuilder::new(format!("job-cleanup-{}", Uuid::new_v4()))
             .backend(CronScheduler::new(schedule("0 */5 * * * *")))
             .data(pool.clone())
             .build(purge)
-            .run()
+            .run_until(signal)
     });
 }

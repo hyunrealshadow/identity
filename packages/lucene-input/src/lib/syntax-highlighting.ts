@@ -105,12 +105,6 @@ export function tokenizeLuceneQuery(value: string): LuceneToken[] {
       continue;
     }
 
-    if (char === '*' || char === '?') {
-      tokens.push(createToken('wildcard', value, index, index + 1));
-      index += 1;
-      continue;
-    }
-
     if (char === ':' || char === '(' || char === ')' || char === '[' || char === ']' || char === '{' || char === '}') {
       if (char === '[' || char === '{') rangeDepth += 1;
       if (char === ']' || char === '}') rangeDepth = Math.max(0, rangeDepth - 1);
@@ -128,11 +122,13 @@ export function tokenizeLuceneQuery(value: string): LuceneToken[] {
     const type =
       next === ':' && isFieldName(text)
         ? 'field'
-        : isOperatorWord(text) || (rangeDepth > 0 && /^to$/i.test(text))
-          ? 'operator'
-          : isDateLike(text)
-            ? 'date'
-            : 'term';
+        : hasUnescapedWildcard(text)
+          ? 'wildcard'
+          : isOperatorWord(text) || (rangeDepth > 0 && /^to$/i.test(text))
+            ? 'operator'
+            : isDateLike(text)
+              ? 'date'
+              : 'term';
     tokens.push(createToken(type, value, index, to));
     index = to;
   }
@@ -257,17 +253,30 @@ function shouldAllowColonInTerm(tokens: LuceneToken[]): boolean {
     previous.type === 'fieldSeparator' ||
     previous.text === '[' ||
     previous.text === '{' ||
-    /^(>=|<=|>|<)$/.test(previous.text) ||
+    (previous.type === 'operator' && /^(>=|<=|>|<)$/.test(previous.text)) ||
     /^to$/i.test(previous.text)
   );
 }
 
+function hasUnescapedWildcard(value: string): boolean {
+  for (let index = 0; index < value.length; index += 1) {
+    if (value[index] === '\\') {
+      index += 1;
+      continue;
+    }
+    if (value[index] === '*' || value[index] === '?') {
+      return true;
+    }
+  }
+  return false;
+}
+
 function readWord(value: string, from: number, allowColon = false): number {
   let index = from;
-  const stopPattern = allowColon ? /[\s()[\]{}!*?&|<>~^"']/ : /[\s:()[\]{}!*?&|<>~^"']/;
+  const stopPattern = allowColon ? /[\s()[\]{}!&|<>~^"']/ : /[\s:()[\]{}!&|<>~^"']/;
   while (index < value.length && !stopPattern.test(value[index])) {
     if (value[index] === '\\') {
-      index += 2;
+      index = Math.min(index + 2, value.length);
     } else {
       index += 1;
     }
@@ -281,7 +290,7 @@ function isTermBoundary(char: string | undefined): boolean {
 }
 
 function readDateTime(value: string, from: number): number | undefined {
-  const match = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:?\d{2})/.exec(
+  const match = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:?\d{2})/.exec(
     value.slice(from)
   );
   if (!match) {
@@ -293,7 +302,7 @@ function readDateTime(value: string, from: number): number | undefined {
 }
 
 function readTime(value: string, from: number): number | undefined {
-  const match = /^\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?/.exec(value.slice(from));
+  const match = /^\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?/.exec(value.slice(from));
   if (!match) {
     return undefined;
   }
@@ -314,9 +323,9 @@ function isQuotedDateLike(value: string): boolean {
 function isDateLike(value: string): boolean {
   return (
     /^\d{4}-\d{2}-\d{2}$/.test(value) ||
-    /^\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?$/.test(value) ||
-    /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,3})?$/.test(value) ||
-    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:?\d{2})$/.test(value) ||
+    /^\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?$/.test(value) ||
+    /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?$/.test(value) ||
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:?\d{2})$/.test(value) ||
     /^now(?:[+-]\d+(?:ms|s|m|h|d|w|M|y))*(?:\/(?:s|m|h|d|w|M|y))?$/.test(value)
   );
 }

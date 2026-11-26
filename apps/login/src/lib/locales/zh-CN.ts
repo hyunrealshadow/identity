@@ -307,6 +307,7 @@ const zhCN = {
   registrationSentDescription: '请打开邮件中的链接完成注册',
   registrationSentNotice: '邮件正在发送中，可能需要一分钟左右。如果此邮箱已有账号，邮件会提示你直接登录',
   registrationResend: '重新发送',
+  registrationResendIn: '{seconds} 秒后可重新发送',
   registrationDetailsTitle: '完成注册',
   registrationDetailsDescription: '设置用户名和密码，之后用它们登录继续',
   registrationUsernameHint: '3–64 个字符，以字母或数字开头和结尾，可包含字母、数字、点、连字符或下划线',

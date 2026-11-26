@@ -162,6 +162,35 @@ impl EmailTemplateKind {
             }),
         }
     }
+
+    /// Contexts that saved templates must survive, including runtime cases
+    /// where optional values (`application`, or `link` on an existing account)
+    /// are null.
+    #[must_use]
+    pub fn validation_contexts(self, locale: &str) -> Vec<Value> {
+        let sample = self.sample_context(locale);
+        let mut contexts = vec![sample.clone()];
+        if matches!(
+            self,
+            Self::SignInCode | Self::PasswordReset | Self::Registration
+        ) {
+            let mut no_app = sample.clone();
+            if let Some(obj) = no_app.as_object_mut() {
+                obj.insert("application".to_owned(), Value::Null);
+            }
+            contexts.push(no_app);
+        }
+        if matches!(self, Self::Registration) {
+            let mut existing = sample;
+            if let Some(obj) = existing.as_object_mut() {
+                obj.insert("account_exists".to_owned(), Value::Bool(true));
+                obj.insert("link".to_owned(), Value::Null);
+                obj.insert("application".to_owned(), Value::Null);
+            }
+            contexts.push(existing);
+        }
+        contexts
+    }
 }
 
 /// One language of a template, as Tera source. The plain-text alternative

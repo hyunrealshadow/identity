@@ -323,6 +323,36 @@ describe('lucene syntax tree', () => {
     expect(collect(buildLuceneSyntaxTree('foo*~1'), 'UnparsedTokens')).toHaveLength(1);
     expect(collect(buildLuceneSyntaxTree('(a OR b)~2'), 'UnparsedTokens')).toHaveLength(1);
   });
+
+  it('supports nanosecond datetime precision and unescapes wildcard values', () => {
+    expect(
+      buildLuceneSyntaxTree(
+        String.raw`created_at:2026-05-15T10:30:57.123456789+0800 actor:a\ b*`,
+        [{ name: 'created_at', type: 'datetime' }],
+      ),
+    ).toMatchObject({
+      type: 'Query',
+      children: [
+        {
+          type: 'BinaryExpression',
+          operator: 'IMPLICIT',
+          children: [
+            {
+              type: 'Node',
+              children: [
+                { type: 'Field', value: 'created_at' },
+                { type: 'DateTimeTerm', value: '2026-05-15T10:30:57.123456789+0800' },
+              ],
+            },
+            {
+              type: 'Node',
+              children: [{ type: 'Field', value: 'actor' }, { type: 'WildcardTerm', value: 'a b*' }],
+            },
+          ],
+        },
+      ],
+    });
+  });
 });
 
 function collect(tree: ReturnType<typeof buildLuceneSyntaxTree>, type: string): ReturnType<typeof buildLuceneSyntaxTree>[] {

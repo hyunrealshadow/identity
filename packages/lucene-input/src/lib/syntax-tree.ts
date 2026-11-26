@@ -408,7 +408,9 @@ class SyntaxTreeParser {
     const normalizedValue =
       token.type === 'string' || token.type === 'date' || token.type === 'term'
         ? normalizeTermValue(token.text)
-        : token.text;
+        : token.type === 'wildcard'
+          ? unescapeTermValue(token.text)
+          : token.text;
     if (fieldType === 'datetime' && isLocalDateTimeValue(normalizedValue)) {
       return {
         type: 'DateTimeTerm',
@@ -494,7 +496,7 @@ class SyntaxTreeParser {
 
 function readDateValue(value: string): string | null {
   const unquoted = normalizeTermValue(value);
-  const match = /^(\d{4}-\d{2}-\d{2})(?:\s+\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?)?$/.exec(unquoted);
+  const match = /^(\d{4}-\d{2}-\d{2})(?:\s+\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?)?$/.exec(unquoted);
   return match ? match[1] : null;
 }
 
@@ -503,11 +505,11 @@ function getDateLikeTermType(value: string): 'DateTerm' | 'TimeTerm' | 'DateTime
     return 'DateTerm';
   }
 
-  if (/^\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?$/.test(value)) {
+  if (/^\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?$/.test(value)) {
     return 'TimeTerm';
   }
 
-  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:?\d{2})$/.test(value)) {
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:?\d{2})$/.test(value)) {
     return 'DateTimeTerm';
   }
 
@@ -515,7 +517,7 @@ function getDateLikeTermType(value: string): 'DateTerm' | 'TimeTerm' | 'DateTime
 }
 
 function isLocalDateTimeValue(value: string): boolean {
-  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,3})?$/.test(value);
+  return /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?$/.test(value);
 }
 
 function normalizeTermValue(value: string): string {

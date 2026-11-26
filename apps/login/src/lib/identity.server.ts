@@ -278,7 +278,9 @@ export async function identityInternalJson<T>(
     locale?: Locale
   },
 ) {
-  const headers = new Headers({ accept: 'application/json' })
+  const headers = forwardRequestContext(
+    new Headers({ accept: 'application/json' }),
+  )
   if (init?.locale) headers.set('accept-language', init.locale)
   headers.set('authorization', `Bearer ${await internalApiToken()}`)
   if (init?.body) headers.set('content-type', 'application/json')

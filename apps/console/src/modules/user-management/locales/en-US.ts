@@ -107,8 +107,6 @@ const enUS = {
   usersOrderUsernameAsc: 'Username A-Z',
   usersOrderUsernameDesc: 'Username Z-A',
   usersSectionAccount: 'Account identifiers',
-  usersCreateAccountDescription:
-    'Enter a username, email address, and initial password.',
   usersFieldUsername: 'Username',
   usersFieldEmail: 'Email',
   usersFieldPassword: 'Initial password',

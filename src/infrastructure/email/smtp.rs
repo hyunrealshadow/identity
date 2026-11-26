@@ -108,46 +108,64 @@ impl SmtpEmailSender {
     async fn credentials(
         &self,
         authentication: &SmtpAuthentication,
-    ) -> Result<Option<(Credentials, Vec<Mechanism>)>, EmailDeliveryError> {
+    ) -> Result<Option<(Credentials, Vec<Mechanism>, Option<[u8; 32]>)>, EmailDeliveryError> {
         match authentication {
             SmtpAuthentication::None => Ok(None),
             SmtpAuthentication::Password { username, password } => Ok(Some((
                 Credentials::new(username.clone(), self.reveal(password).await?),
                 vec![Mechanism::Plain, Mechanism::Login],
+                None,
             ))),
-            SmtpAuthentication::Xoauth2(oauth) => Ok(Some((
-                Credentials::new(oauth.username.clone(), self.access_token(oauth).await?),
-                vec![Mechanism::Xoauth2],
-            ))),
+            SmtpAuthentication::Xoauth2(oauth) => {
+                let (token, key, from_cache) = self.access_token(oauth).await?;
+                Ok(Some((
+                    Credentials::new(oauth.username.clone(), token),
+                    vec![Mechanism::Xoauth2],
+                    from_cache.then_some(key),
+                )))
+            }
         }
     }
 
     /// An access token for `oauth`, from the cache or the token endpoint.
-    async fn access_token(&self, oauth: &Xoauth2Settings) -> Result<String, EmailDeliveryError> {
+    /// Returns `(token, cache_key, from_cache)` without holding the cache
+    /// mutex across the HTTP request.
+    async fn access_token(
+        &self,
+        oauth: &Xoauth2Settings,
+    ) -> Result<(String, [u8; 32], bool), EmailDeliveryError> {
         // Keyed by everything that selects the token, including the
         // protected secrets, so replacing one is never answered from the cache.
         let key: [u8; 32] = Sha256::digest(serde_json::to_vec(oauth).unwrap_or_default()).into();
-        let mut tokens = self.tokens.lock().await;
-        if let Some(cached) = tokens.get(&key)
-            && cached.renew_at > Instant::now()
         {
-            return Ok(cached.access_token.clone());
+            let tokens = self.tokens.lock().await;
+            if let Some(cached) = tokens.get(&key)
+                && cached.renew_at > Instant::now()
+            {
+                return Ok((cached.access_token.clone(), key, true));
+            }
         }
         let span = tracing::info_span!("email.xoauth2.token", http.request.method = "POST");
         let fetched = self.fetch_token(oauth).instrument(span).await?;
+        let renew_at = Instant::now()
+            + fetched
+                .expires_in
+                .map_or(DEFAULT_TOKEN_LIFETIME, Duration::from_secs)
+                .saturating_sub(TOKEN_EXPIRY_MARGIN);
+        let mut tokens = self.tokens.lock().await;
         tokens.retain(|_, cached| cached.renew_at > Instant::now());
         tokens.insert(
             key,
             CachedToken {
                 access_token: fetched.access_token.clone(),
-                renew_at: Instant::now()
-                    + fetched
-                        .expires_in
-                        .map_or(DEFAULT_TOKEN_LIFETIME, Duration::from_secs)
-                        .saturating_sub(TOKEN_EXPIRY_MARGIN),
+                renew_at,
             },
         );
-        Ok(fetched.access_token)
+        Ok((fetched.access_token, key, false))
+    }
+
+    async fn evict_token(&self, key: &[u8; 32]) {
+        self.tokens.lock().await.remove(key);
     }
 
     async fn fetch_token(
@@ -181,7 +199,7 @@ impl SmtpEmailSender {
             .form(&form)
             .send()
             .await
-            .map_err(|error| EmailDeliveryError::Authentication {
+            .map_err(|error| EmailDeliveryError::Transport {
                 detail: truncate(&format!(
                     "token endpoint unreachable: {}",
                     error.without_url()
@@ -191,7 +209,7 @@ impl SmtpEmailSender {
         let body = response
             .bytes()
             .await
-            .map_err(|error| EmailDeliveryError::Authentication {
+            .map_err(|error| EmailDeliveryError::Transport {
                 detail: truncate(&error.without_url().to_string()),
             })?;
         if !status.is_success() {
@@ -202,9 +220,7 @@ impl SmtpEmailSender {
                     None => error.error,
                 },
             );
-            return Err(EmailDeliveryError::Authentication {
-                detail: truncate(&detail),
-            });
+            return Err(classify_token_status(status, truncate(&detail)));
         }
         serde_json::from_slice::<TokenResponse>(&body).map_err(|_| {
             EmailDeliveryError::Authentication {
@@ -229,6 +245,53 @@ impl SmtpEmailSender {
         })?;
         Ok(builder.port(settings.port).timeout(Some(SMTP_TIMEOUT)))
     }
+}
+
+fn is_auth_failure_code(code: &str) -> bool {
+    matches!(code, "530" | "534" | "535" | "538")
+}
+
+fn classify_token_status(status: reqwest::StatusCode, detail: String) -> EmailDeliveryError {
+    if status == reqwest::StatusCode::TOO_MANY_REQUESTS || status.is_server_error() {
+        EmailDeliveryError::Transport { detail }
+    } else {
+        EmailDeliveryError::Authentication { detail }
+    }
+}
+
+fn classify_smtp_error(error: &lettre::transport::smtp::Error) -> EmailDeliveryError {
+    let detail = truncate(&error.to_string());
+    if error
+        .status()
+        .is_some_and(|code| is_auth_failure_code(&code.to_string()))
+    {
+        EmailDeliveryError::Authentication { detail }
+    } else if error.is_permanent() {
+        // Another attempt would be refused the same way.
+        EmailDeliveryError::Rejected { detail }
+    } else {
+        EmailDeliveryError::Transport { detail }
+    }
+}
+
+fn build_email(
+    settings: &EmailDeliverySettings,
+    message: &EmailMessage,
+) -> Result<Message, EmailDeliveryError> {
+    Message::builder()
+        .from(mailbox(
+            settings.sender_name.as_deref(),
+            &settings.sender_address,
+        )?)
+        .to(mailbox(message.to_name.as_deref(), &message.to_address)?)
+        .subject(message.subject.clone())
+        .multipart(MultiPart::alternative_plain_html(
+            plain_text(&message.html),
+            message.html.clone(),
+        ))
+        .map_err(|error| EmailDeliveryError::Rejected {
+            detail: truncate(&error.to_string()),
+        })
 }
 
 fn mailbox(name: Option<&str>, address: &str) -> Result<Mailbox, EmailDeliveryError> {
@@ -258,48 +321,46 @@ impl EmailSender for SmtpEmailSender {
             if !settings.is_configured() {
                 return Err(EmailDeliveryError::NotConfigured);
             }
-            let email = Message::builder()
-                .from(mailbox(
-                    settings.sender_name.as_deref(),
-                    &settings.sender_address,
-                )?)
-                .to(mailbox(message.to_name.as_deref(), &message.to_address)?)
-                .subject(message.subject)
-                .multipart(MultiPart::alternative_plain_html(
-                    plain_text(&message.html),
-                    message.html,
-                ))
-                .map_err(|error| EmailDeliveryError::Transport {
-                    detail: truncate(&error.to_string()),
-                })?;
+            let email = build_email(settings, &message)?;
             let mut transport = Self::transport(settings)?;
-            if let Some((credentials, mechanisms)) =
+            let cached_key = if let Some((credentials, mechanisms, cached_key)) =
                 self.credentials(&settings.authentication).await?
             {
                 transport = transport
                     .credentials(credentials)
                     .authentication(mechanisms);
-            }
-            transport
-                .build()
-                .send(email)
-                .await
-                .map(drop)
-                .map_err(|error| {
-                    let detail = truncate(&error.to_string());
-                    // 535: authentication credentials invalid.
-                    if error
-                        .status()
-                        .is_some_and(|code| code.to_string().starts_with("535"))
+                cached_key
+            } else {
+                None
+            };
+            match transport.build().send(email).await {
+                Ok(_) => Ok(()),
+                Err(error) => {
+                    if let Some(key) = cached_key
+                        && error.status().is_some_and(|code| code.to_string() == "535")
                     {
-                        EmailDeliveryError::Authentication { detail }
-                    } else if error.is_permanent() {
-                        // Another attempt would be refused the same way.
-                        EmailDeliveryError::Rejected { detail }
-                    } else {
-                        EmailDeliveryError::Transport { detail }
+                        // Cached XOAUTH2 token may have been revoked early; drop it
+                        // and retry once with a freshly fetched token.
+                        self.evict_token(&key).await;
+                        let email = build_email(settings, &message)?;
+                        let mut transport = Self::transport(settings)?;
+                        if let Some((credentials, mechanisms, _)) =
+                            self.credentials(&settings.authentication).await?
+                        {
+                            transport = transport
+                                .credentials(credentials)
+                                .authentication(mechanisms);
+                        }
+                        return transport
+                            .build()
+                            .send(email)
+                            .await
+                            .map(drop)
+                            .map_err(|retry_error| classify_smtp_error(&retry_error));
                     }
-                })
+                    Err(classify_smtp_error(&error))
+                }
+            }
         }
         .instrument(span)
         .await
@@ -322,5 +383,33 @@ mod tests {
         assert!(text.contains("Your code is 246810"), "{text}");
         assert!(text.contains(link), "{text}");
         assert!(!text.contains("color"));
+    }
+
+    #[test]
+    fn transient_token_endpoint_statuses_are_retried_while_client_errors_are_auth_failures() {
+        assert!(matches!(
+            classify_token_status(reqwest::StatusCode::TOO_MANY_REQUESTS, "rate".to_owned()),
+            EmailDeliveryError::Transport { .. }
+        ));
+        assert!(matches!(
+            classify_token_status(
+                reqwest::StatusCode::SERVICE_UNAVAILABLE,
+                "unavailable".to_owned()
+            ),
+            EmailDeliveryError::Transport { .. }
+        ));
+        assert!(matches!(
+            classify_token_status(reqwest::StatusCode::BAD_REQUEST, "invalid_grant".to_owned()),
+            EmailDeliveryError::Authentication { .. }
+        ));
+        assert!(matches!(
+            classify_token_status(reqwest::StatusCode::UNAUTHORIZED, "unauthorized".to_owned()),
+            EmailDeliveryError::Authentication { .. }
+        ));
+        assert!(is_auth_failure_code("530"));
+        assert!(is_auth_failure_code("534"));
+        assert!(is_auth_failure_code("535"));
+        assert!(is_auth_failure_code("538"));
+        assert!(!is_auth_failure_code("550"));
     }
 }

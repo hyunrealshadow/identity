@@ -24,23 +24,33 @@ const PATH = '/invitation'
 
 interface InvitationSearch {
   token?: string
+  ui_locales?: string
 }
 
 function optionalString(value: unknown) {
   return typeof value === 'string' ? value : undefined
 }
 
-function destination(token: string) {
-  return `${PATH}?${new URLSearchParams({ token })}`
+function destination(token: string, uiLocales?: string) {
+  const search = new URLSearchParams({ token })
+  if (uiLocales && uiLocales !== 'browser') search.set('ui_locales', uiLocales)
+  return `${PATH}?${search}`
+}
+
+function acceptedDestination(uiLocales?: string) {
+  if (!uiLocales || uiLocales === 'browser') return `${PATH}/accepted`
+  return `${PATH}/accepted?${new URLSearchParams({ ui_locales: uiLocales })}`
 }
 
 const loadInvitationPage = createServerFn({ method: 'GET' })
-  .validator((data: { token: string }) => data)
+  .validator((data: { token: string; uiLocales?: string }) => data)
   .handler(async ({ data }) => {
     const flash = consumeFormFlash(PATH)
-    const locale = requestLocale()
+    const uiLocales = data.uiLocales ?? ''
+    const locale = requestLocale(uiLocales.split(' '))
     const page = {
       locale,
+      uiLocales,
       token: data.token,
       account: undefined as InvitationCheckResponse | undefined,
       error: flash?.fields ? undefined : flash?.message,
@@ -65,8 +75,9 @@ const loadInvitationPage = createServerFn({ method: 'GET' })
 export const Route = createFileRoute('/invitation')({
   validateSearch: (search): InvitationSearch => ({
     token: optionalString(search.token),
+    ui_locales: optionalString(search.ui_locales),
   }),
-  loaderDeps: ({ search }) => ({ token: search.token ?? '' }),
+  loaderDeps: ({ search }) => ({ token: search.token ?? '', uiLocales: search.ui_locales }),
   loader: ({ deps }) => loadInvitationPage({ data: deps }),
   headers: () => ({
     'Cache-Control': 'no-store',
@@ -77,24 +88,37 @@ export const Route = createFileRoute('/invitation')({
     handlers: {
       POST: async ({ request }) => {
         const form = await request.formData()
-        const locale = formLocale(request, null)
+        const uiLocalesEntry = form.get('ui_locales')
+        const uiLocales = typeof uiLocalesEntry === 'string' ? uiLocalesEntry.trim() : ''
+        const locale = formLocale(request, uiLocalesEntry)
         const token = String(form.get('token') ?? '').trim()
+        const errorPath = uiLocales && uiLocales !== 'browser'
+          ? `${PATH}?${new URLSearchParams({ ui_locales: uiLocales })}`
+          : PATH
         if (!token) {
-          return formErrorResponse(request, PATH, translate(locale, 'invitationNoLinkDescription'), {})
+          return formErrorResponse(
+            request,
+            PATH,
+            translate(locale, 'invitationNoLinkDescription'),
+            {},
+            undefined,
+            errorPath,
+          )
         }
         const newPassword = String(form.get('new_password') ?? '')
         const confirmPassword = String(form.get('confirm_password') ?? '')
+        const retryUrl = destination(token, uiLocales)
         if (!newPassword) {
           const message = translate(locale, 'challengeRequired')
-          return formValidationErrorResponse(request, PATH, message, {}, { new_password: message }, destination(token))
+          return formValidationErrorResponse(request, PATH, message, {}, { new_password: message }, retryUrl)
         }
         if (newPassword !== confirmPassword) {
           const message = translate(locale, 'accountPasswordMismatch')
-          return formValidationErrorResponse(request, PATH, message, {}, { confirm_password: message }, destination(token))
+          return formValidationErrorResponse(request, PATH, message, {}, { confirm_password: message }, retryUrl)
         }
         try {
           await acceptInvitation(token, newPassword, locale)
-          return navigationResponse(request, `${PATH}/accepted`)
+          return navigationResponse(request, acceptedDestination(uiLocales))
         } catch (error) {
           if (error instanceof IdentityApiError && error.fields.length > 0) {
             return formValidationErrorResponse(
@@ -108,7 +132,7 @@ export const Route = createFileRoute('/invitation')({
                   field.message,
                 ]),
               ),
-              destination(token),
+              retryUrl,
             )
           }
           // A link that can never work is not offered again; a transient
@@ -119,7 +143,7 @@ export const Route = createFileRoute('/invitation')({
             errorMessage(error, locale),
             {},
             undefined,
-            isFinalInvitationError(error) ? PATH : destination(token),
+            isFinalInvitationError(error) ? errorPath : retryUrl,
           )
         }
       },
@@ -160,9 +184,11 @@ function InvitationPage() {
             action={PATH}
             className="progressive-form space-y-6"
             enhancementErrorMessage={t('enhancedNavigationError')}
+            validationErrors={data.fields}
             noValidate
           >
             <input type="hidden" name="token" value={data.token} />
+            <input type="hidden" name="ui_locales" value={data.uiLocales} />
             {/* Lets password managers save the new password for this account. */}
             <input type="hidden" name="username" value={account.username} autoComplete="username" />
             <TextField

@@ -774,13 +774,26 @@ fn check_template(
             });
         }
     }
-    renderer
-        .render(content, &kind.sample_context(locale.unwrap_or("en")))
-        .map_err(|EmailTemplateRenderError { part, detail }| TemplateCheck {
-            error: AppError::from_code(InstanceErrorCode::InvalidEmailTemplate)
-                .with_param("detail", detail),
-            part: part.as_str(),
-        })
+    let mut contexts = kind.validation_contexts(locale.unwrap_or("en"));
+    let first = contexts.remove(0);
+    let rendered =
+        renderer
+            .render(content, &first)
+            .map_err(|EmailTemplateRenderError { part, detail }| TemplateCheck {
+                error: AppError::from_code(InstanceErrorCode::InvalidEmailTemplate)
+                    .with_param("detail", detail),
+                part: part.as_str(),
+            })?;
+    for context in contexts {
+        renderer.render(content, &context).map_err(
+            |EmailTemplateRenderError { part, detail }| TemplateCheck {
+                error: AppError::from_code(InstanceErrorCode::InvalidEmailTemplate)
+                    .with_param("detail", detail),
+                part: part.as_str(),
+            },
+        )?;
+    }
+    Ok(rendered)
 }
 
 fn test_message(recipient: String, locale: &str) -> EmailMessage {

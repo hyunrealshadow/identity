@@ -181,20 +181,28 @@ export function UserSecurityPage() {
   // A queued invitation email is usually delivered within seconds; follow it
   // for a short while so the panel shows the outcome.
   const invitation = user?.invitation ?? null
+  const invitationStatus = invitation?.delivery.status ?? null
+  const invitationSentAt = invitation?.sentAt ?? null
+  const userId = user?.id ?? null
   const queuedRefreshes = useRef(0)
-  const refreshDetail = detail.refresh
+  const refreshDetailRef = useRef(detail.refresh)
+  refreshDetailRef.current = detail.refresh
+  const isRefreshing = detail.refreshing
   useEffect(() => {
-    if (invitation?.delivery.status !== 'QUEUED') {
+    queuedRefreshes.current = 0
+  }, [userId, invitationSentAt])
+  useEffect(() => {
+    if (invitationStatus !== 'QUEUED') {
       queuedRefreshes.current = 0
       return
     }
-    if (queuedRefreshes.current >= QUEUED_REFRESH_LIMIT) return
+    if (isRefreshing || queuedRefreshes.current >= QUEUED_REFRESH_LIMIT) return
     const timer = window.setTimeout(() => {
       queuedRefreshes.current += 1
-      void refreshDetail()
+      void refreshDetailRef.current()
     }, QUEUED_REFRESH_MS)
     return () => window.clearTimeout(timer)
-  }, [invitation, refreshDetail])
+  }, [invitationStatus, invitationSentAt, userId, isRefreshing])
 
   if (!user) {
     if (detail.status === 'idle' || detail.status === 'loading') {
@@ -205,6 +213,9 @@ export function UserSecurityPage() {
   const selfTarget = isCurrentUser(user.id, claims?.sub)
   const methods = user.authenticationMethods
   const changeRequired = (user.requiredActions ?? []).includes(CHANGE_PASSWORD)
+  const otherRequiredActions = (user.requiredActions ?? []).filter(
+    (action) => action !== CHANGE_PASSWORD,
+  )
   const hasSecondFactor = Boolean(
     methods && (methods.authenticatorApp || methods.recoveryCodes || methods.passkey),
   )
@@ -279,6 +290,7 @@ export function UserSecurityPage() {
         return setFeedback(feedbackFrom(result, 'missing_send_invitation_payload'))
       }
       toast.success(t('usersInvitationSentToast'))
+      queuedRefreshes.current = 0
       void detail.reload()
     } catch {
       setFeedback({
@@ -470,7 +482,7 @@ export function UserSecurityPage() {
                 )}
               </p>
             </div>
-            {scope.update && !selfTarget ? (
+            {scope.update && (!selfTarget || (changeRequired && otherRequiredActions.length === 0)) ? (
               <Button
                 variant="outline"
                 size="sm"

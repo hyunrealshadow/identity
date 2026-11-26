@@ -109,13 +109,24 @@ export function fromZonedDateParts(parts: ZonedDateParts, timeZone?: string): Da
   return guess;
 }
 
+const MAX_DATE_MATH_AMOUNT = 0xffff_ffff;
+const FIXED_VALIDATION_REFERENCE = new Date(Date.UTC(2026, 0, 1, 0, 0, 0, 0));
+
+function isValidBoundedDate(date: Date): boolean {
+  if (Number.isNaN(date.getTime())) {
+    return false;
+  }
+  const year = date.getUTCFullYear();
+  return year >= 1 && year <= 9999;
+}
+
 export function isDateMathValue(value: string): boolean {
-  return /^now(?:[+-]\d+(?:ms|s|m|h|d|w|M|y))*(?:\/(?:s|m|h|d|w|M|y))?$/.test(value);
+  return evaluateDateMath(value, FIXED_VALIDATION_REFERENCE, 'UTC') !== null;
 }
 
 export function evaluateDateMath(value: string, referenceDate = new Date(), timeZone?: string): Date | null {
   const match = /^now((?:[+-]\d+(?:ms|s|m|h|d|w|M|y))*)(?:\/(s|m|h|d|w|M|y))?$/.exec(value);
-  if (!match) {
+  if (!match || !isValidBoundedDate(referenceDate)) {
     return null;
   }
 
@@ -126,12 +137,21 @@ export function evaluateDateMath(value: string, referenceDate = new Date(), time
   for (const step of offsetPart.matchAll(/([+-])(\d+)(ms|s|m|h|d|w|M|y)/g)) {
     const direction = step[1];
     const amount = Number(step[2]);
+    if (!Number.isSafeInteger(amount) || amount > MAX_DATE_MATH_AMOUNT) {
+      return null;
+    }
     const mathUnit = step[3];
     date = addDateMath(date, direction === '-' ? -amount : amount, mathUnit, timeZone);
+    if (!isValidBoundedDate(date)) {
+      return null;
+    }
   }
 
   if (roundUnit) {
     date = roundDateMath(date, roundUnit, timeZone);
+    if (!isValidBoundedDate(date)) {
+      return null;
+    }
   }
 
   return date;
@@ -157,29 +177,19 @@ export function formatDateValue(date: Date, timeZone?: string): string {
   return `${parts.year}-${padDatePart(parts.month)}-${padDatePart(parts.day)}`;
 }
 
-function addDateMath(date: Date, amount: number, unit: string, timeZone?: string): Date {
-  if (!timeZone) {
-    const next = new Date(date.getTime());
-    if (unit === 'ms') {
-      next.setMilliseconds(next.getMilliseconds() + amount);
-    } else if (unit === 's') {
-      next.setSeconds(next.getSeconds() + amount);
-    } else if (unit === 'm') {
-      next.setMinutes(next.getMinutes() + amount);
-    } else if (unit === 'h') {
-      next.setHours(next.getHours() + amount);
-    } else if (unit === 'd') {
-      next.setDate(next.getDate() + amount);
-    } else if (unit === 'w') {
-      next.setDate(next.getDate() + amount * 7);
-    } else if (unit === 'M') {
-      next.setMonth(next.getMonth() + amount);
-    } else if (unit === 'y') {
-      next.setFullYear(next.getFullYear() + amount);
-    }
-    return next;
-  }
+function addClampedMonths(year: number, month: number, day: number, months: number): { year: number; month: number; day: number } {
+  const totalMonths = year * 12 + (month - 1) + months;
+  const targetYear = Math.floor(totalMonths / 12);
+  const targetMonthIndex = ((totalMonths % 12) + 12) % 12;
+  const daysInMonth = new Date(Date.UTC(targetYear, targetMonthIndex + 1, 0)).getUTCDate();
+  return {
+    year: targetYear,
+    month: targetMonthIndex + 1,
+    day: Math.min(day, daysInMonth)
+  };
+}
 
+function addDateMath(date: Date, amount: number, unit: string, timeZone?: string): Date {
   if (unit === 'ms') {
     return new Date(date.getTime() + amount);
   }
@@ -193,6 +203,20 @@ function addDateMath(date: Date, amount: number, unit: string, timeZone?: string
     return new Date(date.getTime() + amount * 3_600_000);
   }
 
+  if (!timeZone) {
+    const next = new Date(date.getTime());
+    if (unit === 'd') {
+      next.setDate(next.getDate() + amount);
+    } else if (unit === 'w') {
+      next.setDate(next.getDate() + amount * 7);
+    } else if (unit === 'M' || unit === 'y') {
+      const months = unit === 'y' ? amount * 12 : amount;
+      const clamped = addClampedMonths(next.getFullYear(), next.getMonth() + 1, next.getDate(), months);
+      next.setFullYear(clamped.year, clamped.month - 1, clamped.day);
+    }
+    return next;
+  }
+
   const parts = getDatePartsInTimeZone(date, timeZone);
   const base = new Date(
     Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute, parts.second, parts.millisecond)
@@ -201,10 +225,10 @@ function addDateMath(date: Date, amount: number, unit: string, timeZone?: string
     base.setUTCDate(base.getUTCDate() + amount);
   } else if (unit === 'w') {
     base.setUTCDate(base.getUTCDate() + amount * 7);
-  } else if (unit === 'M') {
-    base.setUTCMonth(base.getUTCMonth() + amount);
-  } else if (unit === 'y') {
-    base.setUTCFullYear(base.getUTCFullYear() + amount);
+  } else if (unit === 'M' || unit === 'y') {
+    const months = unit === 'y' ? amount * 12 : amount;
+    const clamped = addClampedMonths(parts.year, parts.month, parts.day, months);
+    base.setUTCFullYear(clamped.year, clamped.month - 1, clamped.day);
   }
   return fromZonedDateParts(
     {

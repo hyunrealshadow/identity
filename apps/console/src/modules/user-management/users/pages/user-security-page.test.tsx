@@ -244,6 +244,40 @@ describe('UserSecurityPage', () => {
     ).toBe(true)
   })
 
+  it('allows a signed-in admin to clear their own CHANGE_PASSWORD action only when no other actions remain', () => {
+    mocks.subject = 'User:target'
+    const clearable = renderSecurityPage(
+      makeDetail(
+        makeUser({
+          requiredActions: ['CHANGE_PASSWORD'],
+          authenticationMethods: {
+            password: true,
+            authenticatorApp: false,
+            recoveryCodes: false,
+            passkey: false,
+          },
+        }),
+      ),
+    )
+    expect(screen.getByRole('button', { name: 'Stop requiring' })).toBeTruthy()
+    clearable.unmount()
+
+    renderSecurityPage(
+      makeDetail(
+        makeUser({
+          requiredActions: ['CHANGE_PASSWORD', 'OTHER_ACTION' as never],
+          authenticationMethods: {
+            password: true,
+            authenticatorApp: false,
+            recoveryCodes: false,
+            passkey: false,
+          },
+        }),
+      ),
+    )
+    expect(screen.queryByRole('button', { name: 'Stop requiring' })).toBeNull()
+  })
+
   it('shows password-change toggle and disables Clear MFA when user has no second factors', () => {
     renderSecurityPage(
       makeDetail(

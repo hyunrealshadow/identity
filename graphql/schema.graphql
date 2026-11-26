@@ -1167,7 +1167,7 @@ input CreateUserInput {
 type CreateUserPayload {
 	userId: ID!
 	version: UUID!
-	user: User
+	user: User @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	clientMutationId: String
 }
 
@@ -2297,7 +2297,7 @@ type QueryRoot {
 	Whether new users can be invited to set their own password: email
 	delivery and the sign-in address are configured.
 	"""
-	userInvitationsAvailable: Boolean! @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
+	userInvitationsAvailable: Boolean! @access(policy: {scopes: ["management.user.write"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	user(id: ID!): User @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	users(filter: UserFilter, orderBy: UserOrder, first: Int, after: String, last: Int, before: String): UserConnection! @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	resource(id: ID!): Resource @access(policy: {scopes: ["management.resource.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
@@ -2356,7 +2356,7 @@ input RemoveGroupMemberInput {
 type ResetUserPasswordPayload {
 	userId: ID!
 	version: UUID!
-	user: User
+	user: User @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	"""
 	The generated password, shown once: it is not stored and cannot be
 	read again. The user must replace it at the next sign-in.
@@ -2777,7 +2777,7 @@ input SendUserInvitationInput {
 
 type SendUserInvitationPayload {
 	userId: ID!
-	user: User
+	user: User @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	"""
 	The invitation just sent.
 	"""
@@ -3108,7 +3108,7 @@ input UpdateUserInput {
 type UpdateUserPayload {
 	userId: ID!
 	version: UUID!
-	user: User
+	user: User @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	clientMutationId: String
 }
 
@@ -3378,7 +3378,7 @@ input UserStateInput {
 type UserStatePayload {
 	userId: ID!
 	version: UUID!
-	user: User
+	user: User @access(policy: {scopes: ["management.user.read"], authentication: AAL2, maxAge: null, elevatedMaxAge: null, userOnly: false, runtime: true})
 	clientMutationId: String
 }
 

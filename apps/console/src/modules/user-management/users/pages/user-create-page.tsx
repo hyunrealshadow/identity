@@ -119,11 +119,16 @@ export function UserCreatePage() {
     scope.create,
     'missing_invitations_available',
   )
-  const invitationsAvailable = invitations.data?.userInvitationsAvailable === true
-  // Until the answer arrives the option stays disabled without claiming that
-  // email delivery is off.
-  const invitationsUnknown = invitations.status === 'idle' || invitations.status === 'loading'
-  const [chosenFirstSignIn, setFirstSignIn] = useState<FirstSignIn | null>(null)
+  const invitationsAvailable =
+    invitations.status === 'ready' && invitations.data?.userInvitationsAvailable === true
+  const invitationsUnavailable =
+    invitations.status === 'ready' && invitations.data?.userInvitationsAvailable === false
+  // Until a confirmed false arrives, keep the option disabled without claiming
+  // that email delivery is off.
+  const invitationsUnknown = !invitationsAvailable && !invitationsUnavailable
+  const [chosenFirstSignIn, setFirstSignIn] = useState<FirstSignIn | null>(() =>
+    initialDraft.restored ? 'password' : null,
+  )
   const firstSignIn: FirstSignIn =
     chosenFirstSignIn === 'invite' && !invitationsAvailable
       ? 'password'
@@ -341,8 +346,11 @@ export function UserCreatePage() {
     value: string,
   ) {
     changeDraft((current) => ({ ...current, [field]: value }))
-    if (field === 'password' && value !== '') {
-      setRestoredPasswordHint(false)
+    if (field === 'password') {
+      setFirstSignIn((current) => current ?? 'password')
+      if (value !== '') {
+        setRestoredPasswordHint(false)
+      }
     }
     setFeedback(null)
     clearLocalError(field)
@@ -369,6 +377,7 @@ export function UserCreatePage() {
     draftRef.current = next
     setDraft(next)
     persistDraft.current = true
+    setFirstSignIn(null)
     setRestoredPasswordHint(false)
     setLocalErrors({})
     setFieldErrors({})

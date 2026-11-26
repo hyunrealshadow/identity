@@ -35,7 +35,7 @@ pub async fn start_servers(
     app: Service,
     internal: Service,
 ) -> AppResult<()> {
-    spawn_background_workers(state.clone(), config).await?;
+    let workers = spawn_background_workers(state.clone(), config).await?;
     let shared_health = health::shares_listener(&config.health, &config.server);
     let shared_graphql = graphql::shares_listener(&config.graphql, &config.server);
 
@@ -132,6 +132,7 @@ pub async fn start_servers(
         }
     }
 
+    workers.shutdown(std::time::Duration::from_secs(15)).await;
     Ok(())
 }
 

@@ -107,6 +107,8 @@ pub enum UserInvitationOutcome {
         invitation: UserInvitationStatus,
     },
     UserNotFound,
+    /// Disabled users cannot be invited until re-enabled.
+    UserDisabled,
     /// The user already has a password.
     HasPassword,
     TooSoon {
@@ -114,7 +116,9 @@ pub enum UserInvitationOutcome {
     },
     /// The account's address is no longer the one the email was written
     /// for; nothing was stored or queued.
-    AddressChanged,
+    AddressChanged {
+        current_version: Uuid,
+    },
 }
 
 /// Fully prepared sparse update.

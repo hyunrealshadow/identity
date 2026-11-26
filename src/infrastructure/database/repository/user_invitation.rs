@@ -18,7 +18,7 @@ use identity_domain::{
     audit::{AuditAction, AuditActor, AuditField, AuditRecord},
     auth::challenge::{ChallengePurpose, DeliveryDecision, DeliveryPolicy},
     email::EmailDeliveryReport,
-    user::{User, UserOid},
+    user::{RequiredAction, User, UserOid},
 };
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseConnection, DbBackend, DbErr,
@@ -33,7 +33,7 @@ use super::{
     authorization_lifecycle::renew_user_version_in_txn,
     email_verification::discard_for_user_in_txn,
     shared::lock_user_credentials,
-    user::to_domain,
+    user::{required_actions_value, stored_required_actions, to_domain},
 };
 use crate::{
     database::{
@@ -305,8 +305,20 @@ impl UserInvitationRepository for UserInvitationRepositoryImpl {
         .await
         .map_err(internal)?;
         let verified_now = !account.email_verified;
+        let mut required_actions =
+            stored_required_actions(&account.required_actions).map_err(internal)?;
+        let cleared_change_password = required_actions.remove(&RequiredAction::ChangePassword);
+        let before_actions = account.required_actions.clone();
+        let after_actions = if cleared_change_password {
+            Some(required_actions_value(&required_actions))
+        } else {
+            None
+        };
         let mut active: user::ActiveModel = account.clone().into();
         active.email_verified = Set(true);
+        if let Some(updated_actions) = after_actions.clone() {
+            active.required_actions = Set(updated_actions);
+        }
         active.updated_at = Set(Some(now.into()));
         let model = active.update(&txn).await.map_err(internal)?;
         renew_user_version_in_txn(&txn, model.id)
@@ -327,6 +339,13 @@ impl UserInvitationRepository for UserInvitationRepositoryImpl {
                     changes.secret(AuditField::Password);
                     if verified_now {
                         changes.diff(AuditField::EmailVerified, &false, &true);
+                    }
+                    if let Some(after_actions) = &after_actions {
+                        changes.members(
+                            AuditField::RequiredActions,
+                            before_actions.as_array().into_iter().flatten(),
+                            after_actions.as_array().into_iter().flatten(),
+                        );
                     }
                 }),
         )

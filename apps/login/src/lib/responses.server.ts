@@ -53,13 +53,22 @@ export function consumeFormFlash(pathname: string) {
 }
 
 export function navigationResponse(request: Request, destination: string) {
-  if (request.headers.get(ENHANCED_FORM_HEADER) === '1') {
-    return Response.json({ redirect: destination } satisfies EnhancedNavigationResponse)
+  const carriesToken = new URL(destination, 'http://localhost').searchParams.has('token')
+  const headers = new Headers()
+  if (carriesToken) {
+    headers.set('cache-control', 'no-store')
   }
 
+  if (request.headers.get(ENHANCED_FORM_HEADER) === '1') {
+    return Response.json({ redirect: destination } satisfies EnhancedNavigationResponse, {
+      headers,
+    })
+  }
+
+  headers.set('location', destination)
   return new Response(null, {
     status: 303,
-    headers: { location: destination },
+    headers,
   })
 }
 
