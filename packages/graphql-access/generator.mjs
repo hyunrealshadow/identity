@@ -1,31 +1,18 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
-import { createRequire } from 'node:module'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
-
-const here = dirname(fileURLToPath(import.meta.url))
-const schemaPath = resolve(here, '../../graphql/schema.graphql')
-const outputPath = resolve(here, 'src/schema.ts')
-const consolePackagePath = resolve(here, '../../apps/console/package.json')
-
-async function loadGraphql() {
-  try {
-    return await import('graphql')
-  } catch {
-    const consoleRequire = createRequire(consolePackagePath)
-    return consoleRequire('graphql')
-  }
-}
-
-const graphql = await loadGraphql()
-const {
+import {
   buildSchema,
   getNamedType,
   isInterfaceType,
   isObjectType,
   isUnionType,
   valueFromASTUntyped,
-} = graphql
+} from 'graphql'
+
+const here = dirname(fileURLToPath(import.meta.url))
+const schemaPath = resolve(here, '../../graphql/schema.graphql')
+const outputPath = resolve(here, 'src/schema.ts')
 
 const AUTHENTICATION_VALUES = new Set([
   'SESSION',

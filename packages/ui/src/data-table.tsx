@@ -49,6 +49,7 @@ interface DataTableProps {
 
 interface MeasuredTableWidths {
   tableWidth?: number
+  tbodyHeight?: number
   columnWidths: Record<string, number>
 }
 
@@ -57,6 +58,7 @@ function sameMeasuredWidths(
   next: MeasuredTableWidths,
 ): boolean {
   if (previous.tableWidth !== next.tableWidth) return false
+  if (previous.tbodyHeight !== next.tbodyHeight) return false
   const prevKeys = Object.keys(previous.columnWidths)
   const nextKeys = Object.keys(next.columnWidths)
   if (prevKeys.length !== nextKeys.length) return false
@@ -93,6 +95,7 @@ function DataTableRoot({
     const element = table.current
     const measure = () => {
       const width = element.getBoundingClientRect().width
+      const tbodyHeight = element.querySelector('tbody')?.getBoundingClientRect().height
       const columnWidths: Record<string, number> = {}
       for (const column of element.querySelectorAll<HTMLElement>(
         'thead th[data-key]',
@@ -103,6 +106,7 @@ function DataTableRoot({
       setMeasured((previous) => {
         const next: MeasuredTableWidths = {
           tableWidth: width || previous.tableWidth,
+          tbodyHeight: tbodyHeight || previous.tbodyHeight,
           columnWidths,
         }
         return sameMeasuredWidths(previous, next) ? previous : next
@@ -205,7 +209,7 @@ function DataTableRoot({
             </tr>
           </thead>
           {loading ? (
-            <tbody>
+            <tbody style={measured.tbodyHeight ? { height: measured.tbodyHeight } : undefined}>
               {Array.from({ length: Math.max(1, loadingRows) }, (_, index) => (
                 <tr key={index} className="border-b border-border last:border-0">
                   {columns.map((column) => (
