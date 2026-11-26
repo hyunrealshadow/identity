@@ -8,10 +8,7 @@ use identity_infrastructure::{
     observability::context::TraceTrustPolicy,
     state::AppState,
 };
-use identity_web::{
-    graphql, health,
-    middleware::{RequestIdMiddleware, RequireUpstreamHttps, TraceContextMiddleware},
-};
+use identity_web::{graphql, health, middleware::TraceContextMiddleware, router::graphql_service};
 use rustls::crypto::{CryptoProvider, aws_lc_rs};
 use salvo::{
     Listener, Server, Service,
@@ -91,23 +88,7 @@ pub async fn start_servers(
 
     if needs_separate_graphql {
         let graphql_address = graphql::bind_address(&config.graphql, &config.server);
-        let trace_context = TraceContextMiddleware::new(TraceTrustPolicy::new(
-            config.observability.trace_context.clone(),
-        ));
-        let graphql_app = match mode {
-            ListenerMode::UpstreamTls => graphql::router(state.clone(), &config.graphql)
-                .hoop(RequestIdMiddleware::new(TraceTrustPolicy::new(
-                    config.observability.trace_context.clone(),
-                )))
-                .hoop(RequireUpstreamHttps::new(
-                    &config.server.tls.trusted_proxies,
-                    &config.server.tls.direct_http_clients,
-                ))
-                .hoop(trace_context),
-            ListenerMode::DirectTls => {
-                graphql::router(state.clone(), &config.graphql).hoop(trace_context)
-            }
-        };
+        let graphql_app = graphql_service(state.clone(), config);
         spawn_app(
             &mut servers,
             config,

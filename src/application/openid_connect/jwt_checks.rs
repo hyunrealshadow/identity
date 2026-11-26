@@ -71,10 +71,21 @@ pub fn json_audience_matches(value: &Value, valid_audiences: &[&str]) -> bool {
 }
 
 fn numeric_date(value: &Value) -> Option<i64> {
-    value
-        .as_i64()
-        .or_else(|| value.as_u64().and_then(|value| i64::try_from(value).ok()))
-        .or_else(|| value.as_f64().map(|value| value as i64))
+    if let Some(value) = value.as_i64() {
+        return Some(value);
+    }
+    if let Some(value) = value.as_u64() {
+        return i64::try_from(value).ok();
+    }
+    let value = value.as_f64()?;
+    // 2^63 == 9_223_372_036_854_775_808.0; finite values in [-2^63, 2^63) fit in i64.
+    if !value.is_finite()
+        || value < -9_223_372_036_854_775_808.0
+        || value >= 9_223_372_036_854_775_808.0
+    {
+        return None;
+    }
+    Some(value.trunc() as i64)
 }
 
 #[cfg(test)]
@@ -141,6 +152,34 @@ mod tests {
         let now = SystemTime::UNIX_EPOCH + Duration::from_secs(100);
         payload.set_expires_at(&(now + Duration::from_secs(1)));
 
+        assert_eq!(
+            validate_required_exp_and_optional_window(&payload, 100),
+            Ok(())
+        );
+    }
+
+    #[test]
+    fn numeric_date_rejects_overflowing_values_and_accepts_fractional_dates() {
+        let mut payload = JwtPayload::new();
+        payload
+            .set_claim(JwtClaimNames::EXP, Some(json!(1e30)))
+            .unwrap();
+        assert_eq!(
+            validate_required_exp_and_optional_window(&payload, 100),
+            Err(JwtTimeValidationError::ExpMissing)
+        );
+
+        payload
+            .set_claim(JwtClaimNames::EXP, Some(json!(u64::MAX)))
+            .unwrap();
+        assert_eq!(
+            validate_required_exp_and_optional_window(&payload, 100),
+            Err(JwtTimeValidationError::ExpMissing)
+        );
+
+        payload
+            .set_claim(JwtClaimNames::EXP, Some(json!(101.5)))
+            .unwrap();
         assert_eq!(
             validate_required_exp_and_optional_window(&payload, 100),
             Ok(())

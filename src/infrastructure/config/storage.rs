@@ -1,7 +1,9 @@
+use std::fmt;
+
 use super::default_true;
 use serde::Deserialize;
 
-#[derive(Clone, Debug, Deserialize)]
+#[derive(Clone, Deserialize)]
 pub struct DatabaseConfig {
     pub uri: String,
     #[serde(default)]
@@ -16,6 +18,21 @@ pub struct DatabaseConfig {
     pub max_connections: u32,
     #[serde(default = "default_true")]
     pub auto_migrate: bool,
+}
+
+impl fmt::Debug for DatabaseConfig {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("DatabaseConfig")
+            .field("uri", &"[REDACTED]")
+            .field("enable_logging", &self.enable_logging)
+            .field("connect_timeout", &self.connect_timeout)
+            .field("idle_timeout", &self.idle_timeout)
+            .field("min_connections", &self.min_connections)
+            .field("max_connections", &self.max_connections)
+            .field("auto_migrate", &self.auto_migrate)
+            .finish()
+    }
 }
 
 impl Default for DatabaseConfig {
@@ -64,4 +81,18 @@ fn default_max_connections() -> u32 {
 
 fn default_settings_refresh_interval_secs() -> u64 {
     5
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DatabaseConfig;
+
+    #[test]
+    fn debug_redacts_database_uri() {
+        let cfg = DatabaseConfig {
+            uri: "postgres://user:super-secret-db-pass@localhost/identity".to_owned(),
+            ..Default::default()
+        };
+        assert!(!format!("{cfg:?}").contains("super-secret-db-pass"));
+    }
 }

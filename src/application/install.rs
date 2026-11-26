@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{fmt, sync::Arc};
 
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -36,7 +36,7 @@ use crate::{
     user::model::Password,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct InstallInput {
     pub username: String,
     pub email: String,
@@ -51,6 +51,22 @@ pub struct InstallInput {
     /// Which key the algorithm signs with when it offers several (EdDSA);
     /// `None` selects its default.
     pub key_algorithm: Option<AsymmetricKeyAlgorithm>,
+}
+
+impl fmt::Debug for InstallInput {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("InstallInput")
+            .field("username", &self.username)
+            .field("email", &self.email)
+            .field("password", &"[REDACTED]")
+            .field("domain", &self.domain)
+            .field("application_url", &self.application_url)
+            .field("console_url", &self.console_url)
+            .field("signing_algorithm", &self.signing_algorithm)
+            .field("key_algorithm", &self.key_algorithm)
+            .finish()
+    }
 }
 
 pub trait InstallSettings: SettingsSource + RefreshableSetting {}
@@ -78,7 +94,7 @@ pub trait CertificateGenerator: Send + Sync {
 }
 
 /// Everything the storage layer needs to record a fresh installation.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct InstallationData {
     pub username: String,
     pub email: String,
@@ -100,6 +116,29 @@ pub struct InstallationData {
     pub signing_algorithm: JwaSigningAlgorithm,
     /// The installation settings, written in the same transaction.
     pub settings: SettingChanges,
+}
+
+impl fmt::Debug for InstallationData {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("InstallationData")
+            .field("username", &self.username)
+            .field("email", &self.email)
+            .field("password", &"[REDACTED]")
+            .field("user_oid", &self.user_oid)
+            .field("application_url", &self.application_url)
+            .field("issuer", &self.issuer)
+            .field("console_url", &self.console_url)
+            .field("client_id", &self.client_id)
+            .field("console_client_id", &self.console_client_id)
+            .field("client_secret", &"[REDACTED]")
+            .field("client_secret_lifetime", &self.client_secret_lifetime)
+            .field("key_oid", &self.key_oid)
+            .field("key_data", &self.key_data)
+            .field("signing_algorithm", &self.signing_algorithm)
+            .field("settings", &self.settings)
+            .finish()
+    }
 }
 
 /// Storage port for a complete installation. The implementation writes the
@@ -618,5 +657,12 @@ mod tests {
                 "unsafe login address: {value}"
             );
         }
+    }
+
+    #[test]
+    fn debug_redacts_install_input_password() {
+        let mut input = install_input(JwaSigningAlgorithm::Es256, None);
+        input.password = "super-secret-install-password".to_owned();
+        assert!(!format!("{input:?}").contains("super-secret-install-password"));
     }
 }

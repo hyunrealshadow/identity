@@ -33,30 +33,52 @@ use super::controllers::conformance;
 /// not-found answer as every other request.
 pub fn app_router(state: AppState, config: &AppConfig) -> Service {
     let shared_health_listener = health::shares_listener(&config.health, &config.server);
-    let mut router = Router::new().push(
+    let router = Router::new().push(
         Router::with_path("static/{**path}")
             .hoop(static_cache_control)
             .get(StaticDir::new(["assets/static"])),
     );
 
-    router = router
+    let router = router
         .push(oauth2::routes())
         .push(openid::routes())
         .push(auth::routes())
         .push(well_known::routes());
 
     #[cfg(feature = "oidc-conformance")]
-    if state.context().is_conformance() {
-        router = router.push(conformance::routes());
-    }
+    let router = if state.context().is_conformance() {
+        router.push(conformance::routes())
+    } else {
+        router
+    };
 
-    if config.health.enable && shared_health_listener {
-        router = router.push(health::router(&config.health));
-    }
-    if graphql::shares_listener(&config.graphql, &config.server) {
-        router = router.push(graphql::router(state.clone(), &config.graphql));
-    }
+    let router = if config.health.enable && shared_health_listener {
+        router.push(health::router(&config.health))
+    } else {
+        router
+    };
+    let router = if graphql::shares_listener(&config.graphql, &config.server) {
+        router.push(graphql::router(state.clone(), &config.graphql))
+    } else {
+        router
+    };
 
+    apply_public_middleware(router, state, config)
+        .hoop(inject(config.openid_connect.dynamic_registration.clone()))
+}
+
+/// Separate GraphQL listener service with the same request correlation,
+/// client-IP resolution, audit request context, security headers, and
+/// not-found handling as the main public listener.
+pub fn graphql_service(state: AppState, config: &AppConfig) -> Service {
+    apply_public_middleware(
+        graphql::router(state.clone(), &config.graphql),
+        state,
+        config,
+    )
+}
+
+fn apply_public_middleware(router: Router, state: AppState, config: &AppConfig) -> Service {
     let mut service = Service::new(router.goal(not_found)).hoop(RequestIdMiddleware::new(
         TraceTrustPolicy::new(config.observability.trace_context.clone()),
     ));
@@ -77,7 +99,6 @@ pub fn app_router(state: AppState, config: &AppConfig) -> Service {
         )))
         .hoop(security_headers_middleware)
         .hoop(inject(state))
-        .hoop(inject(config.openid_connect.dynamic_registration.clone()))
         .hoop(not_found_fallback)
 }
 

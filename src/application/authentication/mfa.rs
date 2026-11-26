@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{fmt, sync::Arc};
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Duration, Utc};
@@ -53,7 +53,7 @@ pub struct MfaStatus {
     pub recovery_codes_remaining: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct BeginTotpEnrollment {
     pub secret: String,
     pub otp_auth_uri: String,
@@ -64,14 +64,55 @@ pub struct BeginTotpEnrollment {
     pub expires_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone)]
+impl fmt::Debug for BeginTotpEnrollment {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("BeginTotpEnrollment")
+            .field("secret", &"[REDACTED]")
+            .field("otp_auth_uri", &"[REDACTED]")
+            .field("enrollment_token", &"[REDACTED]")
+            .field(
+                "recovery_codes",
+                &format!("[{} redacted]", self.recovery_codes.len()),
+            )
+            .field("algorithm", &self.algorithm)
+            .field("expires_at", &self.expires_at)
+            .finish()
+    }
+}
+
+#[derive(Clone)]
 pub struct ConfirmTotpEnrollment {
     pub recovery_codes: Vec<String>,
 }
 
-#[derive(Debug, Clone)]
+impl fmt::Debug for ConfirmTotpEnrollment {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("ConfirmTotpEnrollment")
+            .field(
+                "recovery_codes",
+                &format!("[{} redacted]", self.recovery_codes.len()),
+            )
+            .finish()
+    }
+}
+
+#[derive(Clone)]
 pub struct RegenerateRecoveryCodes {
     pub recovery_codes: Vec<String>,
+}
+
+impl fmt::Debug for RegenerateRecoveryCodes {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter
+            .debug_struct("RegenerateRecoveryCodes")
+            .field(
+                "recovery_codes",
+                &format!("[{} redacted]", self.recovery_codes.len()),
+            )
+            .finish()
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -753,5 +794,29 @@ mod tests {
                 _ => true,
             }
         }));
+    }
+
+    #[test]
+    fn debug_redacts_mfa_enrollment_and_recovery_secrets() {
+        let begin = super::BeginTotpEnrollment {
+            secret: "JBSWY3DPEHPK3PXP".to_owned(),
+            otp_auth_uri: "otpauth://totp/Identity:alice?secret=JBSWY3DPEHPK3PXP".to_owned(),
+            enrollment_token: "sealed-enrollment-token".to_owned(),
+            recovery_codes: vec!["CODE-1111".to_owned()],
+            algorithm: OtpAlgorithm::Sha256,
+            expires_at: chrono::Utc::now(),
+        };
+        let confirm = super::ConfirmTotpEnrollment {
+            recovery_codes: vec!["CODE-2222".to_owned()],
+        };
+        let regen = super::RegenerateRecoveryCodes {
+            recovery_codes: vec!["CODE-3333".to_owned()],
+        };
+        let begin_debug = format!("{begin:?}");
+        assert!(!begin_debug.contains("JBSWY3DPEHPK3PXP"));
+        assert!(!begin_debug.contains("sealed-enrollment-token"));
+        assert!(!begin_debug.contains("CODE-1111"));
+        assert!(!format!("{confirm:?}").contains("CODE-2222"));
+        assert!(!format!("{regen:?}").contains("CODE-3333"));
     }
 }

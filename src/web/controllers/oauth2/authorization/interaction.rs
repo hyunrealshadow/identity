@@ -146,7 +146,7 @@ where
         let session_age = Utc::now()
             .signed_duration_since(selected_session.authenticated_at)
             .num_seconds();
-        if session_age > max_age as i64 {
+        if session_age < 0 || session_age > i64::from(max_age) {
             if has_prompt(request.prompt.as_ref(), PromptValue::None) {
                 return Ok(FlowDecision::OAuthError {
                     request: Box::new(request.clone()),
@@ -631,5 +631,22 @@ mod tests {
             error.code(),
             authorize::AuthorizeErrorCode::AuthzInteractionConflict.code()
         );
+    }
+
+    #[tokio::test]
+    async fn determine_authorize_flow_allows_large_i32_max_age() {
+        let request = request(None, Some(i32::MAX));
+        let session = active_session(Utc::now() - Duration::seconds(30));
+
+        let decision = determine_authorize_flow_with_selection_recorder(
+            &request,
+            slice::from_ref(&session),
+            "login-123".to_string(),
+            |_session_oid, _user_oid, _source| async { Ok(()) },
+        )
+        .await
+        .unwrap();
+
+        assert!(matches!(decision, FlowDecision::Continue { .. }));
     }
 }

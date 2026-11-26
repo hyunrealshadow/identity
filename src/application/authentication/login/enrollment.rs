@@ -49,7 +49,7 @@ pub struct LoginMfaEnrollmentDependencies {
 
 /// What the sign-in page presents for a pending TOTP enrollment. The
 /// protected enrollment token stays on the server.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct LoginTotpEnrollment {
     pub secret: String,
     pub otp_auth_uri: String,
@@ -57,6 +57,22 @@ pub struct LoginTotpEnrollment {
     pub recovery_codes: Vec<String>,
     pub algorithm: OtpAlgorithm,
     pub expires_at: DateTime<Utc>,
+}
+
+impl std::fmt::Debug for LoginTotpEnrollment {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("LoginTotpEnrollment")
+            .field("secret", &"[REDACTED]")
+            .field("otp_auth_uri", &"[REDACTED]")
+            .field(
+                "recovery_codes",
+                &format!("[{} redacted]", self.recovery_codes.len()),
+            )
+            .field("algorithm", &self.algorithm)
+            .field("expires_at", &self.expires_at)
+            .finish()
+    }
 }
 
 /// What the sign-in page presents for passkey registration in a `phr`
@@ -343,4 +359,26 @@ fn enrollment_token(challenge: &AuthenticationChallenge) -> Result<String, AppEr
         .and_then(|value| value.as_str())
         .map(ToOwned::to_owned)
         .ok_or_else(|| auth::error::InvalidTotpEnrollment.into())
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::Utc;
+
+    use super::LoginTotpEnrollment;
+    use crate::user::OtpAlgorithm;
+
+    #[test]
+    fn debug_redacts_login_totp_enrollment_secrets() {
+        let enrollment = LoginTotpEnrollment {
+            secret: "JBSWY3DPEHPK3PXP".to_owned(),
+            otp_auth_uri: "otpauth://totp/Identity:alice?secret=JBSWY3DPEHPK3PXP".to_owned(),
+            recovery_codes: vec!["ABCD-1234".to_owned()],
+            algorithm: OtpAlgorithm::Sha256,
+            expires_at: Utc::now(),
+        };
+        let debug = format!("{enrollment:?}");
+        assert!(!debug.contains("JBSWY3DPEHPK3PXP"));
+        assert!(!debug.contains("ABCD-1234"));
+    }
 }

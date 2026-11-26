@@ -10,9 +10,7 @@ pub(super) fn valid_request_id(value: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-'))
 }
 
-/// Extracts W3C trace context, decides whether it may be continued and wraps
-/// the rest of the request in a server span. Invalid headers never fail the
-/// request; untrusted contexts become links instead of parents.
+/// Assigns or validates a trusted `X-Request-ID` header for each request.
 #[derive(Clone, Debug)]
 pub struct RequestIdMiddleware {
     policy: TraceTrustPolicy,
@@ -54,6 +52,9 @@ impl Handler for RequestIdMiddleware {
     }
 }
 
+/// Extracts W3C trace context, decides whether it may be continued and wraps
+/// the rest of the request in a server span. Invalid headers never fail the
+/// request; untrusted contexts become links instead of parents.
 #[derive(Clone, Debug)]
 pub struct TraceContextMiddleware {
     policy: TraceTrustPolicy,
