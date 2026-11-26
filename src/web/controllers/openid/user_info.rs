@@ -11,8 +11,7 @@ use uuid::Uuid;
 use crate::controllers::oauth2::pipeline::{Endpoint, Extract, RequireState, take};
 use crate::{
     application::error::{
-        AppError,
-        code::AppErrorCode,
+        AppError, ErrorCode,
         codes::openid_connect::{self, OpenIdConnectErrorCode},
         kind::ErrorKind,
     },
@@ -184,18 +183,33 @@ fn build_token_response(token: String, content_type: &'static str) -> Response {
     response
 }
 
+fn oidc_code_to_rfc6750(code: OpenIdConnectErrorCode) -> &'static str {
+    match code {
+        OpenIdConnectErrorCode::InvalidToken => "invalid_token",
+        OpenIdConnectErrorCode::InsufficientScope => "insufficient_scope",
+        OpenIdConnectErrorCode::UserNotFound
+        | OpenIdConnectErrorCode::PostLogoutRedirectUriNotRegistered
+        | OpenIdConnectErrorCode::IdTokenHintIssuerInvalid
+        | OpenIdConnectErrorCode::PostLogoutRedirectUriInvalid
+        | OpenIdConnectErrorCode::LogoutClientRequired
+        | OpenIdConnectErrorCode::LogoutClientInvalid
+        | OpenIdConnectErrorCode::LogoutClientLookupFailed
+        | OpenIdConnectErrorCode::LogoutClientNotFound
+        | OpenIdConnectErrorCode::IdTokenHintInvalid
+        | OpenIdConnectErrorCode::IdTokenHintRequired
+        | OpenIdConnectErrorCode::BearerSchemeInvalid
+        | OpenIdConnectErrorCode::AuthorizationHeaderRequired
+        | OpenIdConnectErrorCode::AccessTokenRequired => "invalid_request",
+    }
+}
+
 /// Map an OIDC `AppError` to an RFC 6750 §3.1 `error` value.
 ///
 /// Unlike the previous `error.kind()`-based mapping, this preserves the
 /// specific error code so each failure surfaces its own Fluent message.
 fn userinfo_rfc_error_code(error: &AppError) -> &'static str {
-    match error.code() {
-        c if c == OpenIdConnectErrorCode::InvalidToken.code() => "invalid_token",
-        c if c == OpenIdConnectErrorCode::InsufficientScope.code() => "insufficient_scope",
-        c if c == OpenIdConnectErrorCode::UserNotFound.code() => "invalid_request",
-        c if c == OpenIdConnectErrorCode::BearerSchemeInvalid.code() => "invalid_request",
-        c if c == OpenIdConnectErrorCode::AuthorizationHeaderRequired.code() => "invalid_request",
-        c if c == OpenIdConnectErrorCode::AccessTokenRequired.code() => "invalid_request",
+    match error.error_code() {
+        ErrorCode::OpenIdConnect(code) => oidc_code_to_rfc6750(code),
         _ => match error.kind() {
             ErrorKind::Unauthorized => "invalid_token",
             ErrorKind::Forbidden => "insufficient_scope",

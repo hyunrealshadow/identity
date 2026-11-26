@@ -2,8 +2,7 @@ use std::borrow::Cow;
 
 use http::{HeaderMap, HeaderValue, StatusCode, header};
 use identity_application::error::{
-    AppError,
-    code::AppErrorCode,
+    AppError, ErrorCode,
     codes::{common::CommonErrorCode, token::TokenErrorCode},
     kind::ErrorKind,
 };
@@ -96,69 +95,175 @@ impl Writer for TokenWebError {
     }
 }
 
+pub(in crate::controllers::oauth2) fn is_client_auth_token_error(code: TokenErrorCode) -> bool {
+    match code {
+        TokenErrorCode::ClientIdInvalid
+        | TokenErrorCode::ClientNotFound
+        | TokenErrorCode::ClientCredentialsInvalid
+        | TokenErrorCode::ClientAuthRequired
+        | TokenErrorCode::AssertionIssMissing
+        | TokenErrorCode::AssertionSubMissing
+        | TokenErrorCode::AssertionIssSubMismatch
+        | TokenErrorCode::AssertionAudMismatch
+        | TokenErrorCode::AssertionExpired
+        | TokenErrorCode::AssertionNotYetValid
+        | TokenErrorCode::AssertionHeaderInvalid
+        | TokenErrorCode::AssertionVerifyFailed
+        | TokenErrorCode::AssertionAlgUnsupported
+        | TokenErrorCode::AssertionKeyInvalid => true,
+        TokenErrorCode::UnsupportedGrantType
+        | TokenErrorCode::ClientIdRequired
+        | TokenErrorCode::CodeLookupFailed
+        | TokenErrorCode::AuthCodeNotFound
+        | TokenErrorCode::CodeClientMismatch
+        | TokenErrorCode::AuthCodeInvalid
+        | TokenErrorCode::AuthCodeRevoked
+        | TokenErrorCode::AuthCodeExpired
+        | TokenErrorCode::AuthCodeSessionNotFound
+        | TokenErrorCode::AuthCodeSessionInactive
+        | TokenErrorCode::AuthCodeSessionRevoked
+        | TokenErrorCode::AuthCodeSessionExpired
+        | TokenErrorCode::AuthCodeSessionUserMismatch
+        | TokenErrorCode::AuthCodeClaimFailed
+        | TokenErrorCode::AuthCodeSessionLookupFailed
+        | TokenErrorCode::DeserializeCodeFailed
+        | TokenErrorCode::RedirectUriMismatch
+        | TokenErrorCode::CodeVerifierRequired
+        | TokenErrorCode::StoredUserOidInvalid
+        | TokenErrorCode::UserLookupFailed
+        | TokenErrorCode::AuthCodeUserNotFound
+        | TokenErrorCode::RevokeCodeFailed
+        | TokenErrorCode::RefreshTokenLookupFailed
+        | TokenErrorCode::RefreshTokenNotFound
+        | TokenErrorCode::RefreshTokenInvalid
+        | TokenErrorCode::DeserializeRefreshFailed
+        | TokenErrorCode::RefreshTokenSubMissing
+        | TokenErrorCode::RefreshTokenUseMissing
+        | TokenErrorCode::RefreshTokenUseInvalid
+        | TokenErrorCode::RefreshTokenClientMismatch
+        | TokenErrorCode::RefreshTokenSubInvalid
+        | TokenErrorCode::RefreshTokenUserNotFound
+        | TokenErrorCode::RevokeRefreshFailed
+        | TokenErrorCode::KeyListFailed
+        | TokenErrorCode::NoSigningKeyAvailable
+        | TokenErrorCode::ClientLookupFailed
+        | TokenErrorCode::CredentialLookupFailed
+        | TokenErrorCode::RefreshTokenVerifyFailed
+        | TokenErrorCode::SignAccessTokenFailed
+        | TokenErrorCode::SignIdTokenFailed
+        | TokenErrorCode::SignRefreshTokenFailed
+        | TokenErrorCode::SerializeRefreshFailed
+        | TokenErrorCode::StoreRefreshFailed
+        | TokenErrorCode::PkceMethodUnsupported
+        | TokenErrorCode::PkceVerifierMismatch
+        | TokenErrorCode::EncryptionKeyNotFound
+        | TokenErrorCode::EncryptionFailed
+        | TokenErrorCode::ClientGrantNotAllowed
+        | TokenErrorCode::DeviceCodeNotFound
+        | TokenErrorCode::DeviceCodeClientMismatch
+        | TokenErrorCode::DeviceCodePending
+        | TokenErrorCode::DeviceCodeSlowDown
+        | TokenErrorCode::DeviceCodeDenied
+        | TokenErrorCode::DeviceCodeExpired
+        | TokenErrorCode::DeviceCodeRevoked
+        | TokenErrorCode::DeviceCodeUserNotFound
+        | TokenErrorCode::DeviceRequestStateInvalid
+        | TokenErrorCode::DeviceRequestLookupFailed
+        | TokenErrorCode::DeviceRelationLookupFailed
+        | TokenErrorCode::DeviceRedemptionFailed
+        | TokenErrorCode::RefreshScopeNotAllowed
+        | TokenErrorCode::ClientCredentialsScopeNotAllowed => false,
+    }
+}
+
+fn token_code_to_rfc6749(code: TokenErrorCode) -> &'static str {
+    if is_client_auth_token_error(code) {
+        return "invalid_client";
+    }
+    match code {
+        TokenErrorCode::ClientIdRequired
+        | TokenErrorCode::RefreshTokenSubMissing
+        | TokenErrorCode::RefreshTokenUseMissing
+        | TokenErrorCode::RefreshTokenUseInvalid
+        | TokenErrorCode::RefreshTokenSubInvalid
+        | TokenErrorCode::PkceMethodUnsupported => "invalid_request",
+        TokenErrorCode::AuthCodeNotFound
+        | TokenErrorCode::CodeClientMismatch
+        | TokenErrorCode::AuthCodeInvalid
+        | TokenErrorCode::AuthCodeRevoked
+        | TokenErrorCode::AuthCodeExpired
+        | TokenErrorCode::AuthCodeSessionNotFound
+        | TokenErrorCode::AuthCodeSessionInactive
+        | TokenErrorCode::AuthCodeSessionRevoked
+        | TokenErrorCode::AuthCodeSessionExpired
+        | TokenErrorCode::AuthCodeSessionUserMismatch
+        | TokenErrorCode::AuthCodeClaimFailed
+        | TokenErrorCode::RedirectUriMismatch
+        | TokenErrorCode::CodeVerifierRequired
+        | TokenErrorCode::AuthCodeUserNotFound
+        | TokenErrorCode::RefreshTokenNotFound
+        | TokenErrorCode::RefreshTokenInvalid
+        | TokenErrorCode::RefreshTokenClientMismatch
+        | TokenErrorCode::RefreshTokenUserNotFound
+        | TokenErrorCode::RefreshTokenVerifyFailed
+        | TokenErrorCode::PkceVerifierMismatch
+        | TokenErrorCode::DeviceCodeNotFound
+        | TokenErrorCode::DeviceCodeClientMismatch
+        | TokenErrorCode::DeviceCodeUserNotFound
+        | TokenErrorCode::DeviceRequestStateInvalid => "invalid_grant",
+        TokenErrorCode::RefreshScopeNotAllowed
+        | TokenErrorCode::ClientCredentialsScopeNotAllowed => "invalid_scope",
+        TokenErrorCode::UnsupportedGrantType => "unsupported_grant_type",
+        TokenErrorCode::ClientGrantNotAllowed => "unauthorized_client",
+        TokenErrorCode::DeviceCodePending => "authorization_pending",
+        TokenErrorCode::DeviceCodeSlowDown => "slow_down",
+        TokenErrorCode::DeviceCodeDenied | TokenErrorCode::DeviceCodeRevoked => "access_denied",
+        TokenErrorCode::DeviceCodeExpired => "expired_token",
+        TokenErrorCode::CodeLookupFailed
+        | TokenErrorCode::AuthCodeSessionLookupFailed
+        | TokenErrorCode::DeserializeCodeFailed
+        | TokenErrorCode::StoredUserOidInvalid
+        | TokenErrorCode::UserLookupFailed
+        | TokenErrorCode::RevokeCodeFailed
+        | TokenErrorCode::RefreshTokenLookupFailed
+        | TokenErrorCode::DeserializeRefreshFailed
+        | TokenErrorCode::RevokeRefreshFailed
+        | TokenErrorCode::KeyListFailed
+        | TokenErrorCode::NoSigningKeyAvailable
+        | TokenErrorCode::ClientLookupFailed
+        | TokenErrorCode::CredentialLookupFailed
+        | TokenErrorCode::SignAccessTokenFailed
+        | TokenErrorCode::SignIdTokenFailed
+        | TokenErrorCode::SignRefreshTokenFailed
+        | TokenErrorCode::SerializeRefreshFailed
+        | TokenErrorCode::StoreRefreshFailed
+        | TokenErrorCode::EncryptionKeyNotFound
+        | TokenErrorCode::EncryptionFailed
+        | TokenErrorCode::DeviceRequestLookupFailed
+        | TokenErrorCode::DeviceRelationLookupFailed
+        | TokenErrorCode::DeviceRedemptionFailed => "server_error",
+        TokenErrorCode::ClientIdInvalid
+        | TokenErrorCode::ClientNotFound
+        | TokenErrorCode::ClientCredentialsInvalid
+        | TokenErrorCode::ClientAuthRequired
+        | TokenErrorCode::AssertionIssMissing
+        | TokenErrorCode::AssertionSubMissing
+        | TokenErrorCode::AssertionIssSubMismatch
+        | TokenErrorCode::AssertionAudMismatch
+        | TokenErrorCode::AssertionExpired
+        | TokenErrorCode::AssertionNotYetValid
+        | TokenErrorCode::AssertionHeaderInvalid
+        | TokenErrorCode::AssertionVerifyFailed
+        | TokenErrorCode::AssertionAlgUnsupported
+        | TokenErrorCode::AssertionKeyInvalid => "invalid_client",
+    }
+}
+
 pub(in crate::controllers::oauth2) fn token_error_code(error: &AppError) -> &'static str {
-    match error.code() {
-        code if code == CommonErrorCode::InvalidScope.code() => "invalid_scope",
-        c if c == CommonErrorCode::InvalidTarget.code() => "invalid_target",
-        // Authorization code errors → invalid_grant
-        c if c == TokenErrorCode::AuthCodeNotFound.code() => "invalid_grant",
-        c if c == TokenErrorCode::AuthCodeInvalid.code() => "invalid_grant",
-        c if c == TokenErrorCode::AuthCodeRevoked.code() => "invalid_grant",
-        c if c == TokenErrorCode::AuthCodeExpired.code() => "invalid_grant",
-        c if c == TokenErrorCode::AuthCodeSessionNotFound.code() => "invalid_grant",
-        c if c == TokenErrorCode::AuthCodeSessionInactive.code() => "invalid_grant",
-        c if c == TokenErrorCode::AuthCodeSessionRevoked.code() => "invalid_grant",
-        c if c == TokenErrorCode::AuthCodeSessionExpired.code() => "invalid_grant",
-        c if c == TokenErrorCode::AuthCodeSessionUserMismatch.code() => "invalid_grant",
-        c if c == TokenErrorCode::AuthCodeClaimFailed.code() => "invalid_grant",
-        c if c == TokenErrorCode::CodeClientMismatch.code() => "invalid_grant",
-        c if c == TokenErrorCode::RedirectUriMismatch.code() => "invalid_grant",
-        c if c == TokenErrorCode::PkceVerifierMismatch.code() => "invalid_grant",
-        c if c == TokenErrorCode::CodeVerifierRequired.code() => "invalid_grant",
-        c if c == TokenErrorCode::AuthCodeUserNotFound.code() => "invalid_grant",
-        // Refresh token errors → invalid_grant
-        c if c == TokenErrorCode::RefreshTokenNotFound.code() => "invalid_grant",
-        c if c == TokenErrorCode::RefreshTokenInvalid.code() => "invalid_grant",
-        c if c == TokenErrorCode::RefreshTokenClientMismatch.code() => "invalid_grant",
-        c if c == TokenErrorCode::RefreshTokenUserNotFound.code() => "invalid_grant",
-        c if c == TokenErrorCode::RefreshTokenVerifyFailed.code() => "invalid_grant",
-        // Client auth errors → invalid_client
-        c if c == TokenErrorCode::ClientNotFound.code() => "invalid_client",
-        c if c == TokenErrorCode::ClientCredentialsInvalid.code() => "invalid_client",
-        c if c == TokenErrorCode::ClientAuthRequired.code() => "invalid_client",
-        c if c == TokenErrorCode::RefreshScopeNotAllowed.code() => "invalid_scope",
-        c if c == TokenErrorCode::ClientCredentialsScopeNotAllowed.code() => "invalid_scope",
-        c if c == TokenErrorCode::AssertionVerifyFailed.code() => "invalid_client",
-        c if c == TokenErrorCode::AssertionExpired.code() => "invalid_client",
-        c if c == TokenErrorCode::AssertionAudMismatch.code() => "invalid_client",
-        c if c == TokenErrorCode::AssertionIssSubMismatch.code() => "invalid_client",
-        // Unsupported grant type
-        c if c == TokenErrorCode::UnsupportedGrantType.code() => "unsupported_grant_type",
-        // Client is not permitted to use the requested grant
-        c if c == TokenErrorCode::ClientGrantNotAllowed.code() => "unauthorized_client",
-        // Device authorization grant (RFC 8628 §3.5)
-        c if c == TokenErrorCode::DeviceCodePending.code() => "authorization_pending",
-        c if c == TokenErrorCode::DeviceCodeSlowDown.code() => "slow_down",
-        c if c == TokenErrorCode::DeviceCodeDenied.code()
-            || c == TokenErrorCode::DeviceCodeRevoked.code() =>
-        {
-            "access_denied"
-        }
-        c if c == TokenErrorCode::DeviceCodeExpired.code() => "expired_token",
-        c if c == TokenErrorCode::DeviceCodeNotFound.code()
-            || c == TokenErrorCode::DeviceCodeClientMismatch.code()
-            || c == TokenErrorCode::DeviceCodeUserNotFound.code()
-            || c == TokenErrorCode::DeviceRequestStateInvalid.code() =>
-        {
-            "invalid_grant"
-        }
-        c if c == TokenErrorCode::DeviceRequestLookupFailed.code()
-            || c == TokenErrorCode::DeviceRelationLookupFailed.code()
-            || c == TokenErrorCode::DeviceRedemptionFailed.code() =>
-        {
-            "server_error"
-        }
-        // Everything else
+    match error.error_code() {
+        ErrorCode::Token(code) => token_code_to_rfc6749(code),
+        ErrorCode::Common(CommonErrorCode::InvalidScope) => "invalid_scope",
+        ErrorCode::Common(CommonErrorCode::InvalidTarget) => "invalid_target",
         _ => match error.kind() {
             ErrorKind::Validation => "invalid_request",
             _ => "server_error",
@@ -167,31 +272,10 @@ pub(in crate::controllers::oauth2) fn token_error_code(error: &AppError) -> &'st
 }
 
 fn inspection_error_code(error: &AppError) -> &'static str {
-    let code = error.code();
-    if [
-        TokenErrorCode::ClientNotFound,
-        TokenErrorCode::ClientIdInvalid,
-        TokenErrorCode::ClientCredentialsInvalid,
-        TokenErrorCode::ClientAuthRequired,
-        TokenErrorCode::AssertionIssMissing,
-        TokenErrorCode::AssertionSubMissing,
-        TokenErrorCode::AssertionVerifyFailed,
-        TokenErrorCode::AssertionExpired,
-        TokenErrorCode::AssertionNotYetValid,
-        TokenErrorCode::AssertionHeaderInvalid,
-        TokenErrorCode::AssertionAlgUnsupported,
-        TokenErrorCode::AssertionKeyInvalid,
-        TokenErrorCode::AssertionAudMismatch,
-        TokenErrorCode::AssertionIssSubMismatch,
-    ]
-    .iter()
-    .any(|candidate| code == candidate.code())
-    {
-        "invalid_client"
-    } else if error.kind() == ErrorKind::Internal {
-        "server_error"
-    } else {
-        "invalid_request"
+    match error.error_code() {
+        ErrorCode::Token(code) if is_client_auth_token_error(code) => "invalid_client",
+        _ if error.kind() == ErrorKind::Internal => "server_error",
+        _ => "invalid_request",
     }
 }
 

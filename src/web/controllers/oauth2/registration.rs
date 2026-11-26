@@ -1,8 +1,7 @@
 use http::{HeaderValue, StatusCode, header};
 use identity_application::{
     error::{
-        AppError,
-        code::AppErrorCode,
+        AppError, ErrorCode,
         codes::{common, registration},
         kind::ErrorKind,
     },
@@ -22,18 +21,30 @@ use crate::{
     infrastructure::i18n::{I18n, error_i18n, resolve_locale_from_headers},
 };
 
+fn registration_code_to_rfc7591(code: registration::RegistrationErrorCode) -> &'static str {
+    use registration::RegistrationErrorCode as Code;
+    match code {
+        Code::InvalidRedirectUri => "invalid_redirect_uri",
+        Code::InvalidRegistrationAccessToken => "invalid_token",
+        Code::ClientUpdateForbidden => "insufficient_scope",
+        Code::DynamicRegistrationDisabled
+        | Code::RedirectUrisRequired
+        | Code::UnsupportedApplicationType
+        | Code::UnsupportedSubjectType
+        | Code::NoneNotSupported
+        | Code::InvalidClientMetadata
+        | Code::BuiltInClientCannotBeDeleted => "invalid_client_metadata",
+        Code::ClientCreateFailed
+        | Code::ClientLookupFailed
+        | Code::ClientDeleteFailed
+        | Code::ClientUpdateFailed => "server_error",
+    }
+}
+
 /// Map a registration `AppError` to an RFC 7591 §3.3 `error` value.
 fn registration_rfc_error_code(error: &AppError) -> &'static str {
-    match error.code() {
-        c if c == registration::RegistrationErrorCode::InvalidRedirectUri.code() => {
-            "invalid_redirect_uri"
-        }
-        c if c == registration::RegistrationErrorCode::InvalidClientMetadata.code() => {
-            "invalid_client_metadata"
-        }
-        c if c == registration::RegistrationErrorCode::InvalidRegistrationAccessToken.code() => {
-            "invalid_token"
-        }
+    match error.error_code() {
+        ErrorCode::Registration(code) => registration_code_to_rfc7591(code),
         _ => match error.kind() {
             ErrorKind::Forbidden => "insufficient_scope",
             ErrorKind::Unauthorized => "invalid_token",

@@ -1,8 +1,7 @@
 use http::StatusCode;
 use identity_application::{
     error::{
-        AppError,
-        code::AppErrorCode,
+        AppError, ErrorCode,
         codes::{
             common::CommonErrorCode, device::DeviceAuthorizationErrorCode, token::TokenErrorCode,
         },
@@ -17,6 +16,7 @@ use unic_langid::LanguageIdentifier;
 use super::super::{
     client_credentials::ClientCredentials,
     pipeline::{Endpoint, Extract, RequireState, take},
+    token::is_client_auth_token_error,
 };
 use crate::{
     controllers::response::{
@@ -45,53 +45,48 @@ struct DeviceAuthorizationErrorResponse {
     error_description: String,
 }
 
-/// Map a device authorization `AppError` to an RFC 6749 搂5.2 `error` value.
+fn device_code_to_rfc6749(code: DeviceAuthorizationErrorCode) -> &'static str {
+    match code {
+        DeviceAuthorizationErrorCode::GrantNotAllowed => "unauthorized_client",
+        DeviceAuthorizationErrorCode::ScopeInvalid
+        | DeviceAuthorizationErrorCode::ScopeNotAssignedToClient => "invalid_scope",
+        DeviceAuthorizationErrorCode::UserCodeUnavailable
+        | DeviceAuthorizationErrorCode::CodeGenerationFailed
+        | DeviceAuthorizationErrorCode::StoreRequestFailed
+        | DeviceAuthorizationErrorCode::IssuerInvalid
+        | DeviceAuthorizationErrorCode::LoginDomainInvalid
+        | DeviceAuthorizationErrorCode::LoadRequestFailed
+        | DeviceAuthorizationErrorCode::DeserializeRequestFailed
+        | DeviceAuthorizationErrorCode::InvalidAuthorizationState
+        | DeviceAuthorizationErrorCode::StoreDecisionFailed
+        | DeviceAuthorizationErrorCode::UserLookupFailed
+        | DeviceAuthorizationErrorCode::ClientLookupFailed => "server_error",
+        DeviceAuthorizationErrorCode::UserCodeNotFound
+        | DeviceAuthorizationErrorCode::RequestAlreadyDecided
+        | DeviceAuthorizationErrorCode::ClientNotFound
+        | DeviceAuthorizationErrorCode::UserNotFound
+        | DeviceAuthorizationErrorCode::RequestExpired
+        | DeviceAuthorizationErrorCode::VerificationLoginRequired => "invalid_request",
+    }
+}
+
+/// Map a device authorization `AppError` to an RFC 6749 §5.2 `error` value.
 ///
 /// `unsupported_grant_type` is deliberately absent: the endpoint exists, so a
 /// client that is not allowed to use the device grant is told
 /// `unauthorized_client` instead.
 fn device_error_code(error: &AppError) -> &'static str {
-    let code = error.code();
-    if code == CommonErrorCode::InvalidScope.code() {
-        return "invalid_scope";
-    }
-    if code == CommonErrorCode::InvalidTarget.code() {
-        return "invalid_target";
-    }
-
-    if code == DeviceAuthorizationErrorCode::GrantNotAllowed.code() {
-        return "unauthorized_client";
-    }
-    if code == TokenErrorCode::ClientIdRequired.code() {
-        // A missing parameter is an invalid request; only a failed
-        // authentication is an invalid client (RFC 6749 搂5.2).
-        return "invalid_request";
-    }
-    if code == DeviceAuthorizationErrorCode::ScopeInvalid.code()
-        || code == DeviceAuthorizationErrorCode::ScopeNotAssignedToClient.code()
-    {
-        return "invalid_scope";
-    }
-    // Client authentication failures keep their token-endpoint semantics.
-    if [
-        TokenErrorCode::ClientNotFound,
-        TokenErrorCode::ClientIdInvalid,
-        TokenErrorCode::ClientCredentialsInvalid,
-        TokenErrorCode::ClientAuthRequired,
-        TokenErrorCode::AssertionVerifyFailed,
-        TokenErrorCode::AssertionExpired,
-        TokenErrorCode::AssertionAudMismatch,
-        TokenErrorCode::AssertionIssSubMismatch,
-    ]
-    .iter()
-    .any(|candidate| code == candidate.code())
-    {
-        return "invalid_client";
-    }
-
-    match error.kind() {
-        ErrorKind::Validation | ErrorKind::Gone | ErrorKind::Conflict => "invalid_request",
-        _ => "server_error",
+    match error.error_code() {
+        ErrorCode::Common(CommonErrorCode::InvalidScope) => "invalid_scope",
+        ErrorCode::Common(CommonErrorCode::InvalidTarget) => "invalid_target",
+        ErrorCode::Device(code) => device_code_to_rfc6749(code),
+        // Missing client_id is invalid_request; client authentication failures keep invalid_client.
+        ErrorCode::Token(TokenErrorCode::ClientIdRequired) => "invalid_request",
+        ErrorCode::Token(code) if is_client_auth_token_error(code) => "invalid_client",
+        _ => match error.kind() {
+            ErrorKind::Validation | ErrorKind::Gone | ErrorKind::Conflict => "invalid_request",
+            _ => "server_error",
+        },
     }
 }
 

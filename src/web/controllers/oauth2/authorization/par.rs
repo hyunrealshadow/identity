@@ -3,12 +3,8 @@ use std::{borrow::Cow, collections::BTreeMap, str};
 use http::{HeaderMap, HeaderValue, StatusCode, header};
 use identity_application::{
     error::{
-        AppError,
-        code::AppErrorCode,
-        codes::{
-            common,
-            token::{self, TokenErrorCode},
-        },
+        AppError, ErrorCode,
+        codes::{common, token},
         kind::ErrorKind,
     },
     openid_connect::{authorize::AuthorizationRequestParams, par::PushedAuthorizationParams},
@@ -57,12 +53,11 @@ impl Rfc6749Error for ParWebError {
     }
 
     fn rfc6749_error_code(&self) -> Cow<'static, str> {
-        if (23000..24000).contains(&self.error.code()) {
-            Cow::Owned(authorize_oauth_error_code(&self.error).to_string())
-        } else if self.error.code() == TokenErrorCode::ClientIdInvalid.code() {
-            Cow::Borrowed("invalid_client")
-        } else {
-            Cow::Borrowed(token_error_code(&self.error))
+        match self.error.error_code() {
+            ErrorCode::Authorize(_) => {
+                Cow::Owned(authorize_oauth_error_code(&self.error).to_string())
+            }
+            _ => Cow::Borrowed(token_error_code(&self.error)),
         }
     }
 

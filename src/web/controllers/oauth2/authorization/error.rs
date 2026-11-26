@@ -1,7 +1,6 @@
 use http::{HeaderMap, StatusCode};
 use identity_application::error::{
-    AppError,
-    code::AppErrorCode,
+    AppError, ErrorCode,
     codes::{authorize::AuthorizeErrorCode, common::CommonErrorCode},
     kind::ErrorKind,
 };
@@ -18,6 +17,82 @@ pub(super) fn authorize_error_status(kind: ErrorKind) -> StatusCode {
     }
 }
 
+fn authorize_code_to_oauth(code: AuthorizeErrorCode) -> OAuthErrorCode {
+    match code {
+        AuthorizeErrorCode::ResponseTypeInvalid => OAuthErrorCode::UnsupportedResponseType,
+        AuthorizeErrorCode::ScopeInvalid
+        | AuthorizeErrorCode::OpenidScopeRequired
+        | AuthorizeErrorCode::ScopeNotAssignedToClient => OAuthErrorCode::InvalidScope,
+        AuthorizeErrorCode::RequestUriInvalid
+        | AuthorizeErrorCode::RequestUriNotHttps
+        | AuthorizeErrorCode::RequestUriHasFragment
+        | AuthorizeErrorCode::RequestUriUnsafeHost
+        | AuthorizeErrorCode::RequestUriNotRegistered
+        | AuthorizeErrorCode::RequestUriFetchFailed
+        | AuthorizeErrorCode::RequestUriNot200
+        | AuthorizeErrorCode::RequestUriTooLarge
+        | AuthorizeErrorCode::RequestUriReadFailed => OAuthErrorCode::InvalidRequestUri,
+        AuthorizeErrorCode::RequestObjectHeaderInvalid
+        | AuthorizeErrorCode::RequestObjectDecodeFailed
+        | AuthorizeErrorCode::RequestObjectAlgUnsupported
+        | AuthorizeErrorCode::RequestObjectKeyInvalid
+        | AuthorizeErrorCode::RequestObjectVerifyFailed
+        | AuthorizeErrorCode::RequestObjectIssMismatch
+        | AuthorizeErrorCode::RequestObjectAudMismatch
+        | AuthorizeErrorCode::RequestObjectExpired
+        | AuthorizeErrorCode::RequestObjectNotYetValid
+        | AuthorizeErrorCode::RequestObjectIatFuture
+        | AuthorizeErrorCode::RequestObjectFieldMismatch
+        | AuthorizeErrorCode::RequestObjectJsonInvalid
+        | AuthorizeErrorCode::ClaimsParamInvalid
+        | AuthorizeErrorCode::ClaimsNotObject
+        | AuthorizeErrorCode::ClaimsFieldNotObject
+        | AuthorizeErrorCode::RequestObjectEncodingInvalid
+        | AuthorizeErrorCode::RequestObjectBase64Invalid
+        | AuthorizeErrorCode::RequestObjectPayloadInvalid => OAuthErrorCode::InvalidRequestObject,
+        AuthorizeErrorCode::RequestObjectEncryptionUnsupported => {
+            OAuthErrorCode::RequestNotSupported
+        }
+        AuthorizeErrorCode::ClientGrantNotAllowed => OAuthErrorCode::UnauthorizedClient,
+        AuthorizeErrorCode::ClientLookupFailed
+        | AuthorizeErrorCode::CredentialLookupFailed
+        | AuthorizeErrorCode::SerializeRequestFailed
+        | AuthorizeErrorCode::StoreRequestFailed
+        | AuthorizeErrorCode::StoreLoginFailed
+        | AuthorizeErrorCode::LoadRequestFailed
+        | AuthorizeErrorCode::DeserializeRequestFailed
+        | AuthorizeErrorCode::StoredClientIdInvalid
+        | AuthorizeErrorCode::LoadLoginFailed
+        | AuthorizeErrorCode::StoredRedirectUriInvalid
+        | AuthorizeErrorCode::SerializeCodeFailed
+        | AuthorizeErrorCode::StoreCodeFailed
+        | AuthorizeErrorCode::StoredSessionIdInvalid
+        | AuthorizeErrorCode::EncryptionKeyNotFound
+        | AuthorizeErrorCode::EncryptionFailed => OAuthErrorCode::ServerError,
+        AuthorizeErrorCode::ClientIdInvalid
+        | AuthorizeErrorCode::ClientNotFound
+        | AuthorizeErrorCode::ResponseModeInvalid
+        | AuthorizeErrorCode::RedirectUriInvalid
+        | AuthorizeErrorCode::DisplayValueInvalid
+        | AuthorizeErrorCode::PromptValueInvalid
+        | AuthorizeErrorCode::PromptNoneCombined
+        | AuthorizeErrorCode::MaxAgeInvalid
+        | AuthorizeErrorCode::CodeChallengeMethodInvalid
+        | AuthorizeErrorCode::RequestAndUriConflict
+        | AuthorizeErrorCode::RequiredParamMissing
+        | AuthorizeErrorCode::RedirectUriNotRegistered
+        | AuthorizeErrorCode::AuthzRequestNotFound
+        | AuthorizeErrorCode::AuthzRequestTypeMismatch
+        | AuthorizeErrorCode::LoginNotFound
+        | AuthorizeErrorCode::LoginIdInvalid
+        | AuthorizeErrorCode::ImplicitNonceRequired
+        | AuthorizeErrorCode::ImplicitUserNotFound
+        | AuthorizeErrorCode::IdTokenHintIssuerInvalid
+        | AuthorizeErrorCode::AuthzInteractionConflict
+        | AuthorizeErrorCode::InitiateLoginUriNotRegistered => OAuthErrorCode::InvalidRequest,
+    }
+}
+
 pub(in crate::controllers::oauth2) fn authorize_oauth_error_code(
     error: &AppError,
 ) -> OAuthErrorCode {
@@ -25,37 +100,10 @@ pub(in crate::controllers::oauth2) fn authorize_oauth_error_code(
         return OAuthErrorCode::ServerError;
     }
 
-    match error.code() {
-        c if c == CommonErrorCode::InvalidTarget.code() => OAuthErrorCode::InvalidTarget,
-        code if code == AuthorizeErrorCode::ResponseTypeInvalid.code() => {
-            OAuthErrorCode::UnsupportedResponseType
-        }
-        code if code == CommonErrorCode::InvalidScope.code()
-            || code == AuthorizeErrorCode::ScopeInvalid.code()
-            || code == AuthorizeErrorCode::OpenidScopeRequired.code()
-            || code == AuthorizeErrorCode::ScopeNotAssignedToClient.code() =>
-        {
-            OAuthErrorCode::InvalidScope
-        }
-        code if code == AuthorizeErrorCode::RequestUriInvalid.code()
-            || (AuthorizeErrorCode::RequestUriNotHttps.code()
-                ..=AuthorizeErrorCode::RequestUriReadFailed.code())
-                .contains(&code) =>
-        {
-            OAuthErrorCode::InvalidRequestUri
-        }
-        code if (AuthorizeErrorCode::RequestObjectHeaderInvalid.code()
-            ..=AuthorizeErrorCode::RequestObjectPayloadInvalid.code())
-            .contains(&code) =>
-        {
-            OAuthErrorCode::InvalidRequestObject
-        }
-        code if code == AuthorizeErrorCode::RequestObjectEncryptionUnsupported.code() => {
-            OAuthErrorCode::RequestNotSupported
-        }
-        code if code == AuthorizeErrorCode::ClientGrantNotAllowed.code() => {
-            OAuthErrorCode::UnauthorizedClient
-        }
+    match error.error_code() {
+        ErrorCode::Common(CommonErrorCode::InvalidTarget) => OAuthErrorCode::InvalidTarget,
+        ErrorCode::Common(CommonErrorCode::InvalidScope) => OAuthErrorCode::InvalidScope,
+        ErrorCode::Authorize(code) => authorize_code_to_oauth(code),
         _ => OAuthErrorCode::InvalidRequest,
     }
 }
