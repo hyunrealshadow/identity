@@ -39,6 +39,7 @@ pub const CSRF_HEADER_NAME: &str = "x-csrf-token";
 pub const CSRF_FORM_FIELD_NAME: &str = "csrf_token";
 pub const SESSION_HEADER_NAME: &str = "x-sessions";
 pub const OP_SESSION_COOKIE_NAME: &str = "sessions";
+pub const MAX_PROTECTED_SESSION_IDS: usize = 16;
 const API_CSRF_TOKEN_KEY: &str = "identity.api.csrf-token";
 const SESSION_ID_PROTECTION_PURPOSE: &str = "session-id";
 
@@ -83,17 +84,33 @@ fn parse_cookie(headers: &HeaderMap, cookie_name: &str) -> Option<String> {
         })
 }
 
+fn sanitize_protected_session_ids(ids: Vec<String>) -> Vec<String> {
+    let mut unique = Vec::with_capacity(ids.len().min(MAX_PROTECTED_SESSION_IDS));
+    for id in ids {
+        if id.trim().is_empty() || unique.contains(&id) {
+            continue;
+        }
+        unique.push(id);
+        if unique.len() >= MAX_PROTECTED_SESSION_IDS {
+            break;
+        }
+    }
+    unique
+}
+
 pub fn protected_session_ids(headers: &HeaderMap) -> Vec<String> {
     headers
         .get(SESSION_HEADER_NAME)
         .and_then(|value| value.to_str().ok())
         .and_then(|value| from_str::<Vec<String>>(value).ok())
+        .map(sanitize_protected_session_ids)
         .unwrap_or_default()
 }
 
 pub fn op_protected_session_ids(headers: &HeaderMap) -> Vec<String> {
     parse_cookie(headers, OP_SESSION_COOKIE_NAME)
         .and_then(|raw| from_str::<Vec<String>>(&raw).ok())
+        .map(sanitize_protected_session_ids)
         .unwrap_or_default()
 }
 
@@ -134,14 +151,15 @@ async fn parse_protected_session_ids(
     ctx: &AppState,
     protected_ids: Vec<String>,
 ) -> Vec<SessionCookieEntry> {
-    let mut entries = Vec::new();
-    for protected_session_id in protected_ids {
-        if let Ok(session_oid) = unprotect_session_id(ctx, &protected_session_id).await {
+    let mut entries: Vec<SessionCookieEntry> = Vec::new();
+    for protected_session_id in sanitize_protected_session_ids(protected_ids) {
+        if let Ok(session_oid) = unprotect_session_id(ctx, &protected_session_id).await
+            && !entries.iter().any(|entry| entry.session_oid == session_oid)
+        {
             entries.push(SessionCookieEntry {
                 session_oid,
                 protected_session_id,
             });
-            continue;
         }
     }
     entries
@@ -587,5 +605,38 @@ mod tests {
             op_protected_session_ids(&headers),
             vec!["op-cookie-session"]
         );
+    }
+
+    #[test]
+    fn session_id_lists_ignore_blanks_deduplicate_and_cap() {
+        let too_many: Vec<String> = (0..30)
+            .map(|i| {
+                if i % 5 == 0 {
+                    "dup".to_owned()
+                } else {
+                    format!("s-{i}")
+                }
+            })
+            .chain(["   ".to_owned(), "".to_owned()])
+            .collect();
+        let json = serde_json::to_string(&too_many).unwrap();
+
+        let mut headers = HeaderMap::new();
+        headers.insert(SESSION_HEADER_NAME, HeaderValue::from_str(&json).unwrap());
+        headers.insert(
+            COOKIE,
+            HeaderValue::from_str(&format!("sessions={json}")).unwrap(),
+        );
+
+        let from_header = protected_session_ids(&headers);
+        let from_cookie = op_protected_session_ids(&headers);
+
+        assert_eq!(from_header.len(), super::MAX_PROTECTED_SESSION_IDS);
+        assert_eq!(from_header, from_cookie);
+        assert_eq!(
+            from_header.iter().filter(|id| id.as_str() == "dup").count(),
+            1
+        );
+        assert!(!from_header.iter().any(|id| id.trim().is_empty()));
     }
 }
