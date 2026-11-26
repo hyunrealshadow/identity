@@ -32,7 +32,6 @@ identity-application = { workspace = true }
 identity-domain = { workspace = true }
 idna = { workspace = true }
 ipnet = { workspace = true }
-include_dir = { version = "0.7.4" }
 josekit = { workspace = true }
 lettre = { workspace = true }
 migration = { workspace = true }
@@ -45,7 +44,6 @@ rand = { workspace = true }
 regex = { workspace = true }
 reqwest = { workspace = true }
 writeable = "0.6.4"
-salvo = { workspace = true }
 sea-orm = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -63,7 +61,6 @@ ulid = { workspace = true }
 unic-langid = { workspace = true }
 url = { workspace = true }
 uuid = { workspace = true }
-woothee = { workspace = true }
 
 webauthn-rs = { version = "0.5.4", features = ["danger-allow-state-serialisation"] }
 
