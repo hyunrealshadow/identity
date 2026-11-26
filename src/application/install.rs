@@ -312,16 +312,39 @@ fn validate_install_input(input: InstallInput) -> Result<ValidatedInstallInput, 
         return Err(validation);
     }
 
+    let (
+        Some(username),
+        Some(email),
+        Some(password),
+        Some(domain),
+        Some(issuer),
+        Some(application_url),
+        Some(console_url),
+        Some(key_algorithm),
+    ) = (
+        username,
+        email,
+        password,
+        domain,
+        issuer,
+        application_url,
+        console_url,
+        key_algorithm,
+    )
+    else {
+        return Err(validation);
+    };
+
     Ok(ValidatedInstallInput {
-        username: username.expect("validated username"),
-        email: email.expect("validated email"),
-        password: password.expect("validated password"),
-        domain: domain.expect("validated domain"),
-        issuer: issuer.expect("validated issuer"),
-        application_url: application_url.expect("validated application URL"),
-        console_url: console_url.expect("validated console URL"),
+        username,
+        email,
+        password,
+        domain,
+        issuer,
+        application_url,
+        console_url,
         signing_algorithm: input.signing_algorithm,
-        key_algorithm: key_algorithm.expect("validated key algorithm"),
+        key_algorithm,
     })
 }
 

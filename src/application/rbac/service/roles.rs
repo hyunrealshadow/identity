@@ -87,7 +87,7 @@ impl RbacManagementService {
         command: CreateRoleCommand,
     ) -> Result<RoleRecord, AppError> {
         let result = async {
-            let reason = validate_reason(&command.reason)?;
+            validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
             let metadata = match command.metadata {
                 Some(metadata) => {
@@ -105,7 +105,6 @@ impl RbacManagementService {
                     name,
                     description,
                     metadata,
-                    reason,
                     authority: authority.clone(),
                 })
                 .await
@@ -124,7 +123,7 @@ impl RbacManagementService {
         command: UpdateRoleCommand,
     ) -> Result<RoleRecord, AppError> {
         let result = async {
-            let reason = validate_reason(&command.reason)?;
+            validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
 
             if command.name.is_none()
@@ -156,7 +155,6 @@ impl RbacManagementService {
                     names,
                     descriptions,
                     expected_version: command.expected_version,
-                    reason,
                     authority: authority.clone(),
                 })
                 .await
@@ -198,7 +196,7 @@ impl RbacManagementService {
             "rbac.role.disable"
         };
         let result = async {
-            let reason = validate_reason(&command.reason)?;
+            validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
 
             let record = self
@@ -207,7 +205,6 @@ impl RbacManagementService {
                     RoleStateTransaction {
                         role_oid: command.role_oid,
                         expected_version: command.expected_version,
-                        reason,
                         authority: authority.clone(),
                     },
                     enabled,
@@ -228,7 +225,7 @@ impl RbacManagementService {
         command: SetRolePermissionsCommand,
     ) -> Result<RoleRecord, AppError> {
         let result = async {
-            let reason = validate_reason(&command.reason)?;
+            validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
 
             if command.scope_oids.len() > MAX_ROLE_PERMISSIONS {
@@ -249,7 +246,6 @@ impl RbacManagementService {
                     role_oid: command.role_oid,
                     scope_oids,
                     expected_version: command.expected_version,
-                    reason,
                     authority: authority.clone(),
                 })
                 .await

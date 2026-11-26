@@ -268,7 +268,9 @@ pub(super) async fn list<C: ConnectionTrait>(
         }
     }
     let direction = if descending { "DESC" } else { "ASC" };
-    let limit = binds.push((query.limit + 1) as i64);
+    let limit = binds.push(
+        crate::database::repository::shared::page_fetch_limit_i64(query.limit).map_err(storage)?,
+    );
     let rows = db
         .query_all_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,

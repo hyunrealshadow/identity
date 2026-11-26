@@ -130,7 +130,6 @@ async fn send(
             user_oid: user.into(),
             invitation: issue(digest, "invitee@example.test"),
             delivery: identity_application::user::invitation::USER_INVITATION_DELIVERY,
-            reason: String::new(),
             authority: user_mgmt_authority(db, request).await,
         })
         .await
@@ -157,7 +156,6 @@ async fn an_invitation_sets_the_first_password_once_and_only_for_its_address() {
                 password: None,
                 invitation: Some(issue("digest-first", "invitee@example.test")),
                 profile: identity_domain::user::repository::UserProfilePatch::default(),
-                reason: String::new(),
                 authority: user_mgmt_authority(&db, "invite-create").await,
             })
             .await
@@ -236,7 +234,6 @@ async fn an_invitation_sets_the_first_password_once_and_only_for_its_address() {
                 user_oid: invitee.into(),
                 invitation: issue("digest-stale-address", "old@example.test"),
                 delivery: identity_application::user::invitation::USER_INVITATION_DELIVERY,
-                reason: String::new(),
                 authority: user_mgmt_authority(&db, "invite-stale-address").await,
             })
             .await
@@ -255,7 +252,6 @@ async fn an_invitation_sets_the_first_password_once_and_only_for_its_address() {
                     UserStateTransaction {
                         user_oid: invitee.into(),
                         expected_version: version(&db, invitee).await,
-                        reason: String::new(),
                         authority: user_mgmt_authority(&db, request).await,
                     },
                     enabled,
@@ -341,7 +337,6 @@ async fn an_administrator_password_replaces_an_outstanding_invitation() {
                 password: None,
                 invitation: Some(issue("digest-pending", "pending@example.test")),
                 profile: identity_domain::user::repository::UserProfilePatch::default(),
-                reason: String::new(),
                 authority: user_mgmt_authority(&db, "pending-create").await,
             })
             .await
@@ -352,7 +347,6 @@ async fn an_administrator_password_replaces_an_outstanding_invitation() {
                 UserStateTransaction {
                     user_oid: pending.into(),
                     expected_version: version(&db, pending).await,
-                    reason: String::new(),
                     authority: user_mgmt_authority(&db, "pending-reset").await,
                 },
                 password("TEMPORARY"),
@@ -499,7 +493,6 @@ async fn invitation_guards_delivery_regression_email_updates_disabled_users_and_
                 password: None,
                 invitation: Some(issue("digest-guard-1", "guard@example.test")),
                 profile: identity_domain::user::repository::UserProfilePatch::default(),
-                reason: String::new(),
                 authority: user_mgmt_authority(&db, "guard-create").await,
             })
             .await
@@ -550,7 +543,6 @@ async fn invitation_guards_delivery_regression_email_updates_disabled_users_and_
                     ])),
                     profile: identity_domain::user::repository::UserProfilePatch::default(),
                     expected_version: version(&db, target).await,
-                    reason: String::new(),
                     authority: user_mgmt_authority(&db, "guard-update-email").await,
                 },
             )
@@ -578,7 +570,6 @@ async fn invitation_guards_delivery_regression_email_updates_disabled_users_and_
                 UserStateTransaction {
                     user_oid: target.into(),
                     expected_version: version(&db, target).await,
-                    reason: String::new(),
                     authority: user_mgmt_authority(&db, "guard-disable").await,
                 },
                 false,
@@ -594,7 +585,6 @@ async fn invitation_guards_delivery_regression_email_updates_disabled_users_and_
                 user_oid: target.into(),
                 invitation: issue("digest-guard-disabled", "moved-guard@example.test"),
                 delivery: identity_application::user::invitation::USER_INVITATION_DELIVERY,
-                reason: String::new(),
                 authority: user_mgmt_authority(&db, "guard-send-disabled").await,
             })
             .await
@@ -611,7 +601,6 @@ async fn invitation_guards_delivery_regression_email_updates_disabled_users_and_
                 UserStateTransaction {
                     user_oid: target.into(),
                     expected_version: version(&db, target).await,
-                    reason: String::new(),
                     authority: user_mgmt_authority(&db, "guard-enable").await,
                 },
                 true,
@@ -624,7 +613,6 @@ async fn invitation_guards_delivery_regression_email_updates_disabled_users_and_
                 user_oid: target.into(),
                 invitation: issue("digest-guard-2", "moved-guard@example.test"),
                 delivery: identity_application::user::invitation::USER_INVITATION_DELIVERY,
-                reason: String::new(),
                 authority: user_mgmt_authority(&db, "guard-resend").await,
             })
             .await

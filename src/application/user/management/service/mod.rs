@@ -56,10 +56,10 @@ use crate::{
     },
 };
 
+pub use crate::authorization::{MAX_CLIENT_MUTATION_ID_LENGTH, MAX_REASON_LENGTH};
+
 pub const DEFAULT_PAGE_SIZE: u32 = 20;
 pub const MAX_PAGE_SIZE: u32 = 100;
-pub const MAX_REASON_LENGTH: usize = 1_000;
-pub const MAX_CLIENT_MUTATION_ID_LENGTH: usize = 255;
 pub const MAX_QUERY_FILTER_LENGTH: usize = 255;
 pub const MAX_USERNAME_FILTER_LENGTH: usize = 64;
 pub const MAX_EMAIL_FILTER_LENGTH: usize = 320;
@@ -156,7 +156,7 @@ impl UserManagementService {
         authority: &UserManagementAuthority,
         command: SendUserInvitationCommand,
     ) -> Result<(UserManagementRecord, UserInvitationStatus), AppError> {
-        let reason = validate_reason(&command.reason)?;
+        validate_reason(&command.reason)?;
         validate_client_mutation_id(command.client_mutation_id.as_deref())?;
         let invitations = self.available_invitations()?;
         let now = chrono::Utc::now();
@@ -184,7 +184,6 @@ impl UserManagementService {
                 user_oid: command.user_oid,
                 invitation: issue,
                 delivery: USER_INVITATION_DELIVERY,
-                reason,
                 authority: (*authority).clone(),
             })
             .await
@@ -416,14 +415,13 @@ impl UserManagementService {
         command: RevokeUserSessionsCommand,
     ) -> Result<UserManagementRecord, AppError> {
         let result = async {
-            let reason = validate_reason(&command.reason)?;
+            validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
             let outcome = self
                 .repository
                 .revoke_user_sessions(RevokeUserSessionsTransaction {
                     user_oid: command.user_oid,
                     sessions: command.sessions,
-                    reason,
                     authority: (*authority).clone(),
                 })
                 .await
@@ -461,12 +459,11 @@ impl UserManagementService {
         authority: &UserManagementAuthority,
         command: &UserStateCommand,
     ) -> Result<UserStateTransaction, AppError> {
-        let reason = validate_reason(&command.reason)?;
+        validate_reason(&command.reason)?;
         validate_client_mutation_id(command.client_mutation_id.as_deref())?;
         Ok(UserStateTransaction {
             user_oid: command.user_oid,
             expected_version: command.expected_version,
-            reason,
             authority: (*authority).clone(),
         })
     }
@@ -537,7 +534,7 @@ impl UserManagementService {
         authority: &UserManagementAuthority,
         command: CreateUserCommand,
     ) -> Result<UserManagementRecord, AppError> {
-        let reason = validate_reason(&command.reason)?;
+        validate_reason(&command.reason)?;
         validate_client_mutation_id(command.client_mutation_id.as_deref())?;
         let (username, username_normalized) = validate_username_field(&command.username)?;
         let (email, email_normalized) = validate_email_field(&command.email)?;
@@ -592,7 +589,6 @@ impl UserManagementService {
                 password,
                 invitation,
                 profile,
-                reason,
                 authority: (*authority).clone(),
             })
             .await
@@ -615,7 +611,7 @@ impl UserManagementService {
         {
             reject_self_credential_action(authority, command.user_oid)?;
         }
-        let reason = validate_reason(&command.reason)?;
+        validate_reason(&command.reason)?;
         validate_client_mutation_id(command.client_mutation_id.as_deref())?;
 
         let username = command
@@ -642,7 +638,6 @@ impl UserManagementService {
                 required_actions: command.required_actions,
                 profile,
                 expected_version: command.expected_version,
-                reason,
                 authority: (*authority).clone(),
             })
             .await
@@ -656,7 +651,7 @@ impl UserManagementService {
         command: UserStateCommand,
         enabled: bool,
     ) -> Result<UserManagementRecord, AppError> {
-        let reason = validate_reason(&command.reason)?;
+        validate_reason(&command.reason)?;
         validate_client_mutation_id(command.client_mutation_id.as_deref())?;
 
         let outcome = self
@@ -665,7 +660,6 @@ impl UserManagementService {
                 UserStateTransaction {
                     user_oid: command.user_oid,
                     expected_version: command.expected_version,
-                    reason,
                     authority: (*authority).clone(),
                 },
                 enabled,
@@ -680,7 +674,7 @@ impl UserManagementService {
         authority: &UserManagementAuthority,
         command: UserStateCommand,
     ) -> Result<UserManagementRecord, AppError> {
-        let reason = validate_reason(&command.reason)?;
+        validate_reason(&command.reason)?;
         validate_client_mutation_id(command.client_mutation_id.as_deref())?;
 
         let outcome = self
@@ -688,7 +682,6 @@ impl UserManagementService {
             .unlock_user(UserStateTransaction {
                 user_oid: command.user_oid,
                 expected_version: command.expected_version,
-                reason,
                 authority: (*authority).clone(),
             })
             .await

@@ -30,10 +30,9 @@ use super::{
         ClientPage, ClientPageItem, ClientPageRequest, ClientPlatform, ClientProtocolSettings,
         ClientRecord, ClientSecretResult, ClientStateCommand, CreateClientCommand,
         CreateClientSecretCommand, MANAGEABLE_GRANT_TYPES, MAX_CLIENT_DESCRIPTION_LENGTH,
-        MAX_CLIENT_MUTATION_ID_LENGTH, MAX_CLIENT_NAME_LENGTH, MAX_PUBLIC_KEY_LIFETIME_DAYS,
-        MAX_QUERY_FILTER_LENGTH, MAX_REASON_LENGTH, MAX_REDIRECT_URIS, MAX_SECRET_LIFETIME_DAYS,
-        MAX_URI_LENGTH, MIN_PUBLIC_KEY_LIFETIME_DAYS, MIN_SECRET_LIFETIME_DAYS,
-        RevokeClientCredentialCommand, UpdateClientCommand,
+        MAX_CLIENT_NAME_LENGTH, MAX_PUBLIC_KEY_LIFETIME_DAYS, MAX_QUERY_FILTER_LENGTH,
+        MAX_REDIRECT_URIS, MAX_SECRET_LIFETIME_DAYS, MAX_URI_LENGTH, MIN_PUBLIC_KEY_LIFETIME_DAYS,
+        MIN_SECRET_LIFETIME_DAYS, RevokeClientCredentialCommand, UpdateClientCommand,
     },
     public_key::{ClientPublicKeyReader, PublicKeyError, PublicKeyMaterial},
     repository::{
@@ -232,7 +231,7 @@ impl ClientManagementService {
         command: CreateClientCommand,
     ) -> Result<ClientRecord, AppError> {
         let result = async {
-            let reason = validate_reason(&command.reason)?;
+            validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
             let metadata = LocalizedMetadata::canonicalize(command.names, command.descriptions)
                 .map_err(map_localized_error)?;
@@ -245,7 +244,6 @@ impl ClientManagementService {
                     names: metadata.names,
                     descriptions: metadata.descriptions,
                     settings,
-                    reason,
                     authority: authority.clone(),
                 })
                 .await
@@ -263,7 +261,7 @@ impl ClientManagementService {
         command: UpdateClientCommand,
     ) -> Result<ClientRecord, AppError> {
         let result = async {
-            let reason = validate_reason(&command.reason)?;
+            validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
             if command.name.is_none()
                 && command.description.is_none()
@@ -327,7 +325,6 @@ impl ClientManagementService {
                     descriptions,
                     settings,
                     advanced,
-                    reason,
                     authority: authority.clone(),
                 })
                 .await
@@ -413,7 +410,7 @@ impl ClientManagementService {
             "client.secret.create"
         };
         let result = async {
-            let reason = validate_reason(&command.reason)?;
+            validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
             validate_secret_lifetime(command.lifetime_days)?;
             // Issuing a secret is what enables the secret methods; the
@@ -424,7 +421,6 @@ impl ClientManagementService {
                     expected_version: command.expected_version,
                     replaces: command.replaces,
                     secret: new_secret(command.lifetime_days),
-                    reason,
                     authority: authority.clone(),
                 })
                 .await
@@ -444,7 +440,7 @@ impl ClientManagementService {
         command: AddClientPublicKeyCommand,
     ) -> Result<ClientCredentialResult, AppError> {
         let result = async {
-            let reason = validate_reason(&command.reason)?;
+            validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
             let parsed = self
                 .public_keys
@@ -470,7 +466,6 @@ impl ClientManagementService {
                     hint: Some(parsed.hint),
                     expires_at: Some(expires_at),
                     action: AuditAction::ClientPublicKeyAdd,
-                    reason,
                     authority: authority.clone(),
                 })
                 .await
@@ -490,7 +485,7 @@ impl ClientManagementService {
         command: AddClientJwksUriCommand,
     ) -> Result<ClientCredentialResult, AppError> {
         let result = async {
-            let reason = validate_reason(&command.reason)?;
+            validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
             let jwks_uri = parse_jwks_uri(&command.jwks_uri)?;
             let keys = fetch_client_jwks(
@@ -518,7 +513,6 @@ impl ClientManagementService {
                     hint: None,
                     expires_at: None,
                     action: AuditAction::ClientJwksUriSet,
-                    reason,
                     authority: authority.clone(),
                 })
                 .await
@@ -538,14 +532,13 @@ impl ClientManagementService {
         command: RevokeClientCredentialCommand,
     ) -> Result<ClientCredentialRevokeResult, AppError> {
         let result = async {
-            let reason = validate_reason(&command.reason)?;
+            validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
             self.repository
                 .revoke_client_credential(RevokeClientCredentialTransaction {
                     client_oid: command.client_oid,
                     credential_oid: command.credential_oid,
                     expected_version: command.expected_version,
-                    reason,
                     authority: authority.clone(),
                 })
                 .await
@@ -590,12 +583,11 @@ fn state_transaction(
     authority: &RbacManagementAuthority,
     command: ClientStateCommand,
 ) -> Result<ClientStateTransaction, AppError> {
-    let reason = validate_reason(&command.reason)?;
+    validate_reason(&command.reason)?;
     validate_client_mutation_id(command.client_mutation_id.as_deref())?;
     Ok(ClientStateTransaction {
         client_oid: command.client_oid,
         expected_version: command.expected_version,
-        reason,
         authority: authority.clone(),
     })
 }
@@ -605,21 +597,15 @@ fn state_transaction(
 // ----------------------------------------------------------------------
 
 fn validate_reason(reason: &str) -> Result<String, AppError> {
-    let reason = reason.trim();
-    if reason.chars().count() > MAX_REASON_LENGTH {
-        return Err(client::error::InvalidReason::new(MAX_REASON_LENGTH).with_field("reason"));
-    }
-    Ok(reason.to_owned())
+    crate::authorization::validate_reason_with(reason, |max| {
+        client::error::InvalidReason::new(max).with_field("reason")
+    })
 }
 
 fn validate_client_mutation_id(value: Option<&str>) -> Result<(), AppError> {
-    if value.is_some_and(|value| value.chars().count() > MAX_CLIENT_MUTATION_ID_LENGTH) {
-        return Err(
-            client::error::InvalidClientMutationId::new(MAX_CLIENT_MUTATION_ID_LENGTH)
-                .with_field("client_mutation_id"),
-        );
-    }
-    Ok(())
+    crate::authorization::validate_client_mutation_id_with(value, |max| {
+        client::error::InvalidClientMutationId::new(max).with_field("client_mutation_id")
+    })
 }
 
 fn normalize_filter(mut filter: ClientFilter) -> Result<ClientFilter, AppError> {

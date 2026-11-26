@@ -19,31 +19,19 @@ pub(super) fn reject_self_credential_action(
 /// mutation. Blank input becomes an empty reason; over-long supplied text is
 /// rejected.
 pub(super) fn validate_reason(reason: &str) -> Result<String, AppError> {
-    let reason = reason.trim();
-    if reason.chars().count() > MAX_REASON_LENGTH {
-        return Err(
-            user_management::error::ValidationFailed::new().with_field_error(
-                "reason",
-                user_management::error::ReasonTooLong::new(MAX_REASON_LENGTH),
-            ),
-        );
-    }
-    Ok(reason.to_owned())
+    crate::authorization::validate_reason_with(reason, |max| {
+        user_management::error::ValidationFailed::new()
+            .with_field_error("reason", user_management::error::ReasonTooLong::new(max))
+    })
 }
 
 pub(super) fn validate_client_mutation_id(value: Option<&str>) -> Result<(), AppError> {
-    let Some(value) = value else {
-        return Ok(());
-    };
-    if value.chars().count() > MAX_CLIENT_MUTATION_ID_LENGTH {
-        return Err(
-            user_management::error::ValidationFailed::new().with_field_error(
-                "client_mutation_id",
-                user_management::error::InvalidClientMutationId::new(MAX_CLIENT_MUTATION_ID_LENGTH),
-            ),
-        );
-    }
-    Ok(())
+    crate::authorization::validate_client_mutation_id_with(value, |max| {
+        user_management::error::ValidationFailed::new().with_field_error(
+            "client_mutation_id",
+            user_management::error::InvalidClientMutationId::new(max),
+        )
+    })
 }
 
 pub(super) fn validate_username_field(value: &str) -> Result<(String, String), AppError> {

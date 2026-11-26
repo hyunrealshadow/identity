@@ -42,10 +42,7 @@ use crate::{
             GroupStateTransaction, RemoveGroupMemberTransaction, SetGroupRolesTransaction,
             UpdateGroupTransaction,
         },
-        model::{
-            MAX_CLIENT_MUTATION_ID_LENGTH, MAX_QUERY_FILTER_LENGTH, RbacManagementAuthority,
-            dedupe_batch_lookups,
-        },
+        model::{MAX_QUERY_FILTER_LENGTH, RbacManagementAuthority, dedupe_batch_lookups},
     },
 };
 
@@ -372,7 +369,7 @@ impl GroupManagementService {
         command: CreateGroupCommand,
     ) -> Result<GroupRecord, AppError> {
         let result = async {
-            let reason = validate_reason(&command.reason)?;
+            validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
             let metadata = LocalizedMetadata::canonicalize(command.names, command.descriptions)
                 .map_err(map_localized_error)?;
@@ -383,7 +380,6 @@ impl GroupManagementService {
                     description: validate_default_text(&command.description, false)?,
                     names: metadata.names,
                     descriptions: metadata.descriptions,
-                    reason,
                     authority: authority.clone(),
                 })
                 .await
@@ -401,7 +397,7 @@ impl GroupManagementService {
         command: UpdateGroupCommand,
     ) -> Result<GroupRecord, AppError> {
         let result = async {
-            let reason = validate_reason(&command.reason)?;
+            validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
 
             if command.name.is_none()
@@ -433,7 +429,6 @@ impl GroupManagementService {
                     names: command.names,
                     descriptions: command.descriptions,
                     expected_version: command.expected_version,
-                    reason,
                     authority: authority.clone(),
                 })
                 .await
@@ -474,7 +469,7 @@ impl GroupManagementService {
             "rbac.group.disable"
         };
         let result = async {
-            let reason = validate_reason(&command.reason)?;
+            validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
 
             self.repository
@@ -482,7 +477,6 @@ impl GroupManagementService {
                     GroupStateTransaction {
                         group_oid: command.group_oid,
                         expected_version: command.expected_version,
-                        reason,
                         authority: authority.clone(),
                     },
                     enabled,
@@ -502,14 +496,13 @@ impl GroupManagementService {
         command: DeleteGroupCommand,
     ) -> Result<DeleteGroupResult, AppError> {
         let result = async {
-            let reason = validate_reason(&command.reason)?;
+            validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
 
             self.repository
                 .delete_group(DeleteGroupTransaction {
                     group_oid: command.group_oid,
                     expected_version: command.expected_version,
-                    reason,
                     authority: authority.clone(),
                 })
                 .await
@@ -553,7 +546,7 @@ impl GroupManagementService {
         command: RemoveGroupMemberCommand,
     ) -> Result<GroupMembershipMutationResult, AppError> {
         let result = async {
-            let reason = validate_reason(&command.reason)?;
+            validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
 
             self.repository
@@ -561,7 +554,6 @@ impl GroupManagementService {
                     group_oid: command.group_oid,
                     user_oid: command.user_oid,
                     expected_version: command.expected_version,
-                    reason,
                     authority: authority.clone(),
                 })
                 .await
@@ -629,16 +621,9 @@ fn validate_reason(reason: &str) -> Result<String, AppError> {
 }
 
 fn validate_client_mutation_id(value: Option<&str>) -> Result<(), AppError> {
-    let Some(value) = value else {
-        return Ok(());
-    };
-    if value.chars().count() > MAX_CLIENT_MUTATION_ID_LENGTH {
-        return Err(group_codes::error::InvalidClientMutationId::new(
-            MAX_CLIENT_MUTATION_ID_LENGTH,
-        )
-        .with_field("client_mutation_id"));
-    }
-    Ok(())
+    crate::authorization::validate_client_mutation_id_with(value, |max| {
+        group_codes::error::InvalidClientMutationId::new(max).with_field("client_mutation_id")
+    })
 }
 
 fn normalize_group_filter(mut filter: GroupFilter) -> Result<GroupFilter, AppError> {

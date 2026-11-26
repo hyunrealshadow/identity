@@ -112,7 +112,13 @@ pub(super) async fn render_logout_page(
             },
             None,
         ),
-        LogoutOutcome::Redirect { .. } => unreachable!("call redirect_or_page_response instead"),
+        LogoutOutcome::Redirect { redirect_uri } => {
+            let mut response = redirect_to_response(redirect_uri.as_str());
+            if let Some(cookie) = set_cookie {
+                append_set_cookie(&mut response, &cookie);
+            }
+            return response;
+        }
     };
 
     let mut response = Response::new();

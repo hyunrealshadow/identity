@@ -113,7 +113,6 @@ pub struct CreateClientTransaction {
     pub names: Vec<LocalizedText>,
     pub descriptions: Vec<LocalizedText>,
     pub settings: ClientProtocolSettings,
-    pub reason: String,
     pub authority: RbacManagementAuthority,
 }
 
@@ -127,7 +126,6 @@ pub struct UpdateClientTransaction {
     pub descriptions: Option<Vec<LocalizedText>>,
     pub settings: Option<ClientProtocolSettings>,
     pub advanced: Option<ClientAdvancedSettings>,
-    pub reason: String,
     pub authority: RbacManagementAuthority,
 }
 
@@ -135,7 +133,6 @@ pub struct UpdateClientTransaction {
 pub struct ClientStateTransaction {
     pub client_oid: ClientOid,
     pub expected_version: Uuid,
-    pub reason: String,
     pub authority: RbacManagementAuthority,
 }
 
@@ -145,7 +142,6 @@ pub struct CreateClientSecretTransaction {
     pub expected_version: Uuid,
     pub replaces: Option<OpenIdConnectCredentialOid>,
     pub secret: NewClientSecret,
-    pub reason: String,
     pub authority: RbacManagementAuthority,
 }
 
@@ -161,7 +157,6 @@ pub struct AddClientCredentialTransaction {
     pub hint: Option<String>,
     pub expires_at: Option<DateTime<Utc>>,
     pub action: AuditAction,
-    pub reason: String,
     pub authority: RbacManagementAuthority,
 }
 
@@ -170,7 +165,6 @@ pub struct RevokeClientCredentialTransaction {
     pub client_oid: ClientOid,
     pub credential_oid: OpenIdConnectCredentialOid,
     pub expected_version: Uuid,
-    pub reason: String,
     pub authority: RbacManagementAuthority,
 }
 

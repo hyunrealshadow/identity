@@ -43,7 +43,7 @@ use crate::{
     user::model::{Argon2Options, Argon2Variant, Argon2Version},
 };
 
-pub const MAX_CLIENT_MUTATION_ID_LENGTH: usize = 255;
+pub use crate::authorization::MAX_CLIENT_MUTATION_ID_LENGTH;
 
 /// Inclusive bounds an operator may choose for one numeric setting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -579,13 +579,9 @@ impl InstanceSettingService {
 }
 
 pub(crate) fn validate_client_mutation_id(value: Option<&str>) -> Result<(), AppError> {
-    if value.is_some_and(|value| value.chars().count() > MAX_CLIENT_MUTATION_ID_LENGTH) {
-        return Err(
-            instance::error::InvalidClientMutationId::new(MAX_CLIENT_MUTATION_ID_LENGTH)
-                .with_field("client_mutation_id"),
-        );
-    }
-    Ok(())
+    crate::authorization::validate_client_mutation_id_with(value, |max| {
+        instance::error::InvalidClientMutationId::new(max).with_field("client_mutation_id")
+    })
 }
 
 pub(super) fn map_repository_error(error: InstanceSettingRepositoryError) -> AppError {

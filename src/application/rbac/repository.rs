@@ -233,7 +233,6 @@ pub struct CreateResourceTransaction {
     pub resource_oid: ResourceOid,
     pub uri: String,
     pub name: String,
-    pub reason: String,
     pub authority: RbacManagementAuthority,
 }
 
@@ -242,7 +241,6 @@ pub struct UpdateResourceTransaction {
     pub resource_oid: ResourceOid,
     pub name: Option<String>,
     pub expected_version: Uuid,
-    pub reason: String,
     pub authority: RbacManagementAuthority,
 }
 
@@ -250,7 +248,6 @@ pub struct UpdateResourceTransaction {
 pub struct ResourceStateTransaction {
     pub resource_oid: ResourceOid,
     pub expected_version: Uuid,
-    pub reason: String,
     pub authority: RbacManagementAuthority,
 }
 
@@ -263,7 +260,6 @@ pub struct CreateScopeTransaction {
     pub names: Vec<ScopeDescription>,
     pub description: String,
     pub descriptions: Vec<ScopeDescription>,
-    pub reason: String,
     pub authority: RbacManagementAuthority,
 }
 
@@ -275,7 +271,6 @@ pub struct UpdateScopeTransaction {
     pub description: Option<String>,
     pub descriptions: Option<Vec<ScopeDescription>>,
     pub expected_version: Uuid,
-    pub reason: String,
     pub authority: RbacManagementAuthority,
 }
 
@@ -283,7 +278,6 @@ pub struct UpdateScopeTransaction {
 pub struct ScopeStateTransaction {
     pub scope_oid: ScopeOid,
     pub expected_version: Uuid,
-    pub reason: String,
     pub authority: RbacManagementAuthority,
 }
 
@@ -293,7 +287,6 @@ pub struct CreateRoleTransaction {
     pub name: String,
     pub description: String,
     pub metadata: LocalizedMetadata,
-    pub reason: String,
     pub authority: RbacManagementAuthority,
 }
 
@@ -308,7 +301,6 @@ pub struct UpdateRoleTransaction {
     /// row; `Some(empty)` clears them.
     pub descriptions: Option<Vec<LocalizedText>>,
     pub expected_version: Uuid,
-    pub reason: String,
     pub authority: RbacManagementAuthority,
 }
 
@@ -316,7 +308,6 @@ pub struct UpdateRoleTransaction {
 pub struct RoleStateTransaction {
     pub role_oid: RoleOid,
     pub expected_version: Uuid,
-    pub reason: String,
     pub authority: RbacManagementAuthority,
 }
 
@@ -325,7 +316,6 @@ pub struct SetRolePermissionsTransaction {
     pub role_oid: RoleOid,
     pub scope_oids: Vec<ScopeOid>,
     pub expected_version: Uuid,
-    pub reason: String,
     pub authority: RbacManagementAuthority,
 }
 
@@ -343,7 +333,6 @@ pub struct RevokeUserRolesTransaction {
     pub user_oid: UserOid,
     pub role_oids: Vec<RoleOid>,
     pub expected_user_version: Uuid,
-    pub reason: String,
     pub authority: RbacManagementAuthority,
 }
 
@@ -352,7 +341,6 @@ pub struct SetClientScopesTransaction {
     pub client_oid: ClientOid,
     pub scopes: Vec<ClientScopeAssignment>,
     pub expected_version: Uuid,
-    pub reason: String,
     pub authority: RbacManagementAuthority,
 }
 

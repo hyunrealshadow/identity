@@ -82,7 +82,7 @@ impl RbacManagementService {
         command: CreateResourceCommand,
     ) -> Result<ApiResourceRecord, AppError> {
         let result = async {
-            let reason = validate_reason(&command.reason)?;
+            validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
             let uri = command.uri.trim().to_owned();
             if !resource::valid_resource_uri(&uri) {
@@ -103,7 +103,6 @@ impl RbacManagementService {
                     resource_oid,
                     uri,
                     name,
-                    reason,
                     authority: authority.clone(),
                 })
                 .await
@@ -122,7 +121,7 @@ impl RbacManagementService {
         command: UpdateResourceCommand,
     ) -> Result<ApiResourceRecord, AppError> {
         let result = async {
-            let reason = validate_reason(&command.reason)?;
+            validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
 
             let name = command
@@ -139,7 +138,6 @@ impl RbacManagementService {
                     resource_oid: command.resource_oid,
                     name,
                     expected_version: command.expected_version,
-                    reason,
                     authority: authority.clone(),
                 })
                 .await
@@ -181,7 +179,7 @@ impl RbacManagementService {
             "rbac.resource.disable"
         };
         let result = async {
-            let reason = validate_reason(&command.reason)?;
+            validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
 
             let record = self
@@ -190,7 +188,6 @@ impl RbacManagementService {
                     ResourceStateTransaction {
                         resource_oid: command.resource_oid,
                         expected_version: command.expected_version,
-                        reason,
                         authority: authority.clone(),
                     },
                     enabled,

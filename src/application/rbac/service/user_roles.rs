@@ -433,7 +433,7 @@ impl RbacManagementService {
         command: RevokeUserRolesCommand,
     ) -> Result<UserRoleMutationResult, AppError> {
         let result = async {
-            let reason = validate_reason(&command.reason)?;
+            validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
             let role_oids = dedupe_limit_roles(command.role_oids)?;
             let result = self
@@ -442,7 +442,6 @@ impl RbacManagementService {
                     user_oid: command.user_oid,
                     role_oids,
                     expected_user_version: command.expected_user_version,
-                    reason,
                     authority: authority.clone(),
                 })
                 .await

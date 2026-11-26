@@ -83,7 +83,7 @@ impl RbacManagementService {
         command: CreateScopeCommand,
     ) -> Result<ScopeRecord, AppError> {
         let result = async {
-            let reason = validate_reason(&command.reason)?;
+            validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
             let code = validate_new_scope_code(&command.code)?;
             let name = validate_scope_name(&command.name)?;
@@ -100,7 +100,6 @@ impl RbacManagementService {
                     names,
                     description,
                     descriptions,
-                    reason,
                     authority: authority.clone(),
                 })
                 .await
@@ -119,7 +118,7 @@ impl RbacManagementService {
         command: UpdateScopeCommand,
     ) -> Result<ScopeRecord, AppError> {
         let result = async {
-            let reason = validate_reason(&command.reason)?;
+            validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
 
             if command.name.is_none()
@@ -153,7 +152,6 @@ impl RbacManagementService {
                     description,
                     descriptions,
                     expected_version: command.expected_version,
-                    reason,
                     authority: authority.clone(),
                 })
                 .await
@@ -195,7 +193,7 @@ impl RbacManagementService {
             "rbac.scope.disable"
         };
         let result = async {
-            let reason = validate_reason(&command.reason)?;
+            validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
 
             let record = self
@@ -204,7 +202,6 @@ impl RbacManagementService {
                     ScopeStateTransaction {
                         scope_oid: command.scope_oid,
                         expected_version: command.expected_version,
-                        reason,
                         authority: authority.clone(),
                     },
                     enabled,

@@ -84,15 +84,21 @@ impl Handler for ClientCors {
                 .get(header::ACCESS_CONTROL_REQUEST_HEADERS)
                 .and_then(|value| value.to_str().ok())
                 .is_none_or(preflight_headers_allowed);
+            let origin_header = origin
+                .as_deref()
+                .and_then(|value| HeaderValue::from_str(value).ok());
             if !(allowed && method_allowed && headers_allowed) {
                 res.status_code(StatusCode::FORBIDDEN);
                 ctrl.skip_rest();
                 return;
             }
-            res.headers_mut().insert(
-                header::ACCESS_CONTROL_ALLOW_ORIGIN,
-                HeaderValue::from_str(origin.as_deref().unwrap()).expect("validated Origin header"),
-            );
+            let Some(origin_header) = origin_header else {
+                res.status_code(StatusCode::FORBIDDEN);
+                ctrl.skip_rest();
+                return;
+            };
+            res.headers_mut()
+                .insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin_header);
             res.headers_mut().insert(
                 header::ACCESS_CONTROL_ALLOW_METHODS,
                 HeaderValue::from_static(self.methods),
@@ -113,15 +119,17 @@ impl Handler for ClientCors {
         ctrl.call_next(req, depot, res).await;
         res.headers_mut()
             .append(header::VARY, HeaderValue::from_static("Origin"));
-        if let Some(origin) = origin.as_deref().filter(|_| allowed) {
+        if let Some(origin) = origin
+            .as_deref()
+            .filter(|_| allowed)
+            .and_then(|o| HeaderValue::from_str(o).ok())
+        {
             res.headers_mut().insert(
                 header::ACCESS_CONTROL_EXPOSE_HEADERS,
                 HeaderValue::from_static("X-Request-ID, X-Trace-ID, WWW-Authenticate, Retry-After"),
             );
-            res.headers_mut().insert(
-                header::ACCESS_CONTROL_ALLOW_ORIGIN,
-                HeaderValue::from_str(origin).expect("validated Origin header"),
-            );
+            res.headers_mut()
+                .insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, origin);
         }
     }
 }

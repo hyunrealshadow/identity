@@ -50,14 +50,12 @@ pub fn redirect_oauth_error_response(
         }
     });
 
-    if response_mode == ResponseMode::FormPost {
-        return render_form_post_response(ctx, headers, &request.redirect_uri, &error_response);
-    }
-
     let redirect_uri = match response_mode {
         ResponseMode::Query => error_response.to_redirect_url(&request.redirect_uri),
         ResponseMode::Fragment => error_response.to_fragment_redirect_url(&request.redirect_uri),
-        ResponseMode::FormPost => unreachable!("form_post returned above"),
+        ResponseMode::FormPost => {
+            return render_form_post_response(ctx, headers, &request.redirect_uri, &error_response);
+        }
     };
 
     redirect_to_response(redirect_uri.as_str())

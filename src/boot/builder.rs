@@ -109,7 +109,10 @@ impl AppBuilder {
     /// Load runtime settings from the database, enforce the installation
     /// startup guard, and spawn the background refresh task.
     pub async fn load_runtime_settings(mut self) -> AppResult<Self> {
-        let db = self.db.as_ref().expect("database must be connected first");
+        let db = self
+            .db
+            .as_ref()
+            .ok_or_else(|| Error::other("database must be connected first"))?;
 
         let settings = Arc::new(AppRuntimeSettings::from_db(db.clone()).await?);
         let installed = settings
@@ -152,7 +155,10 @@ impl AppBuilder {
             return Ok(self);
         }
 
-        let db = self.db.as_ref().expect("database must be connected first");
+        let db = self
+            .db
+            .as_ref()
+            .ok_or_else(|| Error::other("database must be connected first"))?;
 
         if is_installed(db).await? {
             return Ok(self);
@@ -214,11 +220,14 @@ impl AppBuilder {
 
     /// Construct application services (login, session, key, install).
     pub fn build_services(mut self) -> AppResult<Self> {
-        let db = self.db.clone().expect("database must be connected first");
+        let db = self
+            .db
+            .clone()
+            .ok_or_else(|| Error::other("database must be connected first"))?;
         let settings = self
             .runtime_settings
             .as_ref()
-            .expect("runtime settings must be loaded first");
+            .ok_or_else(|| Error::other("runtime settings must be loaded first"))?;
 
         let workload_authenticator = build_workload_authenticator(&self.config.internal.workloads)
             .map_err(|error| Error::new(ErrorKind::InvalidInput, error))?;
@@ -235,25 +244,30 @@ impl AppBuilder {
     }
 
     /// Assemble the final `AppState` and return it together with the config.
-    pub fn build(self) -> (AppState, AppConfig) {
+    pub fn build(self) -> AppResult<(AppState, AppConfig)> {
         let context = Arc::new(AppContext::new(
             self.environment,
             self.config.health.checks.clone(),
         ));
         let resources = Arc::new(AppResources::new(
-            self.db.expect("database must be connected first"),
-            self.tera.expect("templates must be initialized first"),
-            self.i18n.expect("i18n must be initialized first"),
+            self.db
+                .ok_or_else(|| Error::other("database must be connected first"))?,
+            self.tera
+                .ok_or_else(|| Error::other("templates must be initialized first"))?,
+            self.i18n
+                .ok_or_else(|| Error::other("i18n must be initialized first"))?,
         ));
         let lifecycle = Arc::new(AppLifecycle::new());
         lifecycle.hold_install_lock(self.install_lock);
         let settings = self
             .runtime_settings
-            .expect("runtime settings must be loaded first");
-        let services = self.services.expect("services must be built first");
+            .ok_or_else(|| Error::other("runtime settings must be loaded first"))?;
+        let services = self
+            .services
+            .ok_or_else(|| Error::other("services must be built first"))?;
 
         let state = AppState::new(context, resources, lifecycle, settings, services);
-        (state, self.config)
+        Ok((state, self.config))
     }
 }
 

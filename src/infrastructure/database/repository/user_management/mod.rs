@@ -200,8 +200,10 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
                 .order_by(UserColumn::NameNormalized, name_order)
                 .order_by(UserColumn::Id, id_order),
         };
+        let fetch_limit = crate::database::repository::shared::page_fetch_limit_u64(query.limit)
+            .map_err(storage)?;
         let rows = select
-            .limit((query.limit.saturating_add(1)) as u64)
+            .limit(fetch_limit)
             .all(&self.db)
             .await
             .map_err(storage)?;

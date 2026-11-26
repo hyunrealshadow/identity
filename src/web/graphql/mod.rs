@@ -226,8 +226,16 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
     use identity_domain::authorization::{
         ActorContext, HumanAuthenticationContext, RequestId, TraceId,
     };
-    let request_id =
-        RequestId::new(correlation.request_id.clone()).expect("generated or trusted request ID");
+    let Ok(request_id) = RequestId::new(correlation.request_id.clone()) else {
+        write_protocol_error(
+            res,
+            StatusCode::BAD_REQUEST,
+            CommonErrorCode::InvalidRequest,
+            &messages,
+            &correlation,
+        );
+        return;
+    };
     let trace_id = correlation
         .trace_id
         .clone()
@@ -494,10 +502,9 @@ fn write_protocol_error(
         extensions["traceId"] = json!(trace_id);
         envelope["traceId"] = json!(trace_id);
     }
-    res.headers_mut().insert(
-        "x-request-id",
-        HeaderValue::from_str(&correlation.request_id).expect("generated or validated request ID"),
-    );
+    if let Ok(value) = HeaderValue::from_str(&correlation.request_id) {
+        res.headers_mut().insert("x-request-id", value);
+    }
     res.render(Json(json!({ "errors": [{ "message": messages.code(code, &ErrorParams::new()), "extensions": extensions }], "extensions": envelope })));
 }
 

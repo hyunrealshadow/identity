@@ -60,21 +60,26 @@ impl TokenService {
             {
                 return Ok(json!({"active": false}));
             }
-            let owner = payload
+            let Some(owner) = payload
                 .claim("client_id")
                 .and_then(Value::as_str)
                 .and_then(|id| {
                     identity_domain::openid_connect::identifier::parse_client_id(id).ok()
-                });
-            let oid = payload.jwt_id().and_then(|id| {
+                })
+            else {
+                return Ok(json!({"active": false}));
+            };
+            let Some(oid) = payload.jwt_id().and_then(|id| {
                 identity_domain::openid_connect::identifier::parse_access_token_id(id).ok()
-            });
-            if owner != Some(client.client().oid) || oid.is_none() {
+            }) else {
+                return Ok(json!({"active": false}));
+            };
+            if owner != client.client().oid {
                 return Ok(json!({"active": false}));
             }
             access = true;
             jwt_payload = Some(payload);
-            oid.unwrap()
+            oid
         } else {
             return Ok(json!({"active": false}));
         };

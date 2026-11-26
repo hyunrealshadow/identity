@@ -21,7 +21,7 @@ async fn main() -> AppResult<()> {
         .load_runtime_settings()
         .await?
         .build_services()?
-        .build();
+        .build()?;
 
     let app = router::app_router(state.clone(), &config);
     let internal = router::internal_router(

@@ -80,7 +80,6 @@ pub struct CreateUserTransaction {
     pub password: Option<Password>,
     pub invitation: Option<InvitationIssue>,
     pub profile: UserProfilePatch,
-    pub reason: String,
     pub authority: UserManagementAuthority,
 }
 
@@ -91,7 +90,6 @@ pub struct SendUserInvitationTransaction {
     pub user_oid: UserOid,
     pub invitation: InvitationIssue,
     pub delivery: identity_domain::auth::challenge::DeliveryPolicy,
-    pub reason: String,
     pub authority: UserManagementAuthority,
 }
 
@@ -130,7 +128,6 @@ pub struct UpdateUserTransaction {
     pub required_actions: Option<RequiredActions>,
     pub profile: UserProfilePatch,
     pub expected_version: Uuid,
-    pub reason: String,
     pub authority: UserManagementAuthority,
 }
 
@@ -139,7 +136,6 @@ pub struct UpdateUserTransaction {
 pub struct UserStateTransaction {
     pub user_oid: UserOid,
     pub expected_version: Uuid,
-    pub reason: String,
     pub authority: UserManagementAuthority,
 }
 
@@ -149,7 +145,6 @@ pub struct RevokeUserSessionsTransaction {
     pub user_oid: UserOid,
     /// `None` revokes every active session.
     pub sessions: Option<Vec<Uuid>>,
-    pub reason: String,
     pub authority: UserManagementAuthority,
 }
 

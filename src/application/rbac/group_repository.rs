@@ -152,7 +152,6 @@ pub struct CreateGroupTransaction {
     pub group_oid: GroupOid,
     pub names: Vec<LocalizedText>,
     pub descriptions: Vec<LocalizedText>,
-    pub reason: String,
     pub authority: RbacManagementAuthority,
 }
 
@@ -164,7 +163,6 @@ pub struct UpdateGroupTransaction {
     pub names: Option<Vec<LocalizedText>>,
     pub descriptions: Option<Vec<LocalizedText>>,
     pub expected_version: Uuid,
-    pub reason: String,
     pub authority: RbacManagementAuthority,
 }
 
@@ -172,7 +170,6 @@ pub struct UpdateGroupTransaction {
 pub struct GroupStateTransaction {
     pub group_oid: GroupOid,
     pub expected_version: Uuid,
-    pub reason: String,
     pub authority: RbacManagementAuthority,
 }
 
@@ -180,7 +177,6 @@ pub struct GroupStateTransaction {
 pub struct DeleteGroupTransaction {
     pub group_oid: GroupOid,
     pub expected_version: Uuid,
-    pub reason: String,
     pub authority: RbacManagementAuthority,
 }
 
@@ -198,7 +194,6 @@ pub struct RemoveGroupMemberTransaction {
     pub group_oid: GroupOid,
     pub user_oid: UserOid,
     pub expected_version: Uuid,
-    pub reason: String,
     pub authority: RbacManagementAuthority,
 }
 

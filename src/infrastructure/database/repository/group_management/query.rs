@@ -362,7 +362,10 @@ impl GroupManagementRepositoryImpl {
             ));
         }
         let direction_sql = if descending { "DESC" } else { "ASC" };
-        let limit_placeholder = binds.push((query.limit + 1) as i64);
+        let limit_placeholder = binds.push(
+            crate::database::repository::shared::page_fetch_limit_i64(query.limit)
+                .map_err(storage)?,
+        );
         let where_sql = conditions.join(" AND ");
         let sql = format!(
             "SELECT gm.id AS membership_id, gm.created_at AS joined_at, \
@@ -450,7 +453,10 @@ impl GroupManagementRepositoryImpl {
             ));
         }
         let direction_sql = if descending { "DESC" } else { "ASC" };
-        let limit_placeholder = binds.push((query.limit + 1) as i64);
+        let limit_placeholder = binds.push(
+            crate::database::repository::shared::page_fetch_limit_i64(query.limit)
+                .map_err(storage)?,
+        );
         let where_sql = conditions.join(" AND ");
         let sql = format!(
             "{GROUP_SELECT} WHERE {where_sql} \
@@ -536,7 +542,10 @@ impl GroupManagementRepositoryImpl {
             ));
         }
         let direction_sql = if descending { "DESC" } else { "ASC" };
-        let limit_placeholder = binds.push((query.limit + 1) as i64);
+        let limit_placeholder = binds.push(
+            crate::database::repository::shared::page_fetch_limit_i64(query.limit)
+                .map_err(storage)?,
+        );
         let where_sql = conditions.join(" AND ");
         let sql = format!(
             "{MEMBERSHIP_SELECT} WHERE {where_sql} \
@@ -623,7 +632,10 @@ impl GroupManagementRepositoryImpl {
             ));
         }
         let direction_sql = if descending { "DESC" } else { "ASC" };
-        let limit_placeholder = binds.push((query.limit + 1) as i64);
+        let limit_placeholder = binds.push(
+            crate::database::repository::shared::page_fetch_limit_i64(query.limit)
+                .map_err(storage)?,
+        );
         let where_sql = conditions.join(" AND ");
         let sql = format!(
             "{GROUP_ROLE_SELECT} WHERE {where_sql} \

@@ -111,7 +111,9 @@ impl AccountService {
     ) -> Result<EmailChange, AppError> {
         let update = validate_email(email)?;
         let UserIdentifierUpdate::Email { value, normalized } = &update else {
-            unreachable!("validate_email returns an email update");
+            return Err(AppError::internal(std::io::Error::other(
+                "validate_email returned a non-email identifier update",
+            )));
         };
         let user = self
             .find_user(user_oid)

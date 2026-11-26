@@ -141,8 +141,10 @@ impl SessionRepositoryImpl {
                 .order_by_asc(SessionColumn::LastActiveAt)
                 .order_by_asc(SessionColumn::Id),
         };
+        let fetch_limit = super::shared::page_fetch_limit_u64(limit)
+            .map_err(|error| SessionRepositoryError::ListActiveFailed(Box::new(error)))?;
         let rows: Vec<(session::Model, Option<user::Model>)> = query
-            .limit((limit.saturating_add(1)) as u64)
+            .limit(fetch_limit)
             .all(&self.db)
             .await
             .map_err(|error| SessionRepositoryError::ListActiveFailed(Box::new(error)))?;

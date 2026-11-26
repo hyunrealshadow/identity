@@ -103,8 +103,6 @@ pub struct ScopeDescription {
 
 pub(crate) const DEFAULT_PAGE_SIZE: u32 = 20;
 pub(crate) const MAX_PAGE_SIZE: u32 = 100;
-pub(crate) const MAX_REASON_LENGTH: usize = 1_000;
-pub(crate) const MAX_CLIENT_MUTATION_ID_LENGTH: usize = 255;
 pub(crate) const MAX_QUERY_FILTER_LENGTH: usize = 255;
 pub(crate) const MAX_DISPLAY_NAME_LENGTH: usize = 256;
 pub(crate) const MAX_DESCRIPTION_LENGTH: usize = 1_024;

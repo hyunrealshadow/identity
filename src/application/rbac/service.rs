@@ -34,10 +34,9 @@ use crate::{
             prepare_page,
         },
         model::{
-            MAX_CLIENT_MUTATION_ID_LENGTH, MAX_DESCRIPTION_LENGTH, MAX_DESCRIPTION_LOCALES,
-            MAX_DISPLAY_NAME_LENGTH, MAX_QUERY_FILTER_LENGTH, MAX_REASON_LENGTH,
-            MAX_ROLE_PERMISSIONS, MAX_USER_ROLES, RbacManagementAuthority, ScopeDescription,
-            ScopeOid, dedupe_batch_lookups,
+            MAX_DESCRIPTION_LENGTH, MAX_DESCRIPTION_LOCALES, MAX_DISPLAY_NAME_LENGTH,
+            MAX_QUERY_FILTER_LENGTH, MAX_ROLE_PERMISSIONS, MAX_USER_ROLES, RbacManagementAuthority,
+            ScopeDescription, ScopeOid, dedupe_batch_lookups,
         },
         repository::{
             AccountPermissionQuery, AccountRoleQuery, AssignUserRolesTransaction, ClientScopeQuery,
@@ -135,27 +134,18 @@ impl RbacManagementService {
 /// mutation. Blank input becomes an empty reason; only over-long supplied text
 /// is rejected.
 fn validate_reason(reason: &str) -> Result<String, AppError> {
-    let reason = reason.trim();
-    if reason.chars().count() > MAX_REASON_LENGTH {
-        return Err(rbac_codes::error::InvalidReason::new()
+    crate::authorization::validate_reason_with(reason, |max| {
+        rbac_codes::error::InvalidReason::new()
             .min(0)
-            .max(MAX_REASON_LENGTH)
-            .with_field("reason"));
-    }
-    Ok(reason.to_owned())
+            .max(max)
+            .with_field("reason")
+    })
 }
 
 fn validate_client_mutation_id(value: Option<&str>) -> Result<(), AppError> {
-    let Some(value) = value else {
-        return Ok(());
-    };
-    if value.chars().count() > MAX_CLIENT_MUTATION_ID_LENGTH {
-        return Err(
-            rbac_codes::error::InvalidClientMutationId::new(MAX_CLIENT_MUTATION_ID_LENGTH)
-                .with_field("client_mutation_id"),
-        );
-    }
-    Ok(())
+    crate::authorization::validate_client_mutation_id_with(value, |max| {
+        rbac_codes::error::InvalidClientMutationId::new(max).with_field("client_mutation_id")
+    })
 }
 
 fn validate_resource_name(value: &str) -> Result<String, AppError> {

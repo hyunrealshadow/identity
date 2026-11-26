@@ -10,7 +10,7 @@ use icu_list::{
     ListFormatter,
     options::{ListFormatterOptions, ListLength},
 };
-use icu_locale_core::LanguageIdentifier as IcuLocaleCoreLanguageIdentifier;
+use icu_locale_core::{LanguageIdentifier as IcuLocaleCoreLanguageIdentifier, locale};
 use icu_provider::DataError;
 use tracing::warn;
 use unic_langid::langid;
@@ -47,10 +47,8 @@ pub fn build_i18n() -> Result<I18n, Box<dyn StdError + Send + Sync + 'static>> {
 ///   `{ LIST($fields, listType: "unit") }` - unit list, e.g. "A B"
 pub(crate) fn register_list_function<R>(bundle: &mut FluentBundle<R>) {
     let langid = bundle.locales.first().cloned().unwrap_or(langid!("en-US"));
-    let locale: IcuLocaleCoreLanguageIdentifier = langid
-        .to_string()
-        .parse()
-        .unwrap_or_else(|_| "en-US".parse().unwrap());
+    let locale: IcuLocaleCoreLanguageIdentifier =
+        langid.to_string().parse().unwrap_or(locale!("en-US").id);
     let opts = ListFormatterOptions::default().with_length(ListLength::Narrow);
     let prefs = locale.into();
 
@@ -71,31 +69,29 @@ pub(crate) fn register_list_function<R>(bundle: &mut FluentBundle<R>) {
         return;
     };
 
-    let formatters: &'static ListFormatters = Box::leak(Box::new(formatters));
+    if let Err(error) = bundle.add_function(
+        "LIST",
+        move |positional: &[FluentValue], named: &FluentArgs| {
+            let Some(FluentValue::String(raw)) = positional.first() else {
+                return FluentValue::Error;
+            };
 
-    bundle
-        .add_function(
-            "LIST",
-            move |positional: &[FluentValue], named: &FluentArgs| {
-                let Some(FluentValue::String(raw)) = positional.first() else {
-                    return FluentValue::Error;
-                };
+            let formatter = match named.get("listType") {
+                Some(FluentValue::String(s)) if s == "or" => &formatters.or,
+                Some(FluentValue::String(s)) if s == "unit" => &formatters.unit,
+                _ => &formatters.and,
+            };
 
-                let formatter = match named.get("listType") {
-                    Some(FluentValue::String(s)) if s == "or" => &formatters.or,
-                    Some(FluentValue::String(s)) if s == "unit" => &formatters.unit,
-                    _ => &formatters.and,
-                };
-
-                let items: Vec<&str> = raw
-                    .split(',')
-                    .map(str::trim)
-                    .filter(|s| !s.is_empty())
-                    .collect();
-                let formatted = formatter.format(items.into_iter());
-                let joined = formatted.write_to_string().into_owned();
-                FluentValue::String(joined.into())
-            },
-        )
-        .expect("registering LIST() Fluent function");
+            let items: Vec<&str> = raw
+                .split(',')
+                .map(str::trim)
+                .filter(|s| !s.is_empty())
+                .collect();
+            let formatted = formatter.format(items.into_iter());
+            let joined = formatted.write_to_string().into_owned();
+            FluentValue::String(joined.into())
+        },
+    ) {
+        warn!(error = ?error, "failed to register LIST() Fluent function");
+    }
 }

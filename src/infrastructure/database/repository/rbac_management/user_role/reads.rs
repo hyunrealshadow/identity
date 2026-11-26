@@ -80,7 +80,10 @@ impl RbacManagementRepositoryImpl {
             ));
         }
         let direction_sql = if descending { "DESC" } else { "ASC" };
-        let limit_placeholder = binds.push((query.limit + 1) as i64);
+        let limit_placeholder = binds.push(
+            crate::database::repository::shared::page_fetch_limit_i64(query.limit)
+                .map_err(storage)?,
+        );
         let where_sql = conditions.join(" AND ");
         let sql = format!(
             "{BINDING_SELECT} WHERE {where_sql} \
@@ -190,7 +193,10 @@ impl RbacManagementRepositoryImpl {
             ));
         }
         let direction_sql = if descending { "DESC" } else { "ASC" };
-        let limit_placeholder = binds.push((query.limit + 1) as i64);
+        let limit_placeholder = binds.push(
+            crate::database::repository::shared::page_fetch_limit_i64(query.limit)
+                .map_err(storage)?,
+        );
         let sql = format!(
             "SELECT g.* FROM ({}) g WHERE {} \
              ORDER BY g.granted_at {direction_sql}, g.tie_oid {direction_sql} LIMIT {limit_placeholder}",
@@ -399,7 +405,10 @@ impl RbacManagementRepositoryImpl {
             ));
         }
         let direction_sql = if descending { "DESC" } else { "ASC" };
-        let limit_placeholder = binds.push((query.limit + 1) as i64);
+        let limit_placeholder = binds.push(
+            crate::database::repository::shared::page_fetch_limit_i64(query.limit)
+                .map_err(storage)?,
+        );
         let where_sql = conditions.join(" AND ");
         let sql = format!(
             "SELECT s.id, s.oid AS permission_oid, s.resource_id, s.code, s.code AS scope \
@@ -530,7 +539,10 @@ impl RbacManagementRepositoryImpl {
             ));
         }
         let direction_sql = if descending { "DESC" } else { "ASC" };
-        let limit_placeholder = binds.push((query.limit + 1) as i64);
+        let limit_placeholder = binds.push(
+            crate::database::repository::shared::page_fetch_limit_i64(query.limit)
+                .map_err(storage)?,
+        );
         let sql = format!(
             "SELECT g.* FROM ({union_sql}) g WHERE {} \
              ORDER BY g.granted_at {direction_sql}, g.tie_oid {direction_sql} LIMIT {limit_placeholder}",
@@ -675,7 +687,10 @@ impl RbacManagementRepositoryImpl {
             ));
         }
         let direction_sql = if descending { "DESC" } else { "ASC" };
-        let limit_placeholder = binds.push((query.limit + 1) as i64);
+        let limit_placeholder = binds.push(
+            crate::database::repository::shared::page_fetch_limit_i64(query.limit)
+                .map_err(storage)?,
+        );
         let where_sql = conditions.join(" AND ");
         let sql = format!(
             "SELECT s.id, s.oid AS permission_oid, s.resource_id, \

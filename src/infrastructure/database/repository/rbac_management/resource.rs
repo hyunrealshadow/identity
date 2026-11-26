@@ -161,7 +161,10 @@ impl RbacManagementRepositoryImpl {
             ));
         }
         let direction_sql = if descending { "DESC" } else { "ASC" };
-        let limit_placeholder = binds.push((query.limit + 1) as i64);
+        let limit_placeholder = binds.push(
+            crate::database::repository::shared::page_fetch_limit_i64(query.limit)
+                .map_err(storage)?,
+        );
         let where_sql = conditions.join(" AND ");
         let sql = format!(
             "{RESOURCE_SELECT} WHERE {where_sql} \

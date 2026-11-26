@@ -5,6 +5,19 @@ use uuid::Uuid;
 
 use crate::database::query::advisory_transaction_lock;
 
+/// Convert a requested page size into a `LIMIT` bind (`limit + 1`) for keyset
+/// has-more detection without integer overflow or lossy `as` casts.
+pub fn page_fetch_limit_i64(limit: usize) -> Result<i64, DbErr> {
+    i64::try_from(limit.saturating_add(1))
+        .map_err(|_| DbErr::Custom("page limit exceeds i64::MAX".to_owned()))
+}
+
+/// Convert a requested page size into a `u64` SeaORM `.limit(...)` value (`limit + 1`).
+pub fn page_fetch_limit_u64(limit: usize) -> Result<u64, DbErr> {
+    u64::try_from(limit.saturating_add(1))
+        .map_err(|_| DbErr::Custom("page limit exceeds u64::MAX".to_owned()))
+}
+
 /// Sentinel value used to represent "no expiry" in the database,
 /// since nullable timestamp columns would require schema changes.
 pub fn non_expiring_timestamp() -> DateTime<FixedOffset> {

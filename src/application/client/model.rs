@@ -13,12 +13,12 @@ use identity_domain::{
 use serde::Serialize;
 use uuid::Uuid;
 
+pub use crate::authorization::{MAX_CLIENT_MUTATION_ID_LENGTH, MAX_REASON_LENGTH};
+
 pub const MAX_CLIENT_NAME_LENGTH: usize = 256;
 pub const MAX_CLIENT_DESCRIPTION_LENGTH: usize = 1_024;
 pub const MAX_REDIRECT_URIS: usize = 20;
 pub const MAX_URI_LENGTH: usize = 2_048;
-pub const MAX_REASON_LENGTH: usize = 1_000;
-pub const MAX_CLIENT_MUTATION_ID_LENGTH: usize = 255;
 pub const MAX_QUERY_FILTER_LENGTH: usize = 255;
 pub const MIN_SECRET_LIFETIME_DAYS: u32 = 1;
 pub const MAX_SECRET_LIFETIME_DAYS: u32 = 3_650;

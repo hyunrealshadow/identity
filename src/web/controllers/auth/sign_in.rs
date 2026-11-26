@@ -170,9 +170,8 @@ pub(super) async fn login_status(
     } else if user.is_some()
         && (stored_request_has_prompt(Some(&prompt), PromptValue::Login)
             || requires_reauthentication)
-        && preferred_credential_type.is_some()
+        && let Some(credential_type) = preferred_credential_type
     {
-        let credential_type = preferred_credential_type.unwrap();
         Some(login_challenge_uri(
             &id,
             credential_type.as_ref(),

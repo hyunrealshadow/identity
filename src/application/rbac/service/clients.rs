@@ -84,7 +84,7 @@ impl RbacManagementService {
         command: SetClientScopesCommand,
     ) -> Result<ClientScopeSetResult, AppError> {
         let result = async {
-            let reason = validate_reason(&command.reason)?;
+            validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
 
             if command.scopes.len() > MAX_SCOPE_ASSIGNMENTS {
@@ -100,7 +100,6 @@ impl RbacManagementService {
                     client_oid: command.client_oid,
                     scopes,
                     expected_version: command.expected_version,
-                    reason,
                     authority: authority.clone(),
                 })
                 .await

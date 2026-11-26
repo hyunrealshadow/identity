@@ -176,7 +176,6 @@ async fn postgres_client_management_rechecks_authority_and_withdraws_on_boundary
             names: Vec::new(),
             descriptions: Vec::new(),
             settings: web_settings("https://app.example.test/callback"),
-            reason: String::new(),
             authority: authority.clone(),
         }).await.unwrap();
         assert!(created.enabled && !created.built_in);
@@ -192,7 +191,6 @@ async fn postgres_client_management_rechecks_authority_and_withdraws_on_boundary
             expected_version: created.version,
             name: Some("Orders portal".to_owned()),
             description: None, names: None, descriptions: None, settings: None, advanced: None,
-            reason: String::new(),
             authority: authority.clone(),
         }).await.unwrap();
         assert_ne!(renamed.version, created.version);
@@ -203,7 +201,6 @@ async fn postgres_client_management_rechecks_authority_and_withdraws_on_boundary
             expected_version: created.version,
             name: Some("Lost update".to_owned()),
             description: None, names: None, descriptions: None, settings: None, advanced: None,
-            reason: String::new(),
             authority: authority.clone(),
         }).await.unwrap_err();
         assert!(matches!(stale, ClientManagementRepositoryError::VersionConflict { current_version } if current_version == renamed.version));
@@ -214,7 +211,6 @@ async fn postgres_client_management_rechecks_authority_and_withdraws_on_boundary
             name: None, description: None, names: None, descriptions: None,
             settings: Some(web_settings("https://portal.example.test/callback")),
             advanced: None,
-            reason: String::new(),
             authority: authority.clone(),
         }).await.unwrap();
         assert!(withdrawn(&db, artifact).await);
@@ -226,7 +222,6 @@ async fn postgres_client_management_rechecks_authority_and_withdraws_on_boundary
         let disabled = repo.set_client_enabled(ClientStateTransaction {
             client_oid: created.oid,
             expected_version: moved.version,
-            reason: String::new(),
             authority: authority.clone(),
         }, false).await.unwrap();
         assert!(!disabled.enabled);
@@ -235,7 +230,6 @@ async fn postgres_client_management_rechecks_authority_and_withdraws_on_boundary
         let enabled = repo.set_client_enabled(ClientStateTransaction {
             client_oid: created.oid,
             expected_version: disabled.version,
-            reason: String::new(),
             authority: authority.clone(),
         }, true).await.unwrap();
         assert!(enabled.enabled);
@@ -247,7 +241,6 @@ async fn postgres_client_management_rechecks_authority_and_withdraws_on_boundary
         let denied = repo.delete_client(ClientStateTransaction {
             client_oid: created.oid,
             expected_version: enabled.version,
-            reason: String::new(),
             authority: authority.clone(),
         }).await.unwrap_err();
         assert!(matches!(denied, ClientManagementRepositoryError::Authorization(_)), "{denied:?}");
@@ -261,7 +254,6 @@ async fn postgres_client_management_rechecks_authority_and_withdraws_on_boundary
                 plaintext: "unused-secret".to_owned(),
                 lifetime_days: 30,
             },
-            reason: String::new(),
             authority: authority.clone(),
         }).await.unwrap_err();
         assert!(matches!(denied, ClientManagementRepositoryError::Authorization(_)), "{denied:?}");
@@ -273,7 +265,6 @@ async fn postgres_client_management_rechecks_authority_and_withdraws_on_boundary
         let protected = repo.set_client_enabled(ClientStateTransaction {
             client_oid: created.oid,
             expected_version: enabled.version,
-            reason: String::new(),
             authority: authority.clone(),
         }, false).await.unwrap_err();
         assert!(matches!(protected, ClientManagementRepositoryError::BuiltInProtected));
@@ -290,7 +281,6 @@ async fn postgres_client_management_rechecks_authority_and_withdraws_on_boundary
             names: Vec::new(),
             descriptions: Vec::new(),
             settings: web_settings("https://other.example.test/callback"),
-            reason: String::new(),
             authority,
         }).await.unwrap_err();
         assert!(matches!(revoked, ClientManagementRepositoryError::Authorization(_)), "{revoked:?}");
@@ -316,7 +306,6 @@ async fn postgres_client_advanced_settings_withdraw_only_on_semantic_boundary_ch
                 names: Vec::new(),
                 descriptions: Vec::new(),
                 settings: web_settings("https://app.example.test/callback"),
-                reason: String::new(),
                 authority: authority.clone(),
             })
             .await
@@ -331,7 +320,6 @@ async fn postgres_client_advanced_settings_withdraw_only_on_semantic_boundary_ch
             descriptions: None,
             settings: None,
             advanced: Some(advanced),
-            reason: String::new(),
             authority: authority.clone(),
         };
 
@@ -527,7 +515,6 @@ async fn postgres_client_protocol_scopes_default_on_create_and_replace_with_the_
             name: "Portal".to_owned(),
             description: String::new(), names: Vec::new(), descriptions: Vec::new(),
             settings: web_settings("https://portal.example.test/callback"),
-            reason: String::new(),
             authority: authority.clone(),
         }).await.unwrap();
         assert_eq!(assigned_codes(&db, web.oid).await, ["email", "offline_access", "openid", "profile"]);
@@ -542,7 +529,6 @@ async fn postgres_client_protocol_scopes_default_on_create_and_replace_with_the_
                 cors_enabled: false,
                 ..web_settings("https://unused.example.test/callback")
             },
-            reason: String::new(),
             authority: authority.clone(),
         }).await.unwrap();
         assert!(assigned_codes(&db, worker.oid).await.is_empty());
@@ -554,7 +540,6 @@ async fn postgres_client_protocol_scopes_default_on_create_and_replace_with_the_
             client_oid: web.oid,
             scopes: vec![ClientScopeAssignment { scope_oid: openid, client_granted: false }],
             expected_version: web.version,
-            reason: String::new(),
             authority: authority.clone(),
         }).await.unwrap();
         assert_eq!(assigned_codes(&db, web.oid).await, ["openid"]);
@@ -567,7 +552,6 @@ async fn postgres_client_protocol_scopes_default_on_create_and_replace_with_the_
             client_oid: web.oid,
             scopes: vec![ClientScopeAssignment { scope_oid: openid, client_granted: true }],
             expected_version: replaced.version,
-            reason: String::new(),
             authority,
         }).await.unwrap_err();
         assert!(matches!(rejected, RbacManagementRepositoryError::ClientGrantNotAllowed { ref scope } if scope == "openid"), "{rejected:?}");
@@ -901,7 +885,6 @@ async fn postgres_client_auth_methods_follow_credentials_within_their_limits() {
                 names: Vec::new(),
                 descriptions: Vec::new(),
                 settings,
-                reason: String::new(),
                 authority: authority.clone(),
             })
             .await
@@ -919,7 +902,6 @@ async fn postgres_client_auth_methods_follow_credentials_within_their_limits() {
                     expected_version: version,
                     replaces: None,
                     secret: new_secret(),
-                    reason: String::new(),
                     authority: authority.clone(),
                 })
                 .await
@@ -934,7 +916,6 @@ async fn postgres_client_auth_methods_follow_credentials_within_their_limits() {
                 expected_version: version,
                 replaces: None,
                 secret: new_secret(),
-                reason: String::new(),
                 authority: authority.clone(),
             })
             .await
@@ -955,7 +936,6 @@ async fn postgres_client_auth_methods_follow_credentials_within_their_limits() {
                 expected_version: version,
                 replaces: Some(secrets[0]),
                 secret: new_secret(),
-                reason: String::new(),
                 authority: authority.clone(),
             })
             .await
@@ -972,7 +952,6 @@ async fn postgres_client_auth_methods_follow_credentials_within_their_limits() {
                 hint: None,
                 expires_at: Some(Utc::now() + Duration::days(30)),
                 action,
-                reason: String::new(),
                 authority: authority.clone(),
             }
         };
@@ -1017,7 +996,6 @@ async fn postgres_client_auth_methods_follow_credentials_within_their_limits() {
                 client_oid: oid,
                 credential_oid,
                 expected_version: version,
-                reason: String::new(),
                 authority: authority.clone(),
             }
         };
@@ -1057,7 +1035,6 @@ async fn postgres_client_auth_methods_follow_credentials_within_their_limits() {
                 descriptions: None,
                 settings: Some(public),
                 advanced: None,
-                reason: String::new(),
                 authority: authority.clone(),
             })
             .await

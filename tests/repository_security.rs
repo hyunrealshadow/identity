@@ -1489,7 +1489,6 @@ async fn password_rehash_preserves_age_and_temporary_password_skips_history() {
                 UserStateTransaction {
                     user_oid: target.into(),
                     expected_version: version,
-                    reason: String::new(),
                     authority,
                 },
                 temp.clone(),
@@ -1662,7 +1661,6 @@ async fn user_management_credential_and_delete_transactions() {
             .reset_user_mfa(UserStateTransaction {
                 user_oid: passwordless.into(),
                 expected_version: pwl_version,
-                reason: String::new(),
                 authority: authority.clone(),
             })
             .await
@@ -1675,7 +1673,6 @@ async fn user_management_credential_and_delete_transactions() {
             .reset_user_mfa(UserStateTransaction {
                 user_oid: target.into(),
                 expected_version: target_version,
-                reason: String::new(),
                 authority: authority.clone(),
             })
             .await
@@ -1721,7 +1718,6 @@ async fn user_management_credential_and_delete_transactions() {
             .revoke_user_sessions(RevokeUserSessionsTransaction {
                 user_oid: target.into(),
                 sessions: Some(vec![s3]),
-                reason: String::new(),
                 authority: authority.clone(),
             })
             .await
@@ -1736,7 +1732,6 @@ async fn user_management_credential_and_delete_transactions() {
             .revoke_user_sessions(RevokeUserSessionsTransaction {
                 user_oid: target.into(),
                 sessions: None,
-                reason: String::new(),
                 authority: authority.clone(),
             })
             .await
@@ -1752,7 +1747,6 @@ async fn user_management_credential_and_delete_transactions() {
             .delete_user(UserStateTransaction {
                 user_oid: target.into(),
                 expected_version: version,
-                reason: String::new(),
                 authority: authority.clone(),
             })
             .await
@@ -1764,7 +1758,6 @@ async fn user_management_credential_and_delete_transactions() {
                 UserStateTransaction {
                     user_oid: target.into(),
                     expected_version: version,
-                    reason: String::new(),
                     authority: authority.clone(),
                 },
                 false,
@@ -1788,7 +1781,6 @@ async fn user_management_credential_and_delete_transactions() {
             .delete_user(UserStateTransaction {
                 user_oid: target.into(),
                 expected_version: disabled.user.version,
-                reason: String::new(),
                 authority: failing_authority,
             })
             .await
@@ -1801,7 +1793,6 @@ async fn user_management_credential_and_delete_transactions() {
             .delete_user(UserStateTransaction {
                 user_oid: target.into(),
                 expected_version: disabled.user.version,
-                reason: String::new(),
                 authority: authority.clone(),
             })
             .await
@@ -1829,7 +1820,6 @@ async fn user_management_credential_and_delete_transactions() {
                 UserStateTransaction {
                     user_oid: owner_oid.into(),
                     expected_version: owner_version,
-                    reason: String::new(),
                     authority,
                 },
                 false,
