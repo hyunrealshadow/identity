@@ -3717,6 +3717,16 @@
     "module": "instance"
   },
   {
+    "code": 29017,
+    "kind": "validation",
+    "fluentKey": "E29017",
+    "requiredParams": [
+      "locale"
+    ],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
     "code": 19000,
     "kind": "validation",
     "fluentKey": "E19000",

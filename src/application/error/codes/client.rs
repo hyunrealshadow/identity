@@ -54,8 +54,8 @@ pub enum ClientErrorCode {
     SectorIdentifierUnavailable = 18045,
 }
 
-impl ClientErrorCode {
-    pub const fn kind(self) -> ErrorKind {
+impl AppErrorCode for ClientErrorCode {
+    fn kind(self) -> ErrorKind {
         match self {
             Self::ClientNotFound | Self::CredentialNotFound => ErrorKind::NotFound,
             Self::VersionConflict | Self::CredentialRevoked => ErrorKind::Conflict,
@@ -100,178 +100,41 @@ impl ClientErrorCode {
             | Self::SectorIdentifierUnavailable => ErrorKind::Validation,
         }
     }
-}
-
-impl AppErrorCode for ClientErrorCode {
-    fn kind(self) -> ErrorKind {
-        Self::kind(self)
-    }
 
     fn code(self) -> u32 {
         self as u32
     }
-}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct ClientErrorCodeDefinition {
-    pub code: ClientErrorCode,
-    pub numeric_code: u32,
-    pub kind: ErrorKind,
-    pub fluent_key: &'static str,
-    pub required_params: &'static [&'static str],
-    pub optional_params: &'static [&'static str],
-    pub usage_module: &'static str,
-}
-
-pub const CLIENT_ERROR_INVENTORY: &[ClientErrorCodeDefinition] = &[
-    entry(ClientErrorCode::ValidationFailed, "E18000", &[], &["field"]),
-    entry(ClientErrorCode::ClientNotFound, "E18001", &[], &[]),
-    entry(ClientErrorCode::CredentialNotFound, "E18002", &[], &[]),
-    entry(
-        ClientErrorCode::VersionConflict,
-        "E18003",
-        &["current_version"],
-        &[],
-    ),
-    entry(ClientErrorCode::BuiltInProtected, "E18004", &[], &[]),
-    entry(ClientErrorCode::InvalidName, "E18005", &[], &["max"]),
-    entry(ClientErrorCode::InvalidDescription, "E18006", &["max"], &[]),
-    entry(ClientErrorCode::InvalidLocale, "E18007", &["max"], &[]),
-    entry(ClientErrorCode::DuplicateLocale, "E18008", &["locale"], &[]),
-    entry(ClientErrorCode::InvalidRedirectUri, "E18009", &["uri"], &[]),
-    entry(
-        ClientErrorCode::InvalidPostLogoutRedirectUri,
-        "E18010",
-        &["uri"],
-        &[],
-    ),
-    entry(
-        ClientErrorCode::DuplicatePlatform,
-        "E18011",
-        &["platform"],
-        &[],
-    ),
-    entry(ClientErrorCode::InvalidGrantTypes, "E18012", &[], &[]),
-    entry(
-        ClientErrorCode::UnsupportedGrantType,
-        "E18013",
-        &["grant_type"],
-        &[],
-    ),
-    entry(ClientErrorCode::RedirectUriRequired, "E18015", &[], &[]),
-    entry(
-        ClientErrorCode::RefreshTokenRequiresInteractiveGrant,
-        "E18017",
-        &[],
-        &[],
-    ),
-    entry(ClientErrorCode::CredentialNotSecret, "E18018", &[], &[]),
-    entry(ClientErrorCode::CredentialRevoked, "E18019", &[], &[]),
-    entry(
-        ClientErrorCode::InvalidSecretLifetime,
-        "E18021",
-        &["min", "max"],
-        &[],
-    ),
-    entry(ClientErrorCode::InvalidFilter, "E18022", &["max"], &[]),
-    entry(ClientErrorCode::InvalidReason, "E18023", &["max"], &[]),
-    entry(
-        ClientErrorCode::InvalidClientMutationId,
-        "E18024",
-        &["max"],
-        &[],
-    ),
-    entry(ClientErrorCode::EmptyUpdate, "E18025", &[], &[]),
-    entry(
-        ClientErrorCode::InvalidCollectionSize,
-        "E18026",
-        &["max"],
-        &[],
-    ),
-    entry(ClientErrorCode::StorageFailed, "E18027", &[], &[]),
-    entry(ClientErrorCode::InvalidPublicKey, "E18028", &[], &[]),
-    entry(ClientErrorCode::PrivateKeyNotAccepted, "E18029", &[], &[]),
-    entry(ClientErrorCode::CertificateExpired, "E18030", &[], &[]),
-    entry(ClientErrorCode::PublicKeyExpiryRequired, "E18031", &[], &[]),
-    entry(
-        ClientErrorCode::InvalidCredentialExpiry,
-        "E18032",
-        &["min", "max"],
-        &[],
-    ),
-    entry(ClientErrorCode::InvalidJwksUri, "E18033", &[], &[]),
-    entry(ClientErrorCode::JwksUnavailable, "E18034", &[], &[]),
-    entry(
-        ClientErrorCode::CredentialLimitReached,
-        "E18035",
-        &["max"],
-        &[],
-    ),
-    entry(ClientErrorCode::InvalidMetadataUri, "E18036", &["uri"], &[]),
-    entry(ClientErrorCode::InvalidContact, "E18037", &["max"], &[]),
-    entry(
-        ClientErrorCode::UnsupportedAlgorithm,
-        "E18038",
-        &["algorithm"],
-        &[],
-    ),
-    entry(
-        ClientErrorCode::EncryptionAlgorithmRequired,
-        "E18039",
-        &[],
-        &[],
-    ),
-    entry(ClientErrorCode::LogoutUriRequired, "E18040", &[], &[]),
-    entry(
-        ClientErrorCode::InvalidDefaultMaxAge,
-        "E18041",
-        &["max"],
-        &[],
-    ),
-    entry(
-        ClientErrorCode::UnsupportedAcrValue,
-        "E18042",
-        &["acr"],
-        &[],
-    ),
-    entry(
-        ClientErrorCode::SectorIdentifierRequired,
-        "E18043",
-        &[],
-        &[],
-    ),
-    entry(
-        ClientErrorCode::SectorIdentifierMismatch,
-        "E18044",
-        &[],
-        &[],
-    ),
-    entry(
-        ClientErrorCode::SectorIdentifierUnavailable,
-        "E18045",
-        &[],
-        &[],
-    ),
-];
-
-const fn entry(
-    code: ClientErrorCode,
-    fluent_key: &'static str,
-    required_params: &'static [&'static str],
-    optional_params: &'static [&'static str],
-) -> ClientErrorCodeDefinition {
-    ClientErrorCodeDefinition {
-        code,
-        numeric_code: code as u32,
-        kind: code.kind(),
-        fluent_key,
-        required_params,
-        optional_params,
-        usage_module: "client",
+    fn required_params(self) -> &'static [&'static str] {
+        match self {
+            Self::VersionConflict => &["current_version"],
+            Self::InvalidDescription
+            | Self::InvalidLocale
+            | Self::InvalidFilter
+            | Self::InvalidReason
+            | Self::InvalidClientMutationId
+            | Self::InvalidCollectionSize
+            | Self::CredentialLimitReached
+            | Self::InvalidContact
+            | Self::InvalidDefaultMaxAge => &["max"],
+            Self::DuplicateLocale => &["locale"],
+            Self::InvalidRedirectUri
+            | Self::InvalidPostLogoutRedirectUri
+            | Self::InvalidMetadataUri => &["uri"],
+            Self::DuplicatePlatform => &["platform"],
+            Self::UnsupportedGrantType => &["grant_type"],
+            Self::InvalidSecretLifetime | Self::InvalidCredentialExpiry => &["min", "max"],
+            Self::UnsupportedAlgorithm => &["algorithm"],
+            Self::UnsupportedAcrValue => &["acr"],
+            _ => &[],
+        }
     }
-}
 
-#[must_use]
-pub fn inventory() -> &'static [ClientErrorCodeDefinition] {
-    CLIENT_ERROR_INVENTORY
+    fn optional_params(self) -> &'static [&'static str] {
+        match self {
+            Self::ValidationFailed => &["field"],
+            Self::InvalidName => &["max"],
+            _ => &[],
+        }
+    }
 }

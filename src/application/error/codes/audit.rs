@@ -22,9 +22,8 @@ pub enum AuditErrorCode {
     QueryUnknownValue = 30014,
 }
 
-impl AuditErrorCode {
-    #[must_use]
-    pub const fn kind(self) -> ErrorKind {
+impl AppErrorCode for AuditErrorCode {
+    fn kind(self) -> ErrorKind {
         match self {
             Self::InvalidCursor
             | Self::InvalidPageSize
@@ -43,157 +42,30 @@ impl AuditErrorCode {
             | Self::QueryUnknownValue => ErrorKind::Validation,
         }
     }
-}
-
-impl AppErrorCode for AuditErrorCode {
-    fn kind(self) -> ErrorKind {
-        Self::kind(self)
-    }
 
     fn code(self) -> u32 {
         self as u32
     }
-}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct AuditErrorCodeDefinition {
-    pub code: AuditErrorCode,
-    pub numeric_code: u32,
-    pub kind: ErrorKind,
-    pub fluent_key: &'static str,
-    pub required_params: &'static [&'static str],
-    pub optional_params: &'static [&'static str],
-    pub usage_module: &'static str,
-}
-
-pub const AUDIT_ERROR_INVENTORY: &[AuditErrorCodeDefinition] = &[
-    entry(AuditErrorCode::InvalidCursor, "E30000", &[], &[], "audit"),
-    entry(
-        AuditErrorCode::InvalidPageSize,
-        "E30001",
-        &["max"],
-        &[],
-        "audit",
-    ),
-    entry(
-        AuditErrorCode::InvalidTimeZone,
-        "E30002",
-        &["value"],
-        &[],
-        "audit",
-    ),
-    entry(
-        AuditErrorCode::QueryTooLong,
-        "E30003",
-        &["max"],
-        &["actual"],
-        "audit",
-    ),
-    entry(
-        AuditErrorCode::QueryTooManyClauses,
-        "E30004",
-        &["max"],
-        &[],
-        "audit",
-    ),
-    entry(
-        AuditErrorCode::QueryTooDeep,
-        "E30005",
-        &["max"],
-        &[],
-        "audit",
-    ),
-    entry(
-        AuditErrorCode::QuerySyntaxError,
-        "E30006",
-        &[],
-        &[],
-        "audit",
-    ),
-    entry(
-        AuditErrorCode::QueryUnknownField,
-        "E30007",
-        &["field"],
-        &[],
-        "audit",
-    ),
-    entry(
-        AuditErrorCode::QueryInvalidDate,
-        "E30008",
-        &["value"],
-        &[],
-        "audit",
-    ),
-    entry(
-        AuditErrorCode::QueryInvalidIdentifier,
-        "E30009",
-        &["field", "value"],
-        &[],
-        "audit",
-    ),
-    entry(
-        AuditErrorCode::QueryUnsupportedOperator,
-        "E30010",
-        &["field"],
-        &[],
-        "audit",
-    ),
-    entry(
-        AuditErrorCode::QueryUnsupportedRangeField,
-        "E30011",
-        &["field"],
-        &[],
-        "audit",
-    ),
-    entry(
-        AuditErrorCode::QueryUnsupportedRegex,
-        "E30012",
-        &[],
-        &[],
-        "audit",
-    ),
-    entry(
-        AuditErrorCode::QueryUnsupportedSyntax,
-        "E30013",
-        &[],
-        &[],
-        "audit",
-    ),
-    entry(
-        AuditErrorCode::QueryUnknownValue,
-        "E30014",
-        &["field", "value"],
-        &[],
-        "audit",
-    ),
-];
-
-const fn entry(
-    code: AuditErrorCode,
-    fluent_key: &'static str,
-    required_params: &'static [&'static str],
-    optional_params: &'static [&'static str],
-    usage_module: &'static str,
-) -> AuditErrorCodeDefinition {
-    AuditErrorCodeDefinition {
-        code,
-        numeric_code: code as u32,
-        kind: code.kind(),
-        fluent_key,
-        required_params,
-        optional_params,
-        usage_module,
+    fn required_params(self) -> &'static [&'static str] {
+        match self {
+            Self::InvalidPageSize
+            | Self::QueryTooLong
+            | Self::QueryTooManyClauses
+            | Self::QueryTooDeep => &["max"],
+            Self::InvalidTimeZone | Self::QueryInvalidDate => &["value"],
+            Self::QueryUnknownField
+            | Self::QueryUnsupportedOperator
+            | Self::QueryUnsupportedRangeField => &["field"],
+            Self::QueryInvalidIdentifier | Self::QueryUnknownValue => &["field", "value"],
+            _ => &[],
+        }
     }
-}
 
-#[must_use]
-pub fn inventory() -> &'static [AuditErrorCodeDefinition] {
-    AUDIT_ERROR_INVENTORY
-}
-
-#[must_use]
-pub fn definition(code: AuditErrorCode) -> Option<&'static AuditErrorCodeDefinition> {
-    AUDIT_ERROR_INVENTORY
-        .iter()
-        .find(|definition| definition.code == code)
+    fn optional_params(self) -> &'static [&'static str] {
+        match self {
+            Self::QueryTooLong => &["actual"],
+            _ => &[],
+        }
+    }
 }

@@ -63,8 +63,8 @@ pub enum RbacErrorCode {
     ClientGrantNotAllowed = 17053,
 }
 
-impl RbacErrorCode {
-    pub const fn kind(self) -> ErrorKind {
+impl AppErrorCode for RbacErrorCode {
+    fn kind(self) -> ErrorKind {
         match self {
             Self::ResourceNotFound
             | Self::ScopeNotFound
@@ -122,385 +122,114 @@ impl RbacErrorCode {
             | Self::ClientGrantNotAllowed => ErrorKind::Validation,
         }
     }
-}
-
-impl AppErrorCode for RbacErrorCode {
-    fn kind(self) -> ErrorKind {
-        Self::kind(self)
-    }
 
     fn code(self) -> u32 {
         self as u32
     }
-}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct RbacErrorCodeDefinition {
-    pub code: RbacErrorCode,
-    pub numeric_code: u32,
-    pub kind: ErrorKind,
-    pub fluent_key: &'static str,
-    pub required_params: &'static [&'static str],
-    pub optional_params: &'static [&'static str],
-    pub usage_module: &'static str,
-}
-
-pub const RBAC_ERROR_INVENTORY: &[RbacErrorCodeDefinition] = &[
-    entry(
-        RbacErrorCode::ValidationFailed,
-        "E17000",
-        &[],
-        &["field"],
-        "rbac",
-    ),
-    entry(
-        RbacErrorCode::ResourceNotFound,
-        "E17001",
-        &[],
-        &[],
-        "rbac.resource",
-    ),
-    entry(
-        RbacErrorCode::ScopeNotFound,
-        "E17002",
-        &[],
-        &[],
-        "rbac.scope",
-    ),
-    entry(
-        RbacErrorCode::PermissionNotFound,
-        "E17003",
-        &[],
-        &[],
-        "rbac.permission",
-    ),
-    entry(RbacErrorCode::RoleNotFound, "E17004", &[], &[], "rbac.role"),
-    entry(
-        RbacErrorCode::BindingNotFound,
-        "E17005",
-        &[],
-        &[],
-        "rbac.binding",
-    ),
-    entry(
-        RbacErrorCode::UserNotFound,
-        "E17006",
-        &[],
-        &[],
-        "rbac.binding",
-    ),
-    entry(
-        RbacErrorCode::ClientNotFound,
-        "E17007",
-        &[],
-        &[],
-        "rbac.client",
-    ),
-    entry(
-        RbacErrorCode::VersionConflict,
-        "E17008",
-        &["current_version"],
-        &[],
-        "rbac",
-    ),
-    entry(
-        RbacErrorCode::UserVersionStale,
-        "E17009",
-        &["current_version"],
-        &[],
-        "rbac.binding",
-    ),
-    entry(
-        RbacErrorCode::PolicyVersionStale,
-        "E17010",
-        &["current_version"],
-        &[],
-        "rbac.client",
-    ),
-    entry(
-        RbacErrorCode::DuplicateResourceUri,
-        "E17011",
-        &[],
-        &["uri"],
-        "rbac.resource",
-    ),
-    entry(
-        RbacErrorCode::DuplicateScopeCode,
-        "E17012",
-        &[],
-        &["code"],
-        "rbac.scope",
-    ),
-    entry(
-        RbacErrorCode::DuplicatePermissionCode,
-        "E17013",
-        &[],
-        &["code"],
-        "rbac.permission",
-    ),
-    entry(
-        RbacErrorCode::DuplicatePermissionScope,
-        "E17014",
-        &[],
-        &["scope"],
-        "rbac.permission",
-    ),
-    entry(
-        RbacErrorCode::ReservedResourceProtected,
-        "E17016",
-        &[],
-        &["resource"],
-        "rbac.resource",
-    ),
-    entry(
-        RbacErrorCode::BuiltInScopeProtected,
-        "E17017",
-        &[],
-        &["name"],
-        "rbac.scope",
-    ),
-    entry(
-        RbacErrorCode::ScopeNotAcceptedByResource,
-        "E17018",
-        &["scope"],
-        &["resource"],
-        "rbac.permission",
-    ),
-    entry(
-        RbacErrorCode::ScopeReferencedByPermission,
-        "E17019",
-        &["scope"],
-        &[],
-        "rbac.resource",
-    ),
-    entry(
-        RbacErrorCode::PolicyDowngradeBlocked,
-        "E17020",
-        &[],
-        &["resource"],
-        "rbac.resource",
-    ),
-    entry(
-        RbacErrorCode::IncompleteScopeMapping,
-        "E17021",
-        &["missing_count"],
-        &[],
-        "rbac.resource",
-    ),
-    entry(
-        RbacErrorCode::ClientProtected,
-        "E17022",
-        &[],
-        &["client"],
-        "rbac.client",
-    ),
-    entry(
-        RbacErrorCode::ClientScopeNotBusiness,
-        "E17023",
-        &["scope"],
-        &[],
-        "rbac.client",
-    ),
-    entry(
-        RbacErrorCode::RolePermissionLimitExceeded,
-        "E17024",
-        &["max"],
-        &[],
-        "rbac.role",
-    ),
-    entry(
-        RbacErrorCode::UserRoleLimitExceeded,
-        "E17025",
-        &["max"],
-        &[],
-        "rbac.binding",
-    ),
-    entry(
-        RbacErrorCode::RoleNotAssigned,
-        "E17026",
-        &[],
-        &["role_id"],
-        "rbac.binding",
-    ),
-    entry(
-        RbacErrorCode::RoleDisabled,
-        "E17027",
-        &[],
-        &["role_id"],
-        "rbac.binding",
-    ),
-    entry(RbacErrorCode::StorageFailed, "E17028", &[], &[], "rbac"),
-    entry(
-        RbacErrorCode::InvalidResourceUri,
-        "E17029",
-        &[],
-        &["uri"],
-        "rbac.resource",
-    ),
-    entry(
-        RbacErrorCode::InvalidScopeName,
-        "E17030",
-        &[],
-        &["name"],
-        "rbac.scope",
-    ),
-    entry(
-        RbacErrorCode::InvalidScopeDescription,
-        "E17031",
-        &[],
-        &["max"],
-        "rbac.scope",
-    ),
-    entry(
-        RbacErrorCode::InvalidPermissionDescription,
-        "E17032",
-        &[],
-        &["max"],
-        "rbac.permission",
-    ),
-    entry(
-        RbacErrorCode::InvalidRoleName,
-        "E17033",
-        &[],
-        &["max"],
-        "rbac.role",
-    ),
-    entry(
-        RbacErrorCode::InvalidReason,
-        "E17035",
-        &[],
-        &["min", "max"],
-        "rbac",
-    ),
-    entry(RbacErrorCode::InvalidVersion, "E17036", &[], &[], "rbac"),
-    entry(RbacErrorCode::InvalidCursor, "E17037", &[], &[], "rbac"),
-    entry(
-        RbacErrorCode::PageSizeInvalid,
-        "E17038",
-        &["max"],
-        &[],
-        "rbac",
-    ),
-    entry(
-        RbacErrorCode::PageArgumentsConflict,
-        "E17039",
-        &[],
-        &[],
-        "rbac",
-    ),
-    entry(
-        RbacErrorCode::InvalidFilter,
-        "E17040",
-        &["field"],
-        &["max"],
-        "rbac",
-    ),
-    entry(
-        RbacErrorCode::InvalidClientMutationId,
-        "E17041",
-        &["max"],
-        &[],
-        "rbac",
-    ),
-    entry(
-        RbacErrorCode::InvalidCollectionSize,
-        "E17042",
-        &["max"],
-        &[],
-        "rbac",
-    ),
-    entry(RbacErrorCode::EmptyUpdate, "E17043", &[], &[], "rbac"),
-    entry(
-        RbacErrorCode::InvalidPermissionCode,
-        "E17045",
-        &[],
-        &["max"],
-        "rbac.permission",
-    ),
-    entry(
-        RbacErrorCode::InvalidDescriptionLocale,
-        "E17046",
-        &[],
-        &["max"],
-        "rbac.scope",
-    ),
-    entry(
-        RbacErrorCode::InvalidResourceName,
-        "E17047",
-        &[],
-        &["max"],
-        "rbac.resource",
-    ),
-    entry(
-        RbacErrorCode::InvalidLocalizedMetadata,
-        "E17048",
-        &[],
-        &["field", "locale", "max"],
-        "rbac.metadata",
-    ),
-    entry(
-        RbacErrorCode::BuiltInDefinitionProtected,
-        "E17049",
-        &[],
-        &["kind", "key"],
-        "rbac.builtin",
-    ),
-    entry(
-        RbacErrorCode::DelegationCeilingExceeded,
-        "E17050",
-        &[],
-        &["permission"],
-        "rbac.delegation",
-    ),
-    entry(
-        RbacErrorCode::BuiltInIdentityConflict,
-        "E17051",
-        &[],
-        &["key"],
-        "rbac.builtin",
-    ),
-    entry(
-        RbacErrorCode::InvalidBuiltInPermissionReference,
-        "E17052",
-        &[],
-        &["permission"],
-        "rbac.builtin",
-    ),
-    entry(
-        RbacErrorCode::ClientGrantNotAllowed,
-        "E17053",
-        &["scope"],
-        &[],
-        "rbac.client",
-    ),
-];
-
-const fn entry(
-    code: RbacErrorCode,
-    fluent_key: &'static str,
-    required_params: &'static [&'static str],
-    optional_params: &'static [&'static str],
-    usage_module: &'static str,
-) -> RbacErrorCodeDefinition {
-    RbacErrorCodeDefinition {
-        code,
-        numeric_code: code as u32,
-        kind: code.kind(),
-        fluent_key,
-        required_params,
-        optional_params,
-        usage_module,
+    fn required_params(self) -> &'static [&'static str] {
+        match self {
+            Self::VersionConflict | Self::UserVersionStale | Self::PolicyVersionStale => {
+                &["current_version"]
+            }
+            Self::ScopeNotAcceptedByResource
+            | Self::ScopeReferencedByPermission
+            | Self::ClientScopeNotBusiness
+            | Self::ClientGrantNotAllowed => &["scope"],
+            Self::IncompleteScopeMapping => &["missing_count"],
+            Self::RolePermissionLimitExceeded
+            | Self::UserRoleLimitExceeded
+            | Self::PageSizeInvalid
+            | Self::InvalidClientMutationId
+            | Self::InvalidCollectionSize => &["max"],
+            Self::InvalidFilter => &["field"],
+            _ => &[],
+        }
     }
-}
 
-#[must_use]
-pub fn inventory() -> &'static [RbacErrorCodeDefinition] {
-    RBAC_ERROR_INVENTORY
-}
+    fn optional_params(self) -> &'static [&'static str] {
+        match self {
+            Self::ValidationFailed => &["field"],
+            Self::DuplicateResourceUri | Self::InvalidResourceUri => &["uri"],
+            Self::DuplicateScopeCode | Self::DuplicatePermissionCode => &["code"],
+            Self::DuplicatePermissionScope => &["scope"],
+            Self::ReservedResourceProtected
+            | Self::ScopeNotAcceptedByResource
+            | Self::PolicyDowngradeBlocked => &["resource"],
+            Self::BuiltInScopeProtected | Self::InvalidScopeName => &["name"],
+            Self::ClientProtected => &["client"],
+            Self::RoleNotAssigned | Self::RoleDisabled => &["role_id"],
+            Self::InvalidScopeDescription
+            | Self::InvalidPermissionDescription
+            | Self::InvalidRoleName
+            | Self::InvalidFilter
+            | Self::InvalidPermissionCode
+            | Self::InvalidDescriptionLocale
+            | Self::InvalidResourceName => &["max"],
+            Self::InvalidReason => &["min", "max"],
+            Self::InvalidLocalizedMetadata => &["field", "locale", "max"],
+            Self::BuiltInDefinitionProtected => &["kind", "key"],
+            Self::DelegationCeilingExceeded | Self::InvalidBuiltInPermissionReference => {
+                &["permission"]
+            }
+            Self::BuiltInIdentityConflict => &["key"],
+            _ => &[],
+        }
+    }
 
-#[must_use]
-pub fn definition(code: RbacErrorCode) -> Option<&'static RbacErrorCodeDefinition> {
-    RBAC_ERROR_INVENTORY
-        .iter()
-        .find(|definition| definition.code == code)
+    fn usage_module(self) -> Option<&'static str> {
+        match self {
+            Self::ResourceNotFound
+            | Self::DuplicateResourceUri
+            | Self::ReservedResourceProtected
+            | Self::ScopeReferencedByPermission
+            | Self::PolicyDowngradeBlocked
+            | Self::IncompleteScopeMapping
+            | Self::InvalidResourceUri
+            | Self::InvalidResourceName => Some("rbac.resource"),
+            Self::ScopeNotFound
+            | Self::DuplicateScopeCode
+            | Self::BuiltInScopeProtected
+            | Self::InvalidScopeName
+            | Self::InvalidScopeDescription
+            | Self::InvalidDescriptionLocale => Some("rbac.scope"),
+            Self::PermissionNotFound
+            | Self::DuplicatePermissionCode
+            | Self::DuplicatePermissionScope
+            | Self::ScopeNotAcceptedByResource
+            | Self::InvalidPermissionDescription
+            | Self::InvalidPermissionCode => Some("rbac.permission"),
+            Self::RoleNotFound | Self::RolePermissionLimitExceeded | Self::InvalidRoleName => {
+                Some("rbac.role")
+            }
+            Self::BindingNotFound
+            | Self::UserNotFound
+            | Self::UserVersionStale
+            | Self::UserRoleLimitExceeded
+            | Self::RoleNotAssigned
+            | Self::RoleDisabled => Some("rbac.binding"),
+            Self::ClientNotFound
+            | Self::PolicyVersionStale
+            | Self::ClientProtected
+            | Self::ClientScopeNotBusiness
+            | Self::ClientGrantNotAllowed => Some("rbac.client"),
+            Self::InvalidLocalizedMetadata => Some("rbac.metadata"),
+            Self::BuiltInDefinitionProtected
+            | Self::BuiltInIdentityConflict
+            | Self::InvalidBuiltInPermissionReference => Some("rbac.builtin"),
+            Self::DelegationCeilingExceeded => Some("rbac.delegation"),
+            Self::ValidationFailed
+            | Self::VersionConflict
+            | Self::StorageFailed
+            | Self::InvalidReason
+            | Self::InvalidVersion
+            | Self::InvalidCursor
+            | Self::PageSizeInvalid
+            | Self::PageArgumentsConflict
+            | Self::InvalidFilter
+            | Self::InvalidClientMutationId
+            | Self::InvalidCollectionSize
+            | Self::EmptyUpdate => None,
+        }
+    }
 }

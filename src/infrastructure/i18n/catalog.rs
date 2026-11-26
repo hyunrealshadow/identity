@@ -6,14 +6,12 @@ use fluent_templates::{
 use identity_application::error::{
     code::AppErrorCode,
     codes::{
-        account::AccountErrorCode, audit::AUDIT_ERROR_INVENTORY, auth::AuthErrorCode,
-        authorization::AUTHORIZATION_ERROR_INVENTORY, authorize::AuthorizeErrorCode,
-        client::CLIENT_ERROR_INVENTORY, common::CommonErrorCode,
-        device::DeviceAuthorizationErrorCode, graphql::GraphqlErrorCode,
-        graphql_transport::GraphqlTransportErrorCode, group::GROUP_ERROR_INVENTORY,
-        instance::INSTANCE_ERROR_INVENTORY, openid_connect::OpenIdConnectErrorCode,
-        rbac::RBAC_ERROR_INVENTORY, token::TokenErrorCode,
-        user_management::USER_MANAGEMENT_ERROR_INVENTORY,
+        account::AccountErrorCode, audit::AuditErrorCode, auth::AuthErrorCode,
+        authorization::AuthorizationErrorCode, authorize::AuthorizeErrorCode,
+        client::ClientErrorCode, common::CommonErrorCode, device::DeviceAuthorizationErrorCode,
+        graphql::GraphqlErrorCode, graphql_transport::GraphqlTransportErrorCode,
+        group::GroupErrorCode, instance::InstanceErrorCode, openid_connect::OpenIdConnectErrorCode,
+        rbac::RbacErrorCode, token::TokenErrorCode, user_management::UserManagementErrorCode,
     },
     kind::ErrorKind,
 };
@@ -44,9 +42,9 @@ pub fn public_error_inventory() -> Vec<PublicErrorDefinition> {
                 code: code.code(),
                 kind: code.kind(),
                 fluent_key: format!("E{}", code.code()),
-                usage_module: module,
+                usage_module: code.usage_module().unwrap_or(module),
                 required: code.required_params(),
-                optional: &[],
+                optional: code.optional_params(),
             })
             .collect()
     }
@@ -67,86 +65,13 @@ pub fn public_error_inventory() -> Vec<PublicErrorDefinition> {
     inventory.extend(definitions::<GraphqlTransportErrorCode>(
         "graphql.transport",
     ));
-    inventory.extend(AUTHORIZATION_ERROR_INVENTORY.iter().map(|definition| {
-        PublicErrorDefinition {
-            code: definition.numeric_code,
-            kind: definition.kind,
-            fluent_key: definition.fluent_key.to_owned(),
-            usage_module: definition.usage_module,
-            required: definition.required_params,
-            optional: definition.optional_params,
-        }
-    }));
-    inventory.extend(USER_MANAGEMENT_ERROR_INVENTORY.iter().map(|definition| {
-        PublicErrorDefinition {
-            code: definition.numeric_code,
-            kind: definition.kind,
-            fluent_key: definition.fluent_key.to_owned(),
-            usage_module: definition.usage_module,
-            required: definition.required_params,
-            optional: definition.optional_params,
-        }
-    }));
-    inventory.extend(
-        RBAC_ERROR_INVENTORY
-            .iter()
-            .map(|definition| PublicErrorDefinition {
-                code: definition.numeric_code,
-                kind: definition.kind,
-                fluent_key: definition.fluent_key.to_owned(),
-                usage_module: definition.usage_module,
-                required: definition.required_params,
-                optional: definition.optional_params,
-            }),
-    );
-    inventory.extend(
-        CLIENT_ERROR_INVENTORY
-            .iter()
-            .map(|definition| PublicErrorDefinition {
-                code: definition.numeric_code,
-                kind: definition.kind,
-                fluent_key: definition.fluent_key.to_owned(),
-                usage_module: definition.usage_module,
-                required: definition.required_params,
-                optional: definition.optional_params,
-            }),
-    );
-    inventory.extend(
-        INSTANCE_ERROR_INVENTORY
-            .iter()
-            .map(|definition| PublicErrorDefinition {
-                code: definition.numeric_code,
-                kind: definition.kind,
-                fluent_key: definition.fluent_key.to_owned(),
-                usage_module: definition.usage_module,
-                required: definition.required_params,
-                optional: definition.optional_params,
-            }),
-    );
-    inventory.extend(
-        GROUP_ERROR_INVENTORY
-            .iter()
-            .map(|definition| PublicErrorDefinition {
-                code: definition.numeric_code,
-                kind: definition.kind,
-                fluent_key: definition.fluent_key.to_owned(),
-                usage_module: definition.usage_module,
-                required: definition.required_params,
-                optional: definition.optional_params,
-            }),
-    );
-    inventory.extend(
-        AUDIT_ERROR_INVENTORY
-            .iter()
-            .map(|definition| PublicErrorDefinition {
-                code: definition.numeric_code,
-                kind: definition.kind,
-                fluent_key: definition.fluent_key.to_owned(),
-                usage_module: definition.usage_module,
-                required: definition.required_params,
-                optional: definition.optional_params,
-            }),
-    );
+    inventory.extend(definitions::<AuthorizationErrorCode>("authorization"));
+    inventory.extend(definitions::<UserManagementErrorCode>("user.management"));
+    inventory.extend(definitions::<RbacErrorCode>("rbac"));
+    inventory.extend(definitions::<ClientErrorCode>("client"));
+    inventory.extend(definitions::<InstanceErrorCode>("instance"));
+    inventory.extend(definitions::<GroupErrorCode>("rbac.group"));
+    inventory.extend(definitions::<AuditErrorCode>("audit"));
     inventory
 }
 
@@ -254,10 +179,6 @@ mod tests {
     }
     #[test]
     fn public_inventory_covers_typed_errors_without_conflicts() {
-        use identity_application::error::codes::{
-            authorization::AuthorizationErrorCode, client::ClientErrorCode, group::GroupErrorCode,
-            rbac::RbacErrorCode, user_management::UserManagementErrorCode,
-        };
         use std::collections::BTreeSet;
         use strum::IntoEnumIterator;
 
@@ -300,6 +221,8 @@ mod tests {
         covered::<ClientErrorCode>(&inventory, 18000..=18099);
         covered::<GroupErrorCode>(&inventory, 19000..=19099);
         covered::<AuthorizationErrorCode>(&inventory, 27000..=27099);
+        covered::<InstanceErrorCode>(&inventory, 29000..=29099);
+        covered::<AuditErrorCode>(&inventory, 30000..=30099);
     }
     #[test]
     fn missing_keys_and_parameters_and_malformed_fluent_are_rejected() {

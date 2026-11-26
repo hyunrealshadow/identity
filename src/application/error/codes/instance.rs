@@ -30,8 +30,8 @@ pub enum InstanceErrorCode {
     DuplicateEmailLocale = 29017,
 }
 
-impl InstanceErrorCode {
-    pub const fn kind(self) -> ErrorKind {
+impl AppErrorCode for InstanceErrorCode {
+    fn kind(self) -> ErrorKind {
         match self {
             Self::KeyNotFound => ErrorKind::NotFound,
             Self::EmailDeliveryNotConfigured => ErrorKind::Conflict,
@@ -53,112 +53,26 @@ impl InstanceErrorCode {
             | Self::UnsupportedKeyAlgorithm => ErrorKind::Validation,
         }
     }
-}
-
-impl AppErrorCode for InstanceErrorCode {
-    fn kind(self) -> ErrorKind {
-        Self::kind(self)
-    }
 
     fn code(self) -> u32 {
         self as u32
     }
-}
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct InstanceErrorCodeDefinition {
-    pub code: InstanceErrorCode,
-    pub numeric_code: u32,
-    pub kind: ErrorKind,
-    pub fluent_key: &'static str,
-    pub required_params: &'static [&'static str],
-    pub optional_params: &'static [&'static str],
-    pub usage_module: &'static str,
-}
+    fn required_params(self) -> &'static [&'static str] {
+        match self {
+            Self::SettingOutOfRange => &["min", "max"],
+            Self::InvalidClientMutationId | Self::EmailTemplateTooLong => &["max"],
+            Self::UnsupportedKeyAlgorithm => &["algorithm"],
+            Self::InvalidEmailTemplate | Self::TestEmailFailed => &["detail"],
+            Self::UnsupportedEmailLocale | Self::DuplicateEmailLocale => &["locale"],
+            _ => &[],
+        }
+    }
 
-pub const INSTANCE_ERROR_INVENTORY: &[InstanceErrorCodeDefinition] = &[
-    entry(
-        InstanceErrorCode::VersionConflict,
-        "E29000",
-        &[],
-        &["current_version"],
-    ),
-    entry(
-        InstanceErrorCode::SettingOutOfRange,
-        "E29001",
-        &["min", "max"],
-        &[],
-    ),
-    entry(
-        InstanceErrorCode::InvalidClientMutationId,
-        "E29002",
-        &["max"],
-        &[],
-    ),
-    entry(InstanceErrorCode::StorageFailed, "E29003", &[], &[]),
-    entry(InstanceErrorCode::KeyNotFound, "E29004", &[], &[]),
-    entry(InstanceErrorCode::KeyNotCurrent, "E29005", &[], &[]),
-    entry(InstanceErrorCode::LastActiveKey, "E29006", &[], &[]),
-    entry(InstanceErrorCode::KeyAlreadyRevoked, "E29007", &[], &[]),
-    entry(
-        InstanceErrorCode::UnsupportedKeyAlgorithm,
-        "E29008",
-        &["algorithm"],
-        &[],
-    ),
-    entry(
-        InstanceErrorCode::EmailDeliveryNotConfigured,
-        "E29009",
-        &[],
-        &[],
-    ),
-    entry(
-        InstanceErrorCode::InvalidEmailTemplate,
-        "E29010",
-        &["detail"],
-        &[],
-    ),
-    entry(
-        InstanceErrorCode::TestEmailFailed,
-        "E29011",
-        &["detail"],
-        &[],
-    ),
-    entry(InstanceErrorCode::EmailSettingRequired, "E29012", &[], &[]),
-    entry(InstanceErrorCode::InvalidEmailAddress, "E29013", &[], &[]),
-    entry(
-        InstanceErrorCode::InvalidEmailTokenEndpoint,
-        "E29014",
-        &[],
-        &[],
-    ),
-    entry(
-        InstanceErrorCode::UnsupportedEmailLocale,
-        "E29015",
-        &["locale"],
-        &[],
-    ),
-    entry(
-        InstanceErrorCode::EmailTemplateTooLong,
-        "E29016",
-        &["max"],
-        &[],
-    ),
-];
-
-const fn entry(
-    code: InstanceErrorCode,
-    fluent_key: &'static str,
-    required_params: &'static [&'static str],
-    optional_params: &'static [&'static str],
-) -> InstanceErrorCodeDefinition {
-    InstanceErrorCodeDefinition {
-        code,
-        numeric_code: code as u32,
-        kind: code.kind(),
-        fluent_key,
-        required_params,
-        optional_params,
-        usage_module: "instance",
+    fn optional_params(self) -> &'static [&'static str] {
+        match self {
+            Self::VersionConflict => &["current_version"],
+            _ => &[],
+        }
     }
 }
