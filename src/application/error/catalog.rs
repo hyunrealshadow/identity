@@ -24,9 +24,7 @@ pub fn public_error_inventory() -> Vec<PublicErrorDefinition> {
             name: code.name(),
             kind: code.kind(),
             fluent_key: format!("E{}", code.code()),
-            usage_module: code
-                .usage_module()
-                .expect("every registered error code must declare usage_module"),
+            usage_module: code.usage_module(),
             required: code.required_params(),
             optional: code.optional_params(),
         })

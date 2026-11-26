@@ -20,9 +20,7 @@ pub trait AppErrorCode: Copy {
         &[]
     }
 
-    /// Optional per-variant module path shown in the exported error catalog.
-    /// When `None`, the catalog falls back to the enum's module name.
-    fn usage_module(self) -> Option<&'static str> {
-        None
-    }
+    /// Module path shown in the exported error catalog: the enum's declared
+    /// `module`, or the variant's own `module` override.
+    fn usage_module(self) -> &'static str;
 }

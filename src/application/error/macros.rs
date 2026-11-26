@@ -2,7 +2,7 @@
 macro_rules! define_error_codes {
     (
         $(#[$enum_meta:meta])*
-        pub enum $EnumName:ident $((module = $default_mod:literal))? {
+        pub enum $EnumName:ident (module = $default_mod:literal) {
             $(
                 $(#[$variant_meta:meta])*
                 $Variant:ident = $code:literal {
@@ -23,11 +23,6 @@ macro_rules! define_error_codes {
                 $(#[$variant_meta])*
                 $Variant = $code,
             )*
-        }
-
-        impl $EnumName {
-            /// Every error code variant defined in this module.
-            pub const ALL: &'static [Self] = &[$(Self::$Variant),*];
         }
 
         impl crate::error::code::AppErrorCode for $EnumName {
@@ -63,15 +58,10 @@ macro_rules! define_error_codes {
                 }
             }
 
-            fn usage_module(self) -> Option<&'static str> {
-                let default_module: Option<&'static str> =
-                    define_error_codes!(@default_module $($default_mod)?);
-                let _ = &default_module;
+            fn usage_module(self) -> &'static str {
                 match self {
                     $(
-                        Self::$Variant => {
-                            define_error_codes!(@variant_module default_module $(, $vmod)?)
-                        }
+                        Self::$Variant => define_error_codes!(@variant_module $default_mod $(, $vmod)?),
                     )*
                 }
             }
@@ -91,17 +81,11 @@ macro_rules! define_error_codes {
         }
     };
 
-    (@default_module) => {
-        None
+    (@variant_module $default_mod:literal) => {
+        $default_mod
     };
-    (@default_module $default_mod:literal) => {
-        Some($default_mod)
-    };
-    (@variant_module $default_module:ident) => {
-        $default_module
-    };
-    (@variant_module $default_module:ident, $vmod:literal) => {
-        Some($vmod)
+    (@variant_module $default_mod:literal, $vmod:literal) => {
+        $vmod
     };
 
     (@variant [$(#[$variant_meta:meta])*] $EnumName:ident, $Variant:ident, [], []) => {
@@ -344,7 +328,7 @@ macro_rules! define_error_code_registry {
                 }
             }
 
-            fn usage_module(self) -> Option<&'static str> {
+            fn usage_module(self) -> &'static str {
                 match self {
                     $(Self::$Variant(code) => code.usage_module(),)*
                 }

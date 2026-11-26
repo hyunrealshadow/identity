@@ -85,6 +85,8 @@ impl AppError {
         self
     }
 
+    /// Add a distinct field-level `error` under this summary error, such as
+    /// a specific rule failing beneath `ValidationFailed`.
     pub fn with_field_error(
         mut self,
         field: impl Into<String>,
@@ -94,6 +96,9 @@ impl AppError {
         self
     }
 
+    /// Attribute this error to `field` without changing it. The top-level
+    /// code stays this error's own, because clients branch on it, and the
+    /// same error is listed for `field` so a form can show it at the input.
     pub fn with_field(mut self, field: impl Into<String>) -> Self {
         let code = self.code;
         let params = self.params.clone();
