@@ -1,6 +1,6 @@
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use identity_application::{
-    error::{AppError, codes::common::CommonErrorCode},
+    error::{AppError, codes::common},
     key::{
         asymmetric::KeyJwkGenerator,
         rotation::{KeyRotationMaterialGenerator, RotationMaterial},
@@ -67,7 +67,7 @@ impl KeyRotationMaterialGenerator for KeyRotationMaterialGeneratorImpl {
 fn generate_same_algorithm(
     previous_private_key: &str,
 ) -> Result<(AsymmetricKeyAlgorithm, AsymmetricKeyData), AppError> {
-    let internal = || AppError::from_code(CommonErrorCode::InternalError);
+    let internal = || common::error::InternalError.into_error();
     if let Ok(previous) = RsaPssKeyPair::from_pem(previous_private_key, None, None, None) {
         let (hash, salt_len) = if PS256.signer_from_pem(previous_private_key).is_ok() {
             (HashAlgorithm::Sha256, 32)
@@ -108,7 +108,7 @@ fn certificate_domain(certificate: &str) -> Result<String, AppError> {
         .entries_by_nid(Nid::COMMONNAME)
         .next()
         .and_then(|entry| entry.data().to_string().ok())
-        .ok_or_else(|| AppError::from_code(CommonErrorCode::InternalError))
+        .ok_or_else(|| common::error::InternalError.into_error())
 }
 
 #[cfg(test)]

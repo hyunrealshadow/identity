@@ -3,7 +3,7 @@ use async_graphql::{
     Context, Object, Result,
     connection::{Connection, Edge, query},
 };
-use identity_application::error::{codes::graphql::GraphqlErrorCode, params::ErrorParams};
+use identity_application::error::codes::graphql;
 use identity_domain::{auth::repository::SessionPageDirection, openid_connect::ApiScope};
 use identity_infrastructure::graphql::cursor::{ProtectedCursor, protect_many, unprotect};
 use uuid::Uuid;
@@ -60,15 +60,13 @@ pub(crate) async fn session_connection(
     let max_page_size = ctx.data_opt::<usize>().copied().unwrap_or(100);
     let requested = first.or(last).unwrap_or(20);
     if requested > 0 && requested as usize > max_page_size {
-        let params = ErrorParams::new().insert("max", max_page_size.to_string());
-        return Err(coded_error(ctx, GraphqlErrorCode::PageSizeInvalid, params));
-    }
-    if first.is_some() && last.is_some() {
         return Err(coded_error(
             ctx,
-            GraphqlErrorCode::PageArgumentsConflict,
-            ErrorParams::new(),
+            graphql::error::PageSizeInvalid::new(max_page_size),
         ));
+    }
+    if first.is_some() && last.is_some() {
+        return Err(coded_error(ctx, graphql::error::PageArgumentsConflict));
     }
     let state = request.state.clone();
     let data_protector = request.state.services().data_protector().clone();
@@ -92,9 +90,7 @@ pub(crate) async fn session_connection(
                 Some(cursor) => Some(
                     unprotect(data_protector.as_ref(), cursor)
                         .await
-                        .map_err(|_| {
-                            coded_error(ctx, GraphqlErrorCode::InvalidCursor, ErrorParams::new())
-                        })?
+                        .map_err(|_| coded_error(ctx, graphql::error::InvalidCursor))?
                         .into_sort_key(),
                 ),
                 None => None,
@@ -103,9 +99,7 @@ pub(crate) async fn session_connection(
                 Some(cursor) => Some(
                     unprotect(data_protector.as_ref(), cursor)
                         .await
-                        .map_err(|_| {
-                            coded_error(ctx, GraphqlErrorCode::InvalidCursor, ErrorParams::new())
-                        })?
+                        .map_err(|_| coded_error(ctx, graphql::error::InvalidCursor))?
                         .into_sort_key(),
                 ),
                 None => None,

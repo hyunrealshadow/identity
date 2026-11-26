@@ -39,7 +39,7 @@ use crate::{
         EmailRecipient, EmailTemplateKind, EmailTemplateRenderer, LinkToken, link_matches,
         render_templated_email,
     },
-    error::{AppError, codes::auth::AuthErrorCode},
+    error::{AppError, codes::auth},
     observability::{BusinessEvent, EventValue},
     setting::{
         EmailDeliverySettings, EmailSignInEnabledSetting, EmailTemplatesSetting, SettingsSnapshot,
@@ -175,10 +175,10 @@ impl LoginService {
         let login = self.get(request.login_oid).await?;
         let now = Utc::now();
         if login.expires_at <= now {
-            return Err(AppError::from_code(AuthErrorCode::LoginExpired));
+            return Err(auth::error::LoginExpired.into());
         }
         if login.status != LoginStatus::IDENTIFIER_VERIFIED {
-            return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
+            return Err(auth::error::InvalidLoginState.into());
         }
         let Some(dependencies) = self
             .email
@@ -260,8 +260,7 @@ impl LoginService {
                         (None, true)
                     }
                     Err(error) => {
-                        return Err(AppError::from_code(AuthErrorCode::EmailDeliveryFailed)
-                            .with_source(error));
+                        return Err(auth::error::EmailDeliveryFailed.with_source(error));
                     }
                 }
             }
@@ -301,14 +300,13 @@ impl LoginService {
             },
             DeliveryChallengeAdmission::TooSoon { available_at } => {
                 let seconds = (available_at - now).num_seconds().max(1);
-                return Err(AppError::from_code(AuthErrorCode::EmailCodeResendTooSoon)
-                    .with_param("seconds", seconds.to_string()));
+                return Err(auth::error::EmailCodeResendTooSoon::new(seconds).into());
             }
             DeliveryChallengeAdmission::LimitReached => {
-                return Err(AppError::from_code(AuthErrorCode::TooManyAttempts));
+                return Err(auth::error::TooManyAttempts.into());
             }
             DeliveryChallengeAdmission::InvalidState => {
-                return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
+                return Err(auth::error::InvalidLoginState.into());
             }
         };
         Ok(sent)
@@ -323,7 +321,7 @@ impl LoginService {
         ctx: SessionContext,
     ) -> Result<ChallengeOutcome, AppError> {
         if login.status != LoginStatus::IDENTIFIER_VERIFIED {
-            return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
+            return Err(auth::error::InvalidLoginState.into());
         }
         let Some(dependencies) = self
             .email
@@ -334,7 +332,7 @@ impl LoginService {
         };
         if login.failed_attempts >= MAX_OTP_ATTEMPTS {
             self.fail_login_for_too_many_otp_attempts(login.oid).await;
-            return Err(AppError::from_code(AuthErrorCode::TooManyAttempts));
+            return Err(auth::error::TooManyAttempts.into());
         }
         let user = match login.user_oid {
             Some(user_oid) => self.user_repo.find_by_oid(user_oid.into()).await?,
@@ -406,15 +404,14 @@ impl LoginService {
             login.concealed_identifier().is_none() && user_attempts >= MAX_FAILED_ATTEMPTS;
         if attempts >= MAX_OTP_ATTEMPTS || account_locked {
             self.fail_login_for_too_many_otp_attempts(login.oid).await;
-            return AppError::from_code(AuthErrorCode::TooManyAttempts);
+            return auth::error::TooManyAttempts.into();
         }
-        AppError::from_code(AuthErrorCode::InvalidOtp)
+        auth::error::InvalidOtp.into()
     }
 }
 
 fn unsupported() -> AppError {
-    AppError::from_code(AuthErrorCode::CredentialTypeUnsupported)
-        .with_param("credential_type", "email_otp")
+    auth::error::CredentialTypeUnsupported::new("email_otp").into()
 }
 
 /// Whether `credential` is the challenge's code or its link token.

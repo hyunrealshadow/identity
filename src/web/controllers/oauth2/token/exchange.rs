@@ -1,6 +1,6 @@
 use http::StatusCode;
 use identity_application::{
-    error::{AppError, codes::token::TokenErrorCode},
+    error::codes::token as token_codes,
     openid_connect::token::{
         AuthorizationCodeGrantParams, ClientCredentialsGrantParams, DeviceCodeGrantParams,
         RefreshTokenGrantParams,
@@ -97,9 +97,11 @@ async fn prepare_grant(depot: &mut Depot, req: &mut Request) -> Result<(), Token
             })
         }
         _ => {
-            return Err(AppError::from_code(TokenErrorCode::UnsupportedGrantType)
-                .with_param("grant_type", form.grant_type)
-                .into());
+            return Err(
+                token_codes::error::UnsupportedGrantType::new(form.grant_type)
+                    .into_error()
+                    .into(),
+            );
         }
     };
 
@@ -130,7 +132,7 @@ async fn token(depot: &mut Depot) -> Result<AppResponse, TokenWebError> {
 #[cfg(test)]
 mod tests {
     use http::{HeaderMap, StatusCode, header, header::AUTHORIZATION};
-    use identity_application::error::codes::common::CommonErrorCode;
+    use identity_application::error::codes::common;
     use identity_infrastructure::test_app_state_with_mock_settings;
     use salvo::test::{ResponseExt, TestClient};
     use serde_json::{Value, from_str};
@@ -147,7 +149,7 @@ mod tests {
         headers.insert(header::ACCEPT_LANGUAGE, "zh-CN,zh;q=0.9".parse().unwrap());
         let locale = resolve_locale_from_headers(&headers);
         let mut response = token_error_response(
-            AppError::from_code(TokenErrorCode::RevokeRefreshFailed),
+            token_codes::error::RevokeRefreshFailed.into_error(),
             ctx.resources().i18n(),
             &locale,
         );
@@ -163,25 +165,25 @@ mod tests {
 
     #[test]
     fn rfc6749_status_for_invalid_grant_is_bad_request() {
-        let error = TokenWebError(AppError::from_code(TokenErrorCode::RefreshTokenInvalid));
+        let error = TokenWebError(token_codes::error::RefreshTokenInvalid.into());
         assert_eq!(error.rfc6749_status(), StatusCode::BAD_REQUEST);
     }
 
     #[test]
     fn rfc6749_status_for_invalid_client_is_unauthorized() {
-        let error = TokenWebError(AppError::from_code(TokenErrorCode::ClientAuthRequired));
+        let error = TokenWebError(token_codes::error::ClientAuthRequired.into());
         assert_eq!(error.rfc6749_status(), StatusCode::UNAUTHORIZED);
     }
 
     #[test]
     fn rfc6749_error_code_maps_refresh_errors_to_invalid_grant() {
-        let error = TokenWebError(AppError::from_code(TokenErrorCode::RefreshTokenInvalid));
+        let error = TokenWebError(token_codes::error::RefreshTokenInvalid.into());
         assert_eq!(error.rfc6749_error_code(), "invalid_grant");
     }
 
     #[test]
     fn rfc6749_error_code_maps_grant_permission_to_unauthorized_client() {
-        let error = TokenWebError(AppError::from_code(TokenErrorCode::ClientGrantNotAllowed));
+        let error = TokenWebError(token_codes::error::ClientGrantNotAllowed.into());
 
         assert_eq!(error.rfc6749_error_code(), "unauthorized_client");
         assert_eq!(error.rfc6749_status(), StatusCode::BAD_REQUEST);
@@ -189,62 +191,84 @@ mod tests {
 
     #[test]
     fn client_credentials_scope_error_maps_to_invalid_scope() {
-        let error = TokenWebError(AppError::from_code(
-            TokenErrorCode::ClientCredentialsScopeNotAllowed,
-        ));
+        let error = TokenWebError(token_codes::error::ClientCredentialsScopeNotAllowed.into());
         assert_eq!(error.rfc6749_error_code(), "invalid_scope");
     }
 
     #[test]
     fn rfc6749_error_code_maps_device_grant_errors() {
         let cases = [
-            (TokenErrorCode::DeviceCodePending, "authorization_pending"),
-            (TokenErrorCode::DeviceCodeSlowDown, "slow_down"),
-            (TokenErrorCode::DeviceCodeDenied, "access_denied"),
-            (TokenErrorCode::DeviceCodeRevoked, "access_denied"),
-            (TokenErrorCode::DeviceCodeExpired, "expired_token"),
-            (TokenErrorCode::DeviceCodeNotFound, "invalid_grant"),
-            (TokenErrorCode::DeviceCodeClientMismatch, "invalid_grant"),
-            (TokenErrorCode::DeviceCodeUserNotFound, "invalid_grant"),
+            (
+                token_codes::error::DeviceCodePending.into_error(),
+                "authorization_pending",
+            ),
+            (
+                token_codes::error::DeviceCodeSlowDown.into_error(),
+                "slow_down",
+            ),
+            (
+                token_codes::error::DeviceCodeDenied.into_error(),
+                "access_denied",
+            ),
+            (
+                token_codes::error::DeviceCodeRevoked.into_error(),
+                "access_denied",
+            ),
+            (
+                token_codes::error::DeviceCodeExpired.into_error(),
+                "expired_token",
+            ),
+            (
+                token_codes::error::DeviceCodeNotFound.into_error(),
+                "invalid_grant",
+            ),
+            (
+                token_codes::error::DeviceCodeClientMismatch.into_error(),
+                "invalid_grant",
+            ),
+            (
+                token_codes::error::DeviceCodeUserNotFound.into_error(),
+                "invalid_grant",
+            ),
         ];
 
-        for (code, expected) in cases {
-            let error = TokenWebError(AppError::from_code(code));
-            assert_eq!(error.rfc6749_error_code(), expected, "{code:?}");
-            assert_eq!(error.rfc6749_status(), StatusCode::BAD_REQUEST, "{code:?}");
+        for (app_error, expected) in cases {
+            let code = app_error.code();
+            let error = TokenWebError(app_error);
+            assert_eq!(error.rfc6749_error_code(), expected, "{code}");
+            assert_eq!(error.rfc6749_status(), StatusCode::BAD_REQUEST, "{code}");
         }
 
-        let internal = TokenWebError(AppError::from_code(TokenErrorCode::DeviceRedemptionFailed));
+        let internal = TokenWebError(token_codes::error::DeviceRedemptionFailed.into());
         assert_eq!(internal.rfc6749_error_code(), "server_error");
         assert_eq!(internal.rfc6749_status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
 
     #[test]
     fn rfc6749_error_code_keeps_unsupported_grant_type_distinct() {
-        let error = TokenWebError(AppError::from_code(TokenErrorCode::UnsupportedGrantType));
+        let error = TokenWebError(token_codes::error::UnsupportedGrantType::new("custom").into());
 
         assert_eq!(error.rfc6749_error_code(), "unsupported_grant_type");
     }
 
     #[test]
     fn detailed_authorization_code_errors_map_to_invalid_grant() {
-        for code in [
-            TokenErrorCode::AuthCodeRevoked,
-            TokenErrorCode::AuthCodeExpired,
-            TokenErrorCode::AuthCodeSessionNotFound,
-            TokenErrorCode::AuthCodeSessionInactive,
-            TokenErrorCode::AuthCodeSessionRevoked,
-            TokenErrorCode::AuthCodeSessionExpired,
-            TokenErrorCode::AuthCodeSessionUserMismatch,
-            TokenErrorCode::AuthCodeClaimFailed,
+        for app_error in [
+            token_codes::error::AuthCodeRevoked.into_error(),
+            token_codes::error::AuthCodeExpired.into_error(),
+            token_codes::error::AuthCodeSessionNotFound.into_error(),
+            token_codes::error::AuthCodeSessionInactive.into_error(),
+            token_codes::error::AuthCodeSessionRevoked.into_error(),
+            token_codes::error::AuthCodeSessionExpired.into_error(),
+            token_codes::error::AuthCodeSessionUserMismatch.into_error(),
+            token_codes::error::AuthCodeClaimFailed.into_error(),
         ] {
-            let error = TokenWebError(AppError::from_code(code));
-            assert_eq!(error.rfc6749_error_code(), "invalid_grant", "{code:?}");
+            let code = app_error.code();
+            let error = TokenWebError(app_error);
+            assert_eq!(error.rfc6749_error_code(), "invalid_grant", "{code}");
             assert_eq!(error.rfc6749_status(), StatusCode::BAD_REQUEST);
         }
-        let error = TokenWebError(AppError::from_code(
-            TokenErrorCode::AuthCodeSessionLookupFailed,
-        ));
+        let error = TokenWebError(token_codes::error::AuthCodeSessionLookupFailed.into());
         assert_eq!(error.rfc6749_error_code(), "server_error");
         assert_eq!(error.rfc6749_status(), StatusCode::INTERNAL_SERVER_ERROR);
     }
@@ -285,7 +309,7 @@ mod tests {
             let form: TokenForm = parse_form(&mut req).await.unwrap();
             assert_eq!(form.resources, expected);
         }
-        let error = TokenWebError(AppError::from_code(CommonErrorCode::InvalidTarget));
+        let error = TokenWebError(common::error::InvalidTarget.into());
         assert_eq!(error.rfc6749_error_code(), "invalid_target");
         assert_eq!(error.rfc6749_status(), StatusCode::BAD_REQUEST);
     }

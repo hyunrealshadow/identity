@@ -3,7 +3,7 @@ use super::{
     failed_attempt_lock_until,
 };
 use crate::{
-    error::{AppError, codes::auth::AuthErrorCode},
+    error::{AppError, codes::auth},
     user::model::{CredentialData, CredentialType, OtpCredentialData},
 };
 use identity_domain::auth::{
@@ -25,25 +25,20 @@ impl LoginService {
         // session. Never accept OTP as a password replacement for an unbound
         // login.
         if !can_challenge_second_factor(&login) {
-            return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
+            return Err(auth::error::InvalidLoginState.into());
         }
 
         if login.failed_attempts >= MAX_OTP_ATTEMPTS {
             self.fail_login_for_too_many_otp_attempts(login.oid).await;
-            return Err(AppError::from_code(AuthErrorCode::TooManyAttempts));
+            return Err(auth::error::TooManyAttempts.into());
         }
 
         // Resolve user from the login record — no identifier string needed.
         let user = self
             .user_repo
-            .find_by_oid(
-                login
-                    .user_oid
-                    .ok_or_else(|| AppError::from_code(AuthErrorCode::InvalidLoginState))?
-                    .into(),
-            )
+            .find_by_oid(login.user_oid.ok_or(auth::error::InvalidLoginState)?.into())
             .await?
-            .ok_or_else(|| AppError::from_code(AuthErrorCode::UserNotFound))?;
+            .ok_or(auth::error::UserNotFound)?;
         self.ensure_user_can_authenticate(&user).await?;
 
         // Load the OTP credential.
@@ -55,19 +50,13 @@ impl LoginService {
         let otp_cred = otp_credentials
             .into_iter()
             .find(|c| c.r#type == CredentialType::Otp)
-            .ok_or_else(|| {
-                AppError::from_code(AuthErrorCode::CredentialTypeUnsupported)
-                    .with_param("credential_type", "otp")
-            })?;
+            .ok_or_else(|| auth::error::CredentialTypeUnsupported::new("otp"))?;
 
         let otp_credential_oid = otp_cred.oid;
         let otp_data: OtpCredentialData = match otp_cred.data {
             CredentialData::Otp(o) => o,
             _ => {
-                return Err(
-                    AppError::from_code(AuthErrorCode::CredentialTypeUnsupported)
-                        .with_param("credential_type", "otp"),
-                );
+                return Err(auth::error::CredentialTypeUnsupported::new("otp").into());
             }
         };
 
@@ -98,9 +87,9 @@ impl LoginService {
 
             if login_attempts >= MAX_OTP_ATTEMPTS || user_attempts >= MAX_FAILED_ATTEMPTS {
                 self.fail_login_for_too_many_otp_attempts(login.oid).await;
-                return Err(AppError::from_code(AuthErrorCode::TooManyAttempts));
+                return Err(auth::error::TooManyAttempts.into());
             }
-            return Err(AppError::from_code(AuthErrorCode::InvalidOtp));
+            return Err(auth::error::InvalidOtp.into());
         }
 
         self.user_repo.reset_failed_attempts(user.oid).await?;

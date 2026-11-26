@@ -56,14 +56,6 @@
     "module": "common"
   },
   {
-    "code": 10009,
-    "kind": "validation",
-    "fluentKey": "E10009",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "common"
-  },
-  {
     "code": 10007,
     "kind": "internal",
     "fluentKey": "E10007",
@@ -75,6 +67,14 @@
     "code": 10008,
     "kind": "internal",
     "fluentKey": "E10008",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "common"
+  },
+  {
+    "code": 10009,
+    "kind": "validation",
+    "fluentKey": "E10009",
     "requiredParams": [],
     "optionalParams": [],
     "module": "common"
@@ -826,7 +826,9 @@
     "kind": "validation",
     "fluentKey": "E23034",
     "requiredParams": [],
-    "optionalParams": [],
+    "optionalParams": [
+      "field"
+    ],
     "module": "openid_connect.authorize"
   },
   {
@@ -2549,10 +2551,10 @@
     "code": 16015,
     "kind": "validation",
     "fluentKey": "E16015",
-    "requiredParams": [],
-    "optionalParams": [
+    "requiredParams": [
       "field"
     ],
+    "optionalParams": [],
     "module": "user.management"
   },
   {

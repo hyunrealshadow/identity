@@ -3,7 +3,7 @@ use serde_json::{from_value, to_value};
 
 use crate::{
     application::{
-        error::{AppError, codes::key::KeyErrorCode},
+        error::{AppError, codes::key},
         key::asymmetric::{GeneratedKeyJwk, KeyJwkGenerator},
     },
     domain::key::generator::KeyMaterialError,
@@ -17,16 +17,16 @@ fn bindings(
     generated: Result<Vec<(String, Jwk)>, KeyMaterialError>,
 ) -> Result<Vec<GeneratedKeyJwk>, AppError> {
     generated
-        .map_err(AppError::map_source(KeyErrorCode::JwkGenerationFailed))?
+        .map_err(key::error::JwkGenerationFailed::map_source())?
         .into_iter()
         .map(|(algorithm, jwk)| {
-            let jwk_value = to_value(jwk)
-                .map_err(AppError::map_source(KeyErrorCode::JwkSerializationFailed))?;
+            let jwk_value =
+                to_value(jwk).map_err(key::error::JwkSerializationFailed::map_source())?;
             let jwk = from_value::<PublicJwk>(jwk_value)
-                .map_err(AppError::map_source(KeyErrorCode::JwkSerializationFailed))?;
+                .map_err(key::error::JwkSerializationFailed::map_source())?;
             let algorithm = algorithm
                 .parse()
-                .map_err(|_| AppError::from_code(KeyErrorCode::UnsupportedAlgorithm))?;
+                .map_err(|_| key::error::UnsupportedAlgorithm::new(&algorithm).into_error())?;
             Ok(GeneratedKeyJwk { algorithm, jwk })
         })
         .collect()

@@ -1,6 +1,10 @@
 use super::{ChallengeOutcome, LoginService, SessionContext};
 use crate::{
-    error::{AppError, code::AppErrorCode as _, codes::auth::AuthErrorCode},
+    error::{
+        AppError,
+        code::AppErrorCode as _,
+        codes::auth::{self, AuthErrorCode},
+    },
     observability::{BusinessEvent, EventValue, error_outcome},
     setting::PasswordHashSetting,
     user::model::CredentialType,
@@ -189,10 +193,10 @@ impl LoginService {
         // nothing.
         let concealed = login.concealed_identifier().is_some();
         if concealed && !self.concealed_credential_types().contains(&credential_type) {
-            return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
+            return Err(auth::error::InvalidLoginState.into());
         }
         if login.user_oid.is_none() && !concealed {
-            return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
+            return Err(auth::error::InvalidLoginState.into());
         }
 
         // Check login expiry for all credential types.
@@ -204,7 +208,7 @@ impl LoginService {
             {
                 error!(error = %e, "failed to update login status on expiry");
             }
-            return Err(AppError::from_code(AuthErrorCode::LoginExpired));
+            return Err(auth::error::LoginExpired.into());
         }
 
         let hash_options = self.settings.snapshot().get::<PasswordHashSetting>();

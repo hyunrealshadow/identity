@@ -21,7 +21,7 @@ use crate::{
     data_protection::DataProtector,
     error::{
         AppError,
-        codes::{authorization::AuthorizationErrorCode, group::GroupErrorCode},
+        codes::{authorization, group as group_codes},
     },
     observability::{BusinessEvent, EventSink, EventValue, NoopEventSink, error_outcome},
     rbac::{
@@ -92,7 +92,9 @@ impl GroupManagementService {
 
     #[tracing::instrument(skip_all, name = "rbac.group.find_many")]
     pub async fn find_groups(&self, oids: Vec<GroupOid>) -> Result<Vec<GroupRecord>, AppError> {
-        let oids = dedupe_batch_lookups(oids, GroupErrorCode::InvalidCollectionSize)?;
+        let oids = dedupe_batch_lookups(oids, |max| {
+            group_codes::error::InvalidCollectionSize::new(max).into()
+        })?;
         self.repository
             .find_groups(oids)
             .await
@@ -379,7 +381,7 @@ impl GroupManagementService {
                 && command.names.is_none()
                 && command.descriptions.is_none()
             {
-                return Err(AppError::from_code(GroupErrorCode::EmptyUpdate));
+                return Err(group_codes::error::EmptyUpdate.into_error());
             }
             if let Some(names) = &command.names {
                 validate_group_names(names).map_err(map_validation)?;
@@ -603,9 +605,10 @@ fn validate_client_mutation_id(value: Option<&str>) -> Result<(), AppError> {
         return Ok(());
     };
     if value.chars().count() > MAX_CLIENT_MUTATION_ID_LENGTH {
-        return Err(AppError::from_code(GroupErrorCode::InvalidClientMutationId)
-            .with_param("max", MAX_CLIENT_MUTATION_ID_LENGTH.to_string())
-            .with_field("clientMutationId"));
+        return Err(group_codes::error::InvalidClientMutationId::new(
+            MAX_CLIENT_MUTATION_ID_LENGTH,
+        )
+        .with_field("clientMutationId"));
     }
     Ok(())
 }
@@ -628,9 +631,8 @@ fn normalize_filter_text(
         return Ok(None);
     }
     if value.chars().count() > max {
-        return Err(AppError::from_code(GroupErrorCode::InvalidFilter)
-            .with_param("field", field)
-            .with_param("max", max.to_string())
+        return Err(group_codes::error::InvalidFilter::new(field)
+            .max(max)
             .with_field(field));
     }
     Ok(Some(value.to_owned()))
@@ -638,9 +640,9 @@ fn normalize_filter_text(
 
 fn dedupe_limit_roles(role_oids: Vec<RoleOid>) -> Result<Vec<RoleOid>, AppError> {
     if role_oids.len() > MAX_GROUP_ROLES {
-        return Err(AppError::from_code(GroupErrorCode::InvalidCollectionSize)
-            .with_param("max", MAX_GROUP_ROLES.to_string())
-            .with_field("roleIds"));
+        return Err(
+            group_codes::error::InvalidCollectionSize::new(MAX_GROUP_ROLES).with_field("roleIds"),
+        );
     }
     Ok(role_oids
         .into_iter()
@@ -652,50 +654,42 @@ fn dedupe_limit_roles(role_oids: Vec<RoleOid>) -> Result<Vec<RoleOid>, AppError>
 fn map_validation(error: GroupValidationError) -> AppError {
     use GroupValidationError as Error;
     match error {
-        Error::InvalidName => AppError::from_code(GroupErrorCode::InvalidName)
-            .with_param("max", "256")
+        Error::InvalidName => group_codes::error::InvalidName::new()
+            .max(256)
             .with_field("names"),
-        Error::InvalidDescription => AppError::from_code(GroupErrorCode::InvalidDescription)
-            .with_param("max", "1024")
+        Error::InvalidDescription => group_codes::error::InvalidDescription::new()
+            .max(1024)
             .with_field("descriptions"),
-        Error::InvalidLocale => AppError::from_code(GroupErrorCode::InvalidLocale)
-            .with_param("max", "35")
+        Error::InvalidLocale => group_codes::error::InvalidLocale::new()
+            .max(35)
             .with_field("names.locale"),
-        Error::NameRequired => {
-            AppError::from_code(GroupErrorCode::NameRequired).with_field("names")
+        Error::NameRequired => group_codes::error::NameRequired.with_field("names"),
+        Error::DuplicateLocale => group_codes::error::DuplicateLocale::new().with_field("names"),
+        Error::TooManyEntries => {
+            group_codes::error::InvalidCollectionSize::new(20).with_field("names")
         }
-        Error::DuplicateLocale => {
-            AppError::from_code(GroupErrorCode::DuplicateLocale).with_field("names")
+        Error::InvalidReason => {
+            group_codes::error::InvalidReason::new(MAX_GROUP_REASON_LENGTH).with_field("reason")
         }
-        Error::TooManyEntries => AppError::from_code(GroupErrorCode::InvalidCollectionSize)
-            .with_param("max", "20")
-            .with_field("names"),
-        Error::InvalidReason => AppError::from_code(GroupErrorCode::InvalidReason)
-            .with_param("max", MAX_GROUP_REASON_LENGTH.to_string())
-            .with_field("reason"),
-        Error::BuiltInDefinition => AppError::from_code(GroupErrorCode::BuiltInProtected),
+        Error::BuiltInDefinition => group_codes::error::BuiltInProtected::new().into_error(),
     }
 }
 
 fn map_localized_error(error: LocalizedTextError) -> AppError {
     use LocalizedTextError as Error;
     match error {
-        Error::InvalidLocale { .. } => AppError::from_code(GroupErrorCode::InvalidLocale)
-            .with_param("max", "35")
+        Error::InvalidLocale { .. } => group_codes::error::InvalidLocale::new()
+            .max(35)
             .with_field("names.locale"),
-        Error::DuplicateLocale { locale } => AppError::from_code(GroupErrorCode::DuplicateLocale)
-            .with_param("locale", locale)
+        Error::DuplicateLocale { locale } => group_codes::error::DuplicateLocale::new()
+            .locale(locale)
             .with_field("names"),
-        Error::EmptyName { .. } => {
-            AppError::from_code(GroupErrorCode::InvalidName).with_field("names")
-        }
-        Error::TextTooLong { max, .. } => AppError::from_code(GroupErrorCode::InvalidName)
-            .with_param("max", max.to_string())
+        Error::EmptyName { .. } => group_codes::error::InvalidName::new().with_field("names"),
+        Error::TextTooLong { max, .. } => group_codes::error::InvalidName::new()
+            .max(max)
             .with_field("names"),
         Error::TooManyEntries { field, max } => {
-            AppError::from_code(GroupErrorCode::InvalidCollectionSize)
-                .with_param("max", max.to_string())
-                .with_field(field)
+            group_codes::error::InvalidCollectionSize::new(max).with_field(field)
         }
     }
 }
@@ -703,57 +697,42 @@ fn map_localized_error(error: LocalizedTextError) -> AppError {
 fn map_repository_error(error: GroupManagementRepositoryError) -> AppError {
     use GroupManagementRepositoryError as Error;
     match error {
-        error @ Error::Storage(_) => {
-            AppError::from_code(GroupErrorCode::StorageFailed).with_source(error)
-        }
+        error @ Error::Storage(_) => group_codes::error::StorageFailed.with_source(error),
         Error::Authorization(source) => AppError::from(source),
-        error @ Error::AuditFailed(_) => {
-            AppError::from_code(AuthorizationErrorCode::AuditWriteFailed).with_source(error)
-        }
-        Error::LastRecoveryProtected => {
-            AppError::from_code(AuthorizationErrorCode::LastOwnerProtected)
-        }
-        Error::CorruptRecord => AppError::from_code(GroupErrorCode::StorageFailed),
-        Error::NotFound(kind) => AppError::from_code(not_found_code(kind)),
+        error @ Error::AuditFailed(_) => authorization::error::AuditWriteFailed.with_source(error),
+        Error::LastRecoveryProtected => authorization::error::LastOwnerProtected.into_error(),
+        Error::CorruptRecord => group_codes::error::StorageFailed.into_error(),
+        Error::NotFound(kind) => not_found_error(kind),
         Error::VersionConflict { current_version } => {
-            AppError::from_code(GroupErrorCode::VersionConflict)
-                .with_param("current_version", current_version.to_string())
-                .with_field("expectedVersion")
+            group_codes::error::VersionConflict::new(current_version).with_field("expectedVersion")
         }
-        Error::BuiltInProtected => AppError::from_code(GroupErrorCode::BuiltInProtected),
-        Error::GroupDisabled => AppError::from_code(GroupErrorCode::Disabled),
-        Error::RoleDisabled { role_oid } => AppError::from_code(GroupErrorCode::RoleDisabled)
-            .with_param("role_id", role_oid.to_string())
-            .with_field("roleIds"),
+        Error::BuiltInProtected => group_codes::error::BuiltInProtected::new().into_error(),
+        Error::GroupDisabled => group_codes::error::Disabled.into_error(),
+        Error::RoleDisabled { .. } => group_codes::error::RoleDisabled.with_field("roleIds"),
         Error::DelegationCeilingExceeded { scope } => {
-            AppError::from_code(GroupErrorCode::DelegationCeilingExceeded)
-                .with_param("scope", scope)
-                .with_field("roleIds")
+            group_codes::error::DelegationCeilingExceeded::new(scope).with_field("roleIds")
         }
         Error::MembershipAlreadyActive => {
-            AppError::from_code(GroupErrorCode::MembershipAlreadyActive).with_field("userId")
+            group_codes::error::MembershipAlreadyActive.with_field("userId")
         }
-        Error::MembershipNotActive => {
-            AppError::from_code(GroupErrorCode::MembershipNotActive).with_field("userId")
-        }
+        Error::MembershipNotActive => group_codes::error::MembershipNotActive.with_field("userId"),
         Error::InvalidMetadata { field } => {
-            AppError::from_code(GroupErrorCode::InvalidMetadata).with_param("field", field)
+            group_codes::error::InvalidMetadata::new(field).into_error()
         }
-        Error::EmptyUpdate => AppError::from_code(GroupErrorCode::EmptyUpdate),
+        Error::EmptyUpdate => group_codes::error::EmptyUpdate.into_error(),
         Error::LimitExceeded { limit } => {
-            AppError::from_code(GroupErrorCode::InvalidCollectionSize)
-                .with_param("max", limit.to_string())
+            group_codes::error::InvalidCollectionSize::new(limit).into_error()
         }
     }
 }
 
-fn not_found_code(kind: GroupEntityKind) -> GroupErrorCode {
+fn not_found_error(kind: GroupEntityKind) -> AppError {
     match kind {
-        GroupEntityKind::Group => GroupErrorCode::GroupNotFound,
-        GroupEntityKind::Membership => GroupErrorCode::MembershipNotFound,
-        GroupEntityKind::RoleBinding => GroupErrorCode::RoleBindingNotFound,
-        GroupEntityKind::User => GroupErrorCode::UserNotFound,
-        GroupEntityKind::Role => GroupErrorCode::RoleNotFound,
+        GroupEntityKind::Group => group_codes::error::GroupNotFound.into_error(),
+        GroupEntityKind::Membership => group_codes::error::MembershipNotFound.into_error(),
+        GroupEntityKind::RoleBinding => group_codes::error::RoleBindingNotFound.into_error(),
+        GroupEntityKind::User => group_codes::error::UserNotFound.into_error(),
+        GroupEntityKind::Role => group_codes::error::RoleNotFound.into_error(),
     }
 }
 

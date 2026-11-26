@@ -47,7 +47,7 @@ use crate::{
     data_protection::DataProtector,
     error::{
         AppError,
-        codes::{authorization::AuthorizationErrorCode, client::ClientErrorCode},
+        codes::{authorization, client},
     },
     observability::{BusinessEvent, EventSink, EventValue, NoopEventSink, error_outcome},
     openid_connect::provider::{
@@ -257,7 +257,7 @@ impl ClientManagementService {
                 && command.settings.is_none()
                 && command.advanced.is_none()
             {
-                return Err(AppError::from_code(ClientErrorCode::EmptyUpdate));
+                return Err(client::error::EmptyUpdate.into());
             }
             let settings = command.settings.map(validate_settings).transpose()?;
             let current = if settings.is_some() || command.advanced.is_some() {
@@ -266,7 +266,7 @@ impl ClientManagementService {
                         .find_client(command.client_oid)
                         .await
                         .map_err(map_repository_error)?
-                        .ok_or_else(|| AppError::from_code(ClientErrorCode::ClientNotFound))?,
+                        .ok_or(client::error::ClientNotFound)?,
                 )
             } else {
                 None
@@ -434,8 +434,7 @@ impl ClientManagementService {
                 Some(expiry) => expiry,
                 None => {
                     let expires_at = command.expires_at.ok_or_else(|| {
-                        AppError::from_code(ClientErrorCode::PublicKeyExpiryRequired)
-                            .with_field("expiresAt")
+                        client::error::PublicKeyExpiryRequired.with_field("expiresAt")
                     })?;
                     validate_key_expiry(expires_at)?;
                     expires_at
@@ -582,9 +581,7 @@ fn state_transaction(
 fn validate_reason(reason: &str) -> Result<String, AppError> {
     let reason = reason.trim();
     if reason.chars().count() > MAX_REASON_LENGTH {
-        return Err(AppError::from_code(ClientErrorCode::InvalidReason)
-            .with_param("max", MAX_REASON_LENGTH.to_string())
-            .with_field("reason"));
+        return Err(client::error::InvalidReason::new(MAX_REASON_LENGTH).with_field("reason"));
     }
     Ok(reason.to_owned())
 }
@@ -592,8 +589,7 @@ fn validate_reason(reason: &str) -> Result<String, AppError> {
 fn validate_client_mutation_id(value: Option<&str>) -> Result<(), AppError> {
     if value.is_some_and(|value| value.chars().count() > MAX_CLIENT_MUTATION_ID_LENGTH) {
         return Err(
-            AppError::from_code(ClientErrorCode::InvalidClientMutationId)
-                .with_param("max", MAX_CLIENT_MUTATION_ID_LENGTH.to_string())
+            client::error::InvalidClientMutationId::new(MAX_CLIENT_MUTATION_ID_LENGTH)
                 .with_field("clientMutationId"),
         );
     }
@@ -604,9 +600,9 @@ fn normalize_filter(mut filter: ClientFilter) -> Result<ClientFilter, AppError> 
     filter.query = match filter.query.as_deref().map(str::trim) {
         None | Some("") => None,
         Some(value) if value.chars().count() > MAX_QUERY_FILTER_LENGTH => {
-            return Err(AppError::from_code(ClientErrorCode::InvalidFilter)
-                .with_param("max", MAX_QUERY_FILTER_LENGTH.to_string())
-                .with_field("query"));
+            return Err(
+                client::error::InvalidFilter::new(MAX_QUERY_FILTER_LENGTH).with_field("query")
+            );
         }
         Some(value) => Some(value.to_owned()),
     };
@@ -616,8 +612,8 @@ fn normalize_filter(mut filter: ClientFilter) -> Result<ClientFilter, AppError> 
 fn validate_name(value: &str) -> Result<String, AppError> {
     let value = value.trim();
     if value.is_empty() || value.chars().count() > MAX_CLIENT_NAME_LENGTH {
-        return Err(AppError::from_code(ClientErrorCode::InvalidName)
-            .with_param("max", MAX_CLIENT_NAME_LENGTH.to_string())
+        return Err(client::error::InvalidName::new()
+            .max(MAX_CLIENT_NAME_LENGTH)
             .with_field("name"));
     }
     Ok(value.to_owned())
@@ -626,19 +622,21 @@ fn validate_name(value: &str) -> Result<String, AppError> {
 fn validate_description(value: &str) -> Result<String, AppError> {
     let value = value.trim();
     if value.chars().count() > MAX_CLIENT_DESCRIPTION_LENGTH {
-        return Err(AppError::from_code(ClientErrorCode::InvalidDescription)
-            .with_param("max", MAX_CLIENT_DESCRIPTION_LENGTH.to_string())
-            .with_field("description"));
+        return Err(
+            client::error::InvalidDescription::new(MAX_CLIENT_DESCRIPTION_LENGTH)
+                .with_field("description"),
+        );
     }
     Ok(value.to_owned())
 }
 
 fn validate_secret_lifetime(days: u32) -> Result<(), AppError> {
     if !(MIN_SECRET_LIFETIME_DAYS..=MAX_SECRET_LIFETIME_DAYS).contains(&days) {
-        return Err(AppError::from_code(ClientErrorCode::InvalidSecretLifetime)
-            .with_param("min", MIN_SECRET_LIFETIME_DAYS.to_string())
-            .with_param("max", MAX_SECRET_LIFETIME_DAYS.to_string())
-            .with_field("lifetimeDays"));
+        return Err(client::error::InvalidSecretLifetime::new(
+            MIN_SECRET_LIFETIME_DAYS,
+            MAX_SECRET_LIFETIME_DAYS,
+        )
+        .with_field("lifetimeDays"));
     }
     Ok(())
 }
@@ -647,14 +645,10 @@ fn validate_secret_lifetime(days: u32) -> Result<(), AppError> {
 fn parse_uri(
     raw: &str,
     allowed: impl Fn(&Url) -> bool,
-    code: ClientErrorCode,
+    make_error: impl Fn(String) -> AppError,
     field: &'static str,
 ) -> Result<String, AppError> {
-    let invalid = || {
-        AppError::from_code(code)
-            .with_param("uri", raw.to_owned())
-            .with_field(field)
-    };
+    let invalid = || make_error(raw.to_owned()).with_field(field);
     let value = raw.trim();
     if value.is_empty() || value.len() > MAX_URI_LENGTH {
         return Err(invalid());
@@ -671,9 +665,7 @@ fn parse_uri(
 
 fn bounded<T>(items: Vec<T>, field: &'static str) -> Result<Vec<T>, AppError> {
     if items.len() > MAX_REDIRECT_URIS {
-        return Err(AppError::from_code(ClientErrorCode::InvalidCollectionSize)
-            .with_param("max", MAX_REDIRECT_URIS.to_string())
-            .with_field(field));
+        return Err(client::error::InvalidCollectionSize::new(MAX_REDIRECT_URIS).with_field(field));
     }
     Ok(items)
 }
@@ -685,9 +677,9 @@ pub(crate) fn validate_settings(
     let mut platforms = Vec::with_capacity(settings.platforms.len());
     for platform in settings.platforms {
         if seen_platforms.contains(&platform.platform) {
-            return Err(AppError::from_code(ClientErrorCode::DuplicatePlatform)
-                .with_param("platform", platform.platform.to_string())
-                .with_field("platforms"));
+            return Err(
+                client::error::DuplicatePlatform::new(&platform.platform).with_field("platforms")
+            );
         }
         seen_platforms.push(platform.platform.clone());
         let mut uris = Vec::new();
@@ -695,7 +687,7 @@ pub(crate) fn validate_settings(
             let uri = parse_uri(
                 &raw,
                 |url| platform.platform.allows_redirect_uri_scheme(url),
-                ClientErrorCode::InvalidRedirectUri,
+                |uri| client::error::InvalidRedirectUri::new(uri).into_error(),
                 "platforms.redirectUris",
             )?;
             if !uris.contains(&uri) {
@@ -722,7 +714,7 @@ pub(crate) fn validate_settings(
                     || native
                         && OpenIdConnectClientPlatformType::Native.allows_redirect_uri_scheme(url)
             },
-            ClientErrorCode::InvalidPostLogoutRedirectUri,
+            |uri| client::error::InvalidPostLogoutRedirectUri::new(uri).into_error(),
             "postLogoutRedirectUris",
         )?;
         if !post_logout_redirect_uris.contains(&uri) {
@@ -733,31 +725,25 @@ pub(crate) fn validate_settings(
     let mut grant_types = Vec::new();
     for grant in settings.grant_types {
         if !MANAGEABLE_GRANT_TYPES.contains(&grant) {
-            return Err(AppError::from_code(ClientErrorCode::UnsupportedGrantType)
-                .with_param("grant_type", grant.as_str())
-                .with_field("grantTypes"));
+            return Err(
+                client::error::UnsupportedGrantType::new(grant.as_str()).with_field("grantTypes")
+            );
         }
         if !grant_types.contains(&grant) {
             grant_types.push(grant);
         }
     }
     if grant_types.is_empty() {
-        return Err(
-            AppError::from_code(ClientErrorCode::InvalidGrantTypes).with_field("grantTypes")
-        );
+        return Err(client::error::InvalidGrantTypes.with_field("grantTypes"));
     }
     if grant_types.contains(&GrantType::RefreshToken)
         && !grant_types.contains(&GrantType::AuthorizationCode)
         && !grant_types.contains(&GrantType::DeviceCode)
     {
-        return Err(
-            AppError::from_code(ClientErrorCode::RefreshTokenRequiresInteractiveGrant)
-                .with_field("grantTypes"),
-        );
+        return Err(client::error::RefreshTokenRequiresInteractiveGrant.with_field("grantTypes"));
     }
     if grant_types.contains(&GrantType::AuthorizationCode) && platforms.is_empty() {
-        return Err(AppError::from_code(ClientErrorCode::RedirectUriRequired)
-            .with_field("platforms.redirectUris"));
+        return Err(client::error::RedirectUriRequired.with_field("platforms.redirectUris"));
     }
     // Keep a stable order so equal settings compare and persist identically.
     grant_types.sort_by_key(|grant| {
@@ -787,18 +773,17 @@ fn validate_key_expiry(expires_at: chrono::DateTime<Utc>) -> Result<(), AppError
     let earliest = now + Duration::days(MIN_PUBLIC_KEY_LIFETIME_DAYS) - Duration::minutes(5);
     let latest = now + Duration::days(MAX_PUBLIC_KEY_LIFETIME_DAYS) + Duration::days(1);
     if expires_at < earliest || expires_at > latest {
-        return Err(
-            AppError::from_code(ClientErrorCode::InvalidCredentialExpiry)
-                .with_param("min", MIN_PUBLIC_KEY_LIFETIME_DAYS.to_string())
-                .with_param("max", MAX_PUBLIC_KEY_LIFETIME_DAYS.to_string())
-                .with_field("expiresAt"),
-        );
+        return Err(client::error::InvalidCredentialExpiry::new(
+            MIN_PUBLIC_KEY_LIFETIME_DAYS,
+            MAX_PUBLIC_KEY_LIFETIME_DAYS,
+        )
+        .with_field("expiresAt"));
     }
     Ok(())
 }
 
 fn parse_jwks_uri(raw: &str) -> Result<Url, AppError> {
-    let invalid = || AppError::from_code(ClientErrorCode::InvalidJwksUri).with_field("jwksUri");
+    let invalid = || client::error::InvalidJwksUri.with_field("jwksUri");
     let raw = raw.trim();
     if raw.is_empty() || raw.len() > MAX_URI_LENGTH {
         return Err(invalid());
@@ -836,8 +821,7 @@ async fn fetch_client_jwks(
     reader: &dyn ClientPublicKeyReader,
     jwks_uri: &Url,
 ) -> Result<Vec<PublicJwk>, AppError> {
-    let unavailable =
-        || AppError::from_code(ClientErrorCode::JwksUnavailable).with_field("jwksUri");
+    let unavailable = || client::error::JwksUnavailable.with_field("jwksUri");
     let client = remote_http_client(RemoteFetchPolicy::new(
         DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
         TimeDuration::from_secs(5),
@@ -870,33 +854,30 @@ async fn fetch_client_jwks(
 // ----------------------------------------------------------------------
 
 fn map_public_key_error(error: PublicKeyError) -> AppError {
-    let code = match error {
-        PublicKeyError::Length | PublicKeyError::Unusable => ClientErrorCode::InvalidPublicKey,
-        PublicKeyError::Private => ClientErrorCode::PrivateKeyNotAccepted,
-        PublicKeyError::CertificateExpired => ClientErrorCode::CertificateExpired,
-    };
-    AppError::from_code(code).with_field("key")
+    match error {
+        PublicKeyError::Length | PublicKeyError::Unusable => {
+            client::error::InvalidPublicKey.with_field("key")
+        }
+        PublicKeyError::Private => client::error::PrivateKeyNotAccepted.with_field("key"),
+        PublicKeyError::CertificateExpired => client::error::CertificateExpired.with_field("key"),
+    }
 }
 
 fn map_localized_error(error: LocalizedTextError) -> AppError {
     use LocalizedTextError as Error;
     match error {
-        Error::InvalidLocale { .. } => AppError::from_code(ClientErrorCode::InvalidLocale)
-            .with_param("max", "35")
-            .with_field("names.locale"),
-        Error::DuplicateLocale { locale } => AppError::from_code(ClientErrorCode::DuplicateLocale)
-            .with_param("locale", locale)
-            .with_field("names"),
-        Error::EmptyName { .. } => {
-            AppError::from_code(ClientErrorCode::InvalidName).with_field("names")
+        Error::InvalidLocale { .. } => {
+            client::error::InvalidLocale::new(35).with_field("names.locale")
         }
-        Error::TextTooLong { max, .. } => AppError::from_code(ClientErrorCode::InvalidDescription)
-            .with_param("max", max.to_string())
-            .with_field("descriptions"),
+        Error::DuplicateLocale { locale } => {
+            client::error::DuplicateLocale::new(locale).with_field("names")
+        }
+        Error::EmptyName { .. } => client::error::InvalidName::new().with_field("names"),
+        Error::TextTooLong { max, .. } => {
+            client::error::InvalidDescription::new(max).with_field("descriptions")
+        }
         Error::TooManyEntries { field, max } => {
-            AppError::from_code(ClientErrorCode::InvalidCollectionSize)
-                .with_param("max", max.to_string())
-                .with_field(field)
+            client::error::InvalidCollectionSize::new(max).with_field(field)
         }
     }
 }
@@ -904,34 +885,21 @@ fn map_localized_error(error: LocalizedTextError) -> AppError {
 fn map_repository_error(error: ClientManagementRepositoryError) -> AppError {
     use ClientManagementRepositoryError as Error;
     match error {
-        error @ Error::Storage(_) => {
-            AppError::from_code(ClientErrorCode::StorageFailed).with_source(error)
-        }
+        error @ Error::Storage(_) => client::error::StorageFailed.with_source(error),
         Error::Authorization(source) => AppError::from(source),
-        error @ Error::AuditFailed(_) => {
-            AppError::from_code(AuthorizationErrorCode::AuditWriteFailed).with_source(error)
-        }
-        Error::LastRecoverableAdministrator => {
-            AppError::from_code(AuthorizationErrorCode::LastOwnerProtected)
-        }
-        Error::CorruptRecord => AppError::from_code(ClientErrorCode::StorageFailed),
-        Error::NotFound(ClientEntityKind::Client) => {
-            AppError::from_code(ClientErrorCode::ClientNotFound)
-        }
-        Error::NotFound(ClientEntityKind::Credential) => {
-            AppError::from_code(ClientErrorCode::CredentialNotFound)
-        }
+        error @ Error::AuditFailed(_) => authorization::error::AuditWriteFailed.with_source(error),
+        Error::LastRecoverableAdministrator => authorization::error::LastOwnerProtected.into(),
+        Error::CorruptRecord => client::error::StorageFailed.into(),
+        Error::NotFound(ClientEntityKind::Client) => client::error::ClientNotFound.into(),
+        Error::NotFound(ClientEntityKind::Credential) => client::error::CredentialNotFound.into(),
         Error::VersionConflict { current_version } => {
-            AppError::from_code(ClientErrorCode::VersionConflict)
-                .with_param("current_version", current_version.to_string())
-                .with_field("expectedVersion")
+            client::error::VersionConflict::new(current_version).with_field("expectedVersion")
         }
-        Error::BuiltInProtected => AppError::from_code(ClientErrorCode::BuiltInProtected),
-        Error::CredentialNotSecret => AppError::from_code(ClientErrorCode::CredentialNotSecret),
-        Error::CredentialRevoked => AppError::from_code(ClientErrorCode::CredentialRevoked),
+        Error::BuiltInProtected => client::error::BuiltInProtected.into(),
+        Error::CredentialNotSecret => client::error::CredentialNotSecret.into(),
+        Error::CredentialRevoked => client::error::CredentialRevoked.into(),
         Error::CredentialLimitReached { max } => {
-            AppError::from_code(ClientErrorCode::CredentialLimitReached)
-                .with_param("max", max.to_string())
+            client::error::CredentialLimitReached::new(max).into()
         }
     }
 }

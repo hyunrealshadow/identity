@@ -6,7 +6,7 @@
 //! membership model used at installation.
 
 use identity_application::{
-    error::{AppError, codes::authorization::AuthorizationErrorCode as Code},
+    error::{AppError, codes::authorization},
     setting::InstallationSettings,
 };
 use identity_domain::audit::{
@@ -45,7 +45,7 @@ pub async fn bootstrap_owner(
     let installed =
         repository::setting::read_section::<InstallationSettings, _>(&transaction).await?;
     if !installed.initialized {
-        return Err(AppError::from_code(Code::InvalidTarget));
+        return Err(authorization::error::InvalidTarget::new().into_error());
     }
     let target = transaction
         .query_one_raw(Statement::from_sql_and_values(
@@ -56,7 +56,7 @@ pub async fn bootstrap_owner(
         .await
         .map_err(AppError::internal)?;
     let Some(target) = target else {
-        return Err(AppError::from_code(Code::InvalidTarget));
+        return Err(authorization::error::InvalidTarget::new().into_error());
     };
     let target_version = target
         .try_get::<Uuid>("", "version")
@@ -70,8 +70,7 @@ pub async fn bootstrap_owner(
             .await
             .map_err(AppError::internal)?;
     if snapshot.target_is_active_owner || snapshot.other_active_owner_count > 0 {
-        return Err(AppError::from_code(Code::VersionConflict)
-            .with_param("current_version", target_version.to_string()));
+        return Err(authorization::error::VersionConflict::new(target_version).into_error());
     }
 
     let owner_group_id = built_in_group_id(&transaction, OWNER_PRESET.group_oid).await?;
@@ -97,7 +96,7 @@ pub async fn bootstrap_owner(
         ))
         .await
         .map_err(AppError::internal)?
-        .ok_or_else(|| AppError::from_code(Code::InvalidTarget))?;
+        .ok_or_else(|| authorization::error::InvalidTarget::new().into_error())?;
     let user_id = record
         .try_get::<i64>("", "user_id")
         .map_err(AppError::internal)?;
@@ -123,7 +122,7 @@ async fn built_in_group_id(
         .await
         .map_err(AppError::internal)?
         .ok_or_else(|| {
-            AppError::map_source(Code::RbacPolicyUnavailable)(DbErr::Custom(
+            authorization::error::RbacPolicyUnavailable.with_source(DbErr::Custom(
                 "a trusted built-in group is missing; run the RBAC seed first".to_owned(),
             ))
         })?;

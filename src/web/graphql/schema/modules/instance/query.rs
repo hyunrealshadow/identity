@@ -1,7 +1,7 @@
 use crate::graphql::schema::access::{AccessPolicy, access};
 use async_graphql::{Context, Object, Result, SimpleObject};
 use chrono::Utc;
-use identity_application::error::{codes::graphql::GraphqlErrorCode, params::ErrorParams};
+use identity_application::error::codes::graphql;
 use tracing::error;
 
 use super::overview::InstanceOverview;
@@ -31,11 +31,7 @@ impl InstanceQuery {
                 error = %error,
                 "instance issuer metadata unavailable"
             );
-            coded_error(
-                ctx,
-                GraphqlErrorCode::InstanceMetadataUnavailable,
-                ErrorParams::new(),
-            )
+            coded_error(ctx, graphql::error::InstanceMetadataUnavailable)
         })?;
         Ok(InstanceInfo {
             name: "Identity".to_owned(),
@@ -57,11 +53,7 @@ impl InstanceQuery {
                 error = %error,
                 "instance endpoint metadata unavailable"
             );
-            coded_error(
-                ctx,
-                GraphqlErrorCode::InstanceMetadataUnavailable,
-                ErrorParams::new(),
-            )
+            coded_error(ctx, graphql::error::InstanceMetadataUnavailable)
         })?;
         let (openid_configuration, oauth_authorization_server) =
             provider.well_known_urls().map_err(|error| {
@@ -70,11 +62,7 @@ impl InstanceQuery {
                     error = %error,
                     "instance well-known metadata unavailable"
                 );
-                coded_error(
-                    ctx,
-                    GraphqlErrorCode::InstanceMetadataUnavailable,
-                    ErrorParams::new(),
-                )
+                coded_error(ctx, graphql::error::InstanceMetadataUnavailable)
             })?;
         let url = |value: &url::Url| value.to_string();
         let optional = |value: Option<&url::Url>| value.map(ToString::to_string);

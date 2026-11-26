@@ -30,10 +30,7 @@ use crate::{
     data_protection::DataProtector,
     error::{
         AppError,
-        codes::{
-            account::AccountErrorCode, authorization::AuthorizationErrorCode,
-            user_management::UserManagementErrorCode,
-        },
+        codes::{account, authorization, user_management},
     },
     observability::{BusinessEvent, EventSink, EventValue, NoopEventSink, error_outcome},
     setting::{PasswordHashSetting, PasswordHistoryCountSetting, SettingsSource},
@@ -134,7 +131,7 @@ impl UserManagementService {
         self.invitations
             .as_ref()
             .filter(|invitations| invitations.delivery.available())
-            .ok_or_else(|| AppError::from_code(UserManagementErrorCode::InvitationUnavailable))
+            .ok_or_else(|| user_management::error::InvitationUnavailable::new().into())
     }
 
     /// Email a new invitation link to a user who has no password yet,
@@ -168,7 +165,7 @@ impl UserManagementService {
             .await
             .map_err(map_repository_error)?
         else {
-            return Err(AppError::from_code(UserManagementErrorCode::UserNotFound));
+            return Err(user_management::error::UserNotFound::new().into());
         };
         let user = &current.user;
         let issue = invitations.delivery.issue(
@@ -194,31 +191,21 @@ impl UserManagementService {
         let (record, status) = match outcome {
             UserInvitationOutcome::Sent { record, invitation } => (*record, invitation),
             UserInvitationOutcome::UserNotFound => {
-                return Err(AppError::from_code(UserManagementErrorCode::UserNotFound));
+                return Err(user_management::error::UserNotFound.into());
             }
             UserInvitationOutcome::UserDisabled => {
-                return Err(AppError::from_code(
-                    UserManagementErrorCode::InvitationUserDisabled,
-                ));
+                return Err(user_management::error::InvitationUserDisabled.into());
             }
             UserInvitationOutcome::HasPassword => {
-                return Err(AppError::from_code(
-                    UserManagementErrorCode::InvitationNotPending,
-                ));
+                return Err(user_management::error::InvitationNotPending.into());
             }
             UserInvitationOutcome::TooSoon { available_at } => {
                 let seconds = (available_at - now).num_seconds().max(1);
-                return Err(
-                    AppError::from_code(UserManagementErrorCode::InvitationResendTooSoon)
-                        .with_param("seconds", seconds.to_string()),
-                );
+                return Err(user_management::error::InvitationResendTooSoon::new(seconds).into());
             }
             // The address changed after the email was written for it.
             UserInvitationOutcome::AddressChanged { current_version } => {
-                return Err(
-                    AppError::from_code(UserManagementErrorCode::VersionConflict)
-                        .with_param("current_version", current_version.to_string()),
-                );
+                return Err(user_management::error::VersionConflict::new(current_version).into());
             }
         };
         Ok((record, status))
@@ -270,9 +257,7 @@ impl UserManagementService {
             .map(Uuid::from)
             .collect::<std::collections::BTreeSet<_>>();
         if user_oids.len() > MAX_PAGE_SIZE as usize {
-            return Err(AppError::from_code(
-                UserManagementErrorCode::ValidationFailed,
-            ));
+            return Err(user_management::error::ValidationFailed::new().into());
         }
         self.repository
             .find_users(user_oids.into_iter().map(UserOid).collect())
@@ -594,11 +579,10 @@ impl UserManagementService {
             }
             _ => {
                 return Err(
-                    AppError::from_code(UserManagementErrorCode::ValidationFailed)
-                        .with_field_error(
-                            "password",
-                            AppError::from_code(UserManagementErrorCode::CredentialChoiceRequired),
-                        ),
+                    user_management::error::ValidationFailed::new().with_field_error(
+                        "password",
+                        user_management::error::CredentialChoiceRequired,
+                    ),
                 );
             }
         };
@@ -757,24 +741,18 @@ fn reject_self_credential_action(
         authority.actor.principal,
         ActorPrincipal::User { user_oid, .. } if user_oid == target
     ) {
-        return Err(AppError::from_code(
-            UserManagementErrorCode::SelfCredentialActionNotAllowed,
-        ));
+        return Err(user_management::error::SelfCredentialActionNotAllowed.into());
     }
     Ok(())
 }
 
 fn page_conflict() -> AppError {
-    AppError::from_code(UserManagementErrorCode::PageArgumentsConflict)
+    user_management::error::PageArgumentsConflict.into()
 }
 
 fn validate_page_size(value: u32, field: &'static str) -> Result<usize, AppError> {
     if !(1..=MAX_PAGE_SIZE).contains(&value) {
-        return Err(
-            AppError::from_code(UserManagementErrorCode::PageSizeInvalid)
-                .with_param("max", MAX_PAGE_SIZE.to_string())
-                .with_field(field),
-        );
+        return Err(user_management::error::PageSizeInvalid::new(MAX_PAGE_SIZE).with_field(field));
     }
     Ok(value as usize)
 }
@@ -786,10 +764,9 @@ fn validate_reason(reason: &str) -> Result<String, AppError> {
     let reason = reason.trim();
     if reason.chars().count() > MAX_REASON_LENGTH {
         return Err(
-            AppError::from_code(UserManagementErrorCode::ValidationFailed).with_field_error(
+            user_management::error::ValidationFailed::new().with_field_error(
                 "reason",
-                AppError::from_code(UserManagementErrorCode::ReasonTooLong)
-                    .with_param("max", MAX_REASON_LENGTH.to_string()),
+                user_management::error::ReasonTooLong::new(MAX_REASON_LENGTH),
             ),
         );
     }
@@ -802,10 +779,9 @@ fn validate_client_mutation_id(value: Option<&str>) -> Result<(), AppError> {
     };
     if value.chars().count() > MAX_CLIENT_MUTATION_ID_LENGTH {
         return Err(
-            AppError::from_code(UserManagementErrorCode::ValidationFailed).with_field_error(
+            user_management::error::ValidationFailed::new().with_field_error(
                 "clientMutationId",
-                AppError::from_code(UserManagementErrorCode::InvalidClientMutationId)
-                    .with_param("max", MAX_CLIENT_MUTATION_ID_LENGTH.to_string()),
+                user_management::error::InvalidClientMutationId::new(MAX_CLIENT_MUTATION_ID_LENGTH),
             ),
         );
     }
@@ -815,20 +791,11 @@ fn validate_client_mutation_id(value: Option<&str>) -> Result<(), AppError> {
 fn validate_username_field(value: &str) -> Result<(String, String), AppError> {
     match validate_username(value) {
         Ok(normalized) => Ok((value.trim().to_owned(), normalized)),
-        Err(UsernameValidationError::Empty) => Err(AppError::from_code(
-            UserManagementErrorCode::ValidationFailed,
-        )
-        .with_field_error(
-            "username",
-            AppError::from_code(AccountErrorCode::UsernameRequired),
-        )),
+        Err(UsernameValidationError::Empty) => Err(user_management::error::ValidationFailed::new()
+            .with_field_error("username", account::error::UsernameRequired)),
         Err(UsernameValidationError::InvalidLength | UsernameValidationError::InvalidCharacter) => {
-            Err(
-                AppError::from_code(UserManagementErrorCode::ValidationFailed).with_field_error(
-                    "username",
-                    AppError::from_code(AccountErrorCode::UsernameInvalid),
-                ),
-            )
+            Err(user_management::error::ValidationFailed::new()
+                .with_field_error("username", account::error::UsernameInvalid))
         }
     }
 }
@@ -836,18 +803,11 @@ fn validate_username_field(value: &str) -> Result<(String, String), AppError> {
 fn validate_email_field(value: &str) -> Result<(String, String), AppError> {
     match normalize_email(value) {
         Ok(normalized) => Ok((value.trim().to_owned(), normalized)),
-        Err(EmailNormalizationError::Empty) => Err(AppError::from_code(
-            UserManagementErrorCode::ValidationFailed,
-        )
-        .with_field_error(
-            "email",
-            AppError::from_code(AccountErrorCode::EmailRequired),
-        )),
+        Err(EmailNormalizationError::Empty) => Err(user_management::error::ValidationFailed::new()
+            .with_field_error("email", account::error::EmailRequired)),
         Err(EmailNormalizationError::InvalidFormat | EmailNormalizationError::InvalidDomain) => {
-            Err(
-                AppError::from_code(UserManagementErrorCode::ValidationFailed)
-                    .with_field_error("email", AppError::from_code(AccountErrorCode::EmailInvalid)),
-            )
+            Err(user_management::error::ValidationFailed::new()
+                .with_field_error("email", account::error::EmailInvalid))
         }
     }
 }
@@ -860,9 +820,7 @@ fn normalize_filter(filter: UserFilter) -> Result<NormalizedFilter, AppError> {
         && from >= before
     {
         return Err(
-            AppError::from_code(UserManagementErrorCode::InvalidDateRange)
-                .with_param("field", "createdFrom")
-                .with_field("createdFrom"),
+            user_management::error::InvalidDateRange::new("createdFrom").with_field("createdFrom")
         );
     }
     Ok(NormalizedFilter {
@@ -889,9 +847,8 @@ fn normalize_filter_text(
         return Ok(None);
     }
     if value.chars().count() > max {
-        return Err(AppError::from_code(UserManagementErrorCode::InvalidFilter)
-            .with_param("field", field)
-            .with_param("max", max.to_string())
+        return Err(user_management::error::InvalidFilter::new(field)
+            .max(max)
             .with_field(field));
     }
     Ok(Some(value.to_lowercase()))
@@ -903,31 +860,30 @@ fn map_mutation_outcome(
     match outcome {
         UserManagementMutationOutcome::Success(record) => Ok(*record),
         UserManagementMutationOutcome::UserNotFound => {
-            Err(AppError::from_code(UserManagementErrorCode::UserNotFound))
+            Err(user_management::error::UserNotFound.into())
         }
         UserManagementMutationOutcome::VersionConflict { current_version } => Err(
-            AppError::from_code(UserManagementErrorCode::VersionConflict)
-                .with_param("current_version", current_version.to_string())
+            user_management::error::VersionConflict::new(current_version)
                 .with_field("expectedVersion"),
         ),
         UserManagementMutationOutcome::LastOwnerProtected => {
             Err(AppError::from(OwnerProtectionError::LastOwnerProtected))
         }
         UserManagementMutationOutcome::UsernameExists => {
-            Err(AppError::from_code(AccountErrorCode::UsernameExists).with_field("username"))
+            Err(account::error::UsernameExists.with_field("username"))
         }
         UserManagementMutationOutcome::EmailExists => {
-            Err(AppError::from_code(AccountErrorCode::EmailExists).with_field("email"))
+            Err(account::error::EmailExists.with_field("email"))
         }
-        UserManagementMutationOutcome::NotDisabled => Err(AppError::from_code(
-            UserManagementErrorCode::UserNotDisabled,
-        )),
-        UserManagementMutationOutcome::NoPassword => Err(AppError::from_code(
-            UserManagementErrorCode::UserHasNoPassword,
-        )),
-        UserManagementMutationOutcome::SessionNotFound => Err(AppError::from_code(
-            UserManagementErrorCode::SessionNotFound,
-        )),
+        UserManagementMutationOutcome::NotDisabled => {
+            Err(user_management::error::UserNotDisabled.into())
+        }
+        UserManagementMutationOutcome::NoPassword => {
+            Err(user_management::error::UserHasNoPassword.into())
+        }
+        UserManagementMutationOutcome::SessionNotFound => {
+            Err(user_management::error::SessionNotFound.into())
+        }
     }
 }
 
@@ -963,17 +919,15 @@ fn temporary_password() -> String {
 
 fn map_repository_error(error: UserManagementRepositoryError) -> AppError {
     match error {
-        UserManagementRepositoryError::Storage(source) => {
-            AppError::from_code(UserManagementErrorCode::StorageFailed)
-                .with_source(UserManagementRepositoryError::Storage(source))
-        }
+        UserManagementRepositoryError::Storage(source) => user_management::error::StorageFailed
+            .with_source(UserManagementRepositoryError::Storage(source)),
         UserManagementRepositoryError::Authorization(source) => AppError::from(source),
         UserManagementRepositoryError::AuditFailed(source) => {
-            AppError::from_code(AuthorizationErrorCode::AuditWriteFailed)
+            authorization::error::AuditWriteFailed
                 .with_source(UserManagementRepositoryError::AuditFailed(source))
         }
         UserManagementRepositoryError::CorruptRecord => {
-            AppError::from_code(UserManagementErrorCode::StorageFailed)
+            user_management::error::StorageFailed.into()
         }
     }
 }

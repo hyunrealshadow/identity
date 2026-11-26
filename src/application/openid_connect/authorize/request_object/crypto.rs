@@ -1,7 +1,7 @@
 //! Request Object decryption, signature verification, and verified payload decoding.
 
 use super::super::AuthorizeService;
-use crate::error::{AppError, codes::authorize::AuthorizeErrorCode};
+use crate::error::{AppError, codes::authorize};
 use crate::openid_connect::jose::{
     REQUEST_OBJECT_CONTENT_ENCRYPTION_ALGORITHMS, REQUEST_OBJECT_ENCRYPTION_ALGORITHMS,
     asymmetric_verifier_from_pem, asymmetric_verifier_from_public_jwk, decode_with_verifier,
@@ -30,32 +30,25 @@ impl AuthorizeService {
             raw.to_owned()
         };
 
-        let header = jwt::decode_header(&raw).map_err(AppError::map_source(
-            AuthorizeErrorCode::RequestObjectHeaderInvalid,
-        ))?;
+        let header = jwt::decode_header(&raw)
+            .map_err(authorize::error::RequestObjectHeaderInvalid::map_source())?;
 
         let algorithm = header
             .claim(JwtClaimNames::ALG)
             .and_then(|value| value.as_str())
             .unwrap_or("none")
             .parse::<JwsAlgorithm>()
-            .map_err(AppError::map_source(
-                AuthorizeErrorCode::RequestObjectVerifyFailed,
-            ))?;
+            .map_err(authorize::error::RequestObjectVerifyFailed::map_source())?;
         if let Some(registered_algorithms) = &client.metadata().request_object_signing_algs
             && !registered_algorithms.contains(&algorithm)
         {
-            return Err(AppError::from_code(
-                AuthorizeErrorCode::RequestObjectVerifyFailed,
-            ));
+            return Err(authorize::error::RequestObjectVerifyFailed.into_error());
         }
 
         let payload = match algorithm {
             JwsAlgorithm::None => jwt::decode_unsecured(&raw)
                 .map(|(payload, _)| payload)
-                .map_err(AppError::map_source(
-                    AuthorizeErrorCode::RequestObjectPayloadInvalid,
-                ))?,
+                .map_err(authorize::error::RequestObjectPayloadInvalid::map_source())?,
             _ => {
                 self.verify_signed_request_object(client, &raw, algorithm)
                     .await?
@@ -63,9 +56,7 @@ impl AuthorizeService {
         };
 
         if payload.claim("request").is_some() || payload.claim("request_uri").is_some() {
-            return Err(AppError::from_code(
-                AuthorizeErrorCode::RequestObjectPayloadInvalid,
-            ));
+            return Err(authorize::error::RequestObjectPayloadInvalid.into_error());
         }
         let mut value = Map::new();
         for claim in [
@@ -110,28 +101,23 @@ impl AuthorizeService {
         let protected = raw
             .split('.')
             .next()
-            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::RequestObjectHeaderInvalid))?;
+            .ok_or_else(|| authorize::error::RequestObjectHeaderInvalid.into_error())?;
         let protected = URL_SAFE_NO_PAD
             .decode(protected)
-            .map_err(AppError::map_source(
-                AuthorizeErrorCode::RequestObjectHeaderInvalid,
-            ))?;
-        let header = JweHeader::from_bytes(&protected).map_err(AppError::map_source(
-            AuthorizeErrorCode::RequestObjectHeaderInvalid,
-        ))?;
+            .map_err(authorize::error::RequestObjectHeaderInvalid::map_source())?;
+        let header = JweHeader::from_bytes(&protected)
+            .map_err(authorize::error::RequestObjectHeaderInvalid::map_source())?;
         let algorithm = header
             .algorithm()
-            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::RequestObjectHeaderInvalid))?;
+            .ok_or_else(|| authorize::error::RequestObjectHeaderInvalid.into_error())?;
         let content_encryption = header
             .content_encryption()
-            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::RequestObjectHeaderInvalid))?;
+            .ok_or_else(|| authorize::error::RequestObjectHeaderInvalid.into_error())?;
 
         if !REQUEST_OBJECT_ENCRYPTION_ALGORITHMS.contains(&algorithm)
             || !REQUEST_OBJECT_CONTENT_ENCRYPTION_ALGORITHMS.contains(&content_encryption)
         {
-            return Err(AppError::from_code(
-                AuthorizeErrorCode::RequestObjectEncryptionUnsupported,
-            ));
+            return Err(authorize::error::RequestObjectEncryptionUnsupported.into_error());
         }
         if client
             .metadata()
@@ -148,9 +134,7 @@ impl AuthorizeService {
                         .any(|value| value.as_str() == content_encryption)
                 })
         {
-            return Err(AppError::from_code(
-                AuthorizeErrorCode::RequestObjectEncryptionUnsupported,
-            ));
+            return Err(authorize::error::RequestObjectEncryptionUnsupported.into_error());
         }
 
         let keys = if let Some(kid) = header.key_id() {
@@ -158,24 +142,22 @@ impl AuthorizeService {
                 .key_jwk_repo
                 .list_active()
                 .await
-                .map_err(AppError::map_source(AuthorizeErrorCode::LoadRequestFailed))?;
+                .map_err(authorize::error::LoadRequestFailed::map_source())?;
             let binding = bindings
                 .into_iter()
                 .find(|binding| binding.jwk.key_id() == Some(kid))
-                .ok_or_else(|| {
-                    AppError::from_code(AuthorizeErrorCode::RequestObjectEncryptionUnsupported)
-                })?;
+                .ok_or_else(|| authorize::error::RequestObjectEncryptionUnsupported.into_error())?;
             self.key_repo
                 .find_by_oid(binding.key_oid)
                 .await
-                .map_err(AppError::map_source(AuthorizeErrorCode::LoadRequestFailed))?
+                .map_err(authorize::error::LoadRequestFailed::map_source())?
                 .into_iter()
                 .collect()
         } else {
             self.key_repo
                 .list_active_asymmetric()
                 .await
-                .map_err(AppError::map_source(AuthorizeErrorCode::LoadRequestFailed))?
+                .map_err(authorize::error::LoadRequestFailed::map_source())?
         };
 
         for key in &keys {
@@ -192,9 +174,7 @@ impl AuthorizeService {
             }
         }
 
-        Err(AppError::from_code(
-            AuthorizeErrorCode::RequestObjectEncryptionUnsupported,
-        ))
+        Err(authorize::error::RequestObjectEncryptionUnsupported.into_error())
     }
 
     async fn verify_signed_request_object(
@@ -210,9 +190,7 @@ impl AuthorizeService {
                 OpenIdConnectCredentialType::ClientPublicKey,
             )
             .await
-            .map_err(AppError::map_source(
-                AuthorizeErrorCode::CredentialLookupFailed,
-            ))?;
+            .map_err(authorize::error::CredentialLookupFailed::map_source())?;
 
         for credential in credentials {
             if let OpenIdConnectCredentialData::ClientPublicKey { public_key, jwk } =
@@ -236,9 +214,7 @@ impl AuthorizeService {
                 OpenIdConnectCredentialType::ClientJsonWebKeySet,
             )
             .await
-            .map_err(AppError::map_source(
-                AuthorizeErrorCode::CredentialLookupFailed,
-            ))?;
+            .map_err(authorize::error::CredentialLookupFailed::map_source())?;
 
         for credential in jwks_credentials {
             if let OpenIdConnectCredentialData::ClientJsonWebKeySet {
@@ -260,9 +236,7 @@ impl AuthorizeService {
             }
         }
 
-        Err(AppError::from_code(
-            AuthorizeErrorCode::RequestObjectVerifyFailed,
-        ))
+        Err(authorize::error::RequestObjectVerifyFailed.into_error())
     }
 }
 
@@ -271,14 +245,10 @@ fn decode_request_object_with_jwk(
     alg: JwsAlgorithm,
     jwk: &PublicJwk,
 ) -> Result<jwt::JwtPayload, AppError> {
-    let verifier = asymmetric_verifier_from_public_jwk(alg.as_str(), jwk).map_err(|error| {
-        AppError::from_code(AuthorizeErrorCode::RequestObjectKeyInvalid)
-            .with_param("alg", alg.to_string())
-            .with_source(error)
-    })?;
-    decode_with_verifier(raw, verifier.as_ref()).map_err(AppError::map_source(
-        AuthorizeErrorCode::RequestObjectVerifyFailed,
-    ))
+    let verifier = asymmetric_verifier_from_public_jwk(alg.as_str(), jwk)
+        .map_err(authorize::error::RequestObjectKeyInvalid::map_source())?;
+    decode_with_verifier(raw, verifier.as_ref())
+        .map_err(authorize::error::RequestObjectVerifyFailed::map_source())
 }
 
 fn decode_request_object(
@@ -286,12 +256,8 @@ fn decode_request_object(
     alg: JwsAlgorithm,
     public_key_pem: &[u8],
 ) -> Result<jwt::JwtPayload, AppError> {
-    let verifier = asymmetric_verifier_from_pem(alg.as_str(), public_key_pem).map_err(|error| {
-        AppError::from_code(AuthorizeErrorCode::RequestObjectKeyInvalid)
-            .with_param("alg", alg.to_string())
-            .with_source(error)
-    })?;
-    decode_with_verifier(raw, verifier.as_ref()).map_err(AppError::map_source(
-        AuthorizeErrorCode::RequestObjectVerifyFailed,
-    ))
+    let verifier = asymmetric_verifier_from_pem(alg.as_str(), public_key_pem)
+        .map_err(authorize::error::RequestObjectKeyInvalid::map_source())?;
+    decode_with_verifier(raw, verifier.as_ref())
+        .map_err(authorize::error::RequestObjectVerifyFailed::map_source())
 }

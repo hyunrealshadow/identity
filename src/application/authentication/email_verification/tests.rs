@@ -25,7 +25,7 @@ use crate::{
         EmailMessage, EmailTemplateContent, EmailTemplateRenderError, EmailTemplateRenderer,
         RenderedEmail,
     },
-    error::codes::account::AccountErrorCode,
+    error::{code::AppErrorCode, codes::account::AccountErrorCode},
     setting::{AppSettings, EmailDeliverySettings, SettingsSnapshot},
 };
 
@@ -427,11 +427,7 @@ async fn refused_admissions_send_nothing_and_explain_why() {
             .await
             .unwrap_err();
 
-        assert_eq!(
-            error.code(),
-            AppError::from_code(expected).code(),
-            "{admission:?}"
-        );
+        assert_eq!(error.code(), expected.code(), "{admission:?}");
         assert!(f.sender.sent.lock().unwrap().is_empty());
         if matches!(admission, EmailVerificationAdmission::TooSoon { .. }) {
             let seconds: i64 = error.params().get("seconds").unwrap().parse().unwrap();
@@ -452,7 +448,7 @@ async fn nothing_is_sent_while_email_delivery_is_off() {
 
     assert_eq!(
         error.code(),
-        AppError::from_code(AccountErrorCode::EmailVerificationUnavailable).code()
+        AccountErrorCode::EmailVerificationUnavailable.code()
     );
     assert!(f.verifications.admitted.lock().unwrap().is_empty());
 }
@@ -493,7 +489,7 @@ async fn unusable_links_are_rejected() {
             .unwrap_err();
         assert_eq!(
             error.code(),
-            AppError::from_code(AccountErrorCode::EmailVerificationInvalid).code()
+            AccountErrorCode::EmailVerificationInvalid.code()
         );
     }
     // Malformed tokens never reach the repository.
@@ -506,7 +502,7 @@ async fn unusable_links_are_rejected() {
         .unwrap_err();
     assert_eq!(
         error.code(),
-        AppError::from_code(AccountErrorCode::EmailVerificationInvalid).code()
+        AccountErrorCode::EmailVerificationInvalid.code()
     );
 
     *f.verifications.outcome.lock().unwrap() = Some(EmailVerificationOutcome::EmailExists);
@@ -515,8 +511,5 @@ async fn unusable_links_are_rejected() {
         .confirm_email_verification(&LinkToken::generate().token)
         .await
         .unwrap_err();
-    assert_eq!(
-        error.code(),
-        AppError::from_code(AccountErrorCode::EmailExists).code()
-    );
+    assert_eq!(error.code(), AccountErrorCode::EmailExists.code());
 }

@@ -4,7 +4,7 @@ use crate::{
     error::{
         AppError,
         code::AppErrorCode,
-        codes::{common::CommonErrorCode, device::DeviceAuthorizationErrorCode},
+        codes::{common::CommonErrorCode, device},
     },
     observability::{BusinessEvent, EventSink, EventValue, NoopEventSink},
     openid_connect::{
@@ -164,19 +164,11 @@ impl DeviceAuthorizationService {
             .filter(|code| !client.has_assigned_scope(code))
             .collect::<Vec<_>>();
         if !unassigned.is_empty() {
-            return Err(AppError::from_code(
-                DeviceAuthorizationErrorCode::ScopeNotAssignedToClient,
-            )
-            .with_param("scopes", unassigned.join(", ")));
+            return Err(device::error::ScopeNotAssignedToClient.into_error());
         }
         if scope.has_management_scopes() {
             // Device authorization is never a management issuance path.
-            return Err(
-                AppError::from_code(DeviceAuthorizationErrorCode::ScopeInvalid).with_param(
-                    "reason",
-                    "management scopes are not allowed for device authorization",
-                ),
-            );
+            return Err(device::error::ScopeInvalid.into_error());
         }
         let resources = if params.resources.is_empty() {
             let selection = self
@@ -184,7 +176,7 @@ impl DeviceAuthorizationService {
                 .select_resources(&[], &[], &scope.to_scope_string())
                 .await?;
             if selection.scope != scope.to_scope_string() {
-                return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
+                return Err(crate::error::codes::common::error::InvalidTarget.into_error());
             }
             selection.resources
         } else {
@@ -205,9 +197,7 @@ impl DeviceAuthorizationService {
             // Business RBAC is not enabled for device authorization in this
             // release. Reject instead of recording a request that could later
             // escalate through the legacy scope path.
-            return Err(AppError::from_code(
-                DeviceAuthorizationErrorCode::ScopeInvalid,
-            ));
+            return Err(device::error::ScopeInvalid.into_error());
         }
         let issuer = self.provider_service.issuer()?;
 
@@ -271,10 +261,7 @@ impl DeviceAuthorizationService {
 
     fn check_client_grant(&self, client: &OpenIdConnectClient) -> Result<(), AppError> {
         if !client.allows_grant(GrantType::DeviceCode) {
-            return Err(
-                AppError::from_code(DeviceAuthorizationErrorCode::GrantNotAllowed)
-                    .with_param("grant_type", GrantType::DeviceCode.as_str()),
-            );
+            return Err(device::error::GrantNotAllowed.into_error());
         }
 
         Ok(())
@@ -292,8 +279,7 @@ impl DeviceAuthorizationService {
             .await
             .map_err(|error| {
                 if error.code() == CommonErrorCode::InvalidScope.code() {
-                    AppError::from_code(DeviceAuthorizationErrorCode::ScopeInvalid)
-                        .with_source(error)
+                    device::error::ScopeInvalid.with_source(error)
                 } else {
                     error
                 }
@@ -341,17 +327,12 @@ impl DeviceAuthorizationService {
                 Ok(record) => return Ok((record.oid, data)),
                 Err(DeviceAuthorizationRepositoryError::UserCodeConflict) => continue,
                 Err(error) => {
-                    return Err(AppError::from_code(
-                        DeviceAuthorizationErrorCode::StoreRequestFailed,
-                    )
-                    .with_source(error));
+                    return Err(device::error::StoreRequestFailed.with_source(error));
                 }
             }
         }
 
-        Err(AppError::from_code(
-            DeviceAuthorizationErrorCode::UserCodeUnavailable,
-        ))
+        Err(device::error::UserCodeUnavailable.into_error())
     }
 }
 
@@ -382,23 +363,17 @@ fn generate_user_code() -> String {
 /// A malformed login domain fails the request rather than silently pointing
 /// users at the wrong host.
 fn device_page(base: &str) -> Result<Url, AppError> {
-    let base = Url::parse(base).map_err(AppError::map_source(
-        DeviceAuthorizationErrorCode::LoginDomainInvalid,
-    ))?;
+    let base = Url::parse(base).map_err(device::error::LoginDomainInvalid::map_source())?;
 
     base.join(DEVICE_VERIFICATION_PATH)
-        .map_err(AppError::map_source(
-            DeviceAuthorizationErrorCode::LoginDomainInvalid,
-        ))
+        .map_err(device::error::LoginDomainInvalid::map_source())
 }
 
 fn verification_uri(issuer: &Url) -> Result<Url, AppError> {
     let mut base = issuer.clone();
     base.set_path("");
     base.join(DEVICE_VERIFICATION_PATH)
-        .map_err(AppError::map_source(
-            DeviceAuthorizationErrorCode::IssuerInvalid,
-        ))
+        .map_err(device::error::IssuerInvalid::map_source())
 }
 
 fn verification_uri_complete(verification_uri: &Url, user_code: &str) -> Url {

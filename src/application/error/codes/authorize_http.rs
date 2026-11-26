@@ -1,50 +1,21 @@
-use crate::error::{code::AppErrorCode, kind::ErrorKind};
-
-/// Error codes for the `/oauth2/authorize` HTTP layer:
-/// request extraction, method validation, and interaction routing.
-/// Range: 22000-22099
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(test, derive(strum::EnumIter))]
-pub enum AuthorizeHttpErrorCode {
-    /// POST request does not use `application/x-www-form-urlencoded` Content-Type.
-    PostContentTypeInvalid,
-    /// HTTP method is neither GET nor POST.
-    MethodNotAllowed,
-    /// One or more required OAuth parameters are missing.
-    RequiredParamMissing,
-    /// Internal client reached the authorize endpoint without an active session.
-    InternalClientLoginRequired,
-    /// Consent request references an account with no matching active session.
-    ConsentSessionNotFound,
-    /// Authorization request interaction has expired or already completed.
-    ContinueInteractionUnavailable,
-    /// The domain the login application is served from is not configured.
-    LoginDomainNotConfigured,
-}
-
-impl AppErrorCode for AuthorizeHttpErrorCode {
-    fn kind(self) -> ErrorKind {
-        match self {
-            Self::PostContentTypeInvalid
-            | Self::MethodNotAllowed
-            | Self::RequiredParamMissing
-            | Self::InternalClientLoginRequired
-            | Self::ConsentSessionNotFound => ErrorKind::Validation,
-
-            Self::ContinueInteractionUnavailable => ErrorKind::Gone,
-            Self::LoginDomainNotConfigured => ErrorKind::Internal,
-        }
-    }
-
-    fn code(self) -> u32 {
-        match self {
-            Self::PostContentTypeInvalid => 22000,
-            Self::MethodNotAllowed => 22001,
-            Self::RequiredParamMissing => 22002,
-            Self::InternalClientLoginRequired => 22003,
-            Self::ConsentSessionNotFound => 22004,
-            Self::ContinueInteractionUnavailable => 22005,
-            Self::LoginDomainNotConfigured => 22006,
-        }
+define_error_codes! {
+    /// Error codes for the `/oauth2/authorize` HTTP layer:
+    /// request extraction, method validation, and interaction routing.
+    /// Range: 22000-22099
+    pub enum AuthorizeHttpErrorCode {
+        /// POST request does not use `application/x-www-form-urlencoded` Content-Type.
+        PostContentTypeInvalid = 22000 { kind: Validation },
+        /// HTTP method is neither GET nor POST.
+        MethodNotAllowed = 22001 { kind: Validation, required: [method] },
+        /// One or more required OAuth parameters are missing.
+        RequiredParamMissing = 22002 { kind: Validation, required: [fields] },
+        /// Internal client reached the authorize endpoint without an active session.
+        InternalClientLoginRequired = 22003 { kind: Validation },
+        /// Consent request references an account with no matching active session.
+        ConsentSessionNotFound = 22004 { kind: Validation },
+        /// Authorization request interaction has expired or already completed.
+        ContinueInteractionUnavailable = 22005 { kind: Gone },
+        /// The domain the login application is served from is not configured.
+        LoginDomainNotConfigured = 22006 { kind: Internal, required: [interaction] },
     }
 }

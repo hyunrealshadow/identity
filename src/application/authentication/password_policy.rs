@@ -2,7 +2,7 @@
 use crate::{
     error::{
         AppError,
-        codes::{auth::AuthErrorCode, common::CommonErrorCode},
+        codes::{auth, common},
     },
     setting::{BreachedPasswordCheckEnabledSetting, SettingsSnapshot},
 };
@@ -23,7 +23,7 @@ pub struct UnavailableBreachChecker;
 #[async_trait]
 impl BreachedPasswordChecker for UnavailableBreachChecker {
     async fn is_breached(&self, _: &str) -> Result<bool, AppError> {
-        Err(AppError::from_code(AuthErrorCode::PasswordCheckUnavailable))
+        Err(auth::error::PasswordCheckUnavailable.into())
     }
 }
 
@@ -37,14 +37,13 @@ pub async fn validate_breached_password(
     let enabled = settings.get::<BreachedPasswordCheckEnabledSetting>();
     Span::current().record("enabled", enabled);
     if enabled && checker.is_breached(password).await? {
-        return Err(password_error(AuthErrorCode::PasswordBreached, field));
+        return Err(password_error(auth::error::PasswordBreached, field));
     }
     Ok(())
 }
 
-pub fn password_error(code: AuthErrorCode, field: &str) -> AppError {
-    AppError::from_code(CommonErrorCode::ValidationFailed)
-        .with_field_error(field, AppError::from_code(code))
+pub fn password_error(error: impl Into<AppError>, field: &str) -> AppError {
+    common::error::ValidationFailed.with_field_error(field, error)
 }
 
 pub fn validate_password(
@@ -54,10 +53,10 @@ pub fn validate_password(
 ) -> Result<(), AppError> {
     let length = password.chars().count();
     if length < MIN_PASSWORD_CHARACTERS {
-        return Err(password_error(AuthErrorCode::PasswordTooShort, field));
+        return Err(password_error(auth::error::PasswordTooShort, field));
     }
     if length > MAX_PASSWORD_CHARACTERS {
-        return Err(password_error(AuthErrorCode::PasswordTooLong, field));
+        return Err(password_error(auth::error::PasswordTooLong, field));
     }
     let folded = password.to_lowercase();
     let chars: Vec<char> = folded.chars().collect();
@@ -81,7 +80,7 @@ pub fn validate_password(
             .iter()
             .any(|weak| folded.trim_matches(|c: char| !c.is_alphabetic()) == *weak)
     {
-        return Err(password_error(AuthErrorCode::PasswordTooWeak, field));
+        return Err(password_error(auth::error::PasswordTooWeak, field));
     }
     for identifier in identifiers {
         let identifier = identifier.to_lowercase();
@@ -90,7 +89,7 @@ pub fn validate_password(
             if candidate.chars().count() >= 3
                 && (folded.contains(candidate) || edit_distance(&folded, candidate) <= 2)
             {
-                return Err(password_error(AuthErrorCode::PasswordTooSimilar, field));
+                return Err(password_error(auth::error::PasswordTooSimilar, field));
             }
         }
     }
@@ -131,7 +130,7 @@ mod tests {
     impl BreachedPasswordChecker for UnavailableCountingChecker {
         async fn is_breached(&self, _: &str) -> Result<bool, AppError> {
             self.0.fetch_add(1, Ordering::SeqCst);
-            Err(AppError::from_code(AuthErrorCode::PasswordCheckUnavailable))
+            Err(auth::error::PasswordCheckUnavailable.into())
         }
     }
 

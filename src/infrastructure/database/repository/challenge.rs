@@ -3,7 +3,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use identity_application::{
     auth::challenge::ChallengeRepository,
-    error::{AppError, codes::auth::AuthErrorCode},
+    error::{AppError, codes::auth},
 };
 use identity_domain::auth::{
     LoginStatus,
@@ -151,7 +151,7 @@ impl ChallengeRepository for ChallengeRepositoryImpl {
             .await
             .map_err(AppError::internal)?;
         if result.rows_affected() != 1 {
-            return Err(AppError::from_code(AuthErrorCode::InvalidCredential));
+            return Err(auth::error::InvalidCredential.into());
         }
         Ok(())
     }

@@ -54,7 +54,7 @@ impl MfaService {
         user_oid: UserOid,
         enrollment_token: Option<&str>,
     ) -> Result<Vec<RecoveryCodeCredentialData>, AppError> {
-        let invalid = || AppError::from_code(AuthErrorCode::InvalidMfaEnrollment);
+        let invalid = || auth::error::InvalidMfaEnrollment.into_error();
         let Some(token) = enrollment_token else {
             return if self.status(user_oid).await?.recovery_codes_remaining > 0 {
                 Ok(Vec::new())

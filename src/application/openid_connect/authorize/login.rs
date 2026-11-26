@@ -1,6 +1,6 @@
 use super::AuthorizeService;
-use crate::error::codes::{auth::AuthErrorCode, authorize_http::AuthorizeHttpErrorCode};
-use crate::error::{AppError, codes::authorize::AuthorizeErrorCode};
+use crate::error::codes::{auth, authorize_http};
+use crate::error::{AppError, codes::authorize};
 use chrono::{DateTime, Utc};
 use identity_domain::{
     auth::{AuthenticationContextClass, LoginStatus, SessionOid, model::Login},
@@ -29,7 +29,7 @@ impl AuthorizeService {
             .login_repo
             .create_pending(client_oid, authorization_request_id, requested_acr_values)
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::StoreLoginFailed))?;
+            .map_err(authorize::error::StoreLoginFailed::map_source())?;
 
         self.encrypt_login_id(login.oid).await
     }
@@ -44,9 +44,7 @@ impl AuthorizeService {
             .load_continue_context_by_login(protected_login_oid)
             .await?;
         if context.expires_at <= Utc::now() || context.completed_at.is_some() {
-            return Err(AppError::from_code(
-                AuthorizeHttpErrorCode::ContinueInteractionUnavailable,
-            ));
+            return Err(authorize_http::error::ContinueInteractionUnavailable.into_error());
         }
         if context.stored.interaction.selection_source == Some(SelectionSource::Reauthentication)
             || !matches!(
@@ -56,13 +54,13 @@ impl AuthorizeService {
                     | LoginStatus::MFA_ENROLLMENT_REQUIRED
             )
         {
-            return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
+            return Err(auth::error::InvalidLoginState.into_error());
         }
 
         self.login_repo
             .reset_identity(context.login.oid)
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::StoreLoginFailed))?;
+            .map_err(authorize::error::StoreLoginFailed::map_source())?;
         Ok(protected_login_oid.to_owned())
     }
 
@@ -77,12 +75,10 @@ impl AuthorizeService {
             .load_continue_context_by_login(protected_login_oid)
             .await?;
         if context.expires_at <= Utc::now() || context.completed_at.is_some() {
-            return Err(AppError::from_code(
-                AuthorizeHttpErrorCode::ContinueInteractionUnavailable,
-            ));
+            return Err(authorize_http::error::ContinueInteractionUnavailable.into_error());
         }
         if context.login.status != LoginStatus::EXPIRED {
-            return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
+            return Err(auth::error::InvalidLoginState.into_error());
         }
 
         let reauthentication = if context.stored.interaction.selection_source
@@ -122,17 +118,17 @@ impl AuthorizeService {
                 &context.login.requested_acr_values,
             )
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::StoreLoginFailed))?;
+            .map_err(authorize::error::StoreLoginFailed::map_source())?;
 
         if let Some((user_oid, session_oid)) = reauthentication {
             self.login_repo
                 .bind_user(login.oid, user_oid)
                 .await
-                .map_err(AppError::map_source(AuthorizeErrorCode::StoreLoginFailed))?;
+                .map_err(authorize::error::StoreLoginFailed::map_source())?;
             self.login_repo
                 .bind_session(login.oid, session_oid)
                 .await
-                .map_err(AppError::map_source(AuthorizeErrorCode::StoreLoginFailed))?;
+                .map_err(authorize::error::StoreLoginFailed::map_source())?;
         }
         self.encrypt_login_id(login.oid).await
     }
@@ -148,15 +144,14 @@ impl AuthorizeService {
         let expires_at = record.expires_at;
         let completed_at = record.completed_at;
         let stored = Self::stored_authorization_request(record.data)?;
-        let client_id = Uuid::parse_str(&stored.request.client_id).map_err(
-            AppError::map_source(AuthorizeErrorCode::StoredClientIdInvalid),
-        )?;
+        let client_id = Uuid::parse_str(&stored.request.client_id)
+            .map_err(authorize::error::StoredClientIdInvalid::map_source())?;
         let client = self
             .client_repo
             .find_by_oid(client_id)
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::ClientLookupFailed))?
-            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClientNotFound))?;
+            .map_err(authorize::error::ClientLookupFailed::map_source())?
+            .ok_or_else(|| authorize::error::ClientNotFound.into_error())?;
 
         Ok(ContinueContext {
             login,
@@ -211,12 +206,12 @@ impl AuthorizeService {
             self.login_repo
                 .bind_user(login.oid, user_oid)
                 .await
-                .map_err(AppError::map_source(AuthorizeErrorCode::StoreLoginFailed))?;
+                .map_err(authorize::error::StoreLoginFailed::map_source())?;
         }
         self.login_repo
             .bind_session(login.oid, session_oid)
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::StoreLoginFailed))
+            .map_err(authorize::error::StoreLoginFailed::map_source())
     }
 
     pub async fn record_authorization_selection(
@@ -237,7 +232,7 @@ impl AuthorizeService {
                 source,
             )
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::StoreRequestFailed))?;
+            .map_err(authorize::error::StoreRequestFailed::map_source())?;
 
         if !updated {
             return Err(Self::interaction_conflict());
@@ -255,7 +250,7 @@ impl AuthorizeService {
         self.login_repo
             .find_by_oid(login_oid)
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::LoadLoginFailed))?
-            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::LoginNotFound))
+            .map_err(authorize::error::LoadLoginFailed::map_source())?
+            .ok_or_else(|| authorize::error::LoginNotFound.into_error())
     }
 }

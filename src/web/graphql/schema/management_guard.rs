@@ -10,7 +10,7 @@ use identity_application::{
         ManagementAuthorizationRequest, ManagementTarget, ManagementTargetKind,
         evaluate_management_authority,
     },
-    error::{AppError, codes::authorization::AuthorizationErrorCode},
+    error::codes::authorization,
 };
 use identity_domain::{
     authorization::{ManagementAuthorityRepository, ManagementScope},
@@ -67,7 +67,7 @@ impl Guard for ManagementGuard {
             .map_err(|_| {
                 app_error(
                     ctx,
-                    AppError::from_code(AuthorizationErrorCode::AuthorizationSnapshotExpired),
+                    authorization::error::AuthorizationSnapshotExpired.into(),
                 )
             })?;
         let policy_version = ManagementAuthorityRepository::current_policy_version(repo.as_ref())

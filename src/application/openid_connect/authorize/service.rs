@@ -1,4 +1,7 @@
-use crate::{domain::auth::repository::SessionRepository, observability::NoopEventSink};
+use crate::{
+    domain::auth::repository::SessionRepository, error::codes::authorize,
+    observability::NoopEventSink,
+};
 
 use super::*;
 
@@ -103,17 +106,17 @@ impl AuthorizeService {
         let repository = self
             .scope_catalog
             .as_ref()
-            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::LoadRequestFailed))?;
+            .ok_or_else(|| authorize::error::LoadRequestFailed.into_error())?;
         let descriptions = repository
             .find_by_names_for_resources(&scope.names(), resources)
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::LoadRequestFailed))?;
+            .map_err(authorize::error::LoadRequestFailed::map_source())?;
         if scope
             .names()
             .iter()
             .any(|name| !descriptions.iter().any(|item| item.code == *name))
         {
-            return Err(AppError::from_code(AuthorizeErrorCode::ScopeInvalid));
+            return Err(authorize::error::ScopeInvalid.into_error());
         }
         Ok(descriptions)
     }

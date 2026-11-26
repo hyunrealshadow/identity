@@ -87,8 +87,7 @@ pub(super) fn oauth_error_response(
 mod tests {
     use http::{HeaderMap, HeaderValue, StatusCode, header};
     use identity_application::error::{
-        AppError,
-        codes::{authorize::AuthorizeErrorCode, common::CommonErrorCode},
+        codes::{authorize, common},
         kind::ErrorKind,
     };
     use identity_domain::openid_connect::OAuthErrorCode;
@@ -127,23 +126,21 @@ mod tests {
     #[test]
     fn authorize_oauth_error_code_maps_protocol_errors() {
         assert_eq!(
-            authorize_oauth_error_code(&AppError::from_code(
-                AuthorizeErrorCode::ResponseTypeInvalid
-            )),
+            authorize_oauth_error_code(
+                &authorize::error::ResponseTypeInvalid::new("unknown").into()
+            ),
             OAuthErrorCode::UnsupportedResponseType
         );
         assert_eq!(
-            authorize_oauth_error_code(&AppError::from_code(AuthorizeErrorCode::ScopeInvalid)),
+            authorize_oauth_error_code(&authorize::error::ScopeInvalid.into()),
             OAuthErrorCode::InvalidScope
         );
         assert_eq!(
-            authorize_oauth_error_code(&AppError::from_code(
-                AuthorizeErrorCode::ClientGrantNotAllowed
-            )),
+            authorize_oauth_error_code(&authorize::error::ClientGrantNotAllowed.into()),
             OAuthErrorCode::UnauthorizedClient
         );
         assert_eq!(
-            authorize_oauth_error_code(&AppError::from_code(CommonErrorCode::InternalError)),
+            authorize_oauth_error_code(&common::error::InternalError.into()),
             OAuthErrorCode::ServerError
         );
     }

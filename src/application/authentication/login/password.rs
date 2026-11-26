@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
     authentication::password::{HashOptions, VerifyResult, run_password_hashing},
-    error::{AppError, codes::auth::AuthErrorCode},
+    error::{AppError, codes::auth},
     user::{
         UserCredentialOid,
         model::{CredentialData, CredentialType, Password, User},
@@ -28,7 +28,7 @@ impl LoginService {
         // Password challenge is only valid when the login is in
         // `identifier_verified` state.
         if login.status != LoginStatus::IDENTIFIER_VERIFIED {
-            return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
+            return Err(auth::error::InvalidLoginState.into());
         }
         if login.concealed_identifier().is_some() {
             return self
@@ -41,22 +41,16 @@ impl LoginService {
         // string needed from the client.
         let user = self
             .user_repo
-            .find_by_oid(
-                login
-                    .user_oid
-                    .ok_or_else(|| AppError::from_code(AuthErrorCode::InvalidLoginState))?
-                    .into(),
-            )
+            .find_by_oid(login.user_oid.ok_or(auth::error::InvalidLoginState)?.into())
             .await?
-            .ok_or_else(|| AppError::from_code(AuthErrorCode::UserNotFound))?;
+            .ok_or(auth::error::UserNotFound)?;
 
         self.ensure_user_can_authenticate(&user).await?;
 
-        let (credential_oid, stored_password) =
-            self.stored_password(&user).await?.ok_or_else(|| {
-                AppError::from_code(AuthErrorCode::CredentialTypeUnsupported)
-                    .with_param("credential_type", "password")
-            })?;
+        let (credential_oid, stored_password) = self
+            .stored_password(&user)
+            .await?
+            .ok_or_else(|| auth::error::CredentialTypeUnsupported::new("password"))?;
         let verify_result = self
             .verify_password(credential, &stored_password, hash_options)
             .await?;
@@ -80,9 +74,9 @@ impl LoginService {
                     .await?;
 
                 if new_attempts >= MAX_FAILED_ATTEMPTS {
-                    return Err(AppError::from_code(AuthErrorCode::UserLocked));
+                    return Err(auth::error::UserLocked.into());
                 }
-                Err(AppError::from_code(AuthErrorCode::InvalidCredential))
+                Err(auth::error::InvalidCredential.into())
             }
             VerifyResult::Success | VerifyResult::NeedsRehash => {
                 self.password_verified(
@@ -128,7 +122,7 @@ impl LoginService {
             self.login_repo
                 .increment_failed_attempts(login.oid, Some(LoginFailureReason::InvalidCredential))
                 .await?;
-            return Err(AppError::from_code(AuthErrorCode::InvalidAccountOrPassword));
+            return Err(auth::error::InvalidAccountOrPassword.into());
         };
 
         // Evaluated before verification so an expired lock is lifted and the
@@ -150,7 +144,7 @@ impl LoginService {
                     )
                     .await?;
             }
-            return Err(AppError::from_code(AuthErrorCode::InvalidAccountOrPassword));
+            return Err(auth::error::InvalidAccountOrPassword.into());
         }
         admission?;
         self.password_verified(
@@ -276,7 +270,7 @@ impl LoginService {
                 .await
             {
                 error!(error = %e, "failed to update login status to mfa_enrollment_required");
-                return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
+                return Err(auth::error::InvalidLoginState.into());
             }
             if let Err(e) = self.login_repo.reset_failed_attempts(login.oid).await {
                 error!(error = %e, "failed to reset login failed attempts for MFA enrollment");

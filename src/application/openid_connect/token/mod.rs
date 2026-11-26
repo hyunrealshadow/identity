@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     application::{
-        error::{AppError, codes::token::TokenErrorCode},
+        error::AppError,
         openid_connect::provider::{OpenIdProviderService, SigningAlgorithmDetector},
     },
     data_protection::DataProtector,

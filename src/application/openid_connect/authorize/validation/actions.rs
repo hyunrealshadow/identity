@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::{
     error::{
         AppError,
-        codes::{authorize::AuthorizeErrorCode, common::CommonErrorCode},
+        codes::{authorize, common},
     },
     openid_connect::{
         authorize::{AuthorizationRequestParams, AuthorizeService},
@@ -55,14 +55,14 @@ impl AuthorizeService {
 
         let client_id =
             identity_domain::openid_connect::identifier::parse_client_id(&params.client_id)
-                .map_err(AppError::map_source(AuthorizeErrorCode::ClientIdInvalid))?;
+                .map_err(authorize::error::ClientIdInvalid::map_source())?;
 
         let client = self
             .client_repo
             .find_by_oid(client_id)
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::ClientLookupFailed))?
-            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClientNotFound))?;
+            .map_err(authorize::error::ClientLookupFailed::map_source())?
+            .ok_or_else(|| authorize::error::ClientNotFound.into_error())?;
 
         if !pushed
             && (self
@@ -74,7 +74,7 @@ impl AuthorizeService {
                     .settings
                     .require_pushed_authorization_requests)
         {
-            return Err(AppError::from_code(CommonErrorCode::InvalidRequest));
+            return Err(common::error::InvalidRequest.into_error());
         }
 
         let oauth_version = self.provider_service.oauth_version(&client);
@@ -101,10 +101,9 @@ impl AuthorizeService {
                 && payload.get("client_id").and_then(Value::as_str)
                     != Some(params.client_id.as_str())
             {
-                return Err(
-                    AppError::from_code(AuthorizeErrorCode::RequestObjectFieldMismatch)
-                        .with_param("field", "client_id"),
-                );
+                return Err(authorize::error::RequestObjectFieldMismatch::new()
+                    .field("client_id")
+                    .into_error());
             }
             Self::validate_request_object_claims(
                 &params,
@@ -134,16 +133,11 @@ impl AuthorizeService {
             .response_type
             .parse::<ResponseType>()
             .map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid)
-                    .with_param("response_type", params.response_type.as_str())
-                    .with_source(error)
+                authorize::error::ResponseTypeInvalid::new(&params.response_type).with_source(error)
             })?;
 
         if !client.allows_response_type(&response_type) {
-            return Err(
-                AppError::from_code(AuthorizeErrorCode::ClientGrantNotAllowed)
-                    .with_param("response_type", response_type.to_string()),
-            );
+            return Err(authorize::error::ClientGrantNotAllowed.into_error());
         }
 
         let redirect_uri_was_supplied = !params.redirect_uri.trim().is_empty();
@@ -154,20 +148,15 @@ impl AuthorizeService {
             params.redirect_uri = only_uri.to_owned();
         }
         if params.redirect_uri.trim().is_empty() {
-            return Err(
-                AppError::from_code(AuthorizeErrorCode::RequiredParamMissing)
-                    .with_param("fields", "redirect_uri"),
-            );
+            return Err(authorize::error::RequiredParamMissing::new("redirect_uri").into_error());
         }
 
         let redirect_uri = Url::parse(&params.redirect_uri)
-            .map_err(AppError::map_source(AuthorizeErrorCode::RedirectUriInvalid))?;
+            .map_err(authorize::error::RedirectUriInvalid::map_source())?;
 
         let response_mode = match params.response_mode.as_deref() {
             Some(value) => Some(value.parse::<ResponseMode>().map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::ResponseModeInvalid)
-                    .with_param("response_mode", value)
-                    .with_source(error)
+                authorize::error::ResponseModeInvalid::new(value).with_source(error)
             })?),
             None => None,
         };
@@ -182,16 +171,10 @@ impl AuthorizeService {
             // would mint a front-channel management token without the required
             // code-exchange snapshot validation.
             if response_type != ResponseType::Code {
-                return Err(AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid)
-                    .with_param("response_type", response_type.to_string()));
+                return Err(authorize::error::ResponseTypeInvalid::new(&response_type).into_error());
             }
             if scope.contains_offline_access() {
-                return Err(
-                    AppError::from_code(AuthorizeErrorCode::ScopeInvalid).with_param(
-                        "scopes",
-                        "management and offline_access are mutually exclusive",
-                    ),
-                );
+                return Err(authorize::error::ScopeInvalid.into_error());
             }
         }
 
@@ -209,12 +192,7 @@ impl AuthorizeService {
             )
             .await?;
         if management && !management::is_single_graphql_resource(&resources) {
-            return Err(
-                AppError::from_code(CommonErrorCode::InvalidTarget).with_param(
-                    "resources",
-                    "management requires the single GraphQL resource",
-                ),
-            );
+            return Err(common::error::InvalidTarget.into_error());
         }
 
         // Business RBAC is code-only. The approval, exchange and online
@@ -222,17 +200,16 @@ impl AuthorizeService {
         let rbac = self.provider_service.has_rbac_resource(&resources).await?;
         if rbac {
             if management {
-                return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
+                return Err(common::error::InvalidTarget.into_error());
             }
             if response_type != ResponseType::Code {
-                return Err(AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid)
-                    .with_param("response_type", response_type.to_string()));
+                return Err(authorize::error::ResponseTypeInvalid::new(&response_type).into_error());
             }
             if scope.has_api_scopes() {
-                return Err(AppError::from_code(AuthorizeErrorCode::ScopeInvalid));
+                return Err(authorize::error::ScopeInvalid.into_error());
             }
             if resources.len() != 1 {
-                return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
+                return Err(common::error::InvalidTarget.into_error());
             }
         }
 
@@ -241,7 +218,7 @@ impl AuthorizeService {
         // OAuth authorizations without it (RFC 6749 §3.1.1); the token
         // endpoint then issues no ID token for that grant.
         if response_type.includes_id_token() && !scope.contains_openid() {
-            return Err(AppError::from_code(AuthorizeErrorCode::OpenidScopeRequired));
+            return Err(authorize::error::OpenidScopeRequired.into_error());
         }
         let InteractionParameters {
             display,
@@ -318,9 +295,7 @@ impl AuthorizeService {
     ) -> Result<InteractionParameters, AppError> {
         let display = match params.display.as_deref() {
             Some(value) => Some(value.parse::<Display>().map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::DisplayValueInvalid)
-                    .with_param("display", value)
-                    .with_source(error)
+                authorize::error::DisplayValueInvalid::new(value).with_source(error)
             })?),
             None => None,
         };
@@ -331,9 +306,7 @@ impl AuthorizeService {
                     .split_whitespace()
                     .map(|item| {
                         item.parse::<PromptValue>().map_err(|error| {
-                            AppError::from_code(AuthorizeErrorCode::PromptValueInvalid)
-                                .with_param("prompt", item)
-                                .with_source(error)
+                            authorize::error::PromptValueInvalid::new(item).with_source(error)
                         })
                     })
                     .collect::<Result<HashSet<_>, _>>()?,
@@ -345,7 +318,7 @@ impl AuthorizeService {
             && prompt_set.contains(&PromptValue::None)
             && prompt_set.len() > 1
         {
-            return Err(AppError::from_code(AuthorizeErrorCode::PromptNoneCombined));
+            return Err(authorize::error::PromptNoneCombined.into_error());
         }
 
         let max_age = params
@@ -353,7 +326,7 @@ impl AuthorizeService {
             .as_deref()
             .map(|value| value.parse::<i32>())
             .transpose()
-            .map_err(AppError::map_source(AuthorizeErrorCode::MaxAgeInvalid))?
+            .map_err(authorize::error::MaxAgeInvalid::map_source())?
             .or_else(|| {
                 scope
                     .contains_openid()
@@ -361,7 +334,7 @@ impl AuthorizeService {
                     .flatten()
             });
         if max_age.is_some_and(|value| value < 0) {
-            return Err(AppError::from_code(AuthorizeErrorCode::MaxAgeInvalid));
+            return Err(authorize::error::MaxAgeInvalid.into_error());
         }
 
         let request_uri = params
@@ -369,7 +342,7 @@ impl AuthorizeService {
             .as_deref()
             .map(Url::parse)
             .transpose()
-            .map_err(AppError::map_source(AuthorizeErrorCode::RequestUriInvalid))?;
+            .map_err(authorize::error::RequestUriInvalid::map_source())?;
 
         Ok(InteractionParameters {
             display,
@@ -389,9 +362,7 @@ impl AuthorizeService {
     ) -> Result<Option<CodeChallengeMethod>, AppError> {
         let code_challenge_method = match method {
             Some(value) => Some(value.parse::<CodeChallengeMethod>().map_err(|error| {
-                AppError::from_code(AuthorizeErrorCode::CodeChallengeMethodInvalid)
-                    .with_param("code_challenge_method", value)
-                    .with_source(error)
+                authorize::error::CodeChallengeMethodInvalid::new(value).with_source(error)
             })?),
             None => None,
         };
@@ -402,30 +373,27 @@ impl AuthorizeService {
             // confidential clients, so a stolen code cannot be exchanged.
             if !has_code_challenge {
                 return Err(
-                    AppError::from_code(AuthorizeErrorCode::RequiredParamMissing)
-                        .with_param("field", "code_challenge"),
+                    authorize::error::RequiredParamMissing::new("code_challenge").into_error(),
                 );
             }
             if code_challenge_method != Some(CodeChallengeMethod::S256) {
-                return Err(
-                    AppError::from_code(AuthorizeErrorCode::CodeChallengeMethodInvalid)
-                        .with_param("code_challenge_method", "S256 required for management"),
-                );
+                return Err(authorize::error::CodeChallengeMethodInvalid::new(
+                    "S256 required for management",
+                )
+                .into_error());
             }
         }
         if challenge.is_some() || code_challenge_method.is_some() {
             if !has_code_challenge {
                 return Err(
-                    AppError::from_code(AuthorizeErrorCode::RequiredParamMissing)
-                        .with_param("field", "code_challenge"),
+                    authorize::error::RequiredParamMissing::new("code_challenge").into_error(),
                 );
             }
             if oauth_version == OAuthProtocolVersion::V2_1
                 && code_challenge_method != Some(CodeChallengeMethod::S256)
             {
                 return Err(
-                    AppError::from_code(AuthorizeErrorCode::CodeChallengeMethodInvalid)
-                        .with_param("code_challenge_method", "S256 required"),
+                    authorize::error::CodeChallengeMethodInvalid::new("S256 required").into_error(),
                 );
             }
         }
@@ -433,36 +401,29 @@ impl AuthorizeService {
         let public_only = client.metadata().effective_token_endpoint_auth_methods()
             == [TokenEndpointAuthMethod::None];
         if public_only && !client.metadata().settings.allow_public_client_flow {
-            return Err(AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid)
-                .with_param("response_type", response_type.to_string()));
+            return Err(authorize::error::ResponseTypeInvalid::new(response_type).into_error());
         }
         if public_only && response_type.includes_code() {
             if !has_code_challenge {
                 return Err(
-                    AppError::from_code(AuthorizeErrorCode::RequiredParamMissing)
-                        .with_param("field", "code_challenge"),
+                    authorize::error::RequiredParamMissing::new("code_challenge").into_error(),
                 );
             }
             if code_challenge_method != Some(CodeChallengeMethod::S256) {
                 return Err(
-                    AppError::from_code(AuthorizeErrorCode::CodeChallengeMethodInvalid)
-                        .with_param("code_challenge_method", "S256 required"),
+                    authorize::error::CodeChallengeMethodInvalid::new("S256 required").into_error(),
                 );
             }
         }
 
         if oauth_version == OAuthProtocolVersion::V2_1 && response_type.includes_access_token() {
-            return Err(AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid)
-                .with_param("response_type", response_type.to_string()));
+            return Err(authorize::error::ResponseTypeInvalid::new(response_type).into_error());
         }
         if oauth_version == OAuthProtocolVersion::V2_1
             && response_type.includes_code()
             && !has_code_challenge
         {
-            return Err(
-                AppError::from_code(AuthorizeErrorCode::RequiredParamMissing)
-                    .with_param("field", "code_challenge"),
-            );
+            return Err(authorize::error::RequiredParamMissing::new("code_challenge").into_error());
         }
 
         Ok(code_challenge_method)

@@ -36,7 +36,7 @@ use crate::{
     email::{EmailTemplateKind, EmailTemplates},
     error::{
         AppError,
-        codes::{authorization::AuthorizationErrorCode, instance::InstanceErrorCode},
+        codes::{authorization, instance},
     },
     observability::{BusinessEvent, EventSink, EventValue, NoopEventSink, error_outcome},
     rbac::RbacManagementAuthority,
@@ -61,10 +61,7 @@ impl SettingRange {
         if (self.min..=self.max).contains(&value) {
             return Ok(());
         }
-        Err(AppError::from_code(InstanceErrorCode::SettingOutOfRange)
-            .with_param("min", self.min.to_string())
-            .with_param("max", self.max.to_string())
-            .with_field(field))
+        Err(instance::error::SettingOutOfRange::new(self.min, self.max).with_field(field))
     }
 }
 
@@ -495,28 +492,22 @@ impl InstanceSettingService {
                     && !state.email_sign_in_enabled
                     && !state.email_delivery.is_configured()
                 {
-                    return Err(
-                        AppError::from_code(InstanceErrorCode::EmailDeliveryNotConfigured)
-                            .with_field("emailSignInEnabled"),
-                    );
+                    return Err(instance::error::EmailDeliveryNotConfigured
+                        .with_field("emailSignInEnabled"));
                 }
                 if password_reset
                     && !state.password_reset_enabled
                     && !state.email_delivery.is_configured()
                 {
-                    return Err(
-                        AppError::from_code(InstanceErrorCode::EmailDeliveryNotConfigured)
-                            .with_field("passwordResetEnabled"),
-                    );
+                    return Err(instance::error::EmailDeliveryNotConfigured
+                        .with_field("passwordResetEnabled"));
                 }
                 if registration
                     && !state.registration_enabled
                     && !state.email_delivery.is_configured()
                 {
-                    return Err(
-                        AppError::from_code(InstanceErrorCode::EmailDeliveryNotConfigured)
-                            .with_field("registrationEnabled"),
-                    );
+                    return Err(instance::error::EmailDeliveryNotConfigured
+                        .with_field("registrationEnabled"));
                 }
                 Ok(SettingChanges::default()
                     .set::<PasswordHashSetting>(&options)?
@@ -590,8 +581,7 @@ impl InstanceSettingService {
 pub(crate) fn validate_client_mutation_id(value: Option<&str>) -> Result<(), AppError> {
     if value.is_some_and(|value| value.chars().count() > MAX_CLIENT_MUTATION_ID_LENGTH) {
         return Err(
-            AppError::from_code(InstanceErrorCode::InvalidClientMutationId)
-                .with_param("max", MAX_CLIENT_MUTATION_ID_LENGTH.to_string())
+            instance::error::InvalidClientMutationId::new(MAX_CLIENT_MUTATION_ID_LENGTH)
                 .with_field("clientMutationId"),
         );
     }
@@ -601,21 +591,13 @@ pub(crate) fn validate_client_mutation_id(value: Option<&str>) -> Result<(), App
 pub(super) fn map_repository_error(error: InstanceSettingRepositoryError) -> AppError {
     use InstanceSettingRepositoryError as Error;
     match error {
-        error @ Error::Storage(_) => {
-            AppError::from_code(InstanceErrorCode::StorageFailed).with_source(error)
-        }
+        error @ Error::Storage(_) => instance::error::StorageFailed.with_source(error),
         Error::Authorization(source) => AppError::from(source),
-        error @ Error::AuditFailed(_) => {
-            AppError::from_code(AuthorizationErrorCode::AuditWriteFailed).with_source(error)
-        }
-        Error::LastRecoverableAdministrator => {
-            AppError::from_code(AuthorizationErrorCode::LastOwnerProtected)
-        }
-        Error::VersionConflict { current_version } => {
-            AppError::from_code(InstanceErrorCode::VersionConflict)
-                .with_param("current_version", current_version.to_string())
-                .with_field("expectedVersion")
-        }
+        error @ Error::AuditFailed(_) => authorization::error::AuditWriteFailed.with_source(error),
+        Error::LastRecoverableAdministrator => authorization::error::LastOwnerProtected.into(),
+        Error::VersionConflict { current_version } => instance::error::VersionConflict::new()
+            .current_version(current_version)
+            .with_field("expectedVersion"),
         Error::Invalid(error) => error,
     }
 }
@@ -680,7 +662,10 @@ mod tests {
         let error = DEVICE_POLLING_INTERVAL_RANGE
             .check(0, "deviceAuthorizationPollingIntervalSeconds")
             .unwrap_err();
-        assert_eq!(error.code(), InstanceErrorCode::SettingOutOfRange as u32);
+        assert_eq!(
+            error.code(),
+            crate::error::codes::instance::InstanceErrorCode::SettingOutOfRange as u32
+        );
         assert!(DEVICE_POLLING_INTERVAL_RANGE.check(60, "field").is_ok());
         assert!(DEVICE_POLLING_INTERVAL_RANGE.check(61, "field").is_err());
     }

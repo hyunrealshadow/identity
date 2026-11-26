@@ -37,7 +37,7 @@ use super::{
     scope::{advance_users_affected_by_role, copy_scope_relations, retire_built_in_scopes},
 };
 use crate::{
-    application::error::{AppError, codes::rbac::RbacErrorCode},
+    application::error::{AppError, codes::rbac},
     database::{
         audit,
         repository::{authorization_lifecycle, localized},
@@ -207,7 +207,7 @@ fn internal(message: &'static str) -> AppError {
 }
 
 fn identity_conflict() -> AppError {
-    AppError::from_code(RbacErrorCode::BuiltInIdentityConflict)
+    rbac::error::BuiltInIdentityConflict::new().into()
 }
 
 /// Display text of one built-in preset's role and group.

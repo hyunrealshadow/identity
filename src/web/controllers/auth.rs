@@ -33,7 +33,14 @@ use super::{
 use crate::{
     application::{
         authentication::{login, login::ChallengeOutcome},
-        error::{AppError, code::AppErrorCode, codes::auth::AuthErrorCode},
+        error::{
+            AppError,
+            code::AppErrorCode,
+            codes::{
+                auth::{self, AuthErrorCode},
+                authorize_http,
+            },
+        },
         openid_connect::authorize::stored_request_has_prompt,
         user::CredentialType,
     },
@@ -376,7 +383,7 @@ async fn select_account(
         ) || continue_context.stored.interaction.selection_source
             == Some(SelectionSource::Reauthentication)
         {
-            return Err(AppError::from_code(AuthErrorCode::InvalidLoginState).into());
+            return Err(auth::error::InvalidLoginState.into_error().into());
         }
     }
 
@@ -583,20 +590,11 @@ fn login_link_prefix(
         .section::<crate::application::setting::AppSettings>()
         .login_domain
         .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| {
-            AppError::from_code(
-                crate::application::error::codes::authorize_http::AuthorizeHttpErrorCode::LoginDomainNotConfigured,
-            )
-            .with_param("route", route.to_owned())
-        })?;
+        .ok_or_else(|| authorize_http::error::LoginDomainNotConfigured::new(route).into_error())?;
     let mut url = url::Url::parse(login_domain.trim())
         .and_then(|base| base.join(route))
         .map_err(|error| {
-            AppError::from_code(
-                crate::application::error::codes::authorize_http::AuthorizeHttpErrorCode::LoginDomainNotConfigured,
-            )
-            .with_param("route", route.to_owned())
-            .with_source(error)
+            authorize_http::error::LoginDomainNotConfigured::new(route).with_source(error)
         })?;
     {
         let mut query = url.query_pairs_mut();
@@ -887,7 +885,7 @@ async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> 
                 .get_user(
                     pending
                         .user_oid
-                        .ok_or_else(|| AppError::from_code(AuthErrorCode::InvalidLoginState))?
+                        .ok_or_else(|| auth::error::InvalidLoginState.into_error())?
                         .into(),
                 )
                 .await?;
@@ -994,7 +992,7 @@ async fn required_password_change(
         ChallengeOutcome::Authenticated { session, .. } => {
             render_authenticated(&ctx, &headers, &body.id, &session, res).await
         }
-        _ => Err(AppError::from_code(AuthErrorCode::InvalidLoginState).into()),
+        _ => Err(auth::error::InvalidLoginState.into_error().into()),
     }
 }
 
@@ -1166,7 +1164,7 @@ async fn confirm_mfa_enrollment(
             Ok(())
         }
         ChallengeOutcome::MfaRequired { .. } | ChallengeOutcome::MfaEnrollmentRequired { .. } => {
-            Err(AppError::from_code(AuthErrorCode::InvalidLoginState).into())
+            Err(auth::error::InvalidLoginState.into_error().into())
         }
     }
 }
@@ -1269,8 +1267,7 @@ fn challenge_form_error(error: AppError) -> AppError {
 mod form_error_tests {
     use super::{challenge_form_error, identifier_form_error, login_challenge_uri};
     use crate::application::error::{
-        AppError,
-        codes::{auth::AuthErrorCode, common::CommonErrorCode},
+        codes::{auth, common},
         kind::ErrorKind,
     };
 
@@ -1292,7 +1289,7 @@ mod form_error_tests {
 
     #[test]
     fn identifier_errors_are_attached_to_identifier_field() {
-        let error = identifier_form_error(AppError::from_code(AuthErrorCode::IdentifierRequired));
+        let error = identifier_form_error(auth::error::IdentifierRequired.into());
 
         assert_eq!(error.kind(), ErrorKind::Validation);
         let fields = error.validation().expect("field details").fields();
@@ -1303,7 +1300,7 @@ mod form_error_tests {
 
     #[test]
     fn invalid_credentials_keep_unauthorized_status_and_attach_field() {
-        let error = challenge_form_error(AppError::from_code(AuthErrorCode::InvalidCredential));
+        let error = challenge_form_error(auth::error::InvalidCredential.into());
 
         assert_eq!(error.kind(), ErrorKind::Unauthorized);
         let fields = error.validation().expect("field details").fields();
@@ -1314,7 +1311,7 @@ mod form_error_tests {
 
     #[test]
     fn login_state_errors_remain_page_level() {
-        let error = identifier_form_error(AppError::from_code(CommonErrorCode::InternalError));
+        let error = identifier_form_error(common::error::InternalError.into());
 
         assert!(error.validation().is_none());
     }

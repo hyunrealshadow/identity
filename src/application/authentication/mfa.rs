@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::{
     authentication::totp::{TotpError, TotpVerifier},
     data_protection::DataProtector,
-    error::{AppError, codes::auth::AuthErrorCode},
+    error::{AppError, codes::auth},
     observability::{BusinessEvent, EventSink, EventValue, NoopEventSink},
     user::{
         CredentialType, OtpAlgorithm, OtpCredentialData, RecoveryCodeCredentialData, UserOid,
@@ -154,7 +154,7 @@ impl MfaService {
     ) -> Result<BeginTotpEnrollment, AppError> {
         let status = self.status(user_oid).await?;
         if status.totp_enabled {
-            return Err(AppError::from_code(AuthErrorCode::TotpAlreadyEnabled));
+            return Err(auth::error::TotpAlreadyEnabled.into());
         }
         let generated = self.generator.generate(issuer, account_name)?;
         let (recovery_codes, recovery_credentials) = if status.recovery_codes_remaining == 0 {
@@ -218,11 +218,11 @@ impl MfaService {
             .data_protector
             .unprotect(ENROLLMENT_PURPOSE, enrollment_token)
             .await
-            .map_err(|_| AppError::from_code(AuthErrorCode::InvalidTotpEnrollment))?;
-        let pending: PendingTotpEnrollment = from_slice(&plaintext)
-            .map_err(|_| AppError::from_code(AuthErrorCode::InvalidTotpEnrollment))?;
+            .map_err(|_| auth::error::InvalidTotpEnrollment)?;
+        let pending: PendingTotpEnrollment =
+            from_slice(&plaintext).map_err(|_| auth::error::InvalidTotpEnrollment)?;
         if pending.user_oid != user_oid || pending.expires_at < Utc::now() {
-            return Err(AppError::from_code(AuthErrorCode::InvalidTotpEnrollment));
+            return Err(auth::error::InvalidTotpEnrollment.into());
         }
         Ok(pending)
     }
@@ -262,11 +262,11 @@ impl MfaService {
         enrolling_login: Option<Uuid>,
     ) -> Result<ConfirmTotpEnrollment, AppError> {
         if self.status(user_oid).await?.totp_enabled {
-            return Err(AppError::from_code(AuthErrorCode::TotpAlreadyEnabled));
+            return Err(auth::error::TotpAlreadyEnabled.into());
         }
         let pending = self.open_pending(user_oid, enrollment_token).await?;
         let Some(counter) = self.verifier.verify(&pending.credential, code)? else {
-            return Err(AppError::from_code(AuthErrorCode::InvalidOtp).with_field("code"));
+            return Err(auth::error::InvalidOtp.with_field("code"));
         };
         let mut otp_credential = pending.credential;
         otp_credential.last_used_counter = Some(counter);
@@ -281,7 +281,7 @@ impl MfaService {
             )
             .await?
         {
-            return Err(AppError::from_code(AuthErrorCode::TotpAlreadyEnabled));
+            return Err(auth::error::TotpAlreadyEnabled.into());
         }
         self.record_mfa_change("mfa.enrollment.confirmed", user_oid, "success");
         Ok(ConfirmTotpEnrollment { recovery_codes })
@@ -297,7 +297,7 @@ impl MfaService {
         algorithm: OtpAlgorithm,
     ) -> Result<BeginTotpEnrollment, AppError> {
         if self.status(user_oid).await?.totp_enabled {
-            return Err(AppError::from_code(AuthErrorCode::TotpAlreadyEnabled));
+            return Err(auth::error::TotpAlreadyEnabled.into());
         }
         let mut pending = self.open_pending(user_oid, enrollment_token).await?;
 
@@ -325,7 +325,7 @@ impl MfaService {
     #[tracing::instrument(skip_all, name = "mfa.disable")]
     pub async fn disable_totp(&self, user_oid: UserOid) -> Result<(), AppError> {
         if !self.credential_repo.disable_totp(user_oid).await? {
-            return Err(AppError::from_code(AuthErrorCode::TotpNotEnabled));
+            return Err(auth::error::TotpNotEnabled.into());
         }
         self.record_mfa_change("mfa.disabled", user_oid, "success");
         Ok(())
@@ -342,7 +342,7 @@ impl MfaService {
             .replace_recovery_codes_if_mfa_enabled(user_oid, recovery_credentials)
             .await?
         {
-            return Err(AppError::from_code(AuthErrorCode::MfaNotEnabled));
+            return Err(auth::error::MfaNotEnabled.into());
         }
         self.record_mfa_change("mfa.recovery_codes.regenerated", user_oid, "success");
         Ok(RegenerateRecoveryCodes { recovery_codes })

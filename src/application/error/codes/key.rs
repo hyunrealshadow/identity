@@ -1,43 +1,13 @@
-use crate::error::{code::AppErrorCode, kind::ErrorKind};
-
-/// Range: 12000-12099
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(test, derive(strum::EnumIter))]
-pub enum KeyErrorCode {
-    NotFound,
-    Revoked,
-    UnsupportedAlgorithm,
-    InvalidCertificatePem,
-    InvalidKeyType,
-    CertificateRequiresAsymmetricKey,
-    JwkGenerationFailed,
-    JwkSerializationFailed,
-}
-
-impl AppErrorCode for KeyErrorCode {
-    fn kind(self) -> ErrorKind {
-        match self {
-            Self::NotFound => ErrorKind::NotFound,
-            Self::Revoked => ErrorKind::Unauthorized,
-            Self::UnsupportedAlgorithm
-            | Self::InvalidCertificatePem
-            | Self::InvalidKeyType
-            | Self::CertificateRequiresAsymmetricKey => ErrorKind::Validation,
-
-            Self::JwkGenerationFailed | Self::JwkSerializationFailed => ErrorKind::Internal,
-        }
-    }
-
-    fn code(self) -> u32 {
-        match self {
-            Self::NotFound => 12000,
-            Self::Revoked => 12001,
-            Self::UnsupportedAlgorithm => 12002,
-            Self::InvalidCertificatePem => 12003,
-            Self::InvalidKeyType => 12004,
-            Self::CertificateRequiresAsymmetricKey => 12005,
-            Self::JwkGenerationFailed => 12006,
-            Self::JwkSerializationFailed => 12007,
-        }
+define_error_codes! {
+    /// Range: 12000-12099
+    pub enum KeyErrorCode {
+        NotFound = 12000 { kind: NotFound },
+        Revoked = 12001 { kind: Unauthorized },
+        UnsupportedAlgorithm = 12002 { kind: Validation, required: [algorithm] },
+        InvalidCertificatePem = 12003 { kind: Validation },
+        InvalidKeyType = 12004 { kind: Validation },
+        CertificateRequiresAsymmetricKey = 12005 { kind: Validation },
+        JwkGenerationFailed = 12006 { kind: Internal },
+        JwkSerializationFailed = 12007 { kind: Internal },
     }
 }

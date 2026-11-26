@@ -20,7 +20,7 @@ use super::{
     client_encryption::select_client_encryption_jwk,
     jose::{asymmetric_verifier_from_pem, asymmetric_verifier_from_public_jwk},
 };
-use crate::error::{AppError, codes::client::ClientErrorCode};
+use crate::error::{AppError, codes::client};
 
 /// What the client's active credentials cover.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -56,13 +56,11 @@ impl ClientKeyCoverageService {
         encryption_candidates: &[String],
         signature_candidates: &[String],
     ) -> Result<ClientKeyCoverage, AppError> {
-        let lookup_failed =
-            |error| AppError::from_code(ClientErrorCode::StorageFailed).with_source(error);
         let mut encryption_algs = Vec::new();
         for algorithm in encryption_candidates {
             if select_client_encryption_jwk(&*self.credentials, client_oid, algorithm)
                 .await
-                .map_err(lookup_failed)?
+                .map_err(client::error::StorageFailed::map_source())?
                 .is_some()
             {
                 encryption_algs.push(algorithm.clone());
@@ -80,7 +78,7 @@ impl ClientKeyCoverageService {
                 .credentials
                 .find_active_by_client_oid_and_type(client_oid, credential_type)
                 .await
-                .map_err(lookup_failed)?
+                .map_err(client::error::StorageFailed::map_source())?
             {
                 match credential.data {
                     OpenIdConnectCredentialData::ClientPublicKey { public_key, jwk } => {
@@ -119,7 +117,7 @@ impl ClientKeyCoverageService {
                 OpenIdConnectCredentialType::ClientSecret,
             )
             .await
-            .map_err(lookup_failed)?
+            .map_err(client::error::StorageFailed::map_source())?
             .is_empty();
 
         Ok(ClientKeyCoverage {

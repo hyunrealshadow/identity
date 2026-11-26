@@ -10,9 +10,7 @@ use tracing::{Level, error, event};
 use unic_langid::LanguageIdentifier;
 
 use crate::{
-    application::error::{
-        AppError, codes::common::CommonErrorCode, kind::ErrorKind, params::ErrorParams,
-    },
+    application::error::{AppError, codes::common, kind::ErrorKind, params::ErrorParams},
     boot::AppState,
     infrastructure::{
         i18n::{I18n, error_i18n, resolve_locale_from_headers},
@@ -104,7 +102,7 @@ pub fn app_state(depot: &Depot) -> Result<AppState, AppError> {
     depot
         .get_typed::<AppState>()
         .cloned()
-        .map_err(|_| AppError::from_code(CommonErrorCode::InternalError))
+        .map_err(|_| common::error::InternalError.into_error())
 }
 
 pub fn render_json<T: Serialize + Send>(res: &mut Response, status: StatusCode, body: T) {
@@ -263,23 +261,23 @@ pub fn insert_no_store_headers(res: &mut Response) {
 pub async fn parse_json<T: DeserializeOwned>(req: &mut Request) -> Result<T, AppError> {
     req.parse_json()
         .await
-        .map_err(|_| AppError::from_code(CommonErrorCode::InvalidRequest))
+        .map_err(|_| common::error::InvalidRequest.into_error())
 }
 
 pub async fn parse_form<T: DeserializeOwned>(req: &mut Request) -> Result<T, AppError> {
     req.parse_form()
         .await
-        .map_err(|_| AppError::from_code(CommonErrorCode::InvalidRequest))
+        .map_err(|_| common::error::InvalidRequest.into_error())
 }
 
 pub fn parse_query<T: DeserializeOwned>(req: &mut Request) -> Result<T, AppError> {
     req.parse_queries()
-        .map_err(|_| AppError::from_code(CommonErrorCode::InvalidRequest))
+        .map_err(|_| common::error::InvalidRequest.into_error())
 }
 
 pub fn parse_param<T: DeserializeOwned>(req: &Request, name: &str) -> Result<T, AppError> {
     req.param(name)
-        .ok_or_else(|| AppError::from_code(CommonErrorCode::InvalidRequest))
+        .ok_or_else(|| common::error::InvalidRequest.into_error())
 }
 
 pub fn write_error_response(
@@ -403,7 +401,7 @@ pub fn render_app_error_json(res: &mut Response, error: AppError) {
 /// error code; the page also shows the request's correlation IDs.
 pub fn render_not_found(req: &Request, depot: &Depot, res: &mut Response) {
     let status = StatusCode::NOT_FOUND;
-    let error = AppError::from_code(CommonErrorCode::NotFound);
+    let error = common::error::NotFound.into_error();
     let Ok(ctx) = app_state(depot) else {
         render_app_error_json(res, error);
         return;
@@ -479,13 +477,7 @@ mod tests {
 
     use super::{JsonWebResult, WebResult, log_app_error};
     use crate::{
-        application::error::{
-            AppError,
-            codes::{
-                authorize_http::AuthorizeHttpErrorCode, common::CommonErrorCode,
-                install::InstallErrorCode,
-            },
-        },
+        application::error::codes::{authorize_http, common, install},
         infrastructure::{i18n::init_error_i18n, web::tera::build_i18n},
     };
 
@@ -511,20 +503,13 @@ mod tests {
             .with_writer(move || writer.clone())
             .finish();
         with_default(subscriber, || {
-            let error =
-                AppError::from_code(CommonErrorCode::InternalError).with_source(ErrorContext::new(
-                    "client_authorization.lock_refresh_family",
-                    Error::other("database unavailable"),
-                ));
+            let error = common::error::InternalError.with_source(ErrorContext::new(
+                "client_authorization.lock_refresh_family",
+                Error::other("database unavailable"),
+            ));
             log_app_error(&error, "internal-test");
-            log_app_error(
-                &AppError::from_code(CommonErrorCode::Unauthorized),
-                "rejection-test",
-            );
-            log_app_error(
-                &AppError::from_code(CommonErrorCode::InvalidRequest),
-                "validation-test",
-            );
+            log_app_error(&common::error::Unauthorized.into(), "rejection-test");
+            log_app_error(&common::error::InvalidRequest.into(), "validation-test");
         });
         let output = String::from_utf8(bytes.lock().unwrap().clone()).unwrap();
         let internal = output
@@ -556,13 +541,15 @@ mod tests {
 
     #[handler]
     async fn direct_app_error() -> WebResult<()> {
-        Err(AppError::from_code(AuthorizeHttpErrorCode::ContinueInteractionUnavailable).into())
+        Err(authorize_http::error::ContinueInteractionUnavailable
+            .into_error()
+            .into())
     }
 
     #[handler]
     async fn validation_app_error() -> JsonWebResult<()> {
-        Err(AppError::from_code(CommonErrorCode::ValidationFailed)
-            .with_field_error("email", AppError::from_code(InstallErrorCode::EmailInvalid))
+        Err(common::error::ValidationFailed::new()
+            .with_field_error("email", install::error::EmailInvalid)
             .into())
     }
 
@@ -605,7 +592,7 @@ mod tests {
 
     #[test]
     fn diagnostics_preserve_internal_error_details() {
-        let error = AppError::from_code(CommonErrorCode::InternalError).with_source(Error::new(
+        let error = common::error::InternalError.with_source(Error::new(
             ErrorKind::ConnectionRefused,
             "database unavailable",
         ));

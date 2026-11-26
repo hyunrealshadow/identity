@@ -2,7 +2,7 @@ use http::{Method, header};
 use identity_application::{
     error::{
         AppError,
-        codes::{authorize_http::AuthorizeHttpErrorCode, common::CommonErrorCode},
+        codes::{authorize_http, common},
     },
     openid_connect::authorize::AuthorizationRequestParams,
 };
@@ -116,22 +116,19 @@ pub async fn extract_authorize_request(
                 .unwrap_or(false);
 
             if !is_form {
-                return Err(AppError::from_code(
-                    AuthorizeHttpErrorCode::PostContentTypeInvalid,
-                ));
+                return Err(authorize_http::error::PostContentTypeInvalid.into());
             }
 
             let body = request
                 .payload_with_max_size(64 * 1024)
                 .await
-                .map_err(AppError::map_source(CommonErrorCode::InvalidRequest))?;
+                .map_err(common::error::InvalidRequest::map_source())?;
 
             parse_authorize_pairs(body)
         }
         _ => {
             return Err(
-                AppError::from_code(AuthorizeHttpErrorCode::MethodNotAllowed)
-                    .with_param("method", request.method().as_str()),
+                authorize_http::error::MethodNotAllowed::new(request.method().as_str()).into(),
             );
         }
     };
@@ -172,10 +169,7 @@ pub fn authorize_input_error(raw: &RawAuthorizeRequest) -> Option<AppError> {
         must_show_page.push("redirect_uri");
     }
 
-    Some(
-        AppError::from_code(AuthorizeHttpErrorCode::RequiredParamMissing)
-            .with_param("fields", must_show_page.join(", ")),
-    )
+    Some(authorize_http::error::RequiredParamMissing::new(must_show_page.join(", ")).into())
 }
 
 #[cfg(test)]

@@ -79,16 +79,14 @@ impl RbacManagementService {
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
             let uri = command.uri.trim().to_owned();
             if !resource::valid_resource_uri(&uri) {
-                return Err(AppError::from_code(RbacErrorCode::InvalidResourceUri)
-                    .with_param("uri", uri)
+                return Err(rbac_codes::error::InvalidResourceUri::new()
+                    .uri(uri)
                     .with_field("uri"));
             }
             if uri == API_RESOURCE {
-                return Err(
-                    AppError::from_code(RbacErrorCode::ReservedResourceProtected)
-                        .with_param("resource", uri)
-                        .with_field("uri"),
-                );
+                return Err(rbac_codes::error::ReservedResourceProtected::new()
+                    .resource(uri)
+                    .with_field("uri"));
             }
             let name = validate_resource_name(&command.name)?;
             let resource_oid = ResourceOid::new();
@@ -126,7 +124,7 @@ impl RbacManagementService {
                 .map(validate_resource_name)
                 .transpose()?;
             if name.is_none() {
-                return Err(AppError::from_code(RbacErrorCode::EmptyUpdate));
+                return Err(rbac_codes::error::EmptyUpdate.into_error());
             }
             let record = self
                 .repository

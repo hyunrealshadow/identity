@@ -2,7 +2,7 @@ use crate::graphql::schema::access::access;
 use async_graphql::{Context, Object, Result};
 use identity_application::{
     authorization::ManagementTarget,
-    error::{AppError, codes::rbac::RbacErrorCode},
+    error::codes::rbac,
     rbac::{CreateScopeCommand, ScopeDescription, ScopeStateCommand, UpdateScopeCommand},
 };
 use identity_domain::{authorization::ManagementScope, rbac::ResourceOid};
@@ -181,9 +181,7 @@ fn check_optional_localized(
         if len.is_some_and(|len| len > 20) {
             return Err(app_error(
                 ctx,
-                AppError::from_code(RbacErrorCode::InvalidCollectionSize)
-                    .with_param("max", "20")
-                    .with_field(field),
+                rbac::error::InvalidCollectionSize::new(20).with_field(field),
             ));
         }
     }

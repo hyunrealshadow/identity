@@ -3,7 +3,7 @@ use identity_application::{
     error::{
         AppError,
         code::AppErrorCode,
-        codes::{common::CommonErrorCode, registration::RegistrationErrorCode},
+        codes::{common, registration},
         kind::ErrorKind,
     },
     openid_connect::registration::{DynamicClientRegistrationRequest, DynamicClientUpdateRequest},
@@ -25,9 +25,15 @@ use crate::{
 /// Map a registration `AppError` to an RFC 7591 §3.3 `error` value.
 fn registration_rfc_error_code(error: &AppError) -> &'static str {
     match error.code() {
-        c if c == RegistrationErrorCode::InvalidRedirectUri.code() => "invalid_redirect_uri",
-        c if c == RegistrationErrorCode::InvalidClientMetadata.code() => "invalid_client_metadata",
-        c if c == RegistrationErrorCode::InvalidRegistrationAccessToken.code() => "invalid_token",
+        c if c == registration::RegistrationErrorCode::InvalidRedirectUri.code() => {
+            "invalid_redirect_uri"
+        }
+        c if c == registration::RegistrationErrorCode::InvalidClientMetadata.code() => {
+            "invalid_client_metadata"
+        }
+        c if c == registration::RegistrationErrorCode::InvalidRegistrationAccessToken.code() => {
+            "invalid_token"
+        }
         _ => match error.kind() {
             ErrorKind::Forbidden => "insufficient_scope",
             ErrorKind::Unauthorized => "invalid_token",
@@ -199,7 +205,7 @@ async fn check_initial_access_token(
     let ctx = app_state(depot)?;
     let registration_config = depot
         .get_typed::<DynamicClientRegistrationConfig>()
-        .map_err(|_| AppError::from_code(CommonErrorCode::InternalError))?;
+        .map_err(|_| common::error::InternalError.into_error())?;
     validate_initial_access_token(registration_config, ctx.context().is_conformance(), req)?;
     Ok(())
 }
@@ -228,9 +234,7 @@ fn validate_initial_access_token(
     if initial_access_token_matches(config, is_conformance, provided) {
         Ok(())
     } else {
-        Err(AppError::from_code(
-            RegistrationErrorCode::InvalidRegistrationAccessToken,
-        ))
+        Err(registration::error::InvalidRegistrationAccessToken.into())
     }
 }
 
@@ -317,7 +321,7 @@ fn bearer_token(req: &Request) -> Result<&str, AppError> {
         .and_then(|value| value.to_str().ok())
         .and_then(|value| value.strip_prefix("Bearer "))
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| AppError::from_code(RegistrationErrorCode::InvalidRegistrationAccessToken))
+        .ok_or_else(|| registration::error::InvalidRegistrationAccessToken.into_error())
 }
 
 #[cfg(test)]

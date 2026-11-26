@@ -2,7 +2,6 @@ use std::{sync::Arc, time::SystemTime};
 
 use identity_domain::{auth::SessionOid, openid_connect::identifier};
 use josekit::{
-    JoseError,
     jws::{
         ES256, ES256K, ES384, ES512, EdDSA, JwsHeader, JwsSigner, PS256, PS384, PS512, RS256,
         RS384, RS512,
@@ -18,7 +17,7 @@ use crate::{
     application::{
         error::{
             AppError,
-            codes::{common::CommonErrorCode, openid_connect::OpenIdConnectErrorCode},
+            codes::{common, openid_connect},
         },
         openid_connect::{jose::asymmetric_verifier_from_pem, provider::OpenIdProviderService},
     },
@@ -221,9 +220,8 @@ impl LogoutService {
             });
         };
 
-        let redirect_uri = Url::parse(raw_redirect_uri).map_err(AppError::map_source(
-            OpenIdConnectErrorCode::PostLogoutRedirectUriInvalid,
-        ))?;
+        let redirect_uri = Url::parse(raw_redirect_uri)
+            .map_err(openid_connect::error::PostLogoutRedirectUriInvalid::map_source())?;
 
         let client_id = request
             .client_id
@@ -231,11 +229,10 @@ impl LogoutService {
             .map(str::to_owned)
             .or_else(|| audience_client_id(id_token_hint.as_ref()));
 
-        let client_id = client_id
-            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::IdTokenHintRequired))?;
-        let client_oid = identifier::parse_client_id(&client_id).map_err(AppError::map_source(
-            OpenIdConnectErrorCode::LogoutClientInvalid,
-        ))?;
+        let client_id =
+            client_id.ok_or_else(|| openid_connect::error::IdTokenHintRequired.into_error())?;
+        let client_oid = identifier::parse_client_id(&client_id)
+            .map_err(openid_connect::error::LogoutClientInvalid::map_source())?;
 
         if id_token_hint.as_ref().is_some_and(|claims| {
             !claims
@@ -247,19 +244,15 @@ impl LogoutService {
                     .as_ref()
                     .is_some_and(|authorized_party| authorized_party != &client_id)
         }) {
-            return Err(AppError::from_code(
-                OpenIdConnectErrorCode::IdTokenHintInvalid,
-            ));
+            return Err(openid_connect::error::IdTokenHintInvalid.into_error());
         }
 
         let client = self
             .client_repo
             .find_by_oid(client_oid)
             .await
-            .map_err(AppError::map_source(
-                OpenIdConnectErrorCode::LogoutClientLookupFailed,
-            ))?
-            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::LogoutClientNotFound))?;
+            .map_err(openid_connect::error::LogoutClientLookupFailed::map_source())?
+            .ok_or_else(|| openid_connect::error::LogoutClientNotFound.into_error())?;
 
         validate_registered_post_logout_redirect_uri(&client, &redirect_uri)?;
 
@@ -321,9 +314,7 @@ impl LogoutService {
             .client_repo
             .find_frontchannel_logout_clients_by_session_oid(session_oid)
             .await
-            .map_err(AppError::map_source(
-                OpenIdConnectErrorCode::LogoutClientLookupFailed,
-            ))?;
+            .map_err(openid_connect::error::LogoutClientLookupFailed::map_source())?;
 
         Ok(clients
             .into_iter()
@@ -378,9 +369,7 @@ impl LogoutService {
             .client_repo
             .find_backchannel_logout_clients_by_session_oid(session_oid)
             .await
-            .map_err(AppError::map_source(
-                OpenIdConnectErrorCode::LogoutClientLookupFailed,
-            ))?;
+            .map_err(openid_connect::error::LogoutClientLookupFailed::map_source())?;
         let candidates = clients
             .into_iter()
             .filter_map(|client| {
@@ -500,7 +489,7 @@ impl LogoutService {
             }
         }
 
-        Err(AppError::from_code(CommonErrorCode::InternalError))
+        Err(common::error::InternalError.into_error())
     }
 
     fn sign_logout_token(
@@ -548,7 +537,7 @@ impl LogoutService {
     }
 
     async fn verify_id_token_hint(&self, raw: &str) -> Result<IdTokenHintClaims, AppError> {
-        let invalid = || AppError::from_code(OpenIdConnectErrorCode::IdTokenHintInvalid);
+        let invalid = || openid_connect::error::IdTokenHintInvalid.into_error();
         let header = jwt::decode_header(raw).map_err(|_| invalid())?;
         let alg = header
             .claim("alg")
@@ -588,9 +577,7 @@ impl LogoutService {
 
         let issuer = self.provider_service.issuer()?;
         if payload.issuer() != Some(issuer.as_str()) {
-            return Err(AppError::from_code(
-                OpenIdConnectErrorCode::IdTokenHintIssuerInvalid,
-            ));
+            return Err(openid_connect::error::IdTokenHintIssuerInvalid.into_error());
         }
 
         let audience = payload
@@ -632,9 +619,7 @@ fn validate_registered_post_logout_redirect_uri(
     if registered {
         Ok(())
     } else {
-        Err(AppError::from_code(
-            OpenIdConnectErrorCode::PostLogoutRedirectUriNotRegistered,
-        ))
+        Err(openid_connect::error::PostLogoutRedirectUriNotRegistered.into_error())
     }
 }
 
@@ -652,7 +637,7 @@ fn build_logout_token_signer(
     alg: JwaSigningAlgorithm,
 ) -> Result<Box<dyn JwsSigner>, AppError> {
     let pem = private_key_pem.as_bytes();
-    let err = |e: JoseError| AppError::from_code(CommonErrorCode::InternalError).with_source(e);
+    let err = common::error::InternalError::map_source();
     match alg {
         JwaSigningAlgorithm::Rs256 => Ok(Box::new(RS256.signer_from_pem(pem).map_err(err)?)),
         JwaSigningAlgorithm::Rs384 => Ok(Box::new(RS384.signer_from_pem(pem).map_err(err)?)),

@@ -1,6 +1,6 @@
 use super::{ChallengeOutcome, LoginService, SessionContext, requires_phishing_resistance};
 use crate::{
-    error::{AppError, codes::auth::AuthErrorCode},
+    error::{AppError, codes::auth},
     user::model::User,
 };
 use chrono::{DateTime, Duration, Utc};
@@ -138,7 +138,7 @@ impl LoginService {
 
     pub(super) async fn ensure_user_can_authenticate(&self, user: &User) -> Result<(), AppError> {
         if !user.enabled {
-            return Err(AppError::from_code(AuthErrorCode::UserLocked));
+            return Err(auth::error::UserLocked.into());
         }
         if !user.locked {
             return Ok(());
@@ -148,7 +148,7 @@ impl LoginService {
                 self.user_repo.reset_failed_attempts(user.oid).await?;
                 Ok(())
             }
-            _ => Err(AppError::from_code(AuthErrorCode::UserLocked)),
+            _ => Err(auth::error::UserLocked.into()),
         }
     }
 }

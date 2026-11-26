@@ -18,7 +18,7 @@ use super::{Seed, oauth_resource};
 use crate::{
     application::error::{
         AppError,
-        codes::{authorization::AuthorizationErrorCode, rbac::RbacErrorCode},
+        codes::{authorization, rbac},
     },
     domain::openid_connect::{
         ApiScope, is_scope_pattern, model::claim::StandardScopes, scope_pattern_matches,
@@ -787,11 +787,11 @@ ORDER BY user_id
 }
 
 fn reserved_scope_error(scope: String) -> AppError {
-    AppError::from_code(AuthorizationErrorCode::ReservedManagementScope).with_param("scope", scope)
+    authorization::error::ReservedManagementScope::new(scope).into()
 }
 
 fn built_in_identity_conflict() -> AppError {
-    AppError::from_code(RbacErrorCode::BuiltInIdentityConflict)
+    rbac::error::BuiltInIdentityConflict::new().into()
 }
 
 /// One built-in scope row as the seed expects it to be stored.

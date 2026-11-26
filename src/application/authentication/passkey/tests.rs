@@ -6,7 +6,7 @@ use crate::{
             VerifiedPasskey,
         },
     },
-    error::{AppError, code::AppErrorCode as _, codes::auth::AuthErrorCode},
+    error::{AppError, code::AppErrorCode as _, codes::auth},
     user::{
         RecoveryCodeCredentialData, UserOid,
         credential::{MAX_PASSKEYS_PER_USER, PasskeyCredentialData},
@@ -28,7 +28,7 @@ use std::{
 use uuid::Uuid;
 
 fn invalid() -> AppError {
-    AppError::from_code(AuthErrorCode::InvalidCredential)
+    auth::error::InvalidCredential.into()
 }
 type Challenge = (ChallengeContext, Value, DateTime<Utc>);
 #[derive(Default)]
@@ -65,7 +65,7 @@ impl PasskeyCredentialRepository for MemoryRepo {
         }
         let owned = keys.entry(user).or_default();
         if owned.len() >= MAX_PASSKEYS_PER_USER {
-            return Err(AppError::from_code(AuthErrorCode::PasskeyLimitReached));
+            return Err(auth::error::PasskeyLimitReached::new(MAX_PASSKEYS_PER_USER).into());
         }
         owned.push(key);
         *self.registration_recovery_codes.lock().unwrap() = recovery_codes;
@@ -324,7 +324,10 @@ async fn passkey_registration_stops_at_five_before_creating_a_challenge() {
         .await
         .err()
         .unwrap();
-    assert_eq!(error.code(), AuthErrorCode::PasskeyLimitReached.code());
+    assert_eq!(
+        error.code(),
+        auth::AuthErrorCode::PasskeyLimitReached.code()
+    );
     assert!(repo.challenges.lock().unwrap().is_empty());
 }
 

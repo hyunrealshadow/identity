@@ -2,7 +2,7 @@
 use async_trait::async_trait;
 use identity_application::{
     auth::password_policy::BreachedPasswordChecker,
-    error::{AppError, codes::auth::AuthErrorCode},
+    error::{AppError, codes::auth},
 };
 use openssl::sha;
 use reqwest::{Client, StatusCode, Url, redirect::Policy};
@@ -54,7 +54,7 @@ impl PwnedPasswordChecker {
 }
 
 fn unavailable() -> AppError {
-    AppError::from_code(AuthErrorCode::PasswordCheckUnavailable)
+    auth::error::PasswordCheckUnavailable.into_error()
 }
 
 #[async_trait]

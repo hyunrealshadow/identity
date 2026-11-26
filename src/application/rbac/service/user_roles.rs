@@ -85,7 +85,9 @@ impl RbacManagementService {
     /// Roles referenced by one page of relation edges.
     #[tracing::instrument(skip_all, name = "rbac.role.find_many")]
     pub async fn find_roles(&self, oids: Vec<RoleOid>) -> Result<Vec<RoleRecord>, AppError> {
-        let oids = dedupe_batch_lookups(oids, RbacErrorCode::InvalidCollectionSize)?;
+        let oids = dedupe_batch_lookups(oids, |max| {
+            rbac_codes::error::InvalidCollectionSize::new(max).into()
+        })?;
         self.repository
             .find_roles(oids)
             .await

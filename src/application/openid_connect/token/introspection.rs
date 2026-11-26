@@ -12,7 +12,7 @@ use uuid::Uuid;
 use super::{TokenIntrospectionParams, TokenService, resolve_client_id};
 use crate::{
     domain::auth::SessionStatus,
-    error::{AppError, codes::token::TokenErrorCode},
+    error::{AppError, codes::token},
     openid_connect::{
         jwt_checks::validate_required_exp_and_optional_window,
         management::{ManagementLivePorts, validate_management_authorization},
@@ -29,7 +29,7 @@ impl TokenService {
         params: TokenIntrospectionParams,
     ) -> Result<Value, AppError> {
         if params.client_secret.is_none() && params.client_assertion.is_none() {
-            return Err(AppError::from_code(TokenErrorCode::ClientAuthRequired));
+            return Err(token::error::ClientAuthRequired.into_error());
         }
         let client_id = resolve_client_id(
             params.client_id,
@@ -82,9 +82,7 @@ impl TokenService {
             .client_authorization_repo
             .find_by_oid(oid)
             .await
-            .map_err(AppError::map_source(
-                TokenErrorCode::RefreshTokenLookupFailed,
-            ))?;
+            .map_err(token::error::RefreshTokenLookupFailed::map_source())?;
         let Some(record) = record else {
             return Ok(json!({"active": false}));
         };
@@ -165,9 +163,7 @@ impl TokenService {
                 .device_repo
                 .find_device_authorization_by_oid(device)
                 .await
-                .map_err(AppError::map_source(
-                    TokenErrorCode::DeviceRelationLookupFailed,
-                ))?
+                .map_err(token::error::DeviceRelationLookupFailed::map_source())?
                 .is_some_and(|relation| relation.revoked_at.is_none() && relation.expires_at > now);
             if !active {
                 return Ok(json!({"active": false}));
@@ -177,9 +173,7 @@ impl TokenService {
             let active = repo
                 .find_by_oid(session)
                 .await
-                .map_err(AppError::map_source(
-                    TokenErrorCode::RefreshTokenLookupFailed,
-                ))?
+                .map_err(token::error::RefreshTokenLookupFailed::map_source())?
                 .is_some_and(|session| {
                     session.revoked_at.is_none()
                         && session.status == SessionStatus::ACTIVE
@@ -195,9 +189,7 @@ impl TokenService {
                 .user_repo
                 .find_by_oid(UserOid(user_oid))
                 .await
-                .map_err(AppError::map_source(
-                    TokenErrorCode::RefreshTokenLookupFailed,
-                ))?;
+                .map_err(token::error::RefreshTokenLookupFailed::map_source())?;
             if !user.is_some_and(|user| user.enabled && !user.locked) {
                 return Ok(json!({"active": false}));
             }
@@ -228,7 +220,7 @@ impl TokenService {
                 .client_repo
                 .find_by_oid(client.client().oid)
                 .await
-                .map_err(AppError::map_source(TokenErrorCode::ClientLookupFailed))?;
+                .map_err(token::error::ClientLookupFailed::map_source())?;
             let Some(live_client) = live_client else {
                 return Ok(json!({"active": false}));
             };
@@ -273,13 +265,13 @@ impl TokenService {
                 .provider_service
                 .has_rbac_resource(&resource_audience)
                 .await
-                .map_err(AppError::map_source(TokenErrorCode::ClientLookupFailed))?;
+                .map_err(token::error::ClientLookupFailed::map_source())?;
         if let Some(persisted) = persisted_business {
             let live_client = self
                 .client_repo
                 .find_by_oid(client.client().oid)
                 .await
-                .map_err(AppError::map_source(TokenErrorCode::ClientLookupFailed))?;
+                .map_err(token::error::ClientLookupFailed::map_source())?;
             let Some(live_client) = live_client else {
                 return Ok(json!({"active": false}));
             };

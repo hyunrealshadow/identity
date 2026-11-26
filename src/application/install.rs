@@ -17,7 +17,7 @@ use crate::{
     application::{
         error::{
             AppError,
-            codes::{common::CommonErrorCode, install::InstallErrorCode},
+            codes::{common, install},
         },
         setting::{PasswordHashSetting, SettingsSource, runtime::RefreshableSetting},
     },
@@ -140,7 +140,7 @@ impl InstallService {
 
     async fn install_inner(&self, input: InstallInput) -> Result<(), AppError> {
         if self.is_initialized() {
-            return Err(AppError::from_code(InstallErrorCode::AlreadyInitialized));
+            return Err(install::error::AlreadyInitialized.into());
         }
 
         let input = validate_install_input(input)?;
@@ -231,7 +231,7 @@ struct ValidatedInstallInput {
 }
 
 fn validate_install_input(input: InstallInput) -> Result<ValidatedInstallInput, AppError> {
-    let mut validation = AppError::from_code(CommonErrorCode::ValidationFailed);
+    let mut validation = common::error::ValidationFailed.into_error();
     let username = collect_field(
         &mut validation,
         "username",
@@ -242,7 +242,7 @@ fn validate_install_input(input: InstallInput) -> Result<ValidatedInstallInput, 
         &mut validation,
         "password",
         if input.password.is_empty() {
-            Err(AppError::from_code(InstallErrorCode::PasswordRequired))
+            Err(install::error::PasswordRequired.into())
         } else {
             Ok(input.password.clone())
         },
@@ -294,8 +294,7 @@ fn normalize_issuer_url(domain: &str) -> Result<Url, AppError> {
     } else {
         format!("https://{domain}")
     };
-    let url =
-        Url::parse(&candidate).map_err(|_| AppError::from_code(InstallErrorCode::DomainInvalid))?;
+    let url = Url::parse(&candidate).map_err(|_| install::error::DomainInvalid)?;
     if url.scheme() != "https"
         || url.host_str().is_none()
         || url.host_str().is_some_and(|host| host.contains('*'))
@@ -304,7 +303,7 @@ fn normalize_issuer_url(domain: &str) -> Result<Url, AppError> {
         || url.query().is_some()
         || url.fragment().is_some()
     {
-        return Err(AppError::from_code(InstallErrorCode::DomainInvalid));
+        return Err(install::error::DomainInvalid.into());
     }
     Ok(url)
 }
@@ -313,10 +312,9 @@ fn normalize_issuer_url(domain: &str) -> Result<Url, AppError> {
 /// by the application and is never supplied by the installer.
 fn normalize_console_url(value: &str) -> Result<Url, AppError> {
     if value.trim().is_empty() {
-        return Err(AppError::from_code(InstallErrorCode::ConsoleUrlRequired));
+        return Err(install::error::ConsoleUrlRequired.into());
     }
-    let mut url = Url::parse(value.trim())
-        .map_err(|_| AppError::from_code(InstallErrorCode::ConsoleUrlInvalid))?;
+    let mut url = Url::parse(value.trim()).map_err(|_| install::error::ConsoleUrlInvalid)?;
     if url.scheme() != "https"
         || url.host_str().is_none()
         || url.host_str().is_some_and(|host| host.contains('*'))
@@ -326,15 +324,14 @@ fn normalize_console_url(value: &str) -> Result<Url, AppError> {
         || url.query().is_some()
         || url.fragment().is_some()
     {
-        return Err(AppError::from_code(InstallErrorCode::ConsoleUrlInvalid));
+        return Err(install::error::ConsoleUrlInvalid.into());
     }
     url.set_path("/console");
     Ok(url)
 }
 
 fn normalize_application_url(value: &str) -> Result<Url, AppError> {
-    let mut url = Url::parse(value.trim())
-        .map_err(|_| AppError::from_code(InstallErrorCode::ApplicationUrlInvalid))?;
+    let mut url = Url::parse(value.trim()).map_err(|_| install::error::ApplicationUrlInvalid)?;
     if url.scheme() != "https"
         || url.host_str().is_none()
         || url.host_str().is_some_and(|host| host.contains('*'))
@@ -344,7 +341,7 @@ fn normalize_application_url(value: &str) -> Result<Url, AppError> {
         || url.query().is_some()
         || url.fragment().is_some()
     {
-        return Err(AppError::from_code(InstallErrorCode::ApplicationUrlInvalid));
+        return Err(install::error::ApplicationUrlInvalid.into());
     }
     url.set_path("");
     Ok(url)
@@ -367,13 +364,12 @@ fn collect_field<T>(
 fn normalize_required(value: &str, field: &'static str) -> Result<String, AppError> {
     let value = value.trim();
     if value.is_empty() {
-        let code = match field {
-            "email" => InstallErrorCode::EmailRequired,
-            "password" => InstallErrorCode::PasswordRequired,
-            "domain" => InstallErrorCode::DomainRequired,
-            _ => InstallErrorCode::UsernameRequired,
-        };
-        return Err(AppError::from_code(code));
+        return Err(match field {
+            "email" => install::error::EmailRequired.into(),
+            "password" => install::error::PasswordRequired.into(),
+            "domain" => install::error::DomainRequired.into(),
+            _ => install::error::UsernameRequired.into(),
+        });
     }
 
     Ok(value.to_owned())
@@ -385,7 +381,7 @@ fn normalize_domain(domain: &str) -> Result<String, AppError> {
     // the dot-presence check since it is a full URL rather than a bare hostname.
     let is_url = domain.contains("://");
     if domain.contains(' ') || (!is_url && !domain.contains('.')) {
-        return Err(AppError::from_code(InstallErrorCode::DomainInvalid));
+        return Err(install::error::DomainInvalid.into());
     }
 
     Ok(domain)
@@ -393,9 +389,9 @@ fn normalize_domain(domain: &str) -> Result<String, AppError> {
 
 fn normalize_email(email: &str) -> Result<String, AppError> {
     normalization_normalize_email(email).map_err(|error| match error {
-        EmailNormalizationError::Empty => AppError::from_code(InstallErrorCode::EmailRequired),
+        EmailNormalizationError::Empty => install::error::EmailRequired.into(),
         EmailNormalizationError::InvalidFormat | EmailNormalizationError::InvalidDomain => {
-            AppError::from_code(InstallErrorCode::EmailInvalid)
+            install::error::EmailInvalid.into()
         }
     })
 }
@@ -417,10 +413,7 @@ fn install_key_algorithm(
 ) -> Result<AsymmetricKeyAlgorithm, AppError> {
     algorithm
         .key_algorithm_for_new_key(requested)
-        .ok_or_else(|| {
-            AppError::from_code(InstallErrorCode::UnsupportedAlgorithm)
-                .with_param("algorithm", algorithm.as_str())
-        })
+        .ok_or_else(|| install::error::UnsupportedAlgorithm::new(algorithm.as_str()).into())
 }
 
 #[cfg(test)]

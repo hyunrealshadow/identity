@@ -1,28 +1,9 @@
-use crate::error::{code::AppErrorCode, kind::ErrorKind};
-
-/// Error codes for data protection (encryption/decryption) operations.
-/// Range: 14000-14099
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(test, derive(strum::EnumIter))]
-pub enum DataProtectionErrorCode {
-    InvalidProtectedPayload,
-    KeyRingEmpty,
-    EncryptionFailed,
-}
-
-impl AppErrorCode for DataProtectionErrorCode {
-    fn kind(self) -> ErrorKind {
-        match self {
-            Self::InvalidProtectedPayload => ErrorKind::Validation,
-            Self::KeyRingEmpty | Self::EncryptionFailed => ErrorKind::Internal,
-        }
-    }
-
-    fn code(self) -> u32 {
-        match self {
-            Self::InvalidProtectedPayload => 14000,
-            Self::KeyRingEmpty => 14001,
-            Self::EncryptionFailed => 14002,
-        }
+define_error_codes! {
+    /// Error codes for data protection (encryption/decryption) operations.
+    /// Range: 14000-14099
+    pub enum DataProtectionErrorCode {
+        InvalidProtectedPayload = 14000 { kind: Validation },
+        KeyRingEmpty = 14001 { kind: Internal },
+        EncryptionFailed = 14002 { kind: Internal },
     }
 }

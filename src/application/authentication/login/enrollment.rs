@@ -18,7 +18,11 @@ use crate::{
         mfa::{BeginTotpEnrollment, MfaService},
         passkey::{PasskeyOptions, PasskeyService},
     },
-    error::{AppError, code::AppErrorCode as _, codes::auth::AuthErrorCode},
+    error::{
+        AppError,
+        code::AppErrorCode as _,
+        codes::auth::{self, AuthErrorCode},
+    },
     user::model::{CredentialType, OtpAlgorithm, User},
 };
 use chrono::{DateTime, Utc};
@@ -113,7 +117,7 @@ impl LoginService {
             .challenges
             .latest(context)
             .await?
-            .ok_or_else(|| AppError::from_code(AuthErrorCode::InvalidTotpEnrollment))?;
+            .ok_or(auth::error::InvalidTotpEnrollment)?;
         let token = enrollment_token(&challenge)?;
         let changed = enrollment
             .mfa
@@ -152,13 +156,13 @@ impl LoginService {
             .await?;
         if login.failed_attempts >= MAX_OTP_ATTEMPTS {
             self.fail_login_for_too_many_otp_attempts(login.oid).await;
-            return Err(AppError::from_code(AuthErrorCode::TooManyAttempts));
+            return Err(auth::error::TooManyAttempts.into());
         }
         let challenge = enrollment
             .challenges
             .latest(enrollment_context(&login, &user))
             .await?
-            .ok_or_else(|| AppError::from_code(AuthErrorCode::InvalidTotpEnrollment))?;
+            .ok_or(auth::error::InvalidTotpEnrollment)?;
         let token = enrollment_token(&challenge)?;
 
         match enrollment
@@ -175,7 +179,7 @@ impl LoginService {
                         .await?;
                     if attempts >= MAX_OTP_ATTEMPTS {
                         self.fail_login_for_too_many_otp_attempts(login.oid).await;
-                        return Err(AppError::from_code(AuthErrorCode::TooManyAttempts));
+                        return Err(auth::error::TooManyAttempts.into());
                     }
                 }
                 return Err(error);
@@ -252,13 +256,13 @@ impl LoginService {
     fn enrollment_dependencies(&self) -> Result<&LoginMfaEnrollmentDependencies, AppError> {
         self.mfa_enrollment
             .as_ref()
-            .ok_or_else(|| AppError::from_code(AuthErrorCode::InvalidLoginState))
+            .ok_or_else(|| auth::error::InvalidLoginState.into())
     }
 
     fn passkey_service(&self) -> Result<&PasskeyService, AppError> {
         self.passkeys
             .as_deref()
-            .ok_or_else(|| AppError::from_code(AuthErrorCode::CredentialTypeUnsupported))
+            .ok_or_else(|| auth::error::CredentialTypeUnsupported::new("passkey").into())
     }
 
     /// The enrollment-phase login and its user, when the requested class asks
@@ -277,16 +281,14 @@ impl LoginService {
             {
                 error!(error = %e, "failed to update login status on expiry");
             }
-            return Err(AppError::from_code(AuthErrorCode::LoginExpired));
+            return Err(auth::error::LoginExpired.into());
         }
         if login.status != LoginStatus::MFA_ENROLLMENT_REQUIRED
             || enrollment_method(&login) != method
         {
-            return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
+            return Err(auth::error::InvalidLoginState.into());
         }
-        let user_oid = login
-            .user_oid
-            .ok_or_else(|| AppError::from_code(AuthErrorCode::InvalidLoginState))?;
+        let user_oid = login.user_oid.ok_or(auth::error::InvalidLoginState)?;
         let user = self.get_user(user_oid.into()).await?;
         self.ensure_user_can_authenticate(&user).await?;
         Ok((login, user))
@@ -323,7 +325,7 @@ async fn store_enrollment(
         )
         .await
         // The owning login left the enrollment phase concurrently.
-        .map_err(|_| AppError::from_code(AuthErrorCode::InvalidLoginState))
+        .map_err(|_| auth::error::InvalidLoginState.into())
 }
 
 fn enrollment_context(login: &Login, user: &User) -> ChallengeContext {
@@ -341,5 +343,5 @@ fn enrollment_token(challenge: &AuthenticationChallenge) -> Result<String, AppEr
         .get(ENROLLMENT_TOKEN)
         .and_then(|value| value.as_str())
         .map(ToOwned::to_owned)
-        .ok_or_else(|| AppError::from_code(AuthErrorCode::InvalidTotpEnrollment))
+        .ok_or_else(|| auth::error::InvalidTotpEnrollment.into())
 }

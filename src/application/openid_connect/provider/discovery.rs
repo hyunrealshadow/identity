@@ -1,6 +1,6 @@
 use super::OpenIdProviderService;
 use crate::{
-    error::{AppError, codes::provider::ProviderErrorCode},
+    error::{AppError, codes::provider},
     setting::{AppSettings, InstallationSettings, OpenIdConnectSettings},
 };
 use identity_domain::openid_connect::OpenIdProviderMetadata;
@@ -173,9 +173,8 @@ fn to_string_values<T: ToString>(values: &[T]) -> Vec<String> {
 
 fn endpoint_url(issuer: &Url, path: &str) -> Result<Url, AppError> {
     let base = issuer.as_str().trim_end_matches('/');
-    Url::parse(&format!("{base}{path}")).map_err(AppError::map_source(
-        ProviderErrorCode::IssuerUrlParseFailed,
-    ))
+    Url::parse(&format!("{base}{path}"))
+        .map_err(provider::error::IssuerUrlParseFailed::map_source())
 }
 
 pub(crate) fn normalize_issuer(
@@ -183,13 +182,13 @@ pub(crate) fn normalize_issuer(
     domain: Option<&str>,
 ) -> Result<Url, AppError> {
     if !installation.initialized {
-        return Err(AppError::from_code(ProviderErrorCode::NotInitialized));
+        return Err(provider::error::NotInitialized.into_error());
     }
 
     let raw = domain
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| AppError::from_code(ProviderErrorCode::DomainMissing))?;
+        .ok_or_else(|| provider::error::DomainMissing.into_error())?;
 
     let candidate = if raw.contains("://") {
         raw.to_owned()
@@ -197,20 +196,17 @@ pub(crate) fn normalize_issuer(
         format!("https://{raw}")
     };
 
-    let mut issuer = Url::parse(&candidate).map_err(AppError::map_source(
-        ProviderErrorCode::IssuerUrlParseFailed,
-    ))?;
+    let mut issuer =
+        Url::parse(&candidate).map_err(provider::error::IssuerUrlParseFailed::map_source())?;
 
     if issuer.scheme() != "https" {
         // In conformance/dev mode (feature flag) allow http for local testing.
         #[cfg(not(feature = "oidc-conformance"))]
-        return Err(AppError::from_code(ProviderErrorCode::IssuerMustUseHttps));
+        return Err(provider::error::IssuerMustUseHttps.into_error());
     }
 
     if issuer.query().is_some() || issuer.fragment().is_some() {
-        return Err(AppError::from_code(
-            ProviderErrorCode::IssuerMustNotHaveQueryOrFragment,
-        ));
+        return Err(provider::error::IssuerMustNotHaveQueryOrFragment.into_error());
     }
 
     let normalized_path = issuer.path().trim_end_matches('/').to_owned();

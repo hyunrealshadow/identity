@@ -120,7 +120,7 @@ impl RbacManagementService {
                 && command.description.is_none()
                 && command.descriptions.is_none()
             {
-                return Err(AppError::from_code(RbacErrorCode::EmptyUpdate));
+                return Err(rbac_codes::error::EmptyUpdate.into_error());
             }
             let name = command
                 .name

@@ -12,7 +12,7 @@ use super::{
     request::RawAuthorizeRequest,
 };
 use crate::{
-    application::error::{AppError, codes::authorize::AuthorizeErrorCode},
+    application::error::{AppError, codes::authorize},
     boot::AppState,
     controllers::{
         response::{
@@ -206,9 +206,8 @@ pub(super) fn continue_oauth_error_response(
     request: &AuthorizationRequestData,
     error: OAuthErrorCode,
 ) -> Result<Response, AppError> {
-    let redirect_uri = Url::parse(&request.redirect_uri).map_err(AppError::map_source(
-        AuthorizeErrorCode::StoredRedirectUriInvalid,
-    ))?;
+    let redirect_uri = Url::parse(&request.redirect_uri)
+        .map_err(authorize::error::StoredRedirectUriInvalid::map_source())?;
     let response_type = request.response_type.clone();
     let error_response = oauth_error_response(ctx, headers, error, None)
         .with_state(request.state.clone())
@@ -366,7 +365,7 @@ mod tests {
     use std::collections::HashMap;
 
     use http::{HeaderMap, HeaderValue, StatusCode, header};
-    use identity_application::error::{AppError, codes::authorize::AuthorizeErrorCode};
+    use identity_application::error::codes::authorize;
     use identity_domain::openid_connect::{
         AuthorizationRequest, OAuthErrorCode, ResponseMode, ResponseType, ScopeSet,
     };
@@ -383,8 +382,7 @@ mod tests {
     #[tokio::test]
     async fn localized_scope_error_redirect_preserves_unassigned_scope() {
         let ctx = test_app_state_with_mock_settings().await;
-        let error = AppError::from_code(AuthorizeErrorCode::ScopeNotAssignedToClient)
-            .with_param("scopes", "email");
+        let error = authorize::error::ScopeNotAssignedToClient::new("email").into_error();
         let redirect_uri = Url::parse("https://client.example.com/callback").unwrap();
 
         for (language, expected) in [

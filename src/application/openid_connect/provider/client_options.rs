@@ -15,7 +15,7 @@ use super::{
     OpenIdProviderCapabilities, OpenIdProviderService,
     capabilities::supported_asymmetric_jws_algorithms, signing::append_conformance_none_alg,
 };
-use crate::error::{AppError, codes::provider::ProviderErrorCode};
+use crate::error::{AppError, codes::provider};
 
 /// Supported values for client registration metadata, as JOSE names.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -92,11 +92,11 @@ impl OpenIdProviderService {
         let keys = key_repo
             .list_active_asymmetric()
             .await
-            .map_err(AppError::map_source(ProviderErrorCode::KeyLookupFailed))?;
+            .map_err(provider::error::KeyLookupFailed::map_source())?;
         let bindings = key_jwk_repo
             .list_active()
             .await
-            .map_err(AppError::map_source(ProviderErrorCode::KeyLookupFailed))?;
+            .map_err(provider::error::KeyLookupFailed::map_source())?;
         let available = bindings
             .into_iter()
             .filter(|binding| keys.iter().any(|key| key.oid == binding.key_oid))

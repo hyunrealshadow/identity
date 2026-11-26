@@ -1,7 +1,7 @@
 use crate::{
     application::error::{
         AppError,
-        codes::{common::CommonErrorCode, key::KeyErrorCode},
+        codes::{common, key},
     },
     domain::key::{
         generator::KeyMaterialError, jwk::KeyJwkRepositoryError, repository::KeyRepositoryError,
@@ -12,10 +12,9 @@ impl From<KeyMaterialError> for AppError {
     fn from(error: KeyMaterialError) -> Self {
         match error {
             KeyMaterialError::InvalidInput(_) => {
-                AppError::from_code(KeyErrorCode::UnsupportedAlgorithm)
-                    .with_param("algorithm", "unknown")
+                key::error::UnsupportedAlgorithm::new("unknown").into()
             }
-            other => AppError::from_code(CommonErrorCode::InternalError).with_source(other),
+            other => common::error::InternalError.with_source(other),
         }
     }
 }
@@ -23,19 +22,17 @@ impl From<KeyMaterialError> for AppError {
 impl From<KeyRepositoryError> for AppError {
     fn from(error: KeyRepositoryError) -> Self {
         match error {
-            KeyRepositoryError::InvalidKeyType(_) => {
-                AppError::from_code(KeyErrorCode::InvalidKeyType)
-            }
+            KeyRepositoryError::InvalidKeyType(_) => key::error::InvalidKeyType.into(),
             KeyRepositoryError::CertificateRequiresAsymmetricKey => {
-                AppError::from_code(KeyErrorCode::CertificateRequiresAsymmetricKey)
+                key::error::CertificateRequiresAsymmetricKey.into()
             }
-            other => AppError::from_code(CommonErrorCode::InternalError).with_source(other),
+            other => common::error::InternalError.with_source(other),
         }
     }
 }
 
 impl From<KeyJwkRepositoryError> for AppError {
     fn from(error: KeyJwkRepositoryError) -> Self {
-        AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+        common::error::InternalError.with_source(error)
     }
 }

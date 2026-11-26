@@ -12,7 +12,7 @@ use identity_domain::{
 use crate::{
     error::{
         AppError,
-        codes::{authorization::AuthorizationErrorCode, common::CommonErrorCode},
+        codes::{authorization, common},
     },
     openid_connect::provider::OpenIdProviderService,
 };
@@ -42,10 +42,9 @@ impl OpenIdProviderService {
         scope: &str,
         coverage: ResourceScopeCoverage,
     ) -> Result<ResourceSelection, AppError> {
-        let raw_scope =
-            ScopeSet::parse(scope).map_err(AppError::map_source(CommonErrorCode::InvalidScope))?;
+        let raw_scope = ScopeSet::parse(scope).map_err(common::error::InvalidScope::map_source())?;
         if requested.is_empty() && granted.is_empty() && raw_scope.has_custom_scopes() {
-            return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
+            return Err(common::error::InvalidTarget.into_error());
         }
         let default_resources = if requested.is_empty()
             && granted.is_empty()
@@ -64,7 +63,7 @@ impl OpenIdProviderService {
             if !valid_resource_uri(uri)
                 || (!requested.is_empty() && !granted.is_empty() && !granted.contains(uri))
             {
-                return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
+                return Err(common::error::InvalidTarget.into_error());
             }
             if !resources.contains(uri) {
                 resources.push(uri.clone());
@@ -86,7 +85,7 @@ impl OpenIdProviderService {
             let definition = if let Some(repo) = &self.resource_repo {
                 repo.find_by_uri(uri)
                     .await
-                    .map_err(AppError::map_source(CommonErrorCode::ResourceLookupFailed))?
+                    .map_err(common::error::ResourceLookupFailed::map_source())?
             } else {
                 // Standalone providers retain the built-in resource; production injects the DB store.
                 if uri == API_RESOURCE {
@@ -100,13 +99,13 @@ impl OpenIdProviderService {
                 }
             }
             .filter(|resource| resource.enabled)
-            .ok_or_else(|| AppError::from_code(CommonErrorCode::InvalidTarget))?;
+            .ok_or_else(|| common::error::InvalidTarget.into_error())?;
             if uri != API_RESOURCE {
                 rbac_resources.push(uri.clone());
             }
             allowed.push(
                 ScopeSet::parse(&definition.scopes.join(" "))
-                    .map_err(|_| AppError::from_code(CommonErrorCode::InvalidTarget))?,
+                    .map_err(|_| common::error::InvalidTarget.into_error())?,
             );
         }
         let scopes = parsed_scope;
@@ -121,37 +120,38 @@ impl OpenIdProviderService {
                 || scopes.has_management_scopes()
                 || scopes.has_api_scopes()
             {
-                return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
+                return Err(common::error::InvalidTarget.into_error());
             }
-            let repository = self.rbac_authorization_repo.as_ref().ok_or_else(|| {
-                AppError::from_code(AuthorizationErrorCode::RbacPolicyUnavailable)
-            })?;
+            let repository = self
+                .rbac_authorization_repo
+                .as_ref()
+                .ok_or_else(|| authorization::error::RbacPolicyUnavailable.into_error())?;
             let state = repository
                 .resource_state(&rbac_resources[0])
                 .await
                 .map_err(rbac_scope_error)?;
             if !state.enabled {
-                return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
+                return Err(common::error::InvalidTarget.into_error());
             }
             for name in scopes.names() {
                 if STANDARD_OIDC_SCOPES.contains(&name) {
                     continue;
                 }
                 if ACCOUNT_SELF_SERVICE_SCOPES.contains(&name) {
-                    return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
+                    return Err(common::error::InvalidTarget.into_error());
                 }
                 let Some(permission) = state.enabled_permission_for_scope(name) else {
-                    return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
+                    return Err(common::error::InvalidTarget.into_error());
                 };
                 if permission.resource_oid != state.resource_oid {
-                    return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
+                    return Err(common::error::InvalidTarget.into_error());
                 }
             }
         }
 
         let selected = scopes.for_resources(&allowed, coverage);
         if scopes.has_resource_permissions() && !selected.has_resource_permissions() {
-            return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
+            return Err(common::error::InvalidTarget.into_error());
         }
         // A flat token scope string cannot distinguish the same resource-owned
         // code granted by two audiences. Fail closed instead of smuggling one
@@ -168,7 +168,7 @@ impl OpenIdProviderService {
                     > 1
             });
             if ambiguous {
-                return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
+                return Err(common::error::InvalidTarget.into_error());
             }
         }
         let scope = selected.to_scope_string();
@@ -185,14 +185,14 @@ impl OpenIdProviderService {
                 || scope.has_management_scopes()
                 || scope.has_custom_scopes())
         {
-            return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
+            return Err(common::error::InvalidTarget.into_error());
         }
         let original = scope.to_scope_string();
         let selection = self
             .resolve_resources(requested, &[], &original, ResourceScopeCoverage::Any)
             .await?;
         if selection.scope != original {
-            return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
+            return Err(common::error::InvalidTarget.into_error());
         }
         Ok(selection.resources)
     }
@@ -217,7 +217,7 @@ impl OpenIdProviderService {
             let protocol = if let Some(repo) = &self.resource_repo {
                 repo.client_protocol_scope_codes(client.client().oid)
                     .await
-                    .map_err(AppError::map_source(CommonErrorCode::ResourceLookupFailed))?
+                    .map_err(common::error::ResourceLookupFailed::map_source())?
             } else {
                 None
             };
@@ -231,7 +231,7 @@ impl OpenIdProviderService {
         for name in scope.names() {
             if STANDARD_OIDC_SCOPES.contains(&name) {
                 if !ceilings.iter().any(|ceiling| ceiling.contains(name)) {
-                    return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
+                    return Err(common::error::InvalidTarget.into_error());
                 }
                 continue;
             }
@@ -240,7 +240,7 @@ impl OpenIdProviderService {
                 .filter(|ceiling| ceiling.contains(name))
                 .count();
             if owners != 1 {
-                return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
+                return Err(common::error::InvalidTarget.into_error());
             }
         }
         Ok(())
@@ -251,11 +251,7 @@ impl OpenIdProviderService {
 /// state is an internal fail-closed condition. There is no scope-only fallback.
 fn rbac_scope_error(error: RbacAuthorizationError) -> AppError {
     match error {
-        RbacAuthorizationError::ResourceNotFound => {
-            AppError::from_code(CommonErrorCode::InvalidTarget)
-        }
-        other => {
-            AppError::from_code(AuthorizationErrorCode::RbacPolicyUnavailable).with_source(other)
-        }
+        RbacAuthorizationError::ResourceNotFound => common::error::InvalidTarget.into_error(),
+        other => authorization::error::RbacPolicyUnavailable.with_source(other),
     }
 }

@@ -24,7 +24,7 @@ use super::email_verification::EmailVerificationDependencies;
 use crate::{
     error::{
         AppError,
-        codes::{account::AccountErrorCode, common::CommonErrorCode},
+        codes::{account, common},
     },
     observability::{BusinessEvent, EventSink, EventValue, NoopEventSink},
 };
@@ -71,7 +71,7 @@ impl AccountService {
             .update_identifier(user_oid, update)
             .await
             .map_err(map_identifier_error)?
-            .ok_or_else(|| AppError::from_code(CommonErrorCode::NotFound))?;
+            .ok_or(common::error::NotFound)?;
         self.record_account_change("username", user_oid, "success");
         Ok(user)
     }
@@ -88,7 +88,7 @@ impl AccountService {
             .update_profile(user_oid, patch)
             .await
             .map_err(AppError::from)?
-            .ok_or_else(|| AppError::from_code(CommonErrorCode::NotFound))?;
+            .ok_or(common::error::NotFound)?;
         self.record_account_change("profile", user_oid, "success");
         Ok(user)
     }
@@ -132,16 +132,13 @@ pub(super) fn validate_username(username: &str) -> Result<UserIdentifierUpdate, 
         }),
         Err(error) => {
             let field_error = match error {
-                UsernameValidationError::Empty => {
-                    AppError::from_code(AccountErrorCode::UsernameRequired)
-                }
+                UsernameValidationError::Empty => account::error::UsernameRequired.into_error(),
                 UsernameValidationError::InvalidLength
                 | UsernameValidationError::InvalidCharacter => {
-                    AppError::from_code(AccountErrorCode::UsernameInvalid)
+                    account::error::UsernameInvalid.into_error()
                 }
             };
-            Err(AppError::from_code(AccountErrorCode::ValidationFailed)
-                .with_field_error("username", field_error))
+            Err(account::error::ValidationFailed.with_field_error("username", field_error))
         }
     }
 }
@@ -154,15 +151,12 @@ pub(super) fn validate_email(email: &str) -> Result<UserIdentifierUpdate, AppErr
         }),
         Err(error) => {
             let field_error = match error {
-                EmailNormalizationError::Empty => {
-                    AppError::from_code(AccountErrorCode::EmailRequired)
-                }
+                EmailNormalizationError::Empty => account::error::EmailRequired.into_error(),
                 EmailNormalizationError::InvalidFormat | EmailNormalizationError::InvalidDomain => {
-                    AppError::from_code(AccountErrorCode::EmailInvalid)
+                    account::error::EmailInvalid.into_error()
                 }
             };
-            Err(AppError::from_code(AccountErrorCode::ValidationFailed)
-                .with_field_error("email", field_error))
+            Err(account::error::ValidationFailed.with_field_error("email", field_error))
         }
     }
 }
@@ -184,20 +178,15 @@ fn normalize_zone_info(
 }
 
 fn invalid_time_zone() -> AppError {
-    AppError::from_code(AccountErrorCode::ValidationFailed).with_field_error(
-        "zoneInfo",
-        AppError::from_code(CommonErrorCode::InvalidTimeZone),
-    )
+    account::error::ValidationFailed.with_field_error("zoneInfo", common::error::InvalidTimeZone)
 }
 
 pub(super) fn map_identifier_error(error: UserRepositoryError) -> AppError {
     match error {
         UserRepositoryError::UsernameExists => {
-            AppError::from_code(AccountErrorCode::UsernameExists).with_field("username")
+            account::error::UsernameExists.with_field("username")
         }
-        UserRepositoryError::EmailExists => {
-            AppError::from_code(AccountErrorCode::EmailExists).with_field("email")
-        }
+        UserRepositoryError::EmailExists => account::error::EmailExists.with_field("email"),
         other => AppError::from(other),
     }
 }

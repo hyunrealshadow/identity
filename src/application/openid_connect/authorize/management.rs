@@ -8,7 +8,7 @@
 use crate::{
     error::{
         AppError,
-        codes::{authorize::AuthorizeErrorCode, common::CommonErrorCode},
+        codes::{authorize, common},
     },
     observability::{BusinessEvent, EventValue},
     openid_connect::management::{
@@ -49,8 +49,8 @@ impl AuthorizeService {
         user_oid: Uuid,
         authentication: ApprovalAuthentication,
     ) -> Result<AuthorizationRequestData, AppError> {
-        let requested_scope = ScopeSet::parse(&request.scope)
-            .map_err(AppError::map_source(AuthorizeErrorCode::ScopeInvalid))?;
+        let requested_scope =
+            ScopeSet::parse(&request.scope).map_err(authorize::error::ScopeInvalid::map_source())?;
         if !requested_scope.has_management_scopes() {
             return Ok(request.clone());
         }
@@ -58,45 +58,35 @@ impl AuthorizeService {
         // These invariants are rechecked at approval so a legacy stored request
         // cannot bypass the authorization endpoint validation.
         if request.response_type != ResponseType::Code {
-            return Err(AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid)
-                .with_param("response_type", request.response_type.to_string()));
+            return Err(
+                authorize::error::ResponseTypeInvalid::new(&request.response_type).into_error(),
+            );
         }
         if requested_scope.contains_offline_access() {
-            return Err(
-                AppError::from_code(AuthorizeErrorCode::ScopeInvalid).with_param(
-                    "scopes",
-                    "management and offline_access are mutually exclusive",
-                ),
-            );
+            return Err(authorize::error::ScopeInvalid.into_error());
         }
         if !is_single_graphql_resource(&request.resources) {
-            return Err(
-                AppError::from_code(CommonErrorCode::InvalidTarget).with_param(
-                    "resources",
-                    "management requires the single GraphQL resource",
-                ),
-            );
+            return Err(common::error::InvalidTarget.into_error());
         }
         if request.code_challenge.as_deref().is_none_or(str::is_empty)
             || request.code_challenge_method != Some(CodeChallengeMethod::S256)
         {
-            return Err(
-                AppError::from_code(AuthorizeErrorCode::CodeChallengeMethodInvalid)
-                    .with_param("code_challenge_method", "S256 required for management"),
-            );
+            return Err(authorize::error::CodeChallengeMethodInvalid::new(
+                "S256 required for management",
+            )
+            .into_error());
         }
 
-        let client_oid = Uuid::parse_str(&request.client_id).map_err(AppError::map_source(
-            AuthorizeErrorCode::StoredClientIdInvalid,
-        ))?;
+        let client_oid = Uuid::parse_str(&request.client_id)
+            .map_err(authorize::error::StoredClientIdInvalid::map_source())?;
         // Live client lookup: a client deleted after the request was stored
         // cannot receive management authority.
         let client = self
             .client_repo
             .find_by_oid(client_oid)
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::ClientLookupFailed))?
-            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClientNotFound))?;
+            .map_err(authorize::error::ClientLookupFailed::map_source())?
+            .ok_or_else(|| authorize::error::ClientNotFound.into_error())?;
         self.provider_service
             .validate_client_resource_ceiling(
                 &client,
@@ -105,19 +95,16 @@ impl AuthorizeService {
                 identity_domain::client_authorization::AccessTokenPrincipal::User,
             )
             .await
-            .map_err(|_| {
-                AppError::from_code(AuthorizeErrorCode::ClientGrantNotAllowed)
-                    .with_param("reason", "client scope ceiling does not cover the request")
-            })?;
+            .map_err(|_| authorize::error::ClientGrantNotAllowed.into_error())?;
 
-        let binding_repo = self.management_authority_repo.as_ref().ok_or_else(|| {
-            AppError::from_code(AuthorizeErrorCode::ClientGrantNotAllowed)
-                .with_param("reason", "management authority support unavailable")
-        })?;
+        let binding_repo = self
+            .management_authority_repo
+            .as_ref()
+            .ok_or_else(|| authorize::error::ClientGrantNotAllowed.into_error())?;
         let authority = binding_repo
             .find_user_permission_authority(UserOid(user_oid))
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::LoadRequestFailed))?;
+            .map_err(authorize::error::LoadRequestFailed::map_source())?;
 
         let human_aal2 = human_authentication_is_multi_factor(authentication.acr);
         let granted =
@@ -149,19 +136,17 @@ impl AuthorizeService {
 
         let Some(authority) = authority else {
             // Defensive: allowed scopes cannot be non-empty without authority.
-            return Err(AppError::from_code(
-                AuthorizeErrorCode::ClientGrantNotAllowed,
-            ));
+            return Err(authorize::error::ClientGrantNotAllowed.into_error());
         };
         let policy_version = binding_repo
             .current_policy_version()
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::LoadRequestFailed))?;
+            .map_err(authorize::error::LoadRequestFailed::map_source())?;
         let client_fingerprint = self
             .provider_service
             .client_authority_fingerprint(&client)
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::LoadRequestFailed))?;
+            .map_err(authorize::error::LoadRequestFailed::map_source())?;
         let data = ManagementAuthorizationSnapshotData::for_user_permission_authority(
             &authority,
             policy_version,

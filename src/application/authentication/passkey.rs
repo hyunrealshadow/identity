@@ -13,7 +13,7 @@ use uuid::Uuid;
 pub use crate::user::credential::StoredPasskey;
 use crate::{
     authentication::challenge::ChallengeRepository,
-    error::{AppError, codes::auth::AuthErrorCode},
+    error::AppError,
     observability::{BusinessEvent, EventSink, EventValue, NoopEventSink},
     user::{
         RecoveryCodeCredentialData, UserOid,
@@ -173,8 +173,10 @@ impl PasskeyService {
     ) -> Result<PasskeyOptions, AppError> {
         let credentials = self.credentials.list(user).await?;
         if credentials.len() >= MAX_PASSKEYS_PER_USER {
-            return Err(AppError::from_code(AuthErrorCode::PasskeyLimitReached)
-                .with_param("limit", MAX_PASSKEYS_PER_USER.to_string()));
+            return Err(crate::error::codes::auth::error::PasskeyLimitReached::new(
+                MAX_PASSKEYS_PER_USER,
+            )
+            .into());
         }
         let ceremony = self
             .authenticator
@@ -384,7 +386,7 @@ fn new_challenge(state: Value) -> AuthenticationChallenge {
 }
 
 fn invalid() -> AppError {
-    AppError::from_code(AuthErrorCode::InvalidCredential)
+    crate::error::codes::auth::error::InvalidCredential.into()
 }
 
 #[cfg(test)]

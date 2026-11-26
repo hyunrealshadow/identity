@@ -25,7 +25,7 @@ use uuid::Uuid;
 
 use crate::error::{
     AppError,
-    codes::{common::CommonErrorCode, user_management::UserManagementErrorCode},
+    codes::{common, user_management},
 };
 
 /// Immutable request authority accepted by every write method.
@@ -287,10 +287,8 @@ pub(crate) fn parse_theme(
             .map(Some)
             .map(Some)
             .map_err(|_| {
-                AppError::from_code(UserManagementErrorCode::ValidationFailed).with_field_error(
-                    "theme",
-                    AppError::from_code(UserManagementErrorCode::InvalidTheme),
-                )
+                user_management::error::ValidationFailed::new()
+                    .with_field_error("theme", user_management::error::InvalidTheme)
             }),
     }
 }
@@ -312,10 +310,8 @@ fn normalize_zone_info(
 }
 
 fn invalid_time_zone() -> AppError {
-    AppError::from_code(UserManagementErrorCode::ValidationFailed).with_field_error(
-        "zoneInfo",
-        AppError::from_code(CommonErrorCode::InvalidTimeZone),
-    )
+    user_management::error::ValidationFailed::new()
+        .with_field_error("zoneInfo", common::error::InvalidTimeZone)
 }
 
 /// Convert the management patch into the existing domain patch.

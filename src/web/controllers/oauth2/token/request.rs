@@ -1,6 +1,6 @@
 use http::{HeaderMap, header};
 use identity_application::{
-    error::{AppError, codes::token::TokenErrorCode},
+    error::{AppError, codes::token},
     openid_connect::token::TokenRevocationParams,
 };
 use serde::Deserialize;
@@ -42,13 +42,11 @@ pub(super) struct TokenInspectionForm {
 impl TokenInspectionForm {
     pub fn prepare(self, headers: &HeaderMap) -> Result<TokenRevocationParams, AppError> {
         if self.token.is_empty() {
-            return Err(AppError::from_code(TokenErrorCode::RefreshTokenInvalid));
+            return Err(token::error::RefreshTokenInvalid.into());
         }
         let basic = parse_basic_client_auth(headers);
         if headers.contains_key(header::AUTHORIZATION) && basic.is_none() {
-            return Err(AppError::from_code(
-                TokenErrorCode::ClientCredentialsInvalid,
-            ));
+            return Err(token::error::ClientCredentialsInvalid.into());
         }
         if basic.is_some()
             && (self.client_secret.is_some()
@@ -57,7 +55,7 @@ impl TokenInspectionForm {
                     Some(id.as_str()) != basic.as_ref().map(|(id, _)| id.as_str())
                 }))
         {
-            return Err(AppError::from_code(TokenErrorCode::RefreshTokenInvalid));
+            return Err(token::error::RefreshTokenInvalid.into());
         }
         let credentials = ClientCredentials::resolve(
             headers,

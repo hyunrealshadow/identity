@@ -5,7 +5,7 @@ use crate::{
     authentication::password::{VerifyResult, run_password_hashing},
     error::{
         AppError,
-        codes::{auth::AuthErrorCode, common::CommonErrorCode},
+        codes::{auth, common},
     },
     observability::{BusinessEvent, EventValue},
     setting::{PasswordHashSetting, PasswordHistoryCountSetting, PasswordMaxAgeDaysSetting},
@@ -68,13 +68,11 @@ impl LoginService {
             .await?
             .into_iter()
             .next()
-            .ok_or_else(|| AppError::from_code(AuthErrorCode::CredentialTypeUnsupported))?;
+            .ok_or_else(|| auth::error::CredentialTypeUnsupported::new("password"))?;
         let stored_password = match &credential.data {
             CredentialData::Password(password) => password.clone(),
             _ => {
-                return Err(AppError::from_code(
-                    AuthErrorCode::CredentialTypeUnsupported,
-                ));
+                return Err(auth::error::CredentialTypeUnsupported::new("password").into());
             }
         };
         let options = snapshot.get::<PasswordHashSetting>();
@@ -82,12 +80,8 @@ impl LoginService {
             .matches_password(new_password, &stored_password, &options)
             .await?
         {
-            return Err(
-                AppError::from_code(CommonErrorCode::ValidationFailed).with_field_error(
-                    "newPassword",
-                    AppError::from_code(AuthErrorCode::PasswordUnchanged),
-                ),
-            );
+            return Err(common::error::ValidationFailed
+                .with_field_error("newPassword", auth::error::PasswordUnchanged));
         }
         let history_count = snapshot.get::<PasswordHistoryCountSetting>();
         let keep_history = history_count.saturating_sub(1);
@@ -100,12 +94,10 @@ impl LoginService {
                 .matches_password(new_password, &previous, &options)
                 .await?
             {
-                return Err(AppError::from_code(CommonErrorCode::ValidationFailed)
-                    .with_field_error(
-                        "newPassword",
-                        AppError::from_code(AuthErrorCode::PasswordReused)
-                            .with_param("count", history_count.to_string()),
-                    ));
+                return Err(common::error::ValidationFailed.with_field_error(
+                    "newPassword",
+                    auth::error::PasswordReused::new(history_count),
+                ));
             }
         }
         let hasher = Arc::clone(&self.password_hasher);
@@ -262,13 +254,13 @@ impl LoginService {
     ) -> Result<ChallengeOutcome, AppError> {
         let login = self.get(login_oid).await?;
         if login.expires_at <= Utc::now() {
-            return Err(AppError::from_code(AuthErrorCode::LoginExpired));
+            return Err(auth::error::LoginExpired.into());
         }
         if login.status != LoginStatus::PASSWORD_CHANGE_REQUIRED {
-            return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
+            return Err(auth::error::InvalidLoginState.into());
         }
         let (Some(user_oid), Some(acr)) = (login.user_oid, login.acr) else {
-            return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
+            return Err(auth::error::InvalidLoginState.into());
         };
         let user = self.get_user(user_oid.into()).await?;
         self.ensure_user_can_authenticate(&user).await?;

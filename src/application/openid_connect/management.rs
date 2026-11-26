@@ -18,7 +18,7 @@ use identity_domain::{
 
 use crate::{
     application::openid_connect::provider::OpenIdProviderService,
-    error::{AppError, codes::openid_connect::OpenIdConnectErrorCode},
+    error::{AppError, codes::openid_connect},
 };
 
 /// Use the session's effective class. Historical AMR values survive the
@@ -50,7 +50,7 @@ pub(crate) async fn validate_management_authorization(
     scope: &ScopeSet,
     principal: AccessTokenPrincipal,
 ) -> Result<(), AppError> {
-    let invalid = || AppError::from_code(OpenIdConnectErrorCode::InvalidToken);
+    let invalid = || openid_connect::error::InvalidToken.into_error();
     if !scope.has_management_scopes() {
         return Err(invalid());
     }
@@ -68,9 +68,7 @@ pub(crate) async fn validate_management_authorization(
     if principal != AccessTokenPrincipal::User {
         return Err(invalid());
     }
-    let repository = ports.binding_repo.ok_or_else(|| {
-        invalid().with_param("reason", "user permission authority support unavailable")
-    })?;
+    let repository = ports.binding_repo.ok_or_else(invalid)?;
     repository
         .validate_snapshot(&snapshot)
         .await

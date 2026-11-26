@@ -1,5 +1,5 @@
 use async_graphql::{Context, InputObject, Result};
-use identity_application::error::{AppError, codes::rbac::RbacErrorCode};
+use identity_application::error::codes::rbac;
 use identity_domain::rbac::LocalizedMetadata;
 
 use super::group::types::{LocalizedTextInput, LocalizedTextNode};
@@ -21,12 +21,7 @@ impl LocalizedMetadataInput {
             self.names.into_iter().map(Into::into).collect(),
             self.descriptions.into_iter().map(Into::into).collect(),
         )
-        .map_err(|_| {
-            app_error(
-                ctx,
-                AppError::from_code(RbacErrorCode::InvalidLocalizedMetadata),
-            )
-        })
+        .map_err(|_| app_error(ctx, rbac::error::InvalidLocalizedMetadata::new().into()))
     }
 }
 

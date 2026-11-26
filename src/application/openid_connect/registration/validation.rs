@@ -4,7 +4,7 @@ use serde_json::from_slice;
 use url::Url;
 
 use crate::{
-    application::error::{AppError, codes::registration::RegistrationErrorCode},
+    application::error::{AppError, codes::registration},
     domain::{
         key::JwaSigningAlgorithm,
         openid_connect::{
@@ -23,21 +23,20 @@ use crate::{
 };
 
 pub(super) fn parse_metadata_value<T: FromStr>(
-    field: &'static str,
+    _field: &'static str,
     value: Option<&str>,
 ) -> Result<Option<T>, AppError> {
     value
         .map(|value| {
-            value.parse().map_err(|_| {
-                AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
-                    .with_param("field", field)
-            })
+            value
+                .parse()
+                .map_err(|_| registration::error::InvalidClientMetadata.into_error())
         })
         .transpose()
 }
 
 pub(super) fn parse_metadata_values<T: FromStr>(
-    field: &'static str,
+    _field: &'static str,
     values: Option<&[String]>,
 ) -> Result<Option<Vec<T>>, AppError> {
     values
@@ -45,10 +44,9 @@ pub(super) fn parse_metadata_values<T: FromStr>(
             values
                 .iter()
                 .map(|value| {
-                    value.parse().map_err(|_| {
-                        AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
-                            .with_param("field", field)
-                    })
+                    value
+                        .parse()
+                        .map_err(|_| registration::error::InvalidClientMetadata.into_error())
                 })
                 .collect()
         })
@@ -76,10 +74,7 @@ pub(super) fn validate_grant_response_type_consistency(
     });
 
     if inconsistent {
-        return Err(
-            AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
-                .with_param("field", "grant_types"),
-        );
+        return Err(registration::error::InvalidClientMetadata.into_error());
     }
 
     Ok(())
@@ -90,9 +85,7 @@ pub(super) fn parse_application_type(
 ) -> Result<OpenIdConnectClientPlatformType, AppError> {
     let application_type = value.unwrap_or("web");
     application_type.parse().map_err(|error| {
-        AppError::from_code(RegistrationErrorCode::UnsupportedApplicationType)
-            .with_param("application_type", application_type)
-            .with_source(error)
+        registration::error::UnsupportedApplicationType::new(application_type).with_source(error)
     })
 }
 
@@ -107,15 +100,13 @@ pub(super) fn reject_none_algorithm(
     value: Option<&str>,
 ) -> Result<(), AppError> {
     if value == Some("none") && !cfg!(feature = "allow-none-alg") {
-        return Err(
-            AppError::from_code(RegistrationErrorCode::NoneNotSupported).with_param("field", field)
-        );
+        return Err(registration::error::NoneNotSupported::new(field).into_error());
     }
     Ok(())
 }
 
 pub(super) fn validate_response_signing_algorithm(
-    field: &'static str,
+    _field: &'static str,
     value: Option<&str>,
     allow_none: bool,
 ) -> Result<(), AppError> {
@@ -127,14 +118,11 @@ pub(super) fn validate_response_signing_algorithm(
     {
         return Ok(());
     }
-    Err(
-        AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
-            .with_param("field", field),
-    )
+    Err(registration::error::InvalidClientMetadata.into_error())
 }
 
 pub(super) fn validate_response_encryption_algorithm(
-    field: &'static str,
+    _field: &'static str,
     value: Option<&str>,
 ) -> Result<(), AppError> {
     if value.is_some_and(|value| {
@@ -143,10 +131,7 @@ pub(super) fn validate_response_encryption_algorithm(
             "RSA-OAEP" | "RSA-OAEP-256" | "ECDH-ES" | "ECDH-ES+A128KW" | "ECDH-ES+A256KW"
         )
     }) {
-        return Err(
-            AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
-                .with_param("field", field),
-        );
+        return Err(registration::error::InvalidClientMetadata.into_error());
     }
     Ok(())
 }
@@ -164,11 +149,8 @@ pub(super) fn validate_request_object_encryption(
         })
         .or_else(|| (enc.is_some() && alg.is_none()).then_some("request_object_encryption_alg"));
 
-    if let Some(field) = invalid_field {
-        return Err(
-            AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
-                .with_param("field", field),
-        );
+    if invalid_field.is_some() {
+        return Err(registration::error::InvalidClientMetadata.into_error());
     }
 
     Ok(())
@@ -176,10 +158,7 @@ pub(super) fn validate_request_object_encryption(
 
 pub(super) fn validate_request_object_signing(value: Option<&str>) -> Result<(), AppError> {
     if value.is_some_and(|value| value != "none" && value.parse::<JwaSigningAlgorithm>().is_err()) {
-        return Err(
-            AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
-                .with_param("field", "request_object_signing_alg"),
-        );
+        return Err(registration::error::InvalidClientMetadata.into_error());
     }
 
     Ok(())
@@ -191,9 +170,7 @@ pub(super) fn validate_initiate_login_uri(value: Option<&Url>) -> Result<(), App
     };
 
     if uri.scheme() != "https" {
-        return Err(AppError::from_code(
-            RegistrationErrorCode::InvalidClientMetadata,
-        ));
+        return Err(registration::error::InvalidClientMetadata.into_error());
     }
 
     Ok(())
@@ -211,9 +188,7 @@ pub(super) async fn validate_sector_identifier_uri(
     if sector_redirect_uris_include_registered_redirects(&sector_redirect_uris, redirect_uris) {
         Ok(())
     } else {
-        Err(AppError::from_code(
-            RegistrationErrorCode::InvalidClientMetadata,
-        ))
+        Err(registration::error::InvalidClientMetadata.into_error())
     }
 }
 
@@ -227,9 +202,7 @@ pub(crate) async fn fetch_sector_redirect_uris(
         Duration::from_secs(5),
         conformance_allows_invalid_certs(),
     ))
-    .map_err(AppError::map_source(
-        RegistrationErrorCode::InvalidClientMetadata,
-    ))?;
+    .map_err(registration::error::InvalidClientMetadata::map_source())?;
 
     let body = fetch_https_public_document(
         &client,
@@ -237,13 +210,10 @@ pub(crate) async fn fetch_sector_redirect_uris(
         DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
     )
     .await
-    .map_err(AppError::map_source(
-        RegistrationErrorCode::InvalidClientMetadata,
-    ))?;
+    .map_err(registration::error::InvalidClientMetadata::map_source())?;
 
-    from_slice::<Vec<String>>(&body).map_err(AppError::map_source(
-        RegistrationErrorCode::InvalidClientMetadata,
-    ))
+    from_slice::<Vec<String>>(&body)
+        .map_err(registration::error::InvalidClientMetadata::map_source())
 }
 
 pub(crate) fn sector_redirect_uris_include_registered_redirects(

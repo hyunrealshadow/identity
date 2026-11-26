@@ -1,7 +1,7 @@
 use http::{HeaderMap, StatusCode};
 use identity_application::error::{
     AppError,
-    codes::{authorize::AuthorizeErrorCode, authorize_http::AuthorizeHttpErrorCode},
+    codes::{authorize, authorize_http},
 };
 use identity_domain::{
     auth::{SessionOid, model::ActiveSession},
@@ -47,9 +47,7 @@ impl ConsentQuery {
         match (self.login_id.as_deref(), self.user_code.as_deref()) {
             (Some(_), None) => Ok(None),
             (None, Some(user_code)) => Ok(Some(user_code)),
-            _ => Err(AppError::from_code(
-                AuthorizeHttpErrorCode::ContinueInteractionUnavailable,
-            )),
+            _ => Err(authorize_http::error::ContinueInteractionUnavailable.into()),
         }
     }
 }
@@ -103,16 +101,16 @@ async fn consent_get(depot: &mut Depot, req: &mut Request) -> WebResult {
     let loaded = load_consent_context(&ctx, &login_id).await?;
 
     if loaded.stored.interaction.consent_state != ConsentState::Pending {
-        return Err(
-            AppError::from_code(AuthorizeHttpErrorCode::ContinueInteractionUnavailable).into(),
-        );
+        return Err(authorize_http::error::ContinueInteractionUnavailable
+            .into_error()
+            .into());
     }
 
     let session = loaded
         .active_sessions
         .iter()
         .find(|session| Some(session.session_oid) == loaded.selected_session_oid)
-        .ok_or_else(|| AppError::from_code(AuthorizeHttpErrorCode::ConsentSessionNotFound))?;
+        .ok_or_else(|| authorize_http::error::ConsentSessionNotFound.into_error())?;
     let previously_granted = ctx
         .services()
         .oidc_authorize()
@@ -188,9 +186,9 @@ async fn consent_post(depot: &mut Depot, req: &mut Request) -> WebResult {
             }
             Ok(handle_consent_decision(ctx, login_id.to_owned(), payload.decision).await?)
         }
-        _ => {
-            Err(AppError::from_code(AuthorizeHttpErrorCode::ContinueInteractionUnavailable).into())
-        }
+        _ => Err(authorize_http::error::ContinueInteractionUnavailable
+            .into_error()
+            .into()),
     }
 }
 
@@ -202,15 +200,11 @@ pub(super) async fn handle_consent_decision(
     let loaded = load_consent_context(&ctx, &login_id).await?;
 
     if loaded.stored.interaction.consent_state != ConsentState::Pending {
-        return Err(AppError::from_code(
-            AuthorizeHttpErrorCode::ContinueInteractionUnavailable,
-        ));
+        return Err(authorize_http::error::ContinueInteractionUnavailable.into());
     }
 
     if !has_selected_session(loaded.selected_session_oid, &loaded.active_sessions) {
-        return Err(AppError::from_code(
-            AuthorizeHttpErrorCode::ConsentSessionNotFound,
-        ));
+        return Err(authorize_http::error::ConsentSessionNotFound.into());
     }
 
     let consent_state = match decision {
@@ -252,7 +246,7 @@ async fn load_consent_context(
     let continue_context = load_active_interaction(ctx, login_id).await?;
 
     let scope = ScopeSet::parse(&continue_context.stored.request.scope)
-        .map_err(AppError::map_source(AuthorizeErrorCode::ScopeInvalid))?;
+        .map_err(authorize::error::ScopeInvalid::map_source())?;
     let selected_session_oid = continue_context.login.session_oid;
     let active_sessions = load_selected_sessions(ctx, selected_session_oid).await?;
 

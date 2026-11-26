@@ -13,62 +13,51 @@ use identity_domain::authorization::{
 
 use crate::{
     authorization::policy::ManagementAuthorizationError,
-    error::{AppError, codes::authorization::AuthorizationErrorCode},
+    error::{AppError, codes::authorization::error as AuthzError},
 };
 
 impl From<ManagementAuthorizationError> for AppError {
     fn from(error: ManagementAuthorizationError) -> Self {
-        use AuthorizationErrorCode as Code;
         use ManagementAuthorizationError as Error;
 
         match error {
-            Error::MissingPrincipal => AppError::from_code(Code::MissingPrincipal),
-            Error::InsufficientScope { required } => AppError::from_code(Code::InsufficientScope)
-                .with_param("required_scope", required.name()),
-            Error::NoCurrentGrant | Error::InconsistentAuthority => {
-                AppError::from_code(Code::ForbiddenManagementAuthority)
+            Error::MissingPrincipal => AuthzError::MissingPrincipal::new().into(),
+            Error::InsufficientScope { required } => {
+                AuthzError::InsufficientScope::new(required.name()).into()
             }
-            Error::ClientScopeBoundaryMismatch => {
-                AppError::from_code(Code::AuthorizationSnapshotExpired)
+            Error::NoCurrentGrant
+            | Error::InconsistentAuthority
+            | Error::PermissionNotAuthorized { .. } => {
+                AuthzError::ForbiddenManagementAuthority::new().into()
             }
+            Error::ClientScopeBoundaryMismatch => AuthzError::AuthorizationSnapshotExpired.into(),
             Error::HumanOnlyCapability { scope } => {
-                AppError::from_code(Code::HumanOnlyManagementCapability)
-                    .with_param("scope", scope.name())
+                AuthzError::HumanOnlyManagementCapability::new(scope.name()).into()
             }
-            Error::PermissionNotAuthorized { permission } => {
-                AppError::from_code(Code::ForbiddenManagementAuthority)
-                    .with_param("permission", permission.name())
-            }
-            Error::SnapshotMissing => AppError::from_code(Code::AuthorizationSnapshotExpired),
-            Error::SnapshotKindMismatch => {
-                AppError::from_code(Code::AuthorizationSnapshotOidMismatch)
-            }
+            Error::SnapshotMissing => AuthzError::AuthorizationSnapshotExpired.into(),
+            Error::SnapshotKindMismatch => AuthzError::AuthorizationSnapshotOidMismatch.into(),
             Error::SnapshotStale { .. } | Error::SnapshotVersionInvalid { .. } => {
-                AppError::from_code(Code::AuthorizationVersionStale)
+                AuthzError::AuthorizationVersionStale.into()
             }
-            Error::SnapshotOidMismatch => {
-                AppError::from_code(Code::AuthorizationSnapshotOidMismatch)
-            }
+            Error::SnapshotOidMismatch => AuthzError::AuthorizationSnapshotOidMismatch.into(),
             Error::SnapshotPolicyMismatch | Error::SnapshotPermissionsMismatch => {
-                AppError::from_code(Code::AuthorizationSnapshotExpired)
+                AuthzError::AuthorizationSnapshotExpired.into()
             }
             Error::AuthenticationRequired { required } => {
-                AppError::from_code(Code::MissingHumanAuthentication)
-                    .with_param("required_authentication", required.as_str())
+                AuthzError::MissingHumanAuthentication::new(required.as_str()).into()
             }
-            Error::RecentAuthenticationRequired => {
-                AppError::from_code(Code::MissingHumanAuthentication).with_param(
-                    "required_authentication",
-                    HumanAuthenticationRequirement::RecentAal2.as_str(),
-                )
-            }
-            Error::TargetForbidden => AppError::from_code(Code::TargetForbidden),
-            Error::InvalidTarget => AppError::from_code(Code::InvalidTarget),
+            Error::RecentAuthenticationRequired => AuthzError::MissingHumanAuthentication::new(
+                HumanAuthenticationRequirement::RecentAal2.as_str(),
+            )
+            .into(),
+            Error::TargetForbidden => AuthzError::TargetForbidden::new().into(),
+            Error::InvalidTarget => AuthzError::InvalidTarget::new().into(),
             Error::InvalidTokenScope { scope } => {
-                AppError::from_code(Code::InvalidManagementScope).with_param("scope", scope)
+                AuthzError::InvalidManagementScope::new(scope).into()
             }
-            Error::TokenScopeNotAuthorized => AppError::from_code(Code::InsufficientScope)
-                .with_param("required_scope", "management"),
+            Error::TokenScopeNotAuthorized => {
+                AuthzError::InsufficientScope::new("management").into()
+            }
         }
     }
 }
@@ -76,12 +65,8 @@ impl From<ManagementAuthorizationError> for AppError {
 impl From<OwnerProtectionError> for AppError {
     fn from(error: OwnerProtectionError) -> Self {
         match error {
-            OwnerProtectionError::LastOwnerProtected => {
-                AppError::from_code(AuthorizationErrorCode::LastOwnerProtected)
-            }
-            OwnerProtectionError::OwnerTargetProtected => {
-                AppError::from_code(AuthorizationErrorCode::OwnerTargetProtected)
-            }
+            OwnerProtectionError::LastOwnerProtected => AuthzError::LastOwnerProtected.into(),
+            OwnerProtectionError::OwnerTargetProtected => AuthzError::OwnerTargetProtected.into(),
         }
     }
 }
@@ -90,12 +75,10 @@ impl From<ManagementScopeError> for AppError {
     fn from(error: ManagementScopeError) -> Self {
         match error {
             ManagementScopeError::ReservedPrefix => {
-                AppError::from_code(AuthorizationErrorCode::ReservedManagementScope)
-                    .with_param("scope", "management")
+                AuthzError::ReservedManagementScope::new("management").into()
             }
             ManagementScopeError::Unknown => {
-                AppError::from_code(AuthorizationErrorCode::InvalidManagementScope)
-                    .with_param("scope", "management")
+                AuthzError::InvalidManagementScope::new("management").into()
             }
         }
     }
@@ -103,32 +86,31 @@ impl From<ManagementScopeError> for AppError {
 
 impl From<ManagementCatalogError> for AppError {
     fn from(_: ManagementCatalogError) -> Self {
-        AppError::from_code(AuthorizationErrorCode::RbacPolicyUnavailable)
+        AuthzError::RbacPolicyUnavailable.into()
     }
 }
 
 impl From<GrantReasonError> for AppError {
     fn from(_: GrantReasonError) -> Self {
-        AppError::from_code(AuthorizationErrorCode::InvalidTarget)
-            .with_param("target_type", "grant_reason")
+        AuthzError::InvalidTarget::new()
+            .target_type("grant_reason")
+            .into()
     }
 }
 
 impl From<SnapshotValidationError> for AppError {
     fn from(error: SnapshotValidationError) -> Self {
         match error {
-            SnapshotValidationError::GrantNotFound => {
-                AppError::from_code(AuthorizationErrorCode::GrantNotFound)
-            }
+            SnapshotValidationError::GrantNotFound => AuthzError::GrantNotFound.into(),
             SnapshotValidationError::OidMismatch { .. } => {
-                AppError::from_code(AuthorizationErrorCode::AuthorizationSnapshotOidMismatch)
+                AuthzError::AuthorizationSnapshotOidMismatch.into()
             }
             SnapshotValidationError::VersionMismatch { .. } => {
-                AppError::from_code(AuthorizationErrorCode::AuthorizationVersionStale)
+                AuthzError::AuthorizationVersionStale.into()
             }
             SnapshotValidationError::PolicyVersionMismatch { .. }
             | SnapshotValidationError::PermissionsMismatch => {
-                AppError::from_code(AuthorizationErrorCode::AuthorizationSnapshotExpired)
+                AuthzError::AuthorizationSnapshotExpired.into()
             }
         }
     }
@@ -138,17 +120,14 @@ impl From<ManagementRepositoryError> for AppError {
     fn from(error: ManagementRepositoryError) -> Self {
         match error {
             error @ ManagementRepositoryError::Storage(_) => {
-                AppError::from_code(AuthorizationErrorCode::RbacPolicyUnavailable)
-                    .with_source(error)
+                AuthzError::RbacPolicyUnavailable.with_source(error)
             }
-            ManagementRepositoryError::CorruptRecord => {
-                AppError::from_code(AuthorizationErrorCode::RbacPolicyUnavailable)
-            }
+            ManagementRepositoryError::CorruptRecord => AuthzError::RbacPolicyUnavailable.into(),
             ManagementRepositoryError::StaleSnapshot => {
-                AppError::from_code(AuthorizationErrorCode::AuthorizationSnapshotExpired)
+                AuthzError::AuthorizationSnapshotExpired.into()
             }
             error @ ManagementRepositoryError::AuditFailed(_) => {
-                AppError::from_code(AuthorizationErrorCode::AuditWriteFailed).with_source(error)
+                AuthzError::AuditWriteFailed.with_source(error)
             }
         }
     }

@@ -6,7 +6,7 @@ use url::Url;
 
 use super::request::DynamicClientJwks;
 use crate::{
-    application::error::{AppError, codes::registration::RegistrationErrorCode},
+    application::error::{AppError, codes::registration},
     domain::{key::PublicJwk, openid_connect::OpenIdConnectCredentialData},
     openid_connect::remote::{
         DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchPolicy, conformance_allows_invalid_certs,
@@ -62,10 +62,7 @@ fn reject_none_jwk_alg(jwks: &DynamicClientJwks) -> Result<(), AppError> {
     if !cfg!(feature = "allow-none-alg")
         && jwks.keys.iter().any(|jwk| jwk.algorithm() == Some("none"))
     {
-        return Err(
-            AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
-                .with_param("field", "jwks"),
-        );
+        return Err(registration::error::InvalidClientMetadata.into_error());
     }
 
     Ok(())
@@ -77,23 +74,16 @@ async fn fetch_jwks(jwks_uri: &Url) -> Result<DynamicClientJwks, AppError> {
         TimeDuration::from_secs(5),
         conformance_allows_invalid_certs(),
     ))
-    .map_err(AppError::map_source(
-        RegistrationErrorCode::ClientCreateFailed,
-    ))?;
+    .map_err(registration::error::ClientCreateFailed::map_source())?;
 
     let body = fetch_https_public_document(&client, jwks_uri, DEFAULT_REMOTE_DOCUMENT_MAX_BYTES)
         .await
-        .map_err(AppError::map_source(
-            RegistrationErrorCode::ClientCreateFailed,
-        ))?;
+        .map_err(registration::error::ClientCreateFailed::map_source())?;
 
-    from_slice::<DynamicClientJwks>(&body).map_err(AppError::map_source(
-        RegistrationErrorCode::ClientCreateFailed,
-    ))
+    from_slice::<DynamicClientJwks>(&body)
+        .map_err(registration::error::ClientCreateFailed::map_source())
 }
 
 fn public_jwk_to_pem(jwk: &PublicJwk) -> Result<String, AppError> {
-    to_string(jwk).map_err(AppError::map_source(
-        RegistrationErrorCode::ClientCreateFailed,
-    ))
+    to_string(jwk).map_err(registration::error::ClientCreateFailed::map_source())
 }

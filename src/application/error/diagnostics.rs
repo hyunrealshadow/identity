@@ -71,7 +71,7 @@ impl<'a> ErrorDiagnostics<'a> {
 mod tests {
     use std::{backtrace::BacktraceStatus, io::Error, ptr};
 
-    use crate::error::codes::common::CommonErrorCode;
+    use crate::error::codes::common;
 
     use super::*;
 
@@ -82,7 +82,7 @@ mod tests {
             Error::other("syntax error at or near dot"),
         );
         let query_trace = query.backtrace.to_string();
-        let error = AppError::from_code(CommonErrorCode::InternalError).with_source(query);
+        let error = common::error::InternalError.with_source(query);
         let diagnostics = ErrorDiagnostics::from_error(&error);
         assert_eq!(diagnostics.cause, "syntax error at or near dot");
         assert_eq!(
@@ -102,7 +102,7 @@ mod tests {
 
     #[test]
     fn internal_errors_without_a_source_have_a_stack_but_business_rejections_do_not() {
-        let error = AppError::from_code(CommonErrorCode::InternalError);
+        let error = common::error::InternalError.into_error();
         let diagnostics = ErrorDiagnostics::from_error(&error);
         assert!(ptr::eq(
             diagnostics.backtrace.unwrap(),
@@ -113,7 +113,8 @@ mod tests {
             BacktraceStatus::Captured
         );
         assert!(
-            AppError::from_code(CommonErrorCode::Unauthorized)
+            common::error::Unauthorized
+                .into_error()
                 .backtrace()
                 .is_none()
         );

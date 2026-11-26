@@ -2,7 +2,7 @@ use crate::graphql::schema::access::access;
 use async_graphql::{Context, Guard, MaybeUndefined, Object, Result};
 use identity_application::{
     authorization::ManagementTarget,
-    error::{codes::graphql::GraphqlErrorCode, params::ErrorParams},
+    error::codes::graphql,
     user::management::{CreateUserCommand, UpdateUserCommand, UserPassword},
 };
 use identity_domain::{
@@ -371,13 +371,7 @@ impl UserManagementMutation {
                     .map(|id| {
                         GlobalId::<SessionGlobalId>::decode(id.as_str())
                             .map(|id| id.oid())
-                            .map_err(|_| {
-                                coded_error(
-                                    ctx,
-                                    GraphqlErrorCode::InvalidSessionId,
-                                    ErrorParams::new(),
-                                )
-                            })
+                            .map_err(|_| coded_error(ctx, graphql::error::InvalidSessionId))
                     })
                     .collect::<Result<Vec<_>>>()
             })
@@ -450,11 +444,9 @@ fn state_fields(
 }
 
 fn identifier(value: MaybeUndefined<String>, ctx: &Context<'_>) -> Result<Option<String>> {
-    optional_identifier(value)
-        .map_err(|_| coded_error(ctx, GraphqlErrorCode::ValidationFailed, ErrorParams::new()))
+    optional_identifier(value).map_err(|_| coded_error(ctx, graphql::error::ValidationFailed))
 }
 
 fn reason_or_error(ctx: &Context<'_>, reason: &str) -> Result<String> {
-    normalize_reason(reason)
-        .ok_or_else(|| coded_error(ctx, GraphqlErrorCode::ValidationFailed, ErrorParams::new()))
+    normalize_reason(reason).ok_or_else(|| coded_error(ctx, graphql::error::ValidationFailed))
 }

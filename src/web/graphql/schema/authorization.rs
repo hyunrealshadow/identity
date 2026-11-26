@@ -3,7 +3,9 @@ use std::result::Result as StdResult;
 use async_graphql::{Context, Error, ErrorExtensions, Guard, Result};
 use chrono::Utc;
 use identity_application::error::{
-    AppError, codes::graphql::GraphqlErrorCode, params::ErrorParams,
+    AppError,
+    codes::graphql::{self, GraphqlErrorCode},
+    params::ErrorParams,
 };
 use identity_domain::{
     auth::{AuthenticationContextClass, authentication_is_fresh},
@@ -17,13 +19,8 @@ use super::{
 };
 
 pub(super) fn request_context<'a>(ctx: &'a Context<'_>) -> Result<&'a RequestContext> {
-    ctx.data::<RequestContext>().map_err(|_| {
-        error::coded_error(
-            ctx,
-            GraphqlErrorCode::AuthenticationContextUnavailable,
-            ErrorParams::new(),
-        )
-    })
+    ctx.data::<RequestContext>()
+        .map_err(|_| error::coded_error(ctx, graphql::error::AuthenticationContextUnavailable))
 }
 
 /// Result of the principal-specific effective-permission adapter. The default
@@ -80,8 +77,12 @@ impl Guard for ScopeGuard {
             return Ok(());
         }
         let scope = self.scope.name();
-        let params = ErrorParams::new().insert("scope", scope);
-        let message = error::localized_message(ctx, GraphqlErrorCode::InsufficientScope, &params);
+        let insufficient = graphql::error::InsufficientScope::new(scope).into_error();
+        let message = error::localized_message(
+            ctx,
+            GraphqlErrorCode::InsufficientScope,
+            insufficient.params(),
+        );
         let correlation = error::correlation(ctx);
         Err(Error::new(message).extend_with(|_, extensions| {
             extensions.set("kind", "authorization_error");

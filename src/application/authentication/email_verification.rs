@@ -29,7 +29,7 @@ use crate::{
     },
     error::{
         AppError,
-        codes::{account::AccountErrorCode, common::CommonErrorCode},
+        codes::{account, common},
     },
     observability::{BusinessEvent, EventValue},
     setting::{AppSettings, EmailDeliverySettings, EmailTemplatesSetting, SettingsSource},
@@ -116,7 +116,7 @@ impl AccountService {
         let user = self
             .find_user(user_oid)
             .await?
-            .ok_or_else(|| AppError::from_code(CommonErrorCode::NotFound))?;
+            .ok_or(common::error::NotFound)?;
         let same_address = *normalized == user.email_normalized;
         if same_address || !self.email_verification_available() {
             if same_address && let Some(dependencies) = &self.email_verification {
@@ -132,7 +132,7 @@ impl AccountService {
                 .update_identifier(user_oid, update)
                 .await
                 .map_err(map_identifier_error)?
-                .ok_or_else(|| AppError::from_code(CommonErrorCode::NotFound))?;
+                .ok_or(common::error::NotFound)?;
             self.record_account_change("email", user_oid, "success");
             return Ok(EmailChange::Changed(Box::new(user)));
         }
@@ -153,7 +153,7 @@ impl AccountService {
         let user = self
             .find_user(user_oid)
             .await?
-            .ok_or_else(|| AppError::from_code(CommonErrorCode::NotFound))?;
+            .ok_or(common::error::NotFound)?;
         let pending = self.pending_email_verification(user_oid).await?;
         let (email, normalized) = match pending {
             Some(pending) if pending.verification.changes_email => (
@@ -229,14 +229,10 @@ impl AccountService {
         token: &str,
     ) -> Result<VerifiedEmail, AppError> {
         let Some(dependencies) = &self.email_verification else {
-            return Err(AppError::from_code(
-                AccountErrorCode::EmailVerificationInvalid,
-            ));
+            return Err(account::error::EmailVerificationInvalid.into());
         };
         if !plausible_link_token(token) {
-            return Err(AppError::from_code(
-                AccountErrorCode::EmailVerificationInvalid,
-            ));
+            return Err(account::error::EmailVerificationInvalid.into());
         }
         match dependencies
             .repository
@@ -253,12 +249,10 @@ impl AccountService {
                 email,
                 changed,
             }),
-            EmailVerificationOutcome::Invalid => Err(AppError::from_code(
-                AccountErrorCode::EmailVerificationInvalid,
-            )),
-            EmailVerificationOutcome::EmailExists => {
-                Err(AppError::from_code(AccountErrorCode::EmailExists))
+            EmailVerificationOutcome::Invalid => {
+                Err(account::error::EmailVerificationInvalid.into())
             }
+            EmailVerificationOutcome::EmailExists => Err(account::error::EmailExists.into()),
         }
     }
 
@@ -298,9 +292,7 @@ impl AccountService {
             .clone()
             .filter(|_| self.email_verification_available())
         else {
-            return Err(AppError::from_code(
-                AccountErrorCode::EmailVerificationUnavailable,
-            ));
+            return Err(account::error::EmailVerificationUnavailable.into());
         };
         let snapshot = dependencies.settings.snapshot();
         let link_prefix = verification_link_prefix(&snapshot.section::<AppSettings>())?;
@@ -334,10 +326,7 @@ impl AccountService {
                 })
             },
         )
-        .map_err(|error| {
-            AppError::from_code(AccountErrorCode::EmailVerificationDeliveryFailed)
-                .with_source(error)
-        })?;
+        .map_err(account::error::EmailVerificationDeliveryFailed::map_source())?;
         // The email is queued with the verification it carries.
         let admission = dependencies
             .repository
@@ -361,24 +350,19 @@ impl AccountService {
             },
             EmailVerificationAdmission::TooSoon { available_at } => {
                 let seconds = (available_at - now).num_seconds().max(1);
-                return Err(
-                    AppError::from_code(AccountErrorCode::EmailVerificationResendTooSoon)
-                        .with_param("seconds", seconds.to_string()),
-                );
+                return Err(account::error::EmailVerificationResendTooSoon::new(seconds).into());
             }
             EmailVerificationAdmission::LimitReached => {
-                return Err(AppError::from_code(
-                    AccountErrorCode::EmailVerificationLimitReached,
-                ));
+                return Err(account::error::EmailVerificationLimitReached.into());
             }
             EmailVerificationAdmission::AlreadyVerified => {
-                return Err(AppError::from_code(AccountErrorCode::EmailAlreadyVerified));
+                return Err(account::error::EmailAlreadyVerified.into());
             }
             EmailVerificationAdmission::EmailExists => {
-                return Err(AppError::from_code(AccountErrorCode::EmailExists).with_field("email"));
+                return Err(account::error::EmailExists.with_field("email"));
             }
             EmailVerificationAdmission::UserNotFound => {
-                return Err(AppError::from_code(CommonErrorCode::NotFound));
+                return Err(common::error::NotFound.into());
             }
         };
 
@@ -389,7 +373,7 @@ impl AccountService {
 /// The Login page that confirms a link, ending where the token is appended.
 fn verification_link_prefix(app: &AppSettings) -> Result<String, AppError> {
     login_link_prefix(app, VERIFY_EMAIL_ROUTE)
-        .ok_or_else(|| AppError::from_code(AccountErrorCode::EmailVerificationUnavailable))
+        .ok_or_else(|| account::error::EmailVerificationUnavailable.into())
 }
 
 #[cfg(test)]

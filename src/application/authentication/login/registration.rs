@@ -44,7 +44,7 @@ use crate::{
     email::{EmailRecipient, EmailTemplateKind, LinkToken, link_matches, render_templated_email},
     error::{
         AppError,
-        codes::{account::AccountErrorCode, auth::AuthErrorCode},
+        codes::{account, auth},
     },
     observability::{BusinessEvent, EventValue},
     setting::{
@@ -152,11 +152,11 @@ fn login_accepts_registration(login: &Login) -> bool {
 }
 
 fn unavailable() -> AppError {
-    AppError::from_code(AuthErrorCode::RegistrationUnavailable)
+    auth::error::RegistrationUnavailable.into()
 }
 
 fn link_invalid() -> AppError {
-    AppError::from_code(AuthErrorCode::RegistrationLinkInvalid)
+    auth::error::RegistrationLinkInvalid.into()
 }
 
 impl LoginService {
@@ -233,17 +233,17 @@ impl LoginService {
         let login = self.get(request.login_oid).await?;
         let now = Utc::now();
         if login.expires_at <= now {
-            return Err(AppError::from_code(AuthErrorCode::LoginExpired));
+            return Err(auth::error::LoginExpired.into());
         }
         if !login_accepts_registration(&login) {
-            return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
+            return Err(auth::error::InvalidLoginState.into());
         }
         let Some((dependencies, repository)) = self.registration_dependencies() else {
             return Err(unavailable());
         };
         let UserIdentifierUpdate::Email { value, normalized } = validate_email(&request.email)?
         else {
-            return Err(AppError::from_code(AccountErrorCode::EmailInvalid).with_field("email"));
+            return Err(account::error::EmailInvalid.with_field("email"));
         };
         let account_exists = repository.email_registered(&normalized).await?;
         let link = (!account_exists).then(LinkToken::generate);
@@ -320,16 +320,13 @@ impl LoginService {
             },
             DeliveryChallengeAdmission::TooSoon { available_at } => {
                 let seconds = (available_at - now).num_seconds().max(1);
-                return Err(
-                    AppError::from_code(AuthErrorCode::RegistrationResendTooSoon)
-                        .with_param("seconds", seconds.to_string()),
-                );
+                return Err(auth::error::RegistrationResendTooSoon::new(seconds).into());
             }
             DeliveryChallengeAdmission::LimitReached => {
-                return Err(AppError::from_code(AuthErrorCode::TooManyAttempts));
+                return Err(auth::error::TooManyAttempts.into());
             }
             DeliveryChallengeAdmission::InvalidState => {
-                return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
+                return Err(auth::error::InvalidLoginState.into());
             }
         };
 
@@ -388,9 +385,7 @@ impl LoginService {
             normalized: username_normalized,
         } = validate_username(username)?
         else {
-            return Err(
-                AppError::from_code(AccountErrorCode::UsernameInvalid).with_field("username")
-            );
+            return Err(account::error::UsernameInvalid.with_field("username"));
         };
         validate_password(password, &[&username, &verifier.email], "newPassword")?;
         let snapshot = self.settings.snapshot();
@@ -419,13 +414,8 @@ impl LoginService {
         {
             RegistrationOutcome::Registered => Ok(()),
             RegistrationOutcome::LinkInvalid => Err(link_invalid()),
-            RegistrationOutcome::UsernameExists => Err(AppError::from_code(
-                AccountErrorCode::ValidationFailed,
-            )
-            .with_field_error(
-                "username",
-                AppError::from_code(AccountErrorCode::UsernameExists),
-            )),
+            RegistrationOutcome::UsernameExists => Err(account::error::ValidationFailed
+                .with_field_error("username", account::error::UsernameExists)),
             // The address got an account after the link was sent.
             RegistrationOutcome::EmailExists => Err(link_invalid()),
         }
@@ -446,7 +436,7 @@ impl LoginService {
     > {
         let login = self.get(login_oid).await?;
         if login.expires_at <= Utc::now() {
-            return Err(AppError::from_code(AuthErrorCode::LoginExpired));
+            return Err(auth::error::LoginExpired.into());
         }
         if !login_accepts_registration(&login) {
             return Err(link_invalid());

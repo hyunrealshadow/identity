@@ -1,6 +1,6 @@
 use identity_domain::{auth::SessionOid, openid_connect::ClientAssertionType};
 
-use crate::error::kind::ErrorKind;
+use crate::error::{codes::token, kind::ErrorKind};
 
 use super::*;
 
@@ -17,7 +17,7 @@ impl TokenService {
         self.data_protector
             .protect("session-id", Uuid::from(session_oid).as_bytes())
             .await
-            .map_err(AppError::map_source(TokenErrorCode::DeserializeCodeFailed))
+            .map_err(token::error::DeserializeCodeFailed::map_source())
     }
 }
 
@@ -36,7 +36,7 @@ pub(crate) fn resolve_client_id(
         return client_id_from_assertion(assertion);
     }
 
-    Err(AppError::from_code(TokenErrorCode::ClientIdRequired))
+    Err(token::error::ClientIdRequired.into_error())
 }
 
 /// Bounded outcome/reason categories for issuance result events. The numeric

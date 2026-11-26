@@ -6,7 +6,7 @@ use serde_json::json;
 
 use crate::{
     application::{
-        error::{AppError, codes::device::DeviceAuthorizationErrorCode},
+        error::{AppError, codes::device},
         openid_connect::device::{DeviceVerificationDecision, DeviceVerificationUser},
     },
     boot::AppState,
@@ -143,5 +143,5 @@ async fn verification_actor(
                 && Some(entry.session.user_oid) == login.user_oid
         })
         .map(|entry| entry.session)
-        .ok_or_else(|| AppError::from_code(DeviceAuthorizationErrorCode::VerificationLoginRequired))
+        .ok_or_else(|| device::error::VerificationLoginRequired.into_error())
 }

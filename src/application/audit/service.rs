@@ -13,7 +13,7 @@ use identity_domain::{
 use super::cursor::{audit_filter_hash, decode_cursor, encode_cursors};
 use crate::{
     data_protection::DataProtector,
-    error::{AppError, codes::audit::AuditErrorCode},
+    error::{AppError, codes::audit},
 };
 
 pub const DEFAULT_AUDIT_PAGE_SIZE: usize = 20;
@@ -159,17 +159,16 @@ fn validate_pagination(
     request: &AuditEventPageRequest,
 ) -> Result<(AuditEventPageDirection, Option<&str>, usize), AppError> {
     if request.first.is_some() && request.last.is_some() {
-        return Err(AppError::from_code(AuditErrorCode::InvalidPageSize)
-            .with_param("max", MAX_AUDIT_PAGE_SIZE.to_string()));
+        return Err(audit::error::InvalidPageSize::new(MAX_AUDIT_PAGE_SIZE).into());
     }
     if request.first.is_some() && request.before.is_some() {
-        return Err(AppError::from_code(AuditErrorCode::InvalidCursor));
+        return Err(audit::error::InvalidCursor.into());
     }
     if request.last.is_some() && request.after.is_some() {
-        return Err(AppError::from_code(AuditErrorCode::InvalidCursor));
+        return Err(audit::error::InvalidCursor.into());
     }
     if request.after.is_some() && request.before.is_some() {
-        return Err(AppError::from_code(AuditErrorCode::InvalidCursor));
+        return Err(audit::error::InvalidCursor.into());
     }
 
     let direction = if request.last.is_some() || request.before.is_some() {
@@ -191,9 +190,7 @@ fn validate_pagination(
             } else {
                 "last"
             };
-            return Err(AppError::from_code(AuditErrorCode::InvalidPageSize)
-                .with_param("max", MAX_AUDIT_PAGE_SIZE.to_string())
-                .with_field(field));
+            return Err(audit::error::InvalidPageSize::new(MAX_AUDIT_PAGE_SIZE).with_field(field));
         }
         Some(value) => value as usize,
     };
@@ -214,11 +211,8 @@ fn parse_time_zone(raw: Option<&str>) -> Result<TimeZone, AppError> {
     let trimmed = raw.map(str::trim).filter(|s| !s.is_empty());
     match trimmed {
         None => Ok(TimeZone::parse("UTC").expect("UTC is always valid")),
-        Some(value) => TimeZone::parse(value).map_err(|_| {
-            AppError::from_code(AuditErrorCode::InvalidTimeZone)
-                .with_param("value", value)
-                .with_field("timeZone")
-        }),
+        Some(value) => TimeZone::parse(value)
+            .map_err(|_| audit::error::InvalidTimeZone::new(value).with_field("timeZone")),
     }
 }
 
@@ -239,62 +233,39 @@ fn parse_query(
 
 fn map_query_error(error: AuditQueryError) -> AppError {
     match error {
-        AuditQueryError::QueryTooLong { max, actual } => {
-            AppError::from_code(AuditErrorCode::QueryTooLong)
-                .with_param("max", max.to_string())
-                .with_param("actual", actual.to_string())
-                .with_field("query")
-        }
+        AuditQueryError::QueryTooLong { max, actual } => audit::error::QueryTooLong::new(max)
+            .actual(actual)
+            .with_field("query"),
         AuditQueryError::TooManyClauses { max } => {
-            AppError::from_code(AuditErrorCode::QueryTooManyClauses)
-                .with_param("max", max.to_string())
-                .with_field("query")
+            audit::error::QueryTooManyClauses::new(max).with_field("query")
         }
         AuditQueryError::TooDeeplyNested { max } => {
-            AppError::from_code(AuditErrorCode::QueryTooDeep)
-                .with_param("max", max.to_string())
-                .with_field("query")
+            audit::error::QueryTooDeep::new(max).with_field("query")
         }
-        AuditQueryError::SyntaxError { .. } => {
-            AppError::from_code(AuditErrorCode::QuerySyntaxError).with_field("query")
-        }
+        AuditQueryError::SyntaxError { .. } => audit::error::QuerySyntaxError.with_field("query"),
         AuditQueryError::UnknownField { field } => {
-            AppError::from_code(AuditErrorCode::QueryUnknownField)
-                .with_param("field", field)
-                .with_field("query")
+            audit::error::QueryUnknownField::new(field).with_field("query")
         }
         AuditQueryError::UnknownValue { field, value } => {
-            AppError::from_code(AuditErrorCode::QueryUnknownValue)
-                .with_param("field", field)
-                .with_param("value", value)
-                .with_field("query")
+            audit::error::QueryUnknownValue::new(field, value).with_field("query")
         }
         AuditQueryError::InvalidDateValue { value } => {
-            AppError::from_code(AuditErrorCode::QueryInvalidDate)
-                .with_param("value", value)
-                .with_field("query")
+            audit::error::QueryInvalidDate::new(value).with_field("query")
         }
         AuditQueryError::InvalidIdentifier { field, value } => {
-            AppError::from_code(AuditErrorCode::QueryInvalidIdentifier)
-                .with_param("field", field)
-                .with_param("value", value)
-                .with_field("query")
+            audit::error::QueryInvalidIdentifier::new(field, value).with_field("query")
         }
         AuditQueryError::UnsupportedOperator { field } => {
-            AppError::from_code(AuditErrorCode::QueryUnsupportedOperator)
-                .with_param("field", field)
-                .with_field("query")
+            audit::error::QueryUnsupportedOperator::new(field).with_field("query")
         }
         AuditQueryError::UnsupportedRangeField { field } => {
-            AppError::from_code(AuditErrorCode::QueryUnsupportedRangeField)
-                .with_param("field", field)
-                .with_field("query")
+            audit::error::QueryUnsupportedRangeField::new(field).with_field("query")
         }
         AuditQueryError::UnsupportedRegex => {
-            AppError::from_code(AuditErrorCode::QueryUnsupportedRegex).with_field("query")
+            audit::error::QueryUnsupportedRegex.with_field("query")
         }
         AuditQueryError::UnsupportedFuzzy | AuditQueryError::UnsupportedBoost => {
-            AppError::from_code(AuditErrorCode::QueryUnsupportedSyntax).with_field("query")
+            audit::error::QueryUnsupportedSyntax.with_field("query")
         }
     }
 }
@@ -495,7 +466,7 @@ mod tests {
             })
             .await
             .unwrap_err();
-        assert_eq!(err.code(), AuditErrorCode::InvalidCursor as u32);
+        assert_eq!(err.code(), audit::AuditErrorCode::InvalidCursor as u32);
 
         let err = service
             .list_events(AuditEventPageRequest {
@@ -509,7 +480,7 @@ mod tests {
             })
             .await
             .unwrap_err();
-        assert_eq!(err.code(), AuditErrorCode::InvalidCursor as u32);
+        assert_eq!(err.code(), audit::AuditErrorCode::InvalidCursor as u32);
     }
 
     #[tokio::test]
@@ -529,7 +500,10 @@ mod tests {
             })
             .await
             .unwrap_err();
-        assert_eq!(too_many.code(), AuditErrorCode::InvalidPageSize as u32);
+        assert_eq!(
+            too_many.code(),
+            audit::AuditErrorCode::InvalidPageSize as u32
+        );
 
         let bad_tz = service
             .list_events(AuditEventPageRequest {
@@ -543,7 +517,7 @@ mod tests {
             })
             .await
             .unwrap_err();
-        assert_eq!(bad_tz.code(), AuditErrorCode::InvalidTimeZone as u32);
+        assert_eq!(bad_tz.code(), audit::AuditErrorCode::InvalidTimeZone as u32);
 
         let unknown_field = service
             .list_events(AuditEventPageRequest {
@@ -559,7 +533,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             unknown_field.code(),
-            AuditErrorCode::QueryUnknownField as u32
+            audit::AuditErrorCode::QueryUnknownField as u32
         );
     }
 }

@@ -1,4 +1,8 @@
+#[macro_use]
+mod macros;
+
 pub mod app_error;
+pub mod catalog;
 pub mod code;
 pub mod codes;
 pub mod diagnostics;

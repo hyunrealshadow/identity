@@ -2,7 +2,7 @@
 
 use super::{AuthorizationRequestParams, AuthorizeService};
 use crate::{
-    error::{AppError, codes::authorize::AuthorizeErrorCode},
+    error::{AppError, codes::authorize},
     openid_connect::remote::{
         DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchError, RemoteUrlError,
         fetch_https_public_document, validate_https_public_url,
@@ -28,7 +28,7 @@ impl AuthorizeService {
 
         if let Some(request_uri) = params.request_uri.clone() {
             let request_uri = Url::parse(&request_uri)
-                .map_err(AppError::map_source(AuthorizeErrorCode::RequestUriInvalid))?;
+                .map_err(authorize::error::RequestUriInvalid::map_source())?;
             self.validate_request_uri(client, &request_uri)?;
             let raw_request_object = self.fetch_request_object(&request_uri).await?;
             return Ok(Some(raw_request_object));
@@ -43,10 +43,8 @@ impl AuthorizeService {
         request_uri: &Url,
     ) -> Result<(), AppError> {
         validate_https_public_url(request_uri).map_err(|error| match error {
-            RemoteUrlError::NotHttps => AppError::from_code(AuthorizeErrorCode::RequestUriNotHttps),
-            RemoteUrlError::UnsafeHost => {
-                AppError::from_code(AuthorizeErrorCode::RequestUriUnsafeHost)
-            }
+            RemoteUrlError::NotHttps => authorize::error::RequestUriNotHttps.into_error(),
+            RemoteUrlError::UnsafeHost => authorize::error::RequestUriUnsafeHost.into_error(),
         })?;
 
         let registered = client
@@ -57,9 +55,7 @@ impl AuthorizeService {
             .unwrap_or(false);
 
         if !registered {
-            return Err(AppError::from_code(
-                AuthorizeErrorCode::RequestUriNotRegistered,
-            ));
+            return Err(authorize::error::RequestUriNotRegistered.into_error());
         }
 
         Ok(())
@@ -74,9 +70,7 @@ impl AuthorizeService {
         .await
         .map_err(map_request_uri_fetch_error)?;
 
-        String::from_utf8(body).map_err(AppError::map_source(
-            AuthorizeErrorCode::RequestUriReadFailed,
-        ))
+        String::from_utf8(body).map_err(authorize::error::RequestUriReadFailed::map_source())
     }
 
     pub(crate) fn extract_request_object_client_id(raw: &str) -> Result<Option<String>, AppError> {
@@ -91,36 +85,31 @@ impl AuthorizeService {
         let payload_segment = raw
             .split('.')
             .nth(1)
-            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::RequestObjectEncodingInvalid))?;
+            .ok_or_else(|| authorize::error::RequestObjectEncodingInvalid.into_error())?;
 
         let payload = URL_SAFE_NO_PAD
             .decode(payload_segment)
-            .map_err(AppError::map_source(
-                AuthorizeErrorCode::RequestObjectBase64Invalid,
-            ))?;
+            .map_err(authorize::error::RequestObjectBase64Invalid::map_source())?;
 
-        from_slice::<Value>(&payload).map_err(AppError::map_source(
-            AuthorizeErrorCode::RequestObjectPayloadInvalid,
-        ))
+        from_slice::<Value>(&payload)
+            .map_err(authorize::error::RequestObjectPayloadInvalid::map_source())
     }
 }
 
 fn map_request_uri_fetch_error(error: RemoteFetchError) -> AppError {
     match error {
-        RemoteFetchError::NotHttps => AppError::from_code(AuthorizeErrorCode::RequestUriNotHttps),
-        RemoteFetchError::UnsafeHost => {
-            AppError::from_code(AuthorizeErrorCode::RequestUriUnsafeHost)
-        }
+        RemoteFetchError::NotHttps => authorize::error::RequestUriNotHttps.into_error(),
+        RemoteFetchError::UnsafeHost => authorize::error::RequestUriUnsafeHost.into_error(),
         RemoteFetchError::FetchFailed(error) => {
-            AppError::from_code(AuthorizeErrorCode::RequestUriFetchFailed).with_source(error)
+            authorize::error::RequestUriFetchFailed.with_source(error)
         }
         RemoteFetchError::ResolveFailed(error) => {
-            AppError::from_code(AuthorizeErrorCode::RequestUriUnsafeHost).with_source(error)
+            authorize::error::RequestUriUnsafeHost.with_source(error)
         }
-        RemoteFetchError::NotOk => AppError::from_code(AuthorizeErrorCode::RequestUriNot200),
-        RemoteFetchError::TooLarge => AppError::from_code(AuthorizeErrorCode::RequestUriTooLarge),
+        RemoteFetchError::NotOk => authorize::error::RequestUriNot200.into_error(),
+        RemoteFetchError::TooLarge => authorize::error::RequestUriTooLarge.into_error(),
         RemoteFetchError::ReadFailed(error) => {
-            AppError::from_code(AuthorizeErrorCode::RequestUriReadFailed).with_source(error)
+            authorize::error::RequestUriReadFailed.with_source(error)
         }
     }
 }

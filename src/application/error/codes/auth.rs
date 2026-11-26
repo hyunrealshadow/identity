@@ -1,168 +1,63 @@
-use crate::error::{code::AppErrorCode, kind::ErrorKind};
-
-/// Range: 11000-11099
-#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumIter)]
-pub enum AuthErrorCode {
-    UserNotFound,
-    InvalidCredential,
-    UserLocked,
-    UserDisabled,
-    LoginExpired,
-    InvalidLoginState,
-    CredentialTypeUnsupported,
-    InvalidOtp,
-    TooManyAttempts,
-    SessionNotFound,
-    SessionExpired,
-    SessionRevoked,
-    IdentifierRequired,
-    PasswordTooShort,
-    PasswordUnchanged,
-    TotpAlreadyEnabled,
-    TotpNotEnabled,
-    InvalidTotpEnrollment,
-    /// Withdrawing device authorizations during an account level action failed.
-    DeviceAuthorizationRevocationFailed,
-    PasskeyLimitReached,
-    InvalidMfaEnrollment,
-    MfaNotEnabled,
-    PasswordTooLong,
-    PasswordTooWeak,
-    PasswordTooSimilar,
-    PasswordBreached,
-    PasswordCheckUnavailable,
-    /// A failed password while the interaction conceals whether the account
-    /// exists: it does not say which of the two was wrong.
-    InvalidAccountOrPassword,
-    /// Another sign-in email was requested before the resend interval passed.
-    EmailCodeResendTooSoon,
-    /// The sign-in email could not be sent.
-    EmailDeliveryFailed,
-    /// The account cannot replace its password by email: password reset is
-    /// off, email cannot be sent, or the account has no password or no
-    /// verified email address.
-    PasswordResetUnavailable,
-    /// The password reset link is wrong, used, or expired.
-    PasswordResetLinkInvalid,
-    /// Another password reset email was requested before the resend interval
-    /// passed.
-    PasswordResetResendTooSoon,
-    /// The password reset email could not be sent.
-    PasswordResetDeliveryFailed,
-    /// The new password repeats one of the account's recent passwords.
-    PasswordReused,
-    /// Self-registration is off or email cannot be sent.
-    RegistrationUnavailable,
-    /// The registration link is wrong, used, or expired.
-    RegistrationLinkInvalid,
-    /// Another registration email was requested before the resend interval
-    /// passed.
-    RegistrationResendTooSoon,
-    /// The invitation link is wrong, used, expired, or no longer matches the
-    /// account.
-    InvitationLinkInvalid,
-}
-
-impl AppErrorCode for AuthErrorCode {
-    fn required_params(self) -> &'static [&'static str] {
-        match self {
-            Self::CredentialTypeUnsupported => &["credential_type"],
-            Self::SessionNotFound => &["session_id"],
-            Self::PasskeyLimitReached => &["limit"],
-            Self::EmailCodeResendTooSoon
-            | Self::PasswordResetResendTooSoon
-            | Self::RegistrationResendTooSoon => &["seconds"],
-            Self::PasswordReused => &["count"],
-            _ => &[],
-        }
-    }
-
-    fn kind(self) -> ErrorKind {
-        match self {
-            AuthErrorCode::UserNotFound | AuthErrorCode::SessionNotFound => ErrorKind::NotFound,
-            AuthErrorCode::InvalidCredential
-            | AuthErrorCode::InvalidAccountOrPassword
-            | AuthErrorCode::InvalidOtp
-            | AuthErrorCode::SessionExpired
-            | AuthErrorCode::SessionRevoked => ErrorKind::Unauthorized,
-            AuthErrorCode::UserLocked | AuthErrorCode::UserDisabled => ErrorKind::Forbidden,
-
-            AuthErrorCode::LoginExpired => ErrorKind::Gone,
-            AuthErrorCode::InvalidLoginState
-            | AuthErrorCode::TotpAlreadyEnabled
-            | AuthErrorCode::PasskeyLimitReached
-            | AuthErrorCode::MfaNotEnabled
-            | AuthErrorCode::TotpNotEnabled => ErrorKind::Conflict,
-            AuthErrorCode::CredentialTypeUnsupported
-            | AuthErrorCode::IdentifierRequired
-            | AuthErrorCode::PasswordTooShort
-            | AuthErrorCode::PasswordUnchanged
-            | AuthErrorCode::PasswordTooLong
-            | AuthErrorCode::PasswordTooWeak
-            | AuthErrorCode::PasswordTooSimilar
-            | AuthErrorCode::PasswordBreached
-            | AuthErrorCode::InvalidTotpEnrollment
-            | AuthErrorCode::InvalidMfaEnrollment
-            | AuthErrorCode::PasswordResetUnavailable
-            | AuthErrorCode::PasswordResetLinkInvalid
-            | AuthErrorCode::PasswordReused
-            | AuthErrorCode::RegistrationUnavailable
-            | AuthErrorCode::RegistrationLinkInvalid
-            | AuthErrorCode::InvitationLinkInvalid => ErrorKind::Validation,
-
-            AuthErrorCode::TooManyAttempts
-            | AuthErrorCode::EmailCodeResendTooSoon
-            | AuthErrorCode::PasswordResetResendTooSoon
-            | AuthErrorCode::RegistrationResendTooSoon => ErrorKind::RateLimit,
-
-            AuthErrorCode::DeviceAuthorizationRevocationFailed
-            | AuthErrorCode::PasswordCheckUnavailable
-            | AuthErrorCode::EmailDeliveryFailed
-            | AuthErrorCode::PasswordResetDeliveryFailed => ErrorKind::Internal,
-        }
-    }
-
-    fn code(self) -> u32 {
-        match self {
-            AuthErrorCode::UserNotFound => 11000,
-            AuthErrorCode::InvalidCredential => 11001,
-            AuthErrorCode::UserLocked => 11002,
-            AuthErrorCode::UserDisabled => 11003,
-            AuthErrorCode::LoginExpired => 11004,
-            AuthErrorCode::InvalidLoginState => 11005,
-            AuthErrorCode::CredentialTypeUnsupported => 11006,
-            AuthErrorCode::InvalidOtp => 11007,
-            AuthErrorCode::TooManyAttempts => 11008,
-            AuthErrorCode::SessionNotFound => 11009,
-            AuthErrorCode::SessionExpired => 11010,
-            AuthErrorCode::SessionRevoked => 11011,
-            AuthErrorCode::IdentifierRequired => 11012,
-            AuthErrorCode::PasswordTooShort => 11013,
-            AuthErrorCode::PasswordUnchanged => 11014,
-            AuthErrorCode::TotpAlreadyEnabled => 11015,
-            AuthErrorCode::TotpNotEnabled => 11016,
-            AuthErrorCode::InvalidTotpEnrollment => 11017,
-            AuthErrorCode::DeviceAuthorizationRevocationFailed => 11018,
-            AuthErrorCode::PasskeyLimitReached => 11019,
-            AuthErrorCode::InvalidMfaEnrollment => 11020,
-            AuthErrorCode::MfaNotEnabled => 11021,
-            AuthErrorCode::PasswordTooLong => 11022,
-            AuthErrorCode::PasswordTooWeak => 11023,
-            AuthErrorCode::PasswordTooSimilar => 11024,
-            AuthErrorCode::PasswordBreached => 11025,
-            AuthErrorCode::PasswordCheckUnavailable => 11026,
-            AuthErrorCode::InvalidAccountOrPassword => 11027,
-            AuthErrorCode::EmailCodeResendTooSoon => 11028,
-            AuthErrorCode::EmailDeliveryFailed => 11029,
-            AuthErrorCode::PasswordResetUnavailable => 11030,
-            AuthErrorCode::PasswordResetLinkInvalid => 11031,
-            AuthErrorCode::PasswordResetResendTooSoon => 11032,
-            AuthErrorCode::PasswordResetDeliveryFailed => 11033,
-            AuthErrorCode::PasswordReused => 11034,
-            AuthErrorCode::RegistrationUnavailable => 11035,
-            AuthErrorCode::RegistrationLinkInvalid => 11036,
-            AuthErrorCode::RegistrationResendTooSoon => 11037,
-            AuthErrorCode::InvitationLinkInvalid => 11038,
-        }
+define_error_codes! {
+    /// Range: 11000-11099
+    pub enum AuthErrorCode(module = "auth") {
+        UserNotFound = 11000 { kind: NotFound },
+        InvalidCredential = 11001 { kind: Unauthorized },
+        UserLocked = 11002 { kind: Forbidden },
+        UserDisabled = 11003 { kind: Forbidden },
+        LoginExpired = 11004 { kind: Gone },
+        InvalidLoginState = 11005 { kind: Conflict },
+        CredentialTypeUnsupported = 11006 { kind: Validation, required: [credential_type] },
+        InvalidOtp = 11007 { kind: Unauthorized },
+        TooManyAttempts = 11008 { kind: RateLimit },
+        SessionNotFound = 11009 { kind: NotFound, required: [session_id] },
+        SessionExpired = 11010 { kind: Unauthorized },
+        SessionRevoked = 11011 { kind: Unauthorized },
+        IdentifierRequired = 11012 { kind: Validation },
+        PasswordTooShort = 11013 { kind: Validation },
+        PasswordUnchanged = 11014 { kind: Validation },
+        TotpAlreadyEnabled = 11015 { kind: Conflict },
+        TotpNotEnabled = 11016 { kind: Conflict },
+        InvalidTotpEnrollment = 11017 { kind: Validation },
+        /// Withdrawing device authorizations during an account level action failed.
+        DeviceAuthorizationRevocationFailed = 11018 { kind: Internal },
+        PasskeyLimitReached = 11019 { kind: Conflict, required: [limit] },
+        InvalidMfaEnrollment = 11020 { kind: Validation },
+        MfaNotEnabled = 11021 { kind: Conflict },
+        PasswordTooLong = 11022 { kind: Validation },
+        PasswordTooWeak = 11023 { kind: Validation },
+        PasswordTooSimilar = 11024 { kind: Validation },
+        PasswordBreached = 11025 { kind: Validation },
+        PasswordCheckUnavailable = 11026 { kind: Internal },
+        /// A failed password while the interaction conceals whether the account
+        /// exists: it does not say which of the two was wrong.
+        InvalidAccountOrPassword = 11027 { kind: Unauthorized },
+        /// Another sign-in email was requested before the resend interval passed.
+        EmailCodeResendTooSoon = 11028 { kind: RateLimit, required: [seconds] },
+        /// The sign-in email could not be sent.
+        EmailDeliveryFailed = 11029 { kind: Internal },
+        /// The account cannot replace its password by email: password reset is
+        /// off, email cannot be sent, or the account has no password or no
+        /// verified email address.
+        PasswordResetUnavailable = 11030 { kind: Validation },
+        /// The password reset link is wrong, used, or expired.
+        PasswordResetLinkInvalid = 11031 { kind: Validation },
+        /// Another password reset email was requested before the resend interval
+        /// passed.
+        PasswordResetResendTooSoon = 11032 { kind: RateLimit, required: [seconds] },
+        /// The password reset email could not be sent.
+        PasswordResetDeliveryFailed = 11033 { kind: Internal },
+        /// The new password repeats one of the account's recent passwords.
+        PasswordReused = 11034 { kind: Validation, required: [count] },
+        /// Self-registration is off or email cannot be sent.
+        RegistrationUnavailable = 11035 { kind: Validation },
+        /// The registration link is wrong, used, or expired.
+        RegistrationLinkInvalid = 11036 { kind: Validation },
+        /// Another registration email was requested before the resend interval
+        /// passed.
+        RegistrationResendTooSoon = 11037 { kind: RateLimit, required: [seconds] },
+        /// The invitation link is wrong, used, expired, or no longer matches the
+        /// account.
+        InvitationLinkInvalid = 11038 { kind: Validation },
     }
 }

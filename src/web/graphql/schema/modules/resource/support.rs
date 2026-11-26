@@ -11,10 +11,7 @@ use async_graphql::{Context, ID, Result, connection::CursorType};
 use identity_application::{
     error::{
         AppError,
-        codes::{
-            authorization::AuthorizationErrorCode, graphql::GraphqlErrorCode, rbac::RbacErrorCode,
-        },
-        params::ErrorParams,
+        codes::{authorization, graphql, rbac},
     },
     rbac::RbacManagementAuthority,
 };
@@ -89,10 +86,7 @@ pub(crate) fn page_args(
         || first.is_some() && before.is_some()
         || last.is_some() && after.is_some();
     if conflict {
-        return Err(app_error(
-            ctx,
-            AppError::from_code(RbacErrorCode::PageArgumentsConflict),
-        ));
+        return Err(app_error(ctx, rbac::error::PageArgumentsConflict.into()));
     }
     Ok(PageArgs {
         first: first.map(|value| value as u32),
@@ -105,7 +99,7 @@ pub(crate) fn page_args(
 pub(crate) fn decode_oid<T: GlobalIdType>(ctx: &Context<'_>, id: &ID) -> Result<Uuid> {
     GlobalId::<T>::decode(id.as_str())
         .map(|id| id.oid())
-        .map_err(|_| coded_error(ctx, GraphqlErrorCode::InvalidGlobalId, ErrorParams::new()))
+        .map_err(|_| coded_error(ctx, graphql::error::InvalidGlobalId))
 }
 
 pub(crate) fn decode_oids<T: GlobalIdType>(ctx: &Context<'_>, ids: &[ID]) -> Result<Vec<Uuid>> {
@@ -119,9 +113,9 @@ pub(crate) fn normalize_reason(ctx: &Context<'_>, reason: &str) -> Result<String
     if reason.chars().count() > 1_000 {
         return Err(app_error(
             ctx,
-            AppError::from_code(RbacErrorCode::InvalidReason)
-                .with_param("min", "0")
-                .with_param("max", "1000")
+            rbac::error::InvalidReason::new()
+                .min(0)
+                .max(1000)
                 .with_field("reason"),
         ));
     }
@@ -144,9 +138,7 @@ pub(crate) async fn request_authority(
         .into_iter()
         .collect::<BTreeSet<ManagementScope>>();
     if request.claims.client_oid.is_nil() {
-        return Err(AppError::from_code(
-            AuthorizationErrorCode::AuthorizationSnapshotExpired,
-        ));
+        return Err(authorization::error::AuthorizationSnapshotExpired.into());
     }
     let (snapshot, boundary) = if request.claims.principal.is_machine() {
         use identity_domain::authorization::ManagementAuthorityRepository;
@@ -159,9 +151,7 @@ pub(crate) async fn request_authority(
             .find_client_scope_authority(request.claims.client_oid)
             .await
             .map_err(AppError::from)?
-            .ok_or_else(|| {
-                AppError::from_code(AuthorizationErrorCode::AuthorizationSnapshotExpired)
-            })?;
+            .ok_or_else(|| authorization::error::AuthorizationSnapshotExpired.into_error())?;
         (None, current.boundary)
     } else {
         let management = request
@@ -169,12 +159,10 @@ pub(crate) async fn request_authority(
             .management
             .as_ref()
             .filter(|data| !data.client_policy_version.is_nil())
-            .ok_or_else(|| {
-                AppError::from_code(AuthorizationErrorCode::AuthorizationSnapshotExpired)
-            })?;
-        let snapshot = management.to_snapshot().map_err(|_| {
-            AppError::from_code(AuthorizationErrorCode::AuthorizationSnapshotExpired)
-        })?;
+            .ok_or_else(|| authorization::error::AuthorizationSnapshotExpired.into_error())?;
+        let snapshot = management
+            .to_snapshot()
+            .map_err(|_| authorization::error::AuthorizationSnapshotExpired.into_error())?;
         (
             Some(snapshot),
             PolicyVersion(management.client_policy_version),

@@ -14,12 +14,15 @@ use josekit::{
 use serde_json::json;
 use uuid::Uuid;
 
-use crate::openid_connect::{
-    client_encryption::select_client_encryption_jwk,
-    dto::scoped_standard_claims,
-    jose::{
-        asymmetric_signer_from_pem, encrypt_compact_with_public_jwk_with_content_type,
-        front_channel_hash,
+use crate::{
+    error::codes::authorize,
+    openid_connect::{
+        client_encryption::select_client_encryption_jwk,
+        dto::scoped_standard_claims,
+        jose::{
+            asymmetric_signer_from_pem, encrypt_compact_with_public_jwk_with_content_type,
+            front_channel_hash,
+        },
     },
 };
 
@@ -78,12 +81,11 @@ impl AuthorizeService {
             {
                 Ok(key) => return Ok(key),
                 Err(error)
-                    if error.code()
-                        == AppError::from_code(AuthorizeErrorCode::StoreCodeFailed).code() => {}
+                    if error.code() == authorize::error::StoreCodeFailed.into_error().code() => {}
                 Err(error) => return Err(error),
             }
         }
-        Err(AppError::from_code(AuthorizeErrorCode::StoreCodeFailed))
+        Err(authorize::error::StoreCodeFailed.into_error())
     }
 
     async fn load_id_token_signing_key_single(
@@ -96,7 +98,7 @@ impl AuthorizeService {
                     .key_repo
                     .list_active_asymmetric()
                     .await
-                    .map_err(AppError::map_source(AuthorizeErrorCode::LoadRequestFailed))?;
+                    .map_err(authorize::error::LoadRequestFailed::map_source())?;
                 for key in keys {
                     let KeyData::Asymmetric(data) = &key.data else {
                         continue;
@@ -110,7 +112,7 @@ impl AuthorizeService {
                         .key_jwk_repo
                         .find_active_by_key_oid_and_algorithm(key.oid, alg)
                         .await
-                        .map_err(AppError::map_source(AuthorizeErrorCode::LoadRequestFailed))?
+                        .map_err(authorize::error::LoadRequestFailed::map_source())?
                     {
                         return Ok((
                             identity_domain::openid_connect::identifier::key_id(binding.oid),
@@ -119,12 +121,12 @@ impl AuthorizeService {
                         ));
                     }
                 }
-                Err(AppError::from_code(AuthorizeErrorCode::StoreCodeFailed))
+                Err(authorize::error::StoreCodeFailed.into_error())
             }
             Some(JwsAlgorithm::None) if cfg!(feature = "allow-none-alg") => {
                 Ok((String::new(), String::new(), JwsAlgorithm::None))
             }
-            Some(_) => Err(AppError::from_code(AuthorizeErrorCode::StoreCodeFailed)),
+            Some(_) => Err(authorize::error::StoreCodeFailed.into_error()),
             None => {
                 let (key_id, private_key, alg) = self.load_signing_key_impl().await?;
                 Ok((key_id, private_key, JwsAlgorithm::Asymmetric(alg)))
@@ -139,7 +141,7 @@ impl AuthorizeService {
             .key_repo
             .list_active_asymmetric()
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::LoadRequestFailed))?;
+            .map_err(authorize::error::LoadRequestFailed::map_source())?;
 
         for key in keys {
             if let KeyData::Asymmetric(data) = &key.data {
@@ -150,7 +152,7 @@ impl AuthorizeService {
                         .key_jwk_repo
                         .find_active_by_key_oid_and_algorithm(key.oid, alg)
                         .await
-                        .map_err(AppError::map_source(AuthorizeErrorCode::LoadRequestFailed))?
+                        .map_err(authorize::error::LoadRequestFailed::map_source())?
                     {
                         found = Some((alg, binding));
                         break;
@@ -168,7 +170,7 @@ impl AuthorizeService {
             }
         }
 
-        Err(AppError::from_code(AuthorizeErrorCode::StoreCodeFailed))
+        Err(authorize::error::StoreCodeFailed.into_error())
     }
 
     pub(super) fn sign_implicit_id_token(
@@ -192,59 +194,41 @@ impl AuthorizeService {
         payload.set_expires_at(&(now + Duration::from_secs(3600)));
         payload
             .set_claim(JwtClaimNames::AZP, Some(json!(input.audience)))
-            .map_err(AppError::map_source(
-                AuthorizeErrorCode::SerializeCodeFailed,
-            ))?;
+            .map_err(authorize::error::SerializeCodeFailed::map_source())?;
         payload
             .set_claim(JwtClaimNames::AMR, Some(json!(input.amr)))
-            .map_err(AppError::map_source(
-                AuthorizeErrorCode::SerializeCodeFailed,
-            ))?;
+            .map_err(authorize::error::SerializeCodeFailed::map_source())?;
 
         payload
             .set_claim(JwtClaimNames::NONCE, Some(json!(input.nonce)))
-            .map_err(AppError::map_source(
-                AuthorizeErrorCode::SerializeCodeFailed,
-            ))?;
+            .map_err(authorize::error::SerializeCodeFailed::map_source())?;
         payload
             .set_claim(JwtClaimNames::AUTH_TIME, Some(json!(input.auth_time)))
-            .map_err(AppError::map_source(
-                AuthorizeErrorCode::SerializeCodeFailed,
-            ))?;
+            .map_err(authorize::error::SerializeCodeFailed::map_source())?;
 
         if let Some(acr) = input.acr {
             payload
                 .set_claim(JwtClaimNames::ACR, Some(json!(acr.as_str())))
-                .map_err(AppError::map_source(
-                    AuthorizeErrorCode::SerializeCodeFailed,
-                ))?;
+                .map_err(authorize::error::SerializeCodeFailed::map_source())?;
         }
         if let Some(access_token) = input.access_token {
-            let at_hash = front_channel_hash(access_token, input.alg.as_str()).map_err(
-                AppError::map_source(AuthorizeErrorCode::SerializeCodeFailed),
-            )?;
+            let at_hash = front_channel_hash(access_token, input.alg.as_str())
+                .map_err(authorize::error::SerializeCodeFailed::map_source())?;
             payload
                 .set_claim(JwtClaimNames::AT_HASH, Some(json!(at_hash)))
-                .map_err(AppError::map_source(
-                    AuthorizeErrorCode::SerializeCodeFailed,
-                ))?;
+                .map_err(authorize::error::SerializeCodeFailed::map_source())?;
         }
         if let Some(code) = input.code {
-            let c_hash = front_channel_hash(code, input.alg.as_str()).map_err(
-                AppError::map_source(AuthorizeErrorCode::SerializeCodeFailed),
-            )?;
+            let c_hash = front_channel_hash(code, input.alg.as_str())
+                .map_err(authorize::error::SerializeCodeFailed::map_source())?;
             payload
                 .set_claim(JwtClaimNames::C_HASH, Some(json!(c_hash)))
-                .map_err(AppError::map_source(
-                    AuthorizeErrorCode::SerializeCodeFailed,
-                ))?;
+                .map_err(authorize::error::SerializeCodeFailed::map_source())?;
         }
         if let Some(protected_session_id) = input.protected_session_id {
             payload
                 .set_claim(JwtClaimNames::SID, Some(json!(protected_session_id)))
-                .map_err(AppError::map_source(
-                    AuthorizeErrorCode::SerializeCodeFailed,
-                ))?;
+                .map_err(authorize::error::SerializeCodeFailed::map_source())?;
         }
 
         let id_token_scope = if input.access_token.is_some() || input.code.is_some() {
@@ -261,9 +245,7 @@ impl AuthorizeService {
         for (name, value) in standard_claims {
             payload
                 .set_claim(&name, Some(value))
-                .map_err(AppError::map_source(
-                    AuthorizeErrorCode::SerializeCodeFailed,
-                ))?;
+                .map_err(authorize::error::SerializeCodeFailed::map_source())?;
         }
 
         if input.alg == JwsAlgorithm::None {
@@ -271,16 +253,15 @@ impl AuthorizeService {
             return Self::sign_unsigned_implicit_id_token(&header, &payload);
 
             #[cfg(not(feature = "allow-none-alg"))]
-            return Err(AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed));
+            return Err(authorize::error::SerializeCodeFailed.into_error());
         }
 
         let JwsAlgorithm::Asymmetric(algorithm) = input.alg else {
-            return Err(AppError::from_code(AuthorizeErrorCode::SerializeCodeFailed));
+            return Err(authorize::error::SerializeCodeFailed.into_error());
         };
         let signer: Box<dyn JwsSigner> = build_signer_for_alg(input.private_key_pem, algorithm)?;
-        jwt::encode_with_signer(&payload, &header, &*signer).map_err(AppError::map_source(
-            AuthorizeErrorCode::SerializeCodeFailed,
-        ))
+        jwt::encode_with_signer(&payload, &header, &*signer)
+            .map_err(authorize::error::SerializeCodeFailed::map_source())
     }
 
     #[cfg(feature = "allow-none-alg")]
@@ -288,9 +269,8 @@ impl AuthorizeService {
         header: &JwsHeader,
         payload: &JwtPayload,
     ) -> Result<String, AppError> {
-        jwt::encode_unsecured(payload, header).map_err(AppError::map_source(
-            AuthorizeErrorCode::SerializeCodeFailed,
-        ))
+        jwt::encode_unsecured(payload, header)
+            .map_err(authorize::error::SerializeCodeFailed::map_source())
     }
 
     pub(super) fn sign_implicit_access_token(
@@ -315,40 +295,27 @@ impl AuthorizeService {
         payload.set_jwt_id(input.token_id);
         payload
             .set_claim(JwtClaimNames::CLIENT_ID, Some(json!(input.client_id)))
-            .map_err(AppError::map_source(
-                AuthorizeErrorCode::SerializeCodeFailed,
-            ))?;
+            .map_err(authorize::error::SerializeCodeFailed::map_source())?;
         payload
             .set_claim(JwtClaimNames::SCOPE, Some(json!(input.scope)))
-            .map_err(AppError::map_source(
-                AuthorizeErrorCode::SerializeCodeFailed,
-            ))?;
+            .map_err(authorize::error::SerializeCodeFailed::map_source())?;
         payload
             .set_claim(JwtClaimNames::SID, Some(json!(input.protected_session_id)))
-            .map_err(AppError::map_source(
-                AuthorizeErrorCode::SerializeCodeFailed,
-            ))?;
+            .map_err(authorize::error::SerializeCodeFailed::map_source())?;
         payload
             .set_claim(JwtClaimNames::AUTH_TIME, Some(json!(input.auth_time)))
-            .map_err(AppError::map_source(
-                AuthorizeErrorCode::SerializeCodeFailed,
-            ))?;
+            .map_err(authorize::error::SerializeCodeFailed::map_source())?;
         if let Some(acr) = input.acr {
             payload
                 .set_claim(JwtClaimNames::ACR, Some(json!(acr.as_str())))
-                .map_err(AppError::map_source(
-                    AuthorizeErrorCode::SerializeCodeFailed,
-                ))?;
+                .map_err(authorize::error::SerializeCodeFailed::map_source())?;
         }
         payload
             .set_claim(JwtClaimNames::AMR, Some(json!(input.amr)))
-            .map_err(AppError::map_source(
-                AuthorizeErrorCode::SerializeCodeFailed,
-            ))?;
+            .map_err(authorize::error::SerializeCodeFailed::map_source())?;
         let signer: Box<dyn JwsSigner> = build_signer_for_alg(input.private_key_pem, input.alg)?;
-        jwt::encode_with_signer(&payload, &header, &*signer).map_err(AppError::map_source(
-            AuthorizeErrorCode::SerializeCodeFailed,
-        ))
+        jwt::encode_with_signer(&payload, &header, &*signer)
+            .map_err(authorize::error::SerializeCodeFailed::map_source())
     }
 
     pub(super) async fn encrypt_id_token_for_client(
@@ -377,9 +344,7 @@ impl AuthorizeService {
                 algorithm.as_str(),
             )
             .await
-            .map_err(AppError::map_source(
-                AuthorizeErrorCode::EncryptionKeyNotFound,
-            ))?
+            .map_err(authorize::error::EncryptionKeyNotFound::map_source())?
             else {
                 continue;
             };
@@ -396,11 +361,11 @@ impl AuthorizeService {
                 }
             }
         }
-        Err(AppError::from_code(if found_key {
-            AuthorizeErrorCode::EncryptionFailed
+        Err(if found_key {
+            authorize::error::EncryptionFailed.into_error()
         } else {
-            AuthorizeErrorCode::EncryptionKeyNotFound
-        }))
+            authorize::error::EncryptionKeyNotFound.into_error()
+        })
     }
 }
 
@@ -408,7 +373,6 @@ fn build_signer_for_alg(
     private_key_pem: &str,
     alg: JwaSigningAlgorithm,
 ) -> Result<Box<dyn JwsSigner>, AppError> {
-    asymmetric_signer_from_pem(alg.as_str(), private_key_pem.as_bytes()).map_err(
-        AppError::map_source(AuthorizeErrorCode::SerializeCodeFailed),
-    )
+    asymmetric_signer_from_pem(alg.as_str(), private_key_pem.as_bytes())
+        .map_err(authorize::error::SerializeCodeFailed::map_source())
 }

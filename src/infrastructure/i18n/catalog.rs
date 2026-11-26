@@ -3,77 +3,11 @@ use fluent_templates::{
     FluentBundle,
     fluent_bundle::{FluentArgs, FluentResource},
 };
-use identity_application::error::{
-    code::AppErrorCode,
-    codes::{
-        account::AccountErrorCode, audit::AuditErrorCode, auth::AuthErrorCode,
-        authorization::AuthorizationErrorCode, authorize::AuthorizeErrorCode,
-        client::ClientErrorCode, common::CommonErrorCode, device::DeviceAuthorizationErrorCode,
-        graphql::GraphqlErrorCode, graphql_transport::GraphqlTransportErrorCode,
-        group::GroupErrorCode, instance::InstanceErrorCode, openid_connect::OpenIdConnectErrorCode,
-        rbac::RbacErrorCode, token::TokenErrorCode, user_management::UserManagementErrorCode,
-    },
-    kind::ErrorKind,
-};
+pub use identity_application::error::catalog::{PublicErrorDefinition, public_error_inventory};
 use std::{fs, path::Path};
 use unic_langid::LanguageIdentifier;
 
 use crate::web::tera as web_tera;
-
-#[derive(Debug, Clone)]
-pub struct PublicErrorDefinition {
-    pub code: u32,
-    pub kind: ErrorKind,
-    pub fluent_key: String,
-    pub usage_module: &'static str,
-    pub required: &'static [&'static str],
-    pub optional: &'static [&'static str],
-}
-
-/// This inventory comes from application contracts, never from a locale file.
-/// Self-service scopes keep their existing error ranges. The separately typed
-/// authorization inventory supplies management and business RBAC errors.
-pub fn public_error_inventory() -> Vec<PublicErrorDefinition> {
-    fn definitions<C: AppErrorCode + Copy + strum::IntoEnumIterator>(
-        module: &'static str,
-    ) -> Vec<PublicErrorDefinition> {
-        C::iter()
-            .map(|code| PublicErrorDefinition {
-                code: code.code(),
-                kind: code.kind(),
-                fluent_key: format!("E{}", code.code()),
-                usage_module: code.usage_module().unwrap_or(module),
-                required: code.required_params(),
-                optional: code.optional_params(),
-            })
-            .collect()
-    }
-    let mut inventory = definitions::<CommonErrorCode>("common");
-    inventory.extend(definitions::<AuthErrorCode>("auth"));
-    inventory.extend(definitions::<AccountErrorCode>("account"));
-    inventory.extend(definitions::<AuthorizeErrorCode>(
-        "openid_connect.authorize",
-    ));
-    inventory.extend(definitions::<DeviceAuthorizationErrorCode>(
-        "openid_connect.device",
-    ));
-    inventory.extend(definitions::<TokenErrorCode>("openid_connect.token"));
-    inventory.extend(definitions::<OpenIdConnectErrorCode>(
-        "openid_connect.user_info",
-    ));
-    inventory.extend(definitions::<GraphqlErrorCode>("graphql"));
-    inventory.extend(definitions::<GraphqlTransportErrorCode>(
-        "graphql.transport",
-    ));
-    inventory.extend(definitions::<AuthorizationErrorCode>("authorization"));
-    inventory.extend(definitions::<UserManagementErrorCode>("user.management"));
-    inventory.extend(definitions::<RbacErrorCode>("rbac"));
-    inventory.extend(definitions::<ClientErrorCode>("client"));
-    inventory.extend(definitions::<InstanceErrorCode>("instance"));
-    inventory.extend(definitions::<GroupErrorCode>("rbac.group"));
-    inventory.extend(definitions::<AuditErrorCode>("audit"));
-    inventory
-}
 
 fn validate_sources(
     locale: &str,
@@ -170,6 +104,16 @@ pub fn validate_error_catalogs(root: &Path) -> Result<(), String> {
 #[cfg(test)]
 mod tests {
     use std::ops::RangeInclusive;
+
+    use identity_application::error::{
+        code::AppErrorCode,
+        codes::{
+            audit::AuditErrorCode, authorization::AuthorizationErrorCode, client::ClientErrorCode,
+            group::GroupErrorCode, instance::InstanceErrorCode, rbac::RbacErrorCode,
+            user_management::UserManagementErrorCode,
+        },
+        kind::ErrorKind,
+    };
 
     use super::*;
     #[test]

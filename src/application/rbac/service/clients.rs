@@ -81,9 +81,10 @@ impl RbacManagementService {
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
 
             if command.scopes.len() > MAX_SCOPE_ASSIGNMENTS {
-                return Err(AppError::from_code(RbacErrorCode::InvalidCollectionSize)
-                    .with_param("max", MAX_SCOPE_ASSIGNMENTS.to_string())
-                    .with_field("scopes"));
+                return Err(
+                    rbac_codes::error::InvalidCollectionSize::new(MAX_SCOPE_ASSIGNMENTS)
+                        .with_field("scopes"),
+                );
             }
             let scopes = normalize_client_scope_assignments(command.scopes)?;
             let result = self
@@ -114,8 +115,8 @@ fn normalize_client_scope_assignments(
     for assignment in scopes {
         match unique.insert(assignment.scope_oid, assignment.client_granted) {
             Some(previous) if previous != assignment.client_granted => {
-                return Err(AppError::from_code(RbacErrorCode::ValidationFailed)
-                    .with_param("field", "scopes")
+                return Err(rbac_codes::error::ValidationFailed::new()
+                    .field("scopes")
                     .with_field("scopes"));
             }
             _ => {}

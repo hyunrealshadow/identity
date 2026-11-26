@@ -17,7 +17,7 @@ use super::super::model::{
     MAX_DEFAULT_ACR_VALUES, MAX_DEFAULT_MAX_AGE_SECONDS, MAX_REQUEST_URIS, MAX_URI_LENGTH,
 };
 use crate::{
-    error::{AppError, codes::client::ClientErrorCode},
+    error::{AppError, codes::client},
     openid_connect::{
         provider::ClientMetadataOptions,
         registration::{
@@ -55,11 +55,7 @@ fn uri(
     let Some(value) = trimmed(value) else {
         return Ok(None);
     };
-    let invalid = || {
-        AppError::from_code(ClientErrorCode::InvalidMetadataUri)
-            .with_param("uri", value.clone())
-            .with_field(field(name))
-    };
+    let invalid = || client::error::InvalidMetadataUri::new(&value).with_field(field(name));
     if value.len() > MAX_URI_LENGTH {
         return Err(invalid());
     }
@@ -86,17 +82,13 @@ fn bounded_list(
         }
     }
     if unique.len() > max {
-        return Err(AppError::from_code(ClientErrorCode::InvalidCollectionSize)
-            .with_param("max", max.to_string())
-            .with_field(field(name)));
+        return Err(client::error::InvalidCollectionSize::new(max).with_field(field(name)));
     }
     Ok(unique)
 }
 
 fn unsupported(value: &str, name: &'static str) -> AppError {
-    AppError::from_code(ClientErrorCode::UnsupportedAlgorithm)
-        .with_param("algorithm", value.to_owned())
-        .with_field(field(name))
+    client::error::UnsupportedAlgorithm::new(value).with_field(field(name))
 }
 
 /// Supported values for this purpose, or values the client already holds,
@@ -131,10 +123,7 @@ fn encryption_pair(
     let algs = listed(algs, supported_alg, current_alg, alg_name)?;
     let encs = listed(encs, supported_enc, current_enc, enc_name)?;
     if !encs.is_empty() && algs.is_empty() {
-        return Err(
-            AppError::from_code(ClientErrorCode::EncryptionAlgorithmRequired)
-                .with_field(field(alg_name)),
-        );
+        return Err(client::error::EncryptionAlgorithmRequired.with_field(field(alg_name)));
     }
     Ok((algs, encs))
 }
@@ -157,19 +146,16 @@ pub(crate) fn validate_advanced_settings(
         web_uri,
     )?;
     if settings.frontchannel_logout_session_required && frontchannel_logout_uri.is_none() {
-        return Err(AppError::from_code(ClientErrorCode::LogoutUriRequired)
-            .with_field(field("frontchannelLogoutUri")));
+        return Err(client::error::LogoutUriRequired.with_field(field("frontchannelLogoutUri")));
     }
     if settings.backchannel_logout_session_required && backchannel_logout_uri.is_none() {
-        return Err(AppError::from_code(ClientErrorCode::LogoutUriRequired)
-            .with_field(field("backchannelLogoutUri")));
+        return Err(client::error::LogoutUriRequired.with_field(field("backchannelLogoutUri")));
     }
 
     let mut contacts = Vec::new();
     for contact in bounded_list(settings.contacts, MAX_CONTACTS, "contacts")? {
         if contact.chars().count() > MAX_CONTACT_LENGTH {
-            return Err(AppError::from_code(ClientErrorCode::InvalidContact)
-                .with_param("max", MAX_CONTACT_LENGTH.to_string())
+            return Err(client::error::InvalidContact::new(MAX_CONTACT_LENGTH)
                 .with_field(field("contacts")));
         }
         contacts.push(contact);
@@ -179,9 +165,10 @@ pub(crate) fn validate_advanced_settings(
         .default_max_age
         .is_some_and(|age| !(0..=MAX_DEFAULT_MAX_AGE_SECONDS).contains(&age))
     {
-        return Err(AppError::from_code(ClientErrorCode::InvalidDefaultMaxAge)
-            .with_param("max", MAX_DEFAULT_MAX_AGE_SECONDS.to_string())
-            .with_field(field("defaultMaxAge")));
+        return Err(
+            client::error::InvalidDefaultMaxAge::new(MAX_DEFAULT_MAX_AGE_SECONDS)
+                .with_field(field("defaultMaxAge")),
+        );
     }
 
     let default_acr_values = bounded_list(
@@ -193,9 +180,9 @@ pub(crate) fn validate_advanced_settings(
         !acr.parse::<AuthenticationContextClass>()
             .is_ok_and(|class| options.acr_values.contains(&class))
     }) {
-        return Err(AppError::from_code(ClientErrorCode::UnsupportedAcrValue)
-            .with_param("acr", acr.clone())
-            .with_field(field("defaultAcrValues")));
+        return Err(
+            client::error::UnsupportedAcrValue::new(acr).with_field(field("defaultAcrValues"))
+        );
     }
 
     let (id_token_encrypted_response_algs, id_token_encrypted_response_encs) = encryption_pair(
@@ -315,29 +302,23 @@ pub(crate) async fn validate_subject_identifier(
         if settings.subject_type == SubjectType::Pairwise && redirect_hosts(redirect_uris).len() > 1
         {
             return Err(
-                AppError::from_code(ClientErrorCode::SectorIdentifierRequired)
-                    .with_field(field("sectorIdentifierUri")),
+                client::error::SectorIdentifierRequired.with_field(field("sectorIdentifierUri"))
             );
         }
         return Ok(());
     };
     let sector = Url::parse(sector).map_err(|_| {
-        AppError::from_code(ClientErrorCode::InvalidMetadataUri)
-            .with_param("uri", sector.to_owned())
-            .with_field(field("sectorIdentifierUri"))
+        client::error::InvalidMetadataUri::new(sector).with_field(field("sectorIdentifierUri"))
     })?;
     let listed = fetch_sector_redirect_uris(&sector).await.map_err(|error| {
-        AppError::from_code(ClientErrorCode::SectorIdentifierUnavailable)
+        client::error::SectorIdentifierUnavailable
             .with_field(field("sectorIdentifierUri"))
             .with_source(error)
     })?;
     if sector_redirect_uris_include_registered_redirects(&listed, redirect_uris) {
         Ok(())
     } else {
-        Err(
-            AppError::from_code(ClientErrorCode::SectorIdentifierMismatch)
-                .with_field(field("sectorIdentifierUri")),
-        )
+        Err(client::error::SectorIdentifierMismatch.with_field(field("sectorIdentifierUri")))
     }
 }
 

@@ -16,10 +16,7 @@ use tracing::{Instrument, field::Empty, info_span};
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 use uuid::Uuid;
 
-use crate::{
-    application::error::{AppError, codes::common::CommonErrorCode},
-    controllers::response::render_app_error_json,
-};
+use crate::{application::error::codes::common, controllers::response::render_app_error_json};
 
 fn render_workload_unauthorized(res: &mut Response, invalid_token: bool) {
     let challenge = if invalid_token {
@@ -29,7 +26,7 @@ fn render_workload_unauthorized(res: &mut Response, invalid_token: bool) {
     };
     res.headers_mut()
         .insert(header::WWW_AUTHENTICATE, challenge);
-    render_app_error_json(res, AppError::from_code(CommonErrorCode::Unauthorized));
+    render_app_error_json(res, common::error::Unauthorized.into());
 }
 
 #[derive(Clone)]
@@ -84,7 +81,7 @@ pub fn authenticated_workload(depot: &Depot) -> Option<AuthenticatedWorkload> {
 #[handler]
 pub async fn require_login_workload(depot: &mut Depot, res: &mut Response, ctrl: &mut FlowCtrl) {
     if authenticated_workload(depot) != Some(AuthenticatedWorkload(BuiltInWorkload::Login)) {
-        render_app_error_json(res, AppError::from_code(CommonErrorCode::Forbidden));
+        render_app_error_json(res, common::error::Forbidden.into());
         ctrl.skip_rest();
     }
 }

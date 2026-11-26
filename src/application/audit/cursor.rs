@@ -8,7 +8,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     data_protection::DataProtector,
-    error::{AppError, codes::audit::AuditErrorCode},
+    error::{AppError, codes::audit},
 };
 
 pub const AUDIT_CURSOR_PURPOSE: &str = "graphql:cursor:audit";
@@ -92,27 +92,27 @@ pub async fn decode_cursor(
 ) -> Result<DecodedAuditCursor, AppError> {
     let trimmed = token.trim();
     if trimmed.is_empty() {
-        return Err(AppError::from_code(AuditErrorCode::InvalidCursor));
+        return Err(audit::error::InvalidCursor.into());
     }
     let bytes = protector
         .unprotect(AUDIT_CURSOR_PURPOSE, trimmed)
         .await
-        .map_err(|_| AppError::from_code(AuditErrorCode::InvalidCursor))?;
-    let payload: AuditCursorPayload = serde_json::from_slice(&bytes)
-        .map_err(|_| AppError::from_code(AuditErrorCode::InvalidCursor))?;
+        .map_err(|_| audit::error::InvalidCursor)?;
+    let payload: AuditCursorPayload =
+        serde_json::from_slice(&bytes).map_err(|_| audit::error::InvalidCursor)?;
 
     if payload.version != AUDIT_CURSOR_VERSION
         || payload.filter_hash != expected_filter_hash
         || payload.order_field != encode_order_field(expected_order.field)
         || payload.order_direction != encode_order_dir(expected_order.direction)
     {
-        return Err(AppError::from_code(AuditErrorCode::InvalidCursor));
+        return Err(audit::error::InvalidCursor.into());
     }
 
     let snapshot_at = DateTime::from_timestamp_micros(payload.snapshot_at_micros)
-        .ok_or_else(|| AppError::from_code(AuditErrorCode::InvalidCursor))?;
+        .ok_or(audit::error::InvalidCursor)?;
     let occurred_at = DateTime::from_timestamp_micros(payload.occurred_at_micros)
-        .ok_or_else(|| AppError::from_code(AuditErrorCode::InvalidCursor))?;
+        .ok_or(audit::error::InvalidCursor)?;
 
     Ok(DecodedAuditCursor {
         sort_key: AuditEventSortKey {

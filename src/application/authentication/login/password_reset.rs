@@ -34,7 +34,7 @@ use uuid::Uuid;
 use super::{LoginEmailDependencies, LoginService};
 use crate::{
     email::{EmailRecipient, EmailTemplateKind, LinkToken, link_matches, render_templated_email},
-    error::{AppError, codes::auth::AuthErrorCode},
+    error::{AppError, codes::auth},
     observability::{BusinessEvent, EventValue},
     setting::{
         EmailDeliverySettings, EmailTemplatesSetting, PasswordResetEnabledSetting, SettingsSnapshot,
@@ -192,10 +192,10 @@ impl LoginService {
         let login = self.get(request.login_oid).await?;
         let now = Utc::now();
         if login.expires_at <= now {
-            return Err(AppError::from_code(AuthErrorCode::LoginExpired));
+            return Err(auth::error::LoginExpired.into());
         }
         if !login_accepts_reset(&login) {
-            return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
+            return Err(auth::error::InvalidLoginState.into());
         }
         let Some(dependencies) = self.password_reset_dependencies() else {
             return Err(unavailable());
@@ -259,10 +259,7 @@ impl LoginService {
                         (None, true)
                     }
                     Err(error) => {
-                        return Err(AppError::from_code(
-                            AuthErrorCode::PasswordResetDeliveryFailed,
-                        )
-                        .with_source(error));
+                        return Err(auth::error::PasswordResetDeliveryFailed.with_source(error));
                     }
                 }
             }
@@ -302,16 +299,13 @@ impl LoginService {
             },
             DeliveryChallengeAdmission::TooSoon { available_at } => {
                 let seconds = (available_at - now).num_seconds().max(1);
-                return Err(
-                    AppError::from_code(AuthErrorCode::PasswordResetResendTooSoon)
-                        .with_param("seconds", seconds.to_string()),
-                );
+                return Err(auth::error::PasswordResetResendTooSoon::new(seconds).into());
             }
             DeliveryChallengeAdmission::LimitReached => {
-                return Err(AppError::from_code(AuthErrorCode::TooManyAttempts));
+                return Err(auth::error::TooManyAttempts.into());
             }
             DeliveryChallengeAdmission::InvalidState => {
-                return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
+                return Err(auth::error::InvalidLoginState.into());
             }
         };
 
@@ -392,7 +386,7 @@ impl LoginService {
     ) -> Result<(LoginEmailDependencies, Login, UserOid, Uuid), AppError> {
         let login = self.get(login_oid).await?;
         if login.expires_at <= Utc::now() {
-            return Err(AppError::from_code(AuthErrorCode::LoginExpired));
+            return Err(auth::error::LoginExpired.into());
         }
         if !login_accepts_reset(&login) {
             return Err(link_invalid());
@@ -418,11 +412,11 @@ impl LoginService {
 }
 
 fn unavailable() -> AppError {
-    AppError::from_code(AuthErrorCode::PasswordResetUnavailable)
+    auth::error::PasswordResetUnavailable.into()
 }
 
 fn link_invalid() -> AppError {
-    AppError::from_code(AuthErrorCode::PasswordResetLinkInvalid)
+    auth::error::PasswordResetLinkInvalid.into()
 }
 
 /// Whether `token` is the challenge's link token and the link is still valid.

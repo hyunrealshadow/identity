@@ -1,58 +1,18 @@
-use crate::error::{code::AppErrorCode, kind::ErrorKind};
-
-/// Range: 13000-13099
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[cfg_attr(test, derive(strum::EnumIter))]
-pub enum InstallErrorCode {
-    AlreadyInitialized,
-    UsernameRequired,
-    EmailRequired,
-    PasswordRequired,
-    DomainRequired,
-    DomainInvalid,
-    EmailInvalid,
-    UsernameExists,
-    EmailExists,
-    UnsupportedAlgorithm,
-    ApplicationUrlInvalid,
-    ConsoleUrlRequired,
-    ConsoleUrlInvalid,
-}
-
-impl AppErrorCode for InstallErrorCode {
-    fn kind(self) -> ErrorKind {
-        match self {
-            Self::AlreadyInitialized | Self::UsernameExists | Self::EmailExists => {
-                ErrorKind::Conflict
-            }
-            Self::UsernameRequired
-            | Self::EmailRequired
-            | Self::PasswordRequired
-            | Self::DomainRequired
-            | Self::DomainInvalid
-            | Self::EmailInvalid
-            | Self::UnsupportedAlgorithm
-            | Self::ApplicationUrlInvalid
-            | Self::ConsoleUrlRequired
-            | Self::ConsoleUrlInvalid => ErrorKind::Validation,
-        }
-    }
-
-    fn code(self) -> u32 {
-        match self {
-            Self::AlreadyInitialized => 13000,
-            Self::UsernameRequired => 13001,
-            Self::EmailRequired => 13002,
-            Self::PasswordRequired => 13003,
-            Self::DomainRequired => 13004,
-            Self::DomainInvalid => 13005,
-            Self::EmailInvalid => 13006,
-            Self::UsernameExists => 13007,
-            Self::EmailExists => 13008,
-            Self::UnsupportedAlgorithm => 13009,
-            Self::ApplicationUrlInvalid => 13010,
-            Self::ConsoleUrlRequired => 13011,
-            Self::ConsoleUrlInvalid => 13012,
-        }
+define_error_codes! {
+    /// Range: 13000-13099
+    pub enum InstallErrorCode {
+        AlreadyInitialized = 13000 { kind: Conflict },
+        UsernameRequired = 13001 { kind: Validation },
+        EmailRequired = 13002 { kind: Validation },
+        PasswordRequired = 13003 { kind: Validation },
+        DomainRequired = 13004 { kind: Validation },
+        DomainInvalid = 13005 { kind: Validation },
+        EmailInvalid = 13006 { kind: Validation },
+        UsernameExists = 13007 { kind: Conflict },
+        EmailExists = 13008 { kind: Conflict },
+        UnsupportedAlgorithm = 13009 { kind: Validation, required: [algorithm] },
+        ApplicationUrlInvalid = 13010 { kind: Validation },
+        ConsoleUrlRequired = 13011 { kind: Validation },
+        ConsoleUrlInvalid = 13012 { kind: Validation },
     }
 }

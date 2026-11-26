@@ -1,3 +1,4 @@
+use crate::error::codes::authorize;
 use identity_domain::auth::SessionOid;
 
 use super::*;
@@ -7,7 +8,7 @@ impl AuthorizeService {
         self.data_protector
             .protect("login-id", login_oid.as_bytes())
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::LoginIdInvalid))
+            .map_err(authorize::error::LoginIdInvalid::map_source())
     }
 
     pub async fn decrypt_login_id(&self, protected_login_id: &str) -> Result<Uuid, AppError> {
@@ -15,18 +16,16 @@ impl AuthorizeService {
             .data_protector
             .unprotect("login-id", protected_login_id)
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::LoginIdInvalid))?;
+            .map_err(authorize::error::LoginIdInvalid::map_source())?;
 
-        Uuid::from_slice(&bytes).map_err(AppError::map_source(AuthorizeErrorCode::LoginIdInvalid))
+        Uuid::from_slice(&bytes).map_err(authorize::error::LoginIdInvalid::map_source())
     }
 
     pub async fn encrypt_session_id(&self, session_oid: SessionOid) -> Result<String, AppError> {
         self.data_protector
             .protect("session-id", Uuid::from(session_oid).as_bytes())
             .await
-            .map_err(AppError::map_source(
-                AuthorizeErrorCode::StoredSessionIdInvalid,
-            ))
+            .map_err(authorize::error::StoredSessionIdInvalid::map_source())
     }
 
     pub async fn decrypt_session_id(
@@ -41,14 +40,10 @@ impl AuthorizeService {
             .data_protector
             .unprotect("session-id", protected_session_id)
             .await
-            .map_err(AppError::map_source(
-                AuthorizeErrorCode::StoredSessionIdInvalid,
-            ))?;
+            .map_err(authorize::error::StoredSessionIdInvalid::map_source())?;
 
         Uuid::from_slice(&bytes)
             .map(SessionOid)
-            .map_err(AppError::map_source(
-                AuthorizeErrorCode::StoredSessionIdInvalid,
-            ))
+            .map_err(authorize::error::StoredSessionIdInvalid::map_source())
     }
 }

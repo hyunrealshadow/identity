@@ -3,7 +3,7 @@ use super::{
     management::ApprovalAuthentication,
 };
 use crate::{
-    error::{AppError, codes::authorize::AuthorizeErrorCode},
+    error::{AppError, codes::authorize},
     observability::{BusinessEvent, EventValue, error_outcome},
 };
 use chrono::{DateTime, Utc};
@@ -38,7 +38,7 @@ pub struct AuthorizationApproval {
 
 impl AuthorizeService {
     pub(super) fn interaction_conflict() -> AppError {
-        AppError::from_code(AuthorizeErrorCode::AuthzInteractionConflict)
+        authorize::error::AuthzInteractionConflict.into_error()
     }
 
     pub async fn mark_authorization_request_completed(
@@ -49,7 +49,7 @@ impl AuthorizeService {
             .client_authorization_repo
             .mark_authorization_request_completed(authorization_request_id, Utc::now())
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::StoreRequestFailed))?;
+            .map_err(authorize::error::StoreRequestFailed::map_source())?;
 
         if !updated {
             return Err(Self::interaction_conflict());
@@ -67,7 +67,7 @@ impl AuthorizeService {
             .client_authorization_repo
             .mark_authorization_request_completed(authorization_request_id, completed_at)
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::StoreRequestFailed))?;
+            .map_err(authorize::error::StoreRequestFailed::map_source())?;
 
         if !updated {
             return Err(Self::interaction_conflict());
@@ -177,21 +177,15 @@ impl AuthorizeService {
         let session = session_repo
             .find_by_oid(session_oid)
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::LoadRequestFailed))?
-            .ok_or_else(|| {
-                AppError::from_code(AuthorizeErrorCode::AuthzInteractionConflict)
-                    .with_param("reason", "approval session was not found")
-            })?;
+            .map_err(authorize::error::LoadRequestFailed::map_source())?
+            .ok_or_else(|| authorize::error::AuthzInteractionConflict.into_error())?;
         let now = Utc::now();
         let active = session.status == SessionStatus::ACTIVE
             && session.revoked_at.is_none()
             && session.expires_at.is_none_or(|expires_at| expires_at > now)
             && session.user_oid == user_oid;
         if !active {
-            return Err(
-                AppError::from_code(AuthorizeErrorCode::AuthzInteractionConflict)
-                    .with_param("reason", "approval session is not active for the user"),
-            );
+            return Err(authorize::error::AuthzInteractionConflict.into_error());
         }
         Ok((auth_time, session.effective_acr(now), session.amr))
     }
@@ -201,13 +195,10 @@ impl AuthorizeService {
             .user_repo
             .find_by_oid(UserOid(user_oid))
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::ClientLookupFailed))?
-            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ImplicitUserNotFound))?;
+            .map_err(authorize::error::ClientLookupFailed::map_source())?
+            .ok_or_else(|| authorize::error::ImplicitUserNotFound.into_error())?;
         if !user.enabled || user.locked {
-            return Err(
-                AppError::from_code(AuthorizeErrorCode::ImplicitUserNotFound)
-                    .with_param("reason", "user is disabled or locked"),
-            );
+            return Err(authorize::error::ImplicitUserNotFound.into_error());
         }
         Ok(())
     }
@@ -230,9 +221,8 @@ impl AuthorizeService {
             .load_stored_authorization_request(authorization_request_id)
             .await?;
         let request = stored.request;
-        let client_oid = Uuid::parse_str(&request.client_id).map_err(AppError::map_source(
-            AuthorizeErrorCode::StoredClientIdInvalid,
-        ))?;
+        let client_oid = Uuid::parse_str(&request.client_id)
+            .map_err(authorize::error::StoredClientIdInvalid::map_source())?;
 
         let (auth_time, acr, amr) = self
             .validated_approval_authentication(session_oid, user_oid, auth_time, acr, amr)
@@ -258,8 +248,7 @@ impl AuthorizeService {
 
         let redirect = if response_type.is_implicit() {
             if rbac_snapshot.is_some() {
-                return Err(AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid)
-                    .with_param("response_type", response_type.to_string()));
+                return Err(authorize::error::ResponseTypeInvalid::new(response_type).into_error());
             }
             self.approve_implicit_flow(
                 &request,
@@ -276,8 +265,7 @@ impl AuthorizeService {
             .await?
         } else if response_type.uses_front_channel_response() {
             if rbac_snapshot.is_some() {
-                return Err(AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid)
-                    .with_param("response_type", response_type.to_string()));
+                return Err(authorize::error::ResponseTypeInvalid::new(response_type).into_error());
             }
             self.approve_hybrid_flow(
                 &request,
@@ -322,7 +310,7 @@ impl AuthorizeService {
                     client_oid,
                 )
                 .await
-                .map_err(AppError::map_source(AuthorizeErrorCode::StoreRequestFailed))?;
+                .map_err(authorize::error::StoreRequestFailed::map_source())?;
             if !completed {
                 return Err(Self::interaction_conflict());
             }
@@ -342,9 +330,8 @@ impl AuthorizeService {
         let request = self
             .load_authorization_request(authorization_request_id)
             .await?;
-        Url::parse(&request.redirect_uri).map_err(AppError::map_source(
-            AuthorizeErrorCode::StoredRedirectUriInvalid,
-        ))?;
+        Url::parse(&request.redirect_uri)
+            .map_err(authorize::error::StoredRedirectUriInvalid::map_source())?;
         self.provider_service.issuer()?;
 
         self.mark_authorization_request_completed(authorization_request_id)

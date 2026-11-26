@@ -2,24 +2,20 @@ use identity_domain::data_protection::DataProtectionError;
 
 use crate::error::{
     AppError,
-    codes::{common::CommonErrorCode, data_protection::DataProtectionErrorCode},
+    codes::{common, data_protection},
 };
 
 impl From<DataProtectionError> for AppError {
     fn from(error: DataProtectionError) -> Self {
         match error {
             DataProtectionError::InvalidProtectedPayload => {
-                AppError::from_code(DataProtectionErrorCode::InvalidProtectedPayload)
+                data_protection::error::InvalidProtectedPayload.into()
             }
-            DataProtectionError::KeyRingEmpty => {
-                AppError::from_code(DataProtectionErrorCode::KeyRingEmpty)
-            }
+            DataProtectionError::KeyRingEmpty => data_protection::error::KeyRingEmpty.into(),
             DataProtectionError::EncryptionFailed => {
-                AppError::from_code(DataProtectionErrorCode::EncryptionFailed)
+                data_protection::error::EncryptionFailed.into()
             }
-            DataProtectionError::Internal(_) => {
-                AppError::from_code(CommonErrorCode::InternalError).with_source(error)
-            }
+            DataProtectionError::Internal(_) => common::error::InternalError.with_source(error),
         }
     }
 }

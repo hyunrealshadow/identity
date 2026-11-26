@@ -6,9 +6,12 @@ use josekit::JoseError;
 use serde_json::{Value, from_slice};
 use subtle::ConstantTimeEq;
 
-use crate::openid_connect::jose::{
-    asymmetric_verifier_from_pem, asymmetric_verifier_from_public_jwk, decode_with_verifier,
-    hmac_verifier_from_bytes,
+use crate::{
+    error::codes::token,
+    openid_connect::jose::{
+        asymmetric_verifier_from_pem, asymmetric_verifier_from_public_jwk, decode_with_verifier,
+        hmac_verifier_from_bytes,
+    },
 };
 
 use super::*;
@@ -19,9 +22,9 @@ pub(crate) fn decode_assertion_with_alg(
     public_key_pem: &[u8],
 ) -> Result<JwtPayload, AppError> {
     let verifier = asymmetric_verifier_from_pem(alg.as_str(), public_key_pem)
-        .map_err(|error| assertion_key_error(error, alg))?;
+        .map_err(|error| assertion_key_error(error))?;
     decode_with_verifier(assertion, verifier.as_ref())
-        .map_err(AppError::map_source(TokenErrorCode::AssertionVerifyFailed))
+        .map_err(token::error::AssertionVerifyFailed::map_source())
 }
 
 pub(crate) fn decode_assertion_with_jwk(
@@ -30,9 +33,9 @@ pub(crate) fn decode_assertion_with_jwk(
     jwk: &PublicJwk,
 ) -> Result<JwtPayload, AppError> {
     let verifier = asymmetric_verifier_from_public_jwk(alg.as_str(), jwk)
-        .map_err(|error| assertion_key_error(error, alg))?;
+        .map_err(|error| assertion_key_error(error))?;
     decode_with_verifier(assertion, verifier.as_ref())
-        .map_err(AppError::map_source(TokenErrorCode::AssertionVerifyFailed))
+        .map_err(token::error::AssertionVerifyFailed::map_source())
 }
 
 pub(crate) fn decode_assertion_with_hmac_alg(
@@ -43,40 +46,36 @@ pub(crate) fn decode_assertion_with_hmac_alg(
     let verifier = hmac_verifier_from_bytes(alg.as_str(), secret)
         .map_err(|error| assertion_alg_error(error, alg))?;
     decode_with_verifier(assertion, verifier.as_ref())
-        .map_err(AppError::map_source(TokenErrorCode::AssertionVerifyFailed))
+        .map_err(token::error::AssertionVerifyFailed::map_source())
 }
 
 pub(crate) fn client_id_from_assertion(assertion: &str) -> Result<String, AppError> {
     let payload_segment = assertion
         .split('.')
         .nth(1)
-        .ok_or_else(|| AppError::from_code(TokenErrorCode::AssertionVerifyFailed))?;
+        .ok_or_else(|| token::error::AssertionVerifyFailed.into_error())?;
 
     let payload = URL_SAFE_NO_PAD
         .decode(payload_segment)
-        .map_err(AppError::map_source(TokenErrorCode::AssertionVerifyFailed))?;
+        .map_err(token::error::AssertionVerifyFailed::map_source())?;
 
-    let payload: Value = from_slice(&payload)
-        .map_err(AppError::map_source(TokenErrorCode::AssertionVerifyFailed))?;
+    let payload: Value =
+        from_slice(&payload).map_err(token::error::AssertionVerifyFailed::map_source())?;
 
     payload
         .get("sub")
         .or_else(|| payload.get("iss"))
         .and_then(|value| value.as_str())
         .map(str::to_owned)
-        .ok_or_else(|| AppError::from_code(TokenErrorCode::AssertionSubMissing))
+        .ok_or_else(|| token::error::AssertionSubMissing.into_error())
 }
 
-fn assertion_key_error(error: JoseError, alg: JwsAlgorithm) -> AppError {
-    AppError::from_code(TokenErrorCode::AssertionKeyInvalid)
-        .with_param("alg", alg.to_string())
-        .with_source(error)
+fn assertion_key_error(error: JoseError) -> AppError {
+    token::error::AssertionKeyInvalid.with_source(error)
 }
 
 fn assertion_alg_error(error: JoseError, alg: JwsAlgorithm) -> AppError {
-    AppError::from_code(TokenErrorCode::AssertionAlgUnsupported)
-        .with_param("alg", alg.to_string())
-        .with_source(error)
+    token::error::AssertionAlgUnsupported::new(alg).with_source(error)
 }
 
 pub(crate) fn verify_pkce(
@@ -87,20 +86,19 @@ pub(crate) fn verify_pkce(
 ) -> Result<(), AppError> {
     let Some(code_challenge) = code_challenge else {
         return if code_verifier.is_some() {
-            Err(AppError::from_code(TokenErrorCode::PkceVerifierMismatch))
+            Err(token::error::PkceVerifierMismatch.into_error())
         } else {
             Ok(())
         };
     };
 
     let Some(code_verifier) = code_verifier else {
-        return Err(AppError::from_code(TokenErrorCode::CodeVerifierRequired));
+        return Err(token::error::CodeVerifierRequired.into_error());
     };
 
     let method = code_challenge_method.unwrap_or(CodeChallengeMethod::Plain);
     if oauth_version == OAuthProtocolVersion::V2_1 && method != CodeChallengeMethod::S256 {
-        return Err(AppError::from_code(TokenErrorCode::PkceMethodUnsupported)
-            .with_param("code_challenge_method", method.to_string()));
+        return Err(token::error::PkceMethodUnsupported::new(method).into_error());
     }
     let computed = match method {
         CodeChallengeMethod::S256 => {
@@ -114,7 +112,7 @@ pub(crate) fn verify_pkce(
         computed.as_bytes(),
         code_challenge.as_bytes(),
     )) {
-        return Err(AppError::from_code(TokenErrorCode::PkceVerifierMismatch));
+        return Err(token::error::PkceVerifierMismatch.into_error());
     }
 
     Ok(())

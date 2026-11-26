@@ -1,3 +1,4 @@
+use crate::error::codes::token;
 use identity_domain::openid_connect::OpenIdConnectClient;
 
 use crate::openid_connect::{
@@ -34,7 +35,7 @@ impl TokenService {
                 algorithm.as_str(),
             )
             .await
-            .map_err(AppError::map_source(TokenErrorCode::EncryptionKeyNotFound))?
+            .map_err(token::error::EncryptionKeyNotFound::map_source())?
             else {
                 continue;
             };
@@ -51,10 +52,10 @@ impl TokenService {
                 }
             }
         }
-        Err(AppError::from_code(if found_key {
-            TokenErrorCode::EncryptionFailed
+        Err(if found_key {
+            token::error::EncryptionFailed.into_error()
         } else {
-            TokenErrorCode::EncryptionKeyNotFound
-        }))
+            token::error::EncryptionKeyNotFound.into_error()
+        })
     }
 }

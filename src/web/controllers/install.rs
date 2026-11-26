@@ -180,8 +180,6 @@ async fn install_submit(depot: &mut Depot, req: &mut Request) -> JsonWebResult<A
 
 #[cfg(test)]
 mod tests {
-    use identity_application::error::{AppError, codes::common::CommonErrorCode};
-
     use identity_domain::key::{AsymmetricKeyAlgorithm, JwaSigningAlgorithm};
 
     use super::{InstallFailureLogContext, InstallRequest, should_log_install_failure_as_error};
@@ -198,7 +196,7 @@ mod tests {
             signing_algorithm: JwaSigningAlgorithm::EdDsa,
             key_algorithm: Some(AsymmetricKeyAlgorithm::Ed25519),
         };
-        let error = AppError::from_code(CommonErrorCode::InternalError);
+        let error = crate::application::error::codes::common::error::InternalError.into_error();
 
         let context = InstallFailureLogContext::from_request(&request);
 

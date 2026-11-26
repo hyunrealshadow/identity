@@ -1,55 +1,19 @@
-use crate::error::{code::AppErrorCode, kind::ErrorKind};
-
-/// Stable HTTP/GraphQL envelope errors. Range: 28100-28199.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumIter)]
-pub enum GraphqlTransportErrorCode {
-    InvalidRequest,
-    UnsupportedMediaType,
-    PayloadTooLarge,
-    UriTooLong,
-    MethodNotAllowed,
-    OriginDenied,
-    TimedOut,
-    Unauthenticated,
-    Internal,
-    InvalidToken,
-    /// The document exceeds the configured selection depth.
-    QueryTooDeep,
-    /// The document exceeds the configured operation complexity.
-    QueryTooComplex,
-}
-
-impl AppErrorCode for GraphqlTransportErrorCode {
-    fn required_params(self) -> &'static [&'static str] {
-        match self {
-            Self::QueryTooDeep | Self::QueryTooComplex => &["max"],
-            _ => &[],
-        }
-    }
-
-    fn kind(self) -> ErrorKind {
-        match self {
-            Self::Unauthenticated | Self::InvalidToken => ErrorKind::Unauthorized,
-            Self::OriginDenied => ErrorKind::Forbidden,
-            Self::TimedOut | Self::Internal => ErrorKind::Internal,
-            _ => ErrorKind::Validation,
-        }
-    }
-
-    fn code(self) -> u32 {
-        match self {
-            Self::InvalidRequest => 28100,
-            Self::UnsupportedMediaType => 28101,
-            Self::PayloadTooLarge => 28102,
-            Self::UriTooLong => 28103,
-            Self::MethodNotAllowed => 28104,
-            Self::OriginDenied => 28105,
-            Self::TimedOut => 28106,
-            Self::Unauthenticated => 28107,
-            Self::Internal => 28108,
-            Self::InvalidToken => 28109,
-            Self::QueryTooDeep => 28110,
-            Self::QueryTooComplex => 28111,
-        }
+define_error_codes! {
+    /// Stable HTTP/GraphQL envelope errors. Range: 28100-28199.
+    pub enum GraphqlTransportErrorCode(module = "graphql.transport") {
+        InvalidRequest = 28100 { kind: Validation },
+        UnsupportedMediaType = 28101 { kind: Validation },
+        PayloadTooLarge = 28102 { kind: Validation },
+        UriTooLong = 28103 { kind: Validation },
+        MethodNotAllowed = 28104 { kind: Validation },
+        OriginDenied = 28105 { kind: Forbidden },
+        TimedOut = 28106 { kind: Internal },
+        Unauthenticated = 28107 { kind: Unauthorized },
+        Internal = 28108 { kind: Internal },
+        InvalidToken = 28109 { kind: Unauthorized },
+        /// The document exceeds the configured selection depth.
+        QueryTooDeep = 28110 { kind: Validation, required: [max] },
+        /// The document exceeds the configured operation complexity.
+        QueryTooComplex = 28111 { kind: Validation, required: [max] },
     }
 }

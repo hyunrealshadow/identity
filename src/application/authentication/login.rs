@@ -6,7 +6,7 @@ use super::{
 };
 use crate::{
     authentication::{password::PasswordHasher, totp::TotpVerifier},
-    error::{AppError, codes::auth::AuthErrorCode},
+    error::{AppError, codes::auth},
     observability::{EventSink, NoopEventSink},
     setting::{IdentifierEnumerationAllowedSetting, SettingsSource},
     user::{
@@ -202,7 +202,7 @@ impl LoginService {
         self.login_repo
             .find_by_oid(login_oid)
             .await?
-            .ok_or_else(|| AppError::from_code(AuthErrorCode::InvalidLoginState))
+            .ok_or_else(|| auth::error::InvalidLoginState.into())
     }
 
     /// Enter the credential phase using established authentication evidence.
@@ -296,7 +296,7 @@ impl LoginService {
         self.user_repo
             .find_by_oid(user_oid)
             .await?
-            .ok_or_else(|| AppError::from_code(AuthErrorCode::UserNotFound))
+            .ok_or_else(|| auth::error::UserNotFound.into())
     }
 
     /// Step 1: Verify the identifier (email or username) and bind the
@@ -309,17 +309,17 @@ impl LoginService {
     ) -> Result<IdentifierResult, AppError> {
         let identifier = identifier.trim();
         if identifier.is_empty() {
-            return Err(AppError::from_code(AuthErrorCode::IdentifierRequired));
+            return Err(auth::error::IdentifierRequired.into());
         }
 
         let login_state = self
             .login_repo
             .find_by_oid(login_oid)
             .await?
-            .ok_or_else(|| AppError::from_code(AuthErrorCode::InvalidLoginState))?;
+            .ok_or(auth::error::InvalidLoginState)?;
 
         if login_state.status != LoginStatus::CREATED {
-            return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
+            return Err(auth::error::InvalidLoginState.into());
         }
 
         if !self
@@ -341,7 +341,7 @@ impl LoginService {
                         AuditFailureReason::UnknownAccount,
                     )
                     .await?;
-                return Err(AppError::from_code(AuthErrorCode::UserNotFound));
+                return Err(auth::error::UserNotFound.into());
             }
             Err(error) => return Err(error.into()),
         };
@@ -357,7 +357,7 @@ impl LoginService {
                         AuditFailureReason::AccountLocked,
                     )
                     .await?;
-                return Err(AppError::from_code(AuthErrorCode::UserLocked));
+                return Err(auth::error::UserLocked.into());
             }
             self.user_repo.reset_failed_attempts(user.oid).await?;
         }
@@ -370,7 +370,7 @@ impl LoginService {
                     AuditFailureReason::AccountDisabled,
                 )
                 .await?;
-            return Err(AppError::from_code(AuthErrorCode::UserLocked));
+            return Err(auth::error::UserLocked.into());
         }
 
         let credential_types = self.credential_types(user.oid).await?;
@@ -573,11 +573,11 @@ pub fn preferred_credential_type(
 
 fn validate_passkey_login(login: &Login) -> Result<(), AppError> {
     if login.expires_at <= Utc::now() {
-        return Err(AppError::from_code(AuthErrorCode::LoginExpired));
+        return Err(auth::error::LoginExpired.into());
     }
     // Passkey options would list the account's credentials.
     if login.concealed_identifier().is_some() {
-        return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
+        return Err(auth::error::InvalidLoginState.into());
     }
     // A `phr` enrollment may still be completed with an existing passkey.
     let enrolling_passkey =
@@ -589,10 +589,10 @@ fn validate_passkey_login(login: &Login) -> Result<(), AppError> {
         ))
         || login.user_oid.is_none()
     {
-        return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
+        return Err(auth::error::InvalidLoginState.into());
     }
     if login.failed_attempts >= MAX_FAILED_ATTEMPTS {
-        return Err(AppError::from_code(AuthErrorCode::TooManyAttempts));
+        return Err(auth::error::TooManyAttempts.into());
     }
     Ok(())
 }

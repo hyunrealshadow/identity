@@ -1,6 +1,6 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
 use http::{HeaderMap, header};
-use identity_application::error::{AppError, codes::token::TokenErrorCode};
+use identity_application::error::{AppError, codes::token};
 use identity_domain::openid_connect::ClientAssertionType;
 
 pub(super) fn parse_basic_client_auth(headers: &HeaderMap) -> Option<(String, String)> {
@@ -33,7 +33,7 @@ impl ClientCredentials {
             .as_deref()
             .map(str::parse::<ClientAssertionType>)
             .transpose()
-            .map_err(|_| AppError::from_code(TokenErrorCode::AssertionVerifyFailed))?;
+            .map_err(|_| token::error::AssertionVerifyFailed.into_error())?;
         Ok(Self {
             client_id: basic.as_ref().map(|(id, _)| id.clone()).or(client_id),
             client_secret: basic

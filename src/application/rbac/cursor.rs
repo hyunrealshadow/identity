@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::{
     data_protection::DataProtector,
-    error::{AppError, codes::rbac::RbacErrorCode},
+    error::{AppError, codes::rbac},
     rbac::model::{DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE},
 };
 
@@ -122,12 +122,11 @@ pub(crate) async fn encode_cursor(
         tie_id,
         tie_oid,
     };
-    let bytes = serde_json::to_vec(&payload)
-        .map_err(|error| AppError::from_code(RbacErrorCode::InvalidCursor).with_source(error))?;
+    let bytes = serde_json::to_vec(&payload).map_err(rbac::error::InvalidCursor::map_source())?;
     protector
         .protect(RBAC_CURSOR_PURPOSE, &bytes)
         .await
-        .map_err(|error| AppError::from_code(RbacErrorCode::InvalidCursor).with_source(error))
+        .map_err(rbac::error::InvalidCursor::map_source())
 }
 
 pub(crate) async fn decode_cursor(
@@ -137,7 +136,7 @@ pub(crate) async fn decode_cursor(
     filter: &str,
     token: &str,
 ) -> Result<RbacSortKey, AppError> {
-    let invalid = || AppError::from_code(RbacErrorCode::InvalidCursor);
+    let invalid = || rbac::error::InvalidCursor.into_error();
     let bytes = protector
         .unprotect(RBAC_CURSOR_PURPOSE, token)
         .await
@@ -235,14 +234,12 @@ pub(crate) async fn prepare_page<T: Serialize>(
 }
 
 fn page_conflict() -> AppError {
-    AppError::from_code(RbacErrorCode::PageArgumentsConflict)
+    rbac::error::PageArgumentsConflict.into_error()
 }
 
 fn validate_page_size(value: u32, field: &'static str) -> Result<usize, AppError> {
     if !(1..=MAX_PAGE_SIZE).contains(&value) {
-        return Err(AppError::from_code(RbacErrorCode::PageSizeInvalid)
-            .with_param("max", MAX_PAGE_SIZE.to_string())
-            .with_field(field));
+        return Err(rbac::error::PageSizeInvalid::new(MAX_PAGE_SIZE).with_field(field));
     }
     Ok(value as usize)
 }

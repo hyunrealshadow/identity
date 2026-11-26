@@ -23,7 +23,7 @@ use crate::{
         authentication::login::SessionContext,
         error::{
             AppError,
-            codes::{authorize_http::AuthorizeHttpErrorCode, common::CommonErrorCode},
+            codes::{authorize_http, common},
         },
         setting::{AppSettings, SettingsSource},
     },
@@ -108,7 +108,7 @@ pub async fn protect_session_id(
             Uuid::from(session_oid).as_bytes(),
         )
         .await
-        .map_err(AppError::map_source(CommonErrorCode::InvalidRequest))
+        .map_err(common::error::InvalidRequest::map_source())
 }
 
 pub async fn unprotect_session_id(
@@ -120,10 +120,9 @@ pub async fn unprotect_session_id(
         .data_protector()
         .unprotect(SESSION_ID_PROTECTION_PURPOSE, protected_id)
         .await
-        .map_err(AppError::map_source(CommonErrorCode::InvalidRequest))?;
+        .map_err(common::error::InvalidRequest::map_source())?;
 
-    let uuid =
-        Uuid::from_slice(&bytes).map_err(AppError::map_source(CommonErrorCode::InvalidRequest))?;
+    let uuid = Uuid::from_slice(&bytes).map_err(common::error::InvalidRequest::map_source())?;
     Ok(SessionOid(uuid))
 }
 
@@ -526,16 +525,11 @@ fn interaction_redirect(
         .as_deref()
         .map(str::trim)
         .filter(|value| !value.is_empty())
-        .ok_or_else(|| {
-            AppError::from_code(AuthorizeHttpErrorCode::LoginDomainNotConfigured)
-                .with_param("route", route)
-        })?;
+        .ok_or_else(|| authorize_http::error::LoginDomainNotConfigured::new(route).into_error())?;
     let target = Url::parse(login_domain)
         .and_then(|base| base.join(route))
         .map_err(|error| {
-            AppError::from_code(AuthorizeHttpErrorCode::LoginDomainNotConfigured)
-                .with_param("route", route)
-                .with_source(error)
+            authorize_http::error::LoginDomainNotConfigured::new(route).with_source(error)
         })?;
     let mut target = target;
     target.query_pairs_mut().append_pair("login_id", login_id);

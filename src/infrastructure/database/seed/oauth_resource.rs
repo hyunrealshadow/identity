@@ -14,7 +14,7 @@ use uuid::Uuid;
 
 use super::Seed;
 use crate::{
-    application::error::{AppError, codes::authorization::AuthorizationErrorCode},
+    application::error::{AppError, codes::authorization},
     database::entity::{
         resource,
         resource::{Column as ResourceColumn, Entity as ResourceEntity},
@@ -71,8 +71,8 @@ pub async fn graphql_resource_oid(db: &impl ConnectionTrait) -> Result<Uuid, App
         .map_err(AppError::internal)?
         .map(|row| row.oid)
         .ok_or_else(|| {
-            AppError::map_source(AuthorizationErrorCode::RbacPolicyUnavailable)(
-                DbErr::RecordNotFound("the reserved GraphQL API resource is missing".to_owned()),
-            )
+            authorization::error::RbacPolicyUnavailable.with_source(DbErr::RecordNotFound(
+                "the reserved GraphQL API resource is missing".to_owned(),
+            ))
         })
 }

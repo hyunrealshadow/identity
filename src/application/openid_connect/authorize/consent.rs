@@ -1,5 +1,5 @@
 use super::AuthorizeService;
-use crate::error::{AppError, codes::authorize::AuthorizeErrorCode};
+use crate::error::{AppError, codes::authorize};
 use crate::observability::{BusinessEvent, EventValue};
 use chrono::Utc;
 use identity_domain::{
@@ -18,15 +18,14 @@ impl AuthorizeService {
         let request = self
             .load_authorization_request(authorization_request_id)
             .await?;
-        let client_id = Uuid::parse_str(&request.client_id).map_err(AppError::map_source(
-            AuthorizeErrorCode::StoredClientIdInvalid,
-        ))?;
+        let client_id = Uuid::parse_str(&request.client_id)
+            .map_err(authorize::error::StoredClientIdInvalid::map_source())?;
         let client = self
             .client_repo
             .find_by_oid(client_id)
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::ClientLookupFailed))?
-            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClientNotFound))?;
+            .map_err(authorize::error::ClientLookupFailed::map_source())?
+            .ok_or_else(|| authorize::error::ClientNotFound.into_error())?;
 
         Ok((request, client))
     }
@@ -61,7 +60,7 @@ impl AuthorizeService {
         self.client_authorization_repo
             .user_consented_scope_names(user_oid, client_oid, resources)
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::LoadRequestFailed))
+            .map_err(authorize::error::LoadRequestFailed::map_source())
     }
 
     pub async fn has_user_consent(
@@ -71,13 +70,12 @@ impl AuthorizeService {
         requested_scope: &str,
         resources: &[String],
     ) -> Result<bool, AppError> {
-        let requested_scope = ScopeSet::parse(requested_scope).map_err(AppError::map_source(
-            AuthorizeErrorCode::DeserializeRequestFailed,
-        ))?;
+        let requested_scope = ScopeSet::parse(requested_scope)
+            .map_err(authorize::error::DeserializeRequestFailed::map_source())?;
         self.client_authorization_repo
             .has_user_consent(user_oid, client_oid, &requested_scope, resources)
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::LoadRequestFailed))
+            .map_err(authorize::error::LoadRequestFailed::map_source())
     }
 
     #[tracing::instrument(skip_all, name = "consent.record")]
@@ -99,7 +97,7 @@ impl AuthorizeService {
                 Utc::now(),
             )
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::StoreRequestFailed))?;
+            .map_err(authorize::error::StoreRequestFailed::map_source())?;
 
         if !updated {
             return Err(Self::interaction_conflict());

@@ -2,8 +2,8 @@
 
 use super::super::AuthorizationRequestParams;
 use super::super::AuthorizeService;
-use crate::error::codes::common::CommonErrorCode;
-use crate::error::{AppError, codes::authorize::AuthorizeErrorCode};
+use crate::error::codes::common;
+use crate::error::{AppError, codes::authorize};
 use chrono::Utc;
 use identity_domain::openid_connect::{
     ClaimRequestMap,
@@ -47,11 +47,11 @@ impl AuthorizeService {
                         value
                             .as_str()
                             .map(str::to_owned)
-                            .ok_or_else(|| AppError::from_code(CommonErrorCode::InvalidTarget))
+                            .ok_or_else(|| common::error::InvalidTarget.into_error())
                     })
                     .collect::<Result<Vec<_>, _>>()?,
                 _ => {
-                    return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
+                    return Err(common::error::InvalidTarget.into_error());
                 }
             };
         }
@@ -196,9 +196,7 @@ impl AuthorizeService {
             .and_then(|value| value.as_str())
             && iss != params.client_id
         {
-            return Err(AppError::from_code(
-                AuthorizeErrorCode::RequestObjectIssMismatch,
-            ));
+            return Err(authorize::error::RequestObjectIssMismatch.into_error());
         }
 
         if let Some(aud) = payload.get(JwtClaimNames::AUD) {
@@ -218,9 +216,7 @@ impl AuthorizeService {
                 });
 
             if !matches {
-                return Err(AppError::from_code(
-                    AuthorizeErrorCode::RequestObjectAudMismatch,
-                ));
+                return Err(authorize::error::RequestObjectAudMismatch.into_error());
             }
         }
 
@@ -230,9 +226,7 @@ impl AuthorizeService {
             .and_then(|value| value.as_i64())
             && exp <= now
         {
-            return Err(AppError::from_code(
-                AuthorizeErrorCode::RequestObjectExpired,
-            ));
+            return Err(authorize::error::RequestObjectExpired.into_error());
         }
 
         if let Some(nbf) = payload
@@ -240,9 +234,7 @@ impl AuthorizeService {
             .and_then(|value| value.as_i64())
             && nbf > now
         {
-            return Err(AppError::from_code(
-                AuthorizeErrorCode::RequestObjectNotYetValid,
-            ));
+            return Err(authorize::error::RequestObjectNotYetValid.into_error());
         }
 
         if let Some(iat) = payload
@@ -250,9 +242,7 @@ impl AuthorizeService {
             .and_then(|value| value.as_i64())
             && iat > now
         {
-            return Err(AppError::from_code(
-                AuthorizeErrorCode::RequestObjectIatFuture,
-            ));
+            return Err(authorize::error::RequestObjectIatFuture.into_error());
         }
 
         Ok(())
@@ -270,10 +260,9 @@ impl AuthorizeService {
         if let Some(inner) = payload.get(field).and_then(|value| value.as_str())
             && inner != outer
         {
-            return Err(
-                AppError::from_code(AuthorizeErrorCode::RequestObjectFieldMismatch)
-                    .with_param("field", field),
-            );
+            return Err(authorize::error::RequestObjectFieldMismatch::new()
+                .field(field)
+                .into_error());
         }
 
         Ok(())
@@ -288,10 +277,9 @@ impl AuthorizeService {
             (payload.get(field).and_then(|value| value.as_str()), outer)
             && inner != outer
         {
-            return Err(
-                AppError::from_code(AuthorizeErrorCode::RequestObjectFieldMismatch)
-                    .with_param("field", field),
-            );
+            return Err(authorize::error::RequestObjectFieldMismatch::new()
+                .field(field)
+                .into_error());
         }
 
         Ok(())
@@ -306,10 +294,9 @@ impl AuthorizeService {
             (payload.get(field).and_then(|value| value.as_i64()), outer)
             && inner.to_string() != outer
         {
-            return Err(
-                AppError::from_code(AuthorizeErrorCode::RequestObjectFieldMismatch)
-                    .with_param("field", field),
-            );
+            return Err(authorize::error::RequestObjectFieldMismatch::new()
+                .field(field)
+                .into_error());
         }
 
         Ok(())
@@ -321,15 +308,13 @@ impl AuthorizeService {
         outer: Option<&str>,
     ) -> Result<(), AppError> {
         if let (Some(inner), Some(outer)) = (payload.get(field), outer) {
-            let outer = from_str::<Value>(outer).map_err(AppError::map_source(
-                AuthorizeErrorCode::RequestObjectJsonInvalid,
-            ))?;
+            let outer = from_str::<Value>(outer)
+                .map_err(authorize::error::RequestObjectJsonInvalid::map_source())?;
 
             if inner != &outer {
-                return Err(
-                    AppError::from_code(AuthorizeErrorCode::RequestObjectFieldMismatch)
-                        .with_param("field", field),
-                );
+                return Err(authorize::error::RequestObjectFieldMismatch::new()
+                    .field(field)
+                    .into_error());
             }
         }
 
@@ -337,11 +322,11 @@ impl AuthorizeService {
     }
 
     pub(in super::super) fn parse_claims_request(raw: &str) -> Result<ClaimsRequest, AppError> {
-        let value = from_str::<Value>(raw)
-            .map_err(AppError::map_source(AuthorizeErrorCode::ClaimsParamInvalid))?;
+        let value =
+            from_str::<Value>(raw).map_err(authorize::error::ClaimsParamInvalid::map_source())?;
         let object = value
             .as_object()
-            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClaimsNotObject))?;
+            .ok_or_else(|| authorize::error::ClaimsNotObject.into_error())?;
 
         // A `null` value (e.g. from a serialized `Option::None`) is treated as
         // absent. Without this, a claims document produced by serializing
@@ -355,10 +340,7 @@ impl AuthorizeService {
                     .cloned()
                     .map(ClaimRequestMap::from_json_map)
                     .map(Some)
-                    .ok_or_else(|| {
-                        AppError::from_code(AuthorizeErrorCode::ClaimsFieldNotObject)
-                            .with_param("field", field)
-                    }),
+                    .ok_or_else(|| authorize::error::ClaimsFieldNotObject.into_error()),
             }
         };
 

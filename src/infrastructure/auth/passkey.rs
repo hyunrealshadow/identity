@@ -4,7 +4,7 @@ use std::sync::Arc;
 use base64::{Engine, engine::general_purpose::URL_SAFE_NO_PAD};
 use identity_application::{
     auth::passkey::{PasskeyAuthenticator, PasskeyCeremony, StoredPasskey, VerifiedPasskey},
-    error::{AppError, codes::auth::AuthErrorCode},
+    error::{AppError, codes::auth},
     setting::{LoginDomainSetting, SettingsSource},
     user::UserOid,
 };
@@ -48,7 +48,7 @@ fn ceremony(options: Value, state: Value) -> Result<PasskeyCeremony, AppError> {
     })
 }
 fn invalid() -> AppError {
-    AppError::from_code(AuthErrorCode::InvalidCredential)
+    auth::error::InvalidCredential.into_error()
 }
 impl PasskeyAuthenticator for WebAuthnAuthenticator {
     fn start_registration(

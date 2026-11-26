@@ -1,6 +1,6 @@
 use identity_domain::key::{JwaSigningAlgorithm, JwsAlgorithm};
 
-use crate::openid_connect::jose::asymmetric_signer_from_pem;
+use crate::{error::codes::token, openid_connect::jose::asymmetric_signer_from_pem};
 
 use super::*;
 
@@ -19,12 +19,11 @@ impl TokenService {
             {
                 Ok(key) => return Ok(key),
                 Err(error)
-                    if error.code()
-                        == AppError::from_code(TokenErrorCode::NoSigningKeyAvailable).code() => {}
+                    if error.code() == token::error::NoSigningKeyAvailable.into_error().code() => {}
                 Err(error) => return Err(error),
             }
         }
-        Err(AppError::from_code(TokenErrorCode::NoSigningKeyAvailable))
+        Err(token::error::NoSigningKeyAvailable.into_error())
     }
 
     async fn load_configured_signing_key_single(
@@ -48,7 +47,7 @@ impl TokenService {
                     .key_repo
                     .list_active_asymmetric()
                     .await
-                    .map_err(AppError::map_source(TokenErrorCode::KeyListFailed))?;
+                    .map_err(token::error::KeyListFailed::map_source())?;
                 for key in keys {
                     let KeyData::Asymmetric(data) = &key.data else {
                         continue;
@@ -62,7 +61,7 @@ impl TokenService {
                         .key_jwk_repo
                         .find_active_by_key_oid_and_algorithm(key.oid, alg)
                         .await
-                        .map_err(AppError::map_source(TokenErrorCode::KeyListFailed))?
+                        .map_err(token::error::KeyListFailed::map_source())?
                     {
                         return Ok((
                             identity_domain::openid_connect::identifier::key_id(binding.oid),
@@ -71,12 +70,12 @@ impl TokenService {
                         ));
                     }
                 }
-                Err(AppError::from_code(TokenErrorCode::NoSigningKeyAvailable))
+                Err(token::error::NoSigningKeyAvailable.into_error())
             }
             Some(JwsAlgorithm::None) if cfg!(feature = "allow-none-alg") => {
                 Ok((String::new(), String::new(), JwsAlgorithm::None))
             }
-            Some(_) => Err(AppError::from_code(TokenErrorCode::NoSigningKeyAvailable)),
+            Some(_) => Err(token::error::NoSigningKeyAvailable.into_error()),
             None => {
                 let (key_id, private_key, alg) = self.load_signing_key().await?;
                 Ok((key_id, private_key, JwsAlgorithm::Asymmetric(alg)))
@@ -91,7 +90,7 @@ impl TokenService {
             let ring = provider.current_value();
             let key = ring
                 .signing_key()
-                .ok_or_else(|| AppError::from_code(TokenErrorCode::NoSigningKeyAvailable))?;
+                .ok_or_else(|| token::error::NoSigningKeyAvailable.into_error())?;
             return Ok((
                 key.key_id.clone(),
                 key.private_key_pem.clone(),
@@ -103,7 +102,7 @@ impl TokenService {
             .key_repo
             .list_active_asymmetric()
             .await
-            .map_err(AppError::map_source(TokenErrorCode::KeyListFailed))?;
+            .map_err(token::error::KeyListFailed::map_source())?;
 
         for key in keys {
             if let KeyData::Asymmetric(data) = &key.data {
@@ -114,7 +113,7 @@ impl TokenService {
                         .key_jwk_repo
                         .find_active_by_key_oid_and_algorithm(key.oid, alg)
                         .await
-                        .map_err(AppError::map_source(TokenErrorCode::KeyListFailed))?
+                        .map_err(token::error::KeyListFailed::map_source())?
                     {
                         found = Some((alg, binding));
                         break;
@@ -132,7 +131,7 @@ impl TokenService {
             }
         }
 
-        Err(AppError::from_code(TokenErrorCode::NoSigningKeyAvailable))
+        Err(token::error::NoSigningKeyAvailable.into_error())
     }
 
     pub(super) async fn load_access_token_signing_key(

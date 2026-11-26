@@ -15,7 +15,7 @@
 
 use std::marker::PhantomData;
 
-use identity_application::error::{AppError, codes::common::CommonErrorCode};
+use identity_application::error::{AppError, codes::common};
 use salvo::{
     Depot, FlowCtrl, Handler, Request, Response, Writer, async_trait,
     handler::{ArcHandler, HoopedHandler},
@@ -95,8 +95,7 @@ impl<H: Handler> Handler for Action<H> {
 }
 
 fn missing_input() -> AppError {
-    AppError::from_code(CommonErrorCode::InternalError)
-        .with_param("message", "Protocol action input is missing")
+    common::error::InternalError.into()
 }
 
 pub(in crate::controllers) fn take<T: Send + Sync + 'static>(

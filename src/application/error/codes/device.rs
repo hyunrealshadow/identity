@@ -1,105 +1,49 @@
-use crate::error::{code::AppErrorCode, kind::ErrorKind};
+define_error_codes! {
+    /// Error codes for the RFC 8628 device authorization endpoint and the shared
+    /// verification interaction. Range: 26000-26099
+    pub enum DeviceAuthorizationErrorCode(module = "openid_connect.device") {
+        // --- device authorization request ---
+        /// Client registration does not permit the device code grant.
+        GrantNotAllowed = 26001 { kind: Validation },
+        /// `scope` parameter could not be parsed.
+        ScopeInvalid = 26002 { kind: Validation },
+        /// Requested scope is not assigned to the client.
+        ScopeNotAssignedToClient = 26003 { kind: Validation },
+        /// The user code space is exhausted for this moment.
+        UserCodeUnavailable = 26005 { kind: Internal },
+        /// Device code or user code generation failed.
+        CodeGenerationFailed = 26006 { kind: Internal },
+        /// Database write of the device authorization request failed.
+        StoreRequestFailed = 26007 { kind: Internal },
+        /// The provider issuer is missing or malformed.
+        IssuerInvalid = 26009 { kind: Internal },
+        /// The recorded login application domain is malformed.
+        LoginDomainInvalid = 26023 { kind: Internal },
 
-/// Error codes for the RFC 8628 device authorization endpoint and the shared
-/// verification interaction. Range: 26000-26099
-#[derive(Debug, Clone, Copy, PartialEq, Eq, strum::EnumIter)]
-pub enum DeviceAuthorizationErrorCode {
-    // --- device authorization request ---
-    /// Client registration does not permit the device code grant.
-    GrantNotAllowed,
-    /// `scope` parameter could not be parsed.
-    ScopeInvalid,
-    /// Requested scope is not assigned to the client.
-    ScopeNotAssignedToClient,
-    /// The user code space is exhausted for this moment.
-    UserCodeUnavailable,
-    /// Device code or user code generation failed.
-    CodeGenerationFailed,
-    /// Database write of the device authorization request failed.
-    StoreRequestFailed,
-    /// The provider issuer is missing or malformed.
-    IssuerInvalid,
-    /// The recorded login application domain is malformed.
-    LoginDomainInvalid,
-
-    // --- verification interaction ---
-    /// The submitted user code is unknown, expired, or already decided.
-    UserCodeNotFound,
-    /// Database read of the device authorization request failed.
-    LoadRequestFailed,
-    /// Stored device authorization request could not be deserialized.
-    DeserializeRequestFailed,
-    /// The request is no longer pending, so the decision was discarded.
-    RequestAlreadyDecided,
-    /// The stored device authorization relation is missing or malformed.
-    InvalidAuthorizationState,
-    /// Database write of the user decision failed.
-    StoreDecisionFailed,
-    /// The user lookup for the approving account failed.
-    UserLookupFailed,
-    /// Database read of the client registration failed.
-    ClientLookupFailed,
-    /// The client registration no longer exists.
-    ClientNotFound,
-    /// The approving user was not found.
-    UserNotFound,
-    /// The request expired before the user decided.
-    RequestExpired,
-    /// The browser answering the verification has no active session.
-    VerificationLoginRequired,
-}
-
-impl AppErrorCode for DeviceAuthorizationErrorCode {
-    fn kind(self) -> ErrorKind {
-        match self {
-            Self::GrantNotAllowed
-            | Self::ScopeInvalid
-            | Self::ScopeNotAssignedToClient
-            | Self::UserCodeNotFound
-            | Self::ClientNotFound
-            | Self::UserNotFound => ErrorKind::Validation,
-
-            Self::UserCodeUnavailable
-            | Self::CodeGenerationFailed
-            | Self::StoreRequestFailed
-            | Self::IssuerInvalid
-            | Self::LoginDomainInvalid
-            | Self::LoadRequestFailed
-            | Self::DeserializeRequestFailed
-            | Self::InvalidAuthorizationState
-            | Self::StoreDecisionFailed
-            | Self::UserLookupFailed
-            | Self::ClientLookupFailed => ErrorKind::Internal,
-
-            Self::RequestAlreadyDecided => ErrorKind::Conflict,
-
-            Self::RequestExpired => ErrorKind::Gone,
-            Self::VerificationLoginRequired => ErrorKind::Unauthorized,
-        }
-    }
-
-    fn code(self) -> u32 {
-        match self {
-            Self::GrantNotAllowed => 26001,
-            Self::ScopeInvalid => 26002,
-            Self::ScopeNotAssignedToClient => 26003,
-            Self::UserCodeUnavailable => 26005,
-            Self::CodeGenerationFailed => 26006,
-            Self::StoreRequestFailed => 26007,
-            Self::IssuerInvalid => 26009,
-            Self::LoginDomainInvalid => 26023,
-            Self::UserCodeNotFound => 26010,
-            Self::LoadRequestFailed => 26012,
-            Self::DeserializeRequestFailed => 26013,
-            Self::RequestAlreadyDecided => 26014,
-            Self::InvalidAuthorizationState => 26015,
-            Self::StoreDecisionFailed => 26016,
-            Self::UserLookupFailed => 26017,
-            Self::ClientLookupFailed => 26020,
-            Self::ClientNotFound => 26021,
-            Self::UserNotFound => 26018,
-            Self::RequestExpired => 26019,
-            Self::VerificationLoginRequired => 26022,
-        }
+        // --- verification interaction ---
+        /// The submitted user code is unknown, expired, or already decided.
+        UserCodeNotFound = 26010 { kind: Validation },
+        /// Database read of the device authorization request failed.
+        LoadRequestFailed = 26012 { kind: Internal },
+        /// Stored device authorization request could not be deserialized.
+        DeserializeRequestFailed = 26013 { kind: Internal },
+        /// The request is no longer pending, so the decision was discarded.
+        RequestAlreadyDecided = 26014 { kind: Conflict },
+        /// The stored device authorization relation is missing or malformed.
+        InvalidAuthorizationState = 26015 { kind: Internal },
+        /// Database write of the user decision failed.
+        StoreDecisionFailed = 26016 { kind: Internal },
+        /// The user lookup for the approving account failed.
+        UserLookupFailed = 26017 { kind: Internal },
+        /// Database read of the client registration failed.
+        ClientLookupFailed = 26020 { kind: Internal },
+        /// The client registration no longer exists.
+        ClientNotFound = 26021 { kind: Validation },
+        /// The approving user was not found.
+        UserNotFound = 26018 { kind: Validation },
+        /// The request expired before the user decided.
+        RequestExpired = 26019 { kind: Gone },
+        /// The browser answering the verification has no active session.
+        VerificationLoginRequired = 26022 { kind: Unauthorized },
     }
 }

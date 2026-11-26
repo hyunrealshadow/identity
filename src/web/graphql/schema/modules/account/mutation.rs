@@ -1,6 +1,6 @@
 use crate::graphql::schema::access::access;
 use async_graphql::{Context, Object, Result};
-use identity_application::error::{codes::graphql::GraphqlErrorCode, params::ErrorParams};
+use identity_application::error::codes::graphql;
 use identity_domain::openid_connect::ApiScope;
 
 use identity_application::authentication::email_verification::EmailChange;
@@ -146,7 +146,7 @@ impl AccountMutation {
         let patch = input
             .clone()
             .into_patch()
-            .map_err(|()| coded_error(ctx, GraphqlErrorCode::InvalidTheme, ErrorParams::new()))?;
+            .map_err(|()| coded_error(ctx, graphql::error::InvalidTheme))?;
         let request = request_context(ctx)?;
         let user = request
             .state

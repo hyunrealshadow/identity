@@ -204,12 +204,13 @@ async fn device_authorization(
 mod tests {
 
     use super::*;
+    use identity_application::error::codes::{device, token};
 
     #[test]
     fn missing_client_id_is_an_invalid_request() {
         // Client identifier resolution is shared with the token endpoint, so
         // the missing parameter reports the token endpoint's error code.
-        let error = AppError::from_code(TokenErrorCode::ClientIdRequired);
+        let error: AppError = token::error::ClientIdRequired.into();
 
         assert_eq!(device_error_code(&error), "invalid_request");
         assert_eq!(device_error_status(&error), StatusCode::BAD_REQUEST);
@@ -217,7 +218,7 @@ mod tests {
 
     #[test]
     fn a_client_without_the_device_grant_is_unauthorized_not_unsupported() {
-        let error = AppError::from_code(DeviceAuthorizationErrorCode::GrantNotAllowed);
+        let error: AppError = device::error::GrantNotAllowed.into();
 
         assert_eq!(device_error_code(&error), "unauthorized_client");
         assert_eq!(device_error_status(&error), StatusCode::BAD_REQUEST);
@@ -225,19 +226,19 @@ mod tests {
 
     #[test]
     fn scope_failures_use_invalid_scope() {
-        for code in [
-            DeviceAuthorizationErrorCode::ScopeInvalid,
-            DeviceAuthorizationErrorCode::ScopeNotAssignedToClient,
+        for error in [
+            device::error::ScopeInvalid.into_error(),
+            device::error::ScopeNotAssignedToClient.into_error(),
         ] {
-            let error = AppError::from_code(code);
-            assert_eq!(device_error_code(&error), "invalid_scope", "{code:?}");
+            let code = error.code();
+            assert_eq!(device_error_code(&error), "invalid_scope", "{code}");
             assert_eq!(device_error_status(&error), StatusCode::BAD_REQUEST);
         }
     }
 
     #[test]
     fn client_authentication_failures_are_invalid_client() {
-        let error = AppError::from_code(TokenErrorCode::ClientAuthRequired);
+        let error: AppError = token::error::ClientAuthRequired.into();
 
         assert_eq!(device_error_code(&error), "invalid_client");
         assert_eq!(device_error_status(&error), StatusCode::UNAUTHORIZED);
@@ -245,7 +246,7 @@ mod tests {
 
     #[test]
     fn internal_failures_are_server_errors() {
-        let error = AppError::from_code(DeviceAuthorizationErrorCode::StoreRequestFailed);
+        let error: AppError = device::error::StoreRequestFailed.into();
 
         assert_eq!(device_error_code(&error), "server_error");
         assert_eq!(

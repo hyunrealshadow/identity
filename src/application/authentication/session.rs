@@ -8,7 +8,7 @@ use identity_domain::auth::{
 use uuid::Uuid;
 
 use crate::{
-    application::error::{AppError, codes::auth::AuthErrorCode},
+    application::error::AppError,
     domain::auth::{
         SessionStatus,
         model::{ActiveSession, Session},
@@ -98,10 +98,7 @@ impl SessionService {
             .session_repo
             .find_by_oid(session_oid)
             .await?
-            .ok_or_else(|| {
-                AppError::from_code(AuthErrorCode::SessionNotFound)
-                    .with_param("session_id", session_oid.0.to_string())
-            })?;
+            .ok_or_else(|| session_not_found(session_oid))?;
 
         validate_selectable_session(&session)?;
 
@@ -114,7 +111,7 @@ impl SessionService {
                 .await?
                 .ok_or_else(|| session_not_found(session_oid))?;
             validate_selectable_session(&current)?;
-            return Err(AppError::from_code(AuthErrorCode::SessionExpired));
+            return Err(crate::error::codes::auth::error::SessionExpired.into());
         }
 
         // Re-fetch and revalidate so a revoke committed immediately after the
@@ -143,10 +140,7 @@ impl SessionService {
             .session_repo
             .revoke_by_oid(session_oid, Utc::now(), client_oid)
             .await?
-            .ok_or_else(|| {
-                AppError::from_code(AuthErrorCode::SessionNotFound)
-                    .with_param("session_id", session_oid.0.to_string())
-            })?;
+            .ok_or_else(|| session_not_found(session_oid))?;
         self.record_session_revoked(&result);
         Ok(result)
     }
@@ -254,21 +248,20 @@ impl SessionService {
 
 fn validate_selectable_session(session: &Session) -> Result<(), AppError> {
     if session.revoked_at.is_some() {
-        return Err(AppError::from_code(AuthErrorCode::SessionRevoked));
+        return Err(crate::error::codes::auth::error::SessionRevoked.into());
     }
     if session.status != SessionStatus::ACTIVE
         || session
             .expires_at
             .is_some_and(|expires_at| Utc::now() > expires_at)
     {
-        return Err(AppError::from_code(AuthErrorCode::SessionExpired));
+        return Err(crate::error::codes::auth::error::SessionExpired.into());
     }
     Ok(())
 }
 
 fn session_not_found(session_oid: SessionOid) -> AppError {
-    AppError::from_code(AuthErrorCode::SessionNotFound)
-        .with_param("session_id", session_oid.0.to_string())
+    crate::error::codes::auth::error::SessionNotFound::new(session_oid.0).into()
 }
 
 /// Shared implementation used by session management and password changes.

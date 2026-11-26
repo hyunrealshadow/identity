@@ -22,7 +22,7 @@ use unic_langid::{LanguageIdentifier, langid};
 use writeable::Writeable;
 
 use crate::{
-    application::error::{AppError, codes::common::CommonErrorCode},
+    application::error::{AppError, codes::common},
     i18n::catalog,
     infrastructure::i18n::{I18n, resolve_locale_from_headers},
     state::AppState,
@@ -244,7 +244,7 @@ pub fn render_view<T: Serialize>(
     match to_value(data) {
         Err(e) => {
             error!(error = %e, "render_view: serialise failed");
-            Err(AppError::from_code(CommonErrorCode::InternalError))
+            Err(common::error::InternalError.into())
         }
         Ok(mut data) => {
             let locale = resolve_locale_from_headers(headers).to_string();
@@ -257,7 +257,7 @@ pub fn render_view<T: Serialize>(
             match Context::from_serialize(&data) {
                 Err(e) => {
                     error!(error = %e, "render_view: context build failed");
-                    Err(AppError::from_code(CommonErrorCode::InternalError))
+                    Err(common::error::InternalError.into())
                 }
                 Ok(context) => match render_with_locale(
                     state.resources().tera(),
@@ -269,7 +269,7 @@ pub fn render_view<T: Serialize>(
                     Ok(body) => Ok(body),
                     Err(e) => {
                         error!(error = %e, template, "render_view: template render failed");
-                        Err(AppError::from_code(CommonErrorCode::InternalError))
+                        Err(common::error::InternalError.into())
                     }
                 },
             }

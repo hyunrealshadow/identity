@@ -18,7 +18,7 @@ use super::{
 };
 use crate::{
     application::{
-        error::{AppError, codes::common::CommonErrorCode},
+        error::{AppError, codes::common},
         setting::LoginClientIdSetting,
     },
     database::{
@@ -64,9 +64,9 @@ async fn ensure_login_client_in_transaction(db: &DatabaseTransaction) -> Result<
         .one(db)
         .await
         .map_err(AppError::internal)?
-        .ok_or_else(|| AppError::from_code(CommonErrorCode::InternalError))?;
+        .ok_or_else(|| common::error::InternalError.into_error())?;
     if !client.built_in {
-        return Err(AppError::from_code(CommonErrorCode::Forbidden));
+        return Err(common::error::Forbidden.into());
     }
 
     let scope_ids =

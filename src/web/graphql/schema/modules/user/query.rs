@@ -3,10 +3,7 @@ use async_graphql::{
     Context, ID, Object, Result,
     connection::{Connection, Edge},
 };
-use identity_application::{
-    authorization::ManagementTarget,
-    error::{codes::graphql::GraphqlErrorCode, params::ErrorParams},
-};
+use identity_application::{authorization::ManagementTarget, error::codes::graphql};
 use identity_domain::global_id::GlobalId;
 use identity_domain::{authorization::ManagementScope, user::UserOid};
 
@@ -110,7 +107,7 @@ impl UserManagementQuery {
 
 pub(super) fn decode_user_oid(ctx: &Context<'_>, id: &ID) -> Result<UserOid> {
     let oid = GlobalId::<UserGlobalId>::decode(id.as_str())
-        .map_err(|_| coded_error(ctx, GraphqlErrorCode::InvalidGlobalId, ErrorParams::new()))?
+        .map_err(|_| coded_error(ctx, graphql::error::InvalidGlobalId))?
         .oid();
     Ok(UserOid(oid))
 }

@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
     authentication::mfa::recovery_code_hash,
-    error::{AppError, codes::auth::AuthErrorCode},
+    error::{AppError, codes::auth},
     user::model::{CredentialData, CredentialType, RecoveryCodeCredentialData},
 };
 use identity_domain::auth::{
@@ -22,21 +22,18 @@ impl LoginService {
         ctx: SessionContext,
     ) -> Result<ChallengeOutcome, AppError> {
         if !can_challenge_second_factor(&login) {
-            return Err(AppError::from_code(AuthErrorCode::InvalidLoginState));
+            return Err(auth::error::InvalidLoginState.into());
         }
         if login.failed_attempts >= MAX_OTP_ATTEMPTS {
             self.fail_login_for_too_many_otp_attempts(login.oid).await;
-            return Err(AppError::from_code(AuthErrorCode::TooManyAttempts));
+            return Err(auth::error::TooManyAttempts.into());
         }
-        let user_oid = login
-            .user_oid
-            .ok_or_else(|| AppError::from_code(AuthErrorCode::InvalidLoginState))?
-            .into();
+        let user_oid = login.user_oid.ok_or(auth::error::InvalidLoginState)?.into();
         let user = self
             .user_repo
             .find_by_oid(user_oid)
             .await?
-            .ok_or_else(|| AppError::from_code(AuthErrorCode::UserNotFound))?;
+            .ok_or(auth::error::UserNotFound)?;
         self.ensure_user_can_authenticate(&user).await?;
         let expected_hash = recovery_code_hash(code);
         let credentials = self
@@ -69,16 +66,16 @@ impl LoginService {
                 .await?;
             if login_attempts >= MAX_OTP_ATTEMPTS || user_attempts >= MAX_FAILED_ATTEMPTS {
                 self.fail_login_for_too_many_otp_attempts(login.oid).await;
-                return Err(AppError::from_code(AuthErrorCode::TooManyAttempts));
+                return Err(auth::error::TooManyAttempts.into());
             }
-            return Err(AppError::from_code(AuthErrorCode::InvalidOtp));
+            return Err(auth::error::InvalidOtp.into());
         };
         if !self
             .credential_repo
             .consume_recovery_code_by_oid(matched.oid)
             .await?
         {
-            return Err(AppError::from_code(AuthErrorCode::InvalidOtp));
+            return Err(auth::error::InvalidOtp.into());
         }
         self.user_repo.reset_failed_attempts(user_oid).await?;
         let amr = combine_amr(&login, &[AMR_RECOVERY_CODE, AMR_MFA], true);

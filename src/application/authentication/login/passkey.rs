@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
     authentication::passkey::PasskeyOptions,
-    error::{AppError, codes::auth::AuthErrorCode},
+    error::{AppError, codes::auth},
 };
 use identity_domain::auth::{
     AMR_MFA, AMR_PASSKEY, AuthenticationContextClass, LoginFailureReason, LoginStatus,
@@ -18,17 +18,12 @@ impl LoginService {
         let login = self.prepare_challenge(login_oid).await?;
         validate_passkey_login(&login)?;
         let user = self
-            .get_user(
-                login
-                    .user_oid
-                    .ok_or_else(|| AppError::from_code(AuthErrorCode::InvalidLoginState))?
-                    .into(),
-            )
+            .get_user(login.user_oid.ok_or(auth::error::InvalidLoginState)?.into())
             .await?;
         self.ensure_user_can_authenticate(&user).await?;
         self.passkeys
             .as_ref()
-            .ok_or_else(|| AppError::from_code(AuthErrorCode::CredentialTypeUnsupported))?
+            .ok_or_else(|| auth::error::CredentialTypeUnsupported::new("passkey"))?
             .begin_authentication(user.oid, login_oid)
             .await
     }
@@ -43,18 +38,13 @@ impl LoginService {
     ) -> Result<ChallengeOutcome, AppError> {
         validate_passkey_login(&login)?;
         let user = self
-            .get_user(
-                login
-                    .user_oid
-                    .ok_or_else(|| AppError::from_code(AuthErrorCode::InvalidLoginState))?
-                    .into(),
-            )
+            .get_user(login.user_oid.ok_or(auth::error::InvalidLoginState)?.into())
             .await?;
         self.ensure_user_can_authenticate(&user).await?;
         let result = self
             .passkeys
             .as_ref()
-            .ok_or_else(|| AppError::from_code(AuthErrorCode::CredentialTypeUnsupported))?
+            .ok_or_else(|| auth::error::CredentialTypeUnsupported::new("passkey"))?
             .authenticate(user.oid, login.oid, assertion)
             .await;
         if let Err(error) = result {

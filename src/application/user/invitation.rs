@@ -31,7 +31,7 @@ use crate::{
     },
     error::{
         AppError,
-        codes::{auth::AuthErrorCode, user_management::UserManagementErrorCode},
+        codes::{auth, user_management},
     },
     observability::{BusinessEvent, EventSink, NoopEventSink},
     setting::{
@@ -172,10 +172,7 @@ impl InvitationDelivery {
                 })
             },
         )
-        .map_err(|error| {
-            AppError::from_code(UserManagementErrorCode::InvitationDeliveryFailed)
-                .with_source(error)
-        })?;
+        .map_err(user_management::error::InvitationDeliveryFailed::map_source())?;
         Ok(InvitationIssue {
             token_digest: digest,
             email,
@@ -190,7 +187,7 @@ impl InvitationDelivery {
 /// appended.
 fn invitation_link_prefix(app: &AppSettings) -> Result<String, AppError> {
     login_link_prefix(app, INVITATION_ROUTE)
-        .ok_or_else(|| AppError::from_code(UserManagementErrorCode::InvitationUnavailable))
+        .ok_or_else(|| user_management::error::InvitationUnavailable.into())
 }
 
 /// The account an invitation link belongs to, as shown to the invitee.
@@ -296,7 +293,7 @@ impl InvitationService {
 }
 
 fn link_invalid() -> AppError {
-    AppError::from_code(AuthErrorCode::InvitationLinkInvalid)
+    auth::error::InvitationLinkInvalid.into()
 }
 
 #[cfg(test)]

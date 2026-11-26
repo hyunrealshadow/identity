@@ -11,7 +11,9 @@ use uuid::Uuid;
 use crate::controllers::oauth2::pipeline::{Endpoint, Extract, RequireState, take};
 use crate::{
     application::error::{
-        AppError, code::AppErrorCode, codes::openid_connect::OpenIdConnectErrorCode,
+        AppError,
+        code::AppErrorCode,
+        codes::openid_connect::{self, OpenIdConnectErrorCode},
         kind::ErrorKind,
     },
     controllers::response::{
@@ -60,7 +62,7 @@ async fn read_bearer(depot: &mut Depot, req: &mut Request) -> Result<(), Userinf
         .headers()
         .get(header::AUTHORIZATION)
         .and_then(|value| value.to_str().ok())
-        .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::AuthorizationHeaderRequired))?;
+        .ok_or_else(|| openid_connect::error::AuthorizationHeaderRequired.into_error())?;
     depot.insert_typed(AccessToken(parse_bearer_token(header)?.to_owned()));
     Ok(())
 }
@@ -76,7 +78,7 @@ async fn read_post_bearer(depot: &mut Depot, req: &mut Request) -> Result<(), Us
         parse_bearer_token(header)?.to_owned()
     } else {
         form.access_token
-            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::AccessTokenRequired))?
+            .ok_or_else(|| openid_connect::error::AccessTokenRequired.into_error())?
     };
     depot.insert_typed(AccessToken(token));
     Ok(())
@@ -85,11 +87,9 @@ async fn read_post_bearer(depot: &mut Depot, req: &mut Request) -> Result<(), Us
 fn parse_bearer_token(header: &str) -> Result<&str, AppError> {
     let token = header
         .strip_prefix("Bearer ")
-        .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::BearerSchemeInvalid))?;
+        .ok_or_else(|| openid_connect::error::BearerSchemeInvalid.into_error())?;
     if token.is_empty() {
-        return Err(AppError::from_code(
-            OpenIdConnectErrorCode::AccessTokenRequired,
-        ));
+        return Err(openid_connect::error::AccessTokenRequired.into());
     }
     Ok(token)
 }
@@ -106,7 +106,7 @@ async fn validate_token(depot: &mut Depot) -> Result<(), UserinfoWebError> {
     if !claims.audience.iter().any(|audience| {
         *audience == identity_domain::openid_connect::identifier::client_id(claims.client_oid)
     }) {
-        return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken).into());
+        return Err(openid_connect::error::InvalidToken.into_error().into());
     }
     depot.insert_typed(claims);
     Ok(())

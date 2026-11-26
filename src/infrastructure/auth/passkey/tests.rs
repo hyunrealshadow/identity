@@ -5,7 +5,7 @@ use identity_application::{
         challenge::ChallengeRepository,
         passkey::{PasskeyOptions, PasskeyService, StoredPasskey},
     },
-    error::{AppError, codes::auth::AuthErrorCode},
+    error::{AppError, codes::auth},
     user::{UserOid, repository::PasskeyCredentialRepository},
 };
 use identity_domain::auth::challenge::{
@@ -21,7 +21,7 @@ use std::{
 use uuid::Uuid;
 
 fn invalid() -> AppError {
-    AppError::from_code(AuthErrorCode::InvalidCredential)
+    auth::error::InvalidCredential.into_error()
 }
 type Challenge = (ChallengeContext, Value, DateTime<Utc>);
 #[derive(Default)]

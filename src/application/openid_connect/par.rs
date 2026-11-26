@@ -14,7 +14,7 @@ use sha2::{Digest, Sha256};
 use crate::{
     error::{
         AppError,
-        codes::{common::CommonErrorCode, token::TokenErrorCode},
+        codes::{common, token},
     },
     openid_connect::{
         authorize::{AuthorizationRequestParams, AuthorizeService},
@@ -69,10 +69,10 @@ impl PushedAuthorizationService {
         mut params: PushedAuthorizationParams,
     ) -> Result<PushedAuthorizationResponse, AppError> {
         if params.authorization.request.is_none() && params.authorization.client_id.is_empty() {
-            return Err(AppError::from_code(TokenErrorCode::ClientIdRequired));
+            return Err(token::error::ClientIdRequired.into_error());
         }
         if params.authorization.request.is_none() && params.authorization.client_id.is_empty() {
-            return Err(AppError::from_code(TokenErrorCode::ClientIdRequired));
+            return Err(token::error::ClientIdRequired.into_error());
         }
         if params.authorization.client_id.is_empty()
             && params.client_assertion.is_none()
@@ -89,7 +89,7 @@ impl PushedAuthorizationService {
         )?;
         let client_id = &params.authorization.client_id;
         if client_id.is_empty() {
-            return Err(AppError::from_code(TokenErrorCode::ClientIdRequired));
+            return Err(token::error::ClientIdRequired.into_error());
         }
         let client_oid = self
             .client_authentication
@@ -102,14 +102,14 @@ impl PushedAuthorizationService {
             )
             .await?;
         if params.authorization.request_uri.is_some() {
-            return Err(AppError::from_code(CommonErrorCode::InvalidRequest));
+            return Err(common::error::InvalidRequest.into_error());
         }
         let (_, client) = self
             .authorize
             .validate_pushed_request(params.authorization.clone())
             .await?;
         if client.client().oid != client_oid {
-            return Err(AppError::from_code(CommonErrorCode::InvalidRequest));
+            return Err(common::error::InvalidRequest.into_error());
         }
         let expires_in = self
             .provider
@@ -129,9 +129,7 @@ impl PushedAuthorizationService {
                 Utc::now() + Duration::seconds(expires_in),
             )
             .await
-            .map_err(AppError::map_source(
-                CommonErrorCode::PushedRequestStorageFailed,
-            ))?;
+            .map_err(common::error::PushedRequestStorageFailed::map_source())?;
         Ok(PushedAuthorizationResponse {
             request_uri,
             expires_in,

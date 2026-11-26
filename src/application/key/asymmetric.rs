@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use super::rotation::KEY_LIFETIME;
 use crate::{
-    application::error::{AppError, codes::key::KeyErrorCode},
+    application::error::{AppError, codes::key},
     domain::key::{
         CreateKeyJwkInput, JwaSigningAlgorithm, JwkAlgorithm, KeyJwkRepository, PublicJwk,
         generator::{AsymmetricKeyGenerator, AsymmetricKeySpec},
@@ -147,14 +147,14 @@ impl AsymmetricKeyService {
             .repo
             .find_by_oid(oid.into())
             .await?
-            .ok_or_else(|| AppError::from_code(KeyErrorCode::NotFound))?;
+            .ok_or(key::error::NotFound)?;
 
         if key.revoked_at.is_some()
             || key
                 .expires_at
                 .is_some_and(|expires_at| expires_at <= Utc::now())
         {
-            return Err(AppError::from_code(KeyErrorCode::Revoked));
+            return Err(key::error::Revoked.into());
         }
 
         if let Some(ref jwk_repo) = self.jwk_repo {
@@ -179,10 +179,10 @@ impl AsymmetricKeyService {
             .repo
             .update_certificate_by_oid(oid.into(), certificate_pem)
             .await?
-            .ok_or_else(|| AppError::from_code(KeyErrorCode::NotFound))?;
+            .ok_or(key::error::NotFound)?;
 
         if key.revoked_at.is_some() {
-            return Err(AppError::from_code(KeyErrorCode::Revoked));
+            return Err(key::error::Revoked.into());
         }
 
         self.refresh_runtime_key_ring().await?;
@@ -194,7 +194,7 @@ impl AsymmetricKeyService {
             .repo
             .revoke_by_oid(oid.into(), Utc::now())
             .await?
-            .ok_or_else(|| AppError::from_code(KeyErrorCode::NotFound))?;
+            .ok_or(key::error::NotFound)?;
         self.refresh_runtime_key_ring().await?;
         Ok(key)
     }
@@ -239,7 +239,7 @@ fn validate_certificate_pem(certificate_pem: &str) -> Result<(), AppError> {
         return Ok(());
     }
 
-    Err(AppError::from_code(KeyErrorCode::InvalidCertificatePem))
+    Err(key::error::InvalidCertificatePem.into())
 }
 
 #[cfg(test)]

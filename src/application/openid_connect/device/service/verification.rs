@@ -2,7 +2,7 @@
 
 use super::DeviceAuthorizationService;
 use crate::{
-    error::{AppError, codes::device::DeviceAuthorizationErrorCode},
+    error::{AppError, codes::device},
     observability::{BusinessEvent, EventValue},
 };
 use chrono::{DateTime, Utc};
@@ -117,23 +117,17 @@ impl DeviceAuthorizationService {
     ) -> Result<ClientAuthorization, AppError> {
         let normalized = normalize_user_code(user_code);
         if normalized.len() != USER_CODE_LENGTH {
-            return Err(AppError::from_code(
-                DeviceAuthorizationErrorCode::UserCodeNotFound,
-            ));
+            return Err(device::error::UserCodeNotFound.into_error());
         }
 
         let record = self
             .device_repo
             .find_active_device_request_by_user_code(&normalized)
             .await
-            .map_err(AppError::map_source(
-                DeviceAuthorizationErrorCode::LoadRequestFailed,
-            ))?
-            .ok_or_else(|| AppError::from_code(DeviceAuthorizationErrorCode::UserCodeNotFound))?;
+            .map_err(device::error::LoadRequestFailed::map_source())?
+            .ok_or_else(|| device::error::UserCodeNotFound.into_error())?;
         if request_data(&record)?.claimed_login_oid.is_some() {
-            return Err(AppError::from_code(
-                DeviceAuthorizationErrorCode::UserCodeNotFound,
-            ));
+            return Err(device::error::UserCodeNotFound.into_error());
         }
         Ok(record)
     }
@@ -146,23 +140,14 @@ impl DeviceAuthorizationService {
         decision: DeviceVerificationDecision,
     ) -> Result<(), AppError> {
         if record.expires_at <= Utc::now() {
-            return Err(AppError::from_code(
-                DeviceAuthorizationErrorCode::RequestExpired,
-            ));
+            return Err(device::error::RequestExpired.into_error());
         }
         if !data.is_pending() {
-            return Err(AppError::from_code(
-                DeviceAuthorizationErrorCode::RequestAlreadyDecided,
-            ));
+            return Err(device::error::RequestAlreadyDecided.into_error());
         }
         if ScopeSet::parse(&data.scope).is_ok_and(|scope| scope.has_management_scopes()) {
             // Legacy stored requests must not be approved into a device token.
-            return Err(
-                AppError::from_code(DeviceAuthorizationErrorCode::ScopeInvalid).with_param(
-                    "reason",
-                    "management scopes are not allowed for device authorization",
-                ),
-            );
+            return Err(device::error::ScopeInvalid.into_error());
         }
         if self
             .provider_service
@@ -171,9 +156,7 @@ impl DeviceAuthorizationService {
         {
             // No historical request may be approved into an RBAC business
             // token; exchange would reject it, but approval must fail too.
-            return Err(AppError::from_code(
-                DeviceAuthorizationErrorCode::ScopeInvalid,
-            ));
+            return Err(device::error::ScopeInvalid.into_error());
         }
 
         let now = Utc::now();
@@ -194,25 +177,19 @@ impl DeviceAuthorizationService {
                     now,
                 )
                 .await
-                .map_err(AppError::map_source(
-                    DeviceAuthorizationErrorCode::StoreDecisionFailed,
-                ))?
+                .map_err(device::error::StoreDecisionFailed::map_source())?
                 .is_some(),
             DeviceVerificationDecision::Deny => self
                 .device_repo
                 .deny_device_request(record.oid, user.user_oid, now)
                 .await
-                .map_err(AppError::map_source(
-                    DeviceAuthorizationErrorCode::StoreDecisionFailed,
-                ))?,
+                .map_err(device::error::StoreDecisionFailed::map_source())?,
         };
 
         if !applied {
             // Another tab, an expiry, or a concurrent decision won the race;
             // the stored decision stays authoritative.
-            return Err(AppError::from_code(
-                DeviceAuthorizationErrorCode::RequestAlreadyDecided,
-            ));
+            return Err(device::error::RequestAlreadyDecided.into_error());
         }
 
         let mut event = BusinessEvent::audit(match decision {
@@ -243,10 +220,8 @@ impl DeviceAuthorizationService {
         self.client_repo
             .find_by_oid(client_oid)
             .await
-            .map_err(AppError::map_source(
-                DeviceAuthorizationErrorCode::ClientLookupFailed,
-            ))?
-            .ok_or_else(|| AppError::from_code(DeviceAuthorizationErrorCode::ClientNotFound))
+            .map_err(device::error::ClientLookupFailed::map_source())?
+            .ok_or_else(|| device::error::ClientNotFound.into_error())
     }
 }
 
@@ -255,9 +230,7 @@ pub(super) fn request_data(
 ) -> Result<DeviceAuthorizationRequestData, AppError> {
     match &record.data {
         ClientAuthorizationData::DeviceAuthorizationRequest(data) => Ok(data.clone()),
-        _ => Err(AppError::from_code(
-            DeviceAuthorizationErrorCode::DeserializeRequestFailed,
-        )),
+        _ => Err(device::error::DeserializeRequestFailed.into_error()),
     }
 }
 

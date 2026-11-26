@@ -23,7 +23,7 @@ use crate::{
     application::{
         error::{
             AppError,
-            codes::{common::CommonErrorCode, openid_connect::OpenIdConnectErrorCode},
+            codes::{common, openid_connect},
         },
         key::asymmetric::AsymmetricKeyService,
         openid_connect::{
@@ -183,13 +183,13 @@ impl UserInfoService {
         let relation = device_repo
             .find_device_authorization_by_oid(device_authorization_oid)
             .await
-            .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?;
+            .map_err(openid_connect::error::InvalidToken::map_source())?;
         let now = Utc::now();
         let active = relation
             .is_some_and(|relation| relation.revoked_at.is_none() && relation.expires_at > now);
 
         if !active {
-            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+            return Err(openid_connect::error::InvalidToken.into_error());
         }
 
         Ok(())
@@ -206,7 +206,7 @@ impl UserInfoService {
             .user_repo
             .find_by_oid(user_oid)
             .await?
-            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::UserNotFound))?;
+            .ok_or_else(|| openid_connect::error::UserNotFound.into_error())?;
 
         let issuer = self.provider_service.issuer()?;
         let mut claims = UserInfoClaims::from_user_with_profile_base(&user, issuer.as_str());
@@ -214,8 +214,8 @@ impl UserInfoService {
             .client_repo
             .find_by_oid(client_oid)
             .await
-            .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?
-            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+            .map_err(openid_connect::error::InvalidToken::map_source())?
+            .ok_or_else(|| openid_connect::error::InvalidToken.into_error())?;
         claims.sub = client.subject_identifier(Uuid::from(user.oid), &issuer);
         claims.apply_scope_filter(scope, claims_request);
         Ok(claims)
@@ -230,8 +230,8 @@ impl UserInfoService {
             .client_repo
             .find_by_oid(client_oid)
             .await
-            .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?
-            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+            .map_err(openid_connect::error::InvalidToken::map_source())?
+            .ok_or_else(|| openid_connect::error::InvalidToken.into_error())?;
 
         let Some(algorithms) = client.metadata().userinfo_signed_response_algs.as_deref() else {
             return Ok(None);
@@ -267,8 +267,8 @@ impl UserInfoService {
             .client_repo
             .find_by_oid(client_oid)
             .await
-            .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?
-            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+            .map_err(openid_connect::error::InvalidToken::map_source())?
+            .ok_or_else(|| openid_connect::error::InvalidToken.into_error())?;
 
         let Some(algorithms) = client
             .metadata()
@@ -312,7 +312,7 @@ impl UserInfoService {
             }
         }
 
-        Err(AppError::from_code(CommonErrorCode::InternalError))
+        Err(common::error::InternalError.into_error())
     }
 
     /// UserInfo-only validation. Machine tokens never satisfy it: the endpoint
@@ -320,15 +320,13 @@ impl UserInfoService {
     pub async fn validate_access_token(&self, raw_token: &str) -> Result<TokenClaims, AppError> {
         let validated = self.validate_principal_access_token(raw_token).await?;
         if validated.principal != AccessTokenPrincipal::User {
-            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+            return Err(openid_connect::error::InvalidToken.into_error());
         }
         let user_oid = validated
             .user_oid
-            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+            .ok_or_else(|| openid_connect::error::InvalidToken.into_error())?;
         if !validated.scope.openid {
-            return Err(AppError::from_code(
-                OpenIdConnectErrorCode::InsufficientScope,
-            ));
+            return Err(openid_connect::error::InsufficientScope.into_error());
         }
         Ok(TokenClaims {
             user_oid,
@@ -360,13 +358,13 @@ impl UserInfoService {
         raw_token: &str,
     ) -> Result<PrincipalClaims, AppError> {
         let header = jwt::decode_header(raw_token)
-            .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?;
+            .map_err(openid_connect::error::InvalidToken::map_source())?;
 
         let alg = header
             .claim(JwtClaimNames::ALG)
             .and_then(|v| v.as_str())
             .and_then(|value| value.parse::<JwaSigningAlgorithm>().ok())
-            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+            .ok_or_else(|| openid_connect::error::InvalidToken.into_error())?;
 
         let keys = self.key_service.list_available().await?;
 
@@ -378,36 +376,36 @@ impl UserInfoService {
             }
         }
 
-        let (payload, header) = verified_result
-            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+        let (payload, header) =
+            verified_result.ok_or_else(|| openid_connect::error::InvalidToken.into_error())?;
 
         let typ = header
             .claim(JwtClaimNames::TYP)
             .and_then(|v| v.as_str())
-            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+            .ok_or_else(|| openid_connect::error::InvalidToken.into_error())?;
         if typ != JwtTokenType::ACCESS_TOKEN && typ != JwtTokenType::ACCESS_TOKEN_FULL {
-            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+            return Err(openid_connect::error::InvalidToken.into_error());
         }
 
         let expires_at = payload
             .expires_at()
-            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+            .ok_or_else(|| openid_connect::error::InvalidToken.into_error())?;
         if expires_at <= SystemTime::now() {
-            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+            return Err(openid_connect::error::InvalidToken.into_error());
         }
         let issued_at = payload
             .issued_at()
-            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+            .ok_or_else(|| openid_connect::error::InvalidToken.into_error())?;
         if issued_at > SystemTime::now() + Duration::from_secs(60) {
-            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+            return Err(openid_connect::error::InvalidToken.into_error());
         }
         let issuer = self.provider_service.issuer()?;
         if payload.issuer() != Some(issuer.as_str()) {
-            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+            return Err(openid_connect::error::InvalidToken.into_error());
         }
         let audience = payload
             .audience()
-            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?
+            .ok_or_else(|| openid_connect::error::InvalidToken.into_error())?
             .into_iter()
             .map(str::to_owned)
             .collect::<Vec<_>>();
@@ -415,56 +413,56 @@ impl UserInfoService {
         let sub = payload
             .claim(JwtClaimNames::SUB)
             .and_then(|v| v.as_str())
-            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+            .ok_or_else(|| openid_connect::error::InvalidToken.into_error())?;
 
         let jti = payload
             .jwt_id()
-            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+            .ok_or_else(|| openid_connect::error::InvalidToken.into_error())?;
         let access_token_oid =
             identity_domain::openid_connect::identifier::parse_access_token_id(jti)
-                .map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+                .map_err(|_| openid_connect::error::InvalidToken.into_error())?;
         let access_token_record = self
             .client_authorization_repo
             .find_by_oid(access_token_oid)
             .await
-            .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?
-            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+            .map_err(openid_connect::error::InvalidToken::map_source())?
+            .ok_or_else(|| openid_connect::error::InvalidToken.into_error())?;
         if access_token_record.type_ != ClientAuthorizationType::AccessToken
             || access_token_record.revoked_at.is_some()
             || access_token_record.expires_at <= Utc::now()
         {
-            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+            return Err(openid_connect::error::InvalidToken.into_error());
         }
         let ClientAuthorizationData::AccessToken(access_token_data) = &access_token_record.data
         else {
-            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+            return Err(openid_connect::error::InvalidToken.into_error());
         };
 
         let principal = access_token_data.principal;
         let user_oid = match principal {
             AccessTokenPrincipal::User => {
                 let user = identity_domain::openid_connect::identifier::parse_user_subject(sub)
-                    .map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+                    .map_err(|_| openid_connect::error::InvalidToken.into_error())?;
                 if access_token_data
                     .user_oid
                     .as_deref()
                     .and_then(|oid| Uuid::parse_str(oid).ok())
                     != Some(user)
                 {
-                    return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+                    return Err(openid_connect::error::InvalidToken.into_error());
                 }
                 Some(UserOid(user))
             }
             AccessTokenPrincipal::Client => {
                 let subject = identity_domain::openid_connect::identifier::parse_client_id(sub)
-                    .map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+                    .map_err(|_| openid_connect::error::InvalidToken.into_error())?;
                 if subject != access_token_record.client_oid
                     || access_token_data.user_oid.is_some()
                     || access_token_data.session_oid.is_some()
                     || access_token_data.protected_session_id.is_some()
                     || access_token_data.device_authorization_oid.is_some()
                 {
-                    return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+                    return Err(openid_connect::error::InvalidToken.into_error());
                 }
                 None
             }
@@ -476,8 +474,8 @@ impl UserInfoService {
             .client_repo
             .find_by_oid(access_token_record.client_oid)
             .await
-            .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?
-            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+            .map_err(openid_connect::error::InvalidToken::map_source())?
+            .ok_or_else(|| openid_connect::error::InvalidToken.into_error())?;
 
         let mut session_is_multi_factor = None;
         let device_linked = access_token_data.device_authorization_oid.is_some();
@@ -487,11 +485,10 @@ impl UserInfoService {
                 .user_repo
                 .find_by_oid(user_oid)
                 .await
-                .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?
-                .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+                .map_err(openid_connect::error::InvalidToken::map_source())?
+                .ok_or_else(|| openid_connect::error::InvalidToken.into_error())?;
             if !user.enabled || user.locked {
-                return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken)
-                    .with_param("reason", "user is disabled or locked"));
+                return Err(openid_connect::error::InvalidToken.into_error());
             }
 
             match access_token_data.session_oid {
@@ -500,18 +497,15 @@ impl UserInfoService {
                         let session = session_repo
                             .find_by_oid(session_oid)
                             .await
-                            .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?
-                            .ok_or_else(|| {
-                                AppError::from_code(OpenIdConnectErrorCode::InvalidToken)
-                            })?;
+                            .map_err(openid_connect::error::InvalidToken::map_source())?
+                            .ok_or_else(|| openid_connect::error::InvalidToken.into_error())?;
                         let now = Utc::now();
                         let active = session.revoked_at.is_none()
                             && session.status == SessionStatus::ACTIVE
                             && session.expires_at.is_none_or(|expiry| expiry > now)
                             && session.user_oid == Uuid::from(user_oid);
                         if !active {
-                            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken)
-                                .with_param("reason", "session is not active for the user"));
+                            return Err(openid_connect::error::InvalidToken.into_error());
                         }
                         session_is_multi_factor = Some(
                             session
@@ -521,8 +515,7 @@ impl UserInfoService {
                     }
                 }
                 None if !device_linked => {
-                    return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken)
-                        .with_param("reason", "human token requires a live session"));
+                    return Err(openid_connect::error::InvalidToken.into_error());
                 }
                 None => {}
             }
@@ -539,13 +532,13 @@ impl UserInfoService {
         let client_id = payload
             .claim(JwtClaimNames::CLIENT_ID)
             .and_then(|value| value.as_str())
-            .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+            .ok_or_else(|| openid_connect::error::InvalidToken.into_error())?;
         if client_id
             != identity_domain::openid_connect::identifier::client_id(
                 access_token_record.client_oid,
             )
         {
-            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+            return Err(openid_connect::error::InvalidToken.into_error());
         }
 
         let scope_str = payload
@@ -553,9 +546,9 @@ impl UserInfoService {
             .and_then(|v| v.as_str())
             .unwrap_or("");
         let scope = ScopeSet::parse(scope_str)
-            .map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+            .map_err(|_| openid_connect::error::InvalidToken.into_error())?;
         if scope.to_scope_string() != access_token_data.scope {
-            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+            return Err(openid_connect::error::InvalidToken.into_error());
         }
 
         let resource_audience = audience
@@ -572,9 +565,9 @@ impl UserInfoService {
                     &access_token_data.scope,
                 )
                 .await
-                .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?;
+                .map_err(openid_connect::error::InvalidToken::map_source())?;
             if ScopeSet::parse(&selection.scope).ok().as_ref() != Some(&scope) {
-                return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+                return Err(openid_connect::error::InvalidToken.into_error());
             }
         }
         let persisted_issuance = access_token_data.management.as_ref();
@@ -583,13 +576,13 @@ impl UserInfoService {
         let machine_management =
             principal == AccessTokenPrincipal::Client && scope.has_management_scopes();
         if machine_management && persisted_business.is_none() {
-            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+            return Err(openid_connect::error::InvalidToken.into_error());
         }
         let management = persisted_management.is_some()
             || (principal == AccessTokenPrincipal::User && scope.has_management_scopes());
         if management {
             let persisted = persisted_management
-                .ok_or_else(|| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+                .ok_or_else(|| openid_connect::error::InvalidToken.into_error())?;
             validate_management_authorization(
                 ManagementLivePorts {
                     binding_repo: self.management_authority_repo.as_ref(),
@@ -610,7 +603,7 @@ impl UserInfoService {
             self.provider_service
                 .has_rbac_resource(&resource_audience)
                 .await
-                .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?
+                .map_err(openid_connect::error::InvalidToken::map_source())?
         };
         if let Some(persisted) = persisted_business {
             shared::validate_business_authorization(
@@ -632,7 +625,7 @@ impl UserInfoService {
         } else if resource_is_rbac {
             // A token for a resource that now uses RBAC must carry a business
             // snapshot. This invalidates legacy tokens across a policy switch.
-            return Err(AppError::from_code(OpenIdConnectErrorCode::InvalidToken));
+            return Err(openid_connect::error::InvalidToken.into_error());
         }
         Span::current().record("management", management);
 
@@ -657,7 +650,7 @@ impl UserInfoService {
             .cloned()
             .map(from_value)
             .transpose()
-            .map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?
+            .map_err(|_| openid_connect::error::InvalidToken.into_error())?
             .unwrap_or_default();
 
         Ok(PrincipalClaims {
@@ -684,13 +677,13 @@ impl UserInfoService {
     ) -> Result<(jwt::JwtPayload, JwsHeader), AppError> {
         let public_key = match &key.data {
             KeyData::Asymmetric(data) => data.public_key.as_bytes(),
-            _ => return Err(AppError::from_code(CommonErrorCode::InternalError)),
+            _ => return Err(common::error::InternalError.into_error()),
         };
 
         let verifier = asymmetric_verifier_from_pem(alg.as_str(), public_key)
-            .map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+            .map_err(|_| openid_connect::error::InvalidToken.into_error())?;
         let (payload, header) = jwt::decode_with_verifier(token, verifier.as_ref())
-            .map_err(|_| AppError::from_code(OpenIdConnectErrorCode::InvalidToken))?;
+            .map_err(|_| openid_connect::error::InvalidToken.into_error())?;
 
         Ok((payload, header))
     }
@@ -723,7 +716,7 @@ impl UserInfoService {
             }
         }
 
-        Err(AppError::from_code(CommonErrorCode::InternalError))
+        Err(common::error::InternalError.into_error())
     }
 }
 
@@ -731,7 +724,7 @@ fn user_info_payload(claims: &UserInfoClaims) -> Result<jwt::JwtPayload, AppErro
     let value = to_value(claims).map_err(AppError::internal)?;
     let object = value
         .as_object()
-        .ok_or_else(|| AppError::from_code(CommonErrorCode::InternalError))?;
+        .ok_or_else(|| common::error::InternalError.into_error())?;
     let mut payload = JwtPayload::new();
     for (name, value) in object {
         payload

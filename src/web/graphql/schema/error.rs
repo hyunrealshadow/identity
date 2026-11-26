@@ -128,15 +128,28 @@ fn kind_name(kind: ErrorKind) -> &'static str {
     }
 }
 
-/// Build a localized GraphQL error from a stable code and safe parameters.
+/// Build a localized GraphQL error from a typed `AppError` or variant builder.
 /// The extension `code` is the numeric application code.
-pub(super) fn coded_error(ctx: &Context<'_>, code: GraphqlErrorCode, params: ErrorParams) -> Error {
-    let message = localized_message(ctx, code, &params);
-    let kind = kind_name(code.kind());
+pub(super) fn coded_error(ctx: &Context<'_>, error: impl Into<AppError>) -> Error {
+    let error = error.into();
+    let code = error.code();
+    let (i18n, locale) = context_i18n(ctx);
+    let key = format!("E{code}");
+    let rendered = if error.params().is_empty() {
+        i18n.t_code(&locale, code)
+    } else {
+        i18n.t_code_with_params(&locale, code, error.params())
+    };
+    let message = if rendered == key {
+        generic_message(&i18n, &locale)
+    } else {
+        rendered
+    };
+    let kind = kind_name(error.kind());
     let correlation = correlation(ctx);
     Error::new(message).extend_with(|_, extensions| {
         extensions.set("kind", kind);
-        extensions.set("code", code.code());
+        extensions.set("code", code);
         correlation.apply(extensions);
     })
 }

@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use super::request::DynamicClientJwks;
 use crate::{
-    application::error::{AppError, codes::registration::RegistrationErrorCode},
+    application::error::{AppError, codes::registration},
     domain::openid_connect::OpenIdConnectClient,
 };
 
@@ -101,9 +101,7 @@ pub(super) fn registration_client_uri(issuer: &Url, client_id: Uuid) -> Result<U
         "{base}/oauth2/clients/{}",
         identity_domain::openid_connect::identifier::client_id(client_id)
     ))
-    .map_err(AppError::map_source(
-        RegistrationErrorCode::ClientLookupFailed,
-    ))
+    .map_err(registration::error::ClientLookupFailed::map_source())
 }
 
 pub(super) fn response_from_client(

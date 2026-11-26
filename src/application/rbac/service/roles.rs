@@ -125,7 +125,7 @@ impl RbacManagementService {
                 && command.names.is_none()
                 && command.descriptions.is_none()
             {
-                return Err(AppError::from_code(RbacErrorCode::EmptyUpdate));
+                return Err(rbac_codes::error::EmptyUpdate.into_error());
             }
             let names = command.names.map(canonicalize_role_names).transpose()?;
             let descriptions = command
@@ -225,11 +225,10 @@ impl RbacManagementService {
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
 
             if command.scope_oids.len() > MAX_ROLE_PERMISSIONS {
-                return Err(
-                    AppError::from_code(RbacErrorCode::RolePermissionLimitExceeded)
-                        .with_param("max", MAX_ROLE_PERMISSIONS.to_string())
-                        .with_field("permissionIds"),
-                );
+                return Err(rbac_codes::error::RolePermissionLimitExceeded::new(
+                    MAX_ROLE_PERMISSIONS,
+                )
+                .with_field("permissionIds"));
             }
             let scope_oids = command
                 .scope_oids

@@ -3,7 +3,7 @@ use identity_domain::openid_connect::BuiltInWorkload;
 use salvo::{Depot, Router, handler};
 
 use crate::{
-    application::error::{AppError, codes::common::CommonErrorCode},
+    application::error::codes::common,
     middleware::authenticated_workload,
     web::controllers::response::{
         AppResponse, JsonWebError, JsonWebResult, app_state, insert_no_store_headers, json_response,
@@ -18,9 +18,7 @@ pub fn routes() -> Router {
 async fn runtime_configuration(depot: &mut Depot) -> JsonWebResult<AppResponse> {
     let ctx = app_state(depot).map_err(JsonWebError)?;
     let Some(workload) = authenticated_workload(depot) else {
-        return Err(JsonWebError(AppError::from_code(
-            CommonErrorCode::Unauthorized,
-        )));
+        return Err(JsonWebError(common::error::Unauthorized.into()));
     };
     let mut response = match workload.0 {
         BuiltInWorkload::Login => {
@@ -30,7 +28,7 @@ async fn runtime_configuration(depot: &mut Depot) -> JsonWebResult<AppResponse> 
                 .runtime_config()
                 .await
                 .map_err(JsonWebError)?
-                .ok_or_else(|| JsonWebError(AppError::from_code(CommonErrorCode::NotFound)))?;
+                .ok_or_else(|| JsonWebError(common::error::NotFound.into()))?;
             json_response(StatusCode::OK, config)
         }
         BuiltInWorkload::Console => {
@@ -39,7 +37,7 @@ async fn runtime_configuration(depot: &mut Depot) -> JsonWebResult<AppResponse> 
                 .console_runtime()
                 .runtime_config(ctx.context().environment().as_str())
                 .map_err(JsonWebError)?
-                .ok_or_else(|| JsonWebError(AppError::from_code(CommonErrorCode::NotFound)))?;
+                .ok_or_else(|| JsonWebError(common::error::NotFound.into()))?;
             json_response(StatusCode::OK, config)
         }
     };

@@ -3,7 +3,7 @@ use chrono::Utc;
 use identity_application::{
     error::{
         AppError,
-        codes::{auth::AuthErrorCode, authorization::AuthorizationErrorCode},
+        codes::{auth, authorization},
     },
     user::{
         CredentialData, CredentialType, OtpCredentialData, Password, RecoveryCodeCredentialData,
@@ -730,8 +730,7 @@ impl PasskeyCredentialRepository for UserCredentialRepositoryImpl {
             .await
             .map_err(AppError::internal)?;
         if existing.len() >= MAX_PASSKEYS_PER_USER {
-            return Err(AppError::from_code(AuthErrorCode::PasskeyLimitReached)
-                .with_param("limit", MAX_PASSKEYS_PER_USER.to_string()));
+            return Err(auth::error::PasskeyLimitReached::new(MAX_PASSKEYS_PER_USER).into());
         }
         mfa::install_recovery_codes(&txn, user_id, &recovery_codes).await?;
         let passkey_oid = key.id;
@@ -837,7 +836,7 @@ impl PasskeyCredentialRepository for UserCredentialRepositoryImpl {
                     DbErr::Custom(message)
                         if message == "no recoverable authorization administrator remains" =>
                     {
-                        AppError::from_code(AuthorizationErrorCode::LastOwnerProtected)
+                        authorization::error::LastOwnerProtected.into()
                     }
                     _ => AppError::internal(error),
                 })?;
@@ -943,7 +942,7 @@ mod passkey_tests {
             } else {
                 assert_eq!(
                     result.unwrap_err().code(),
-                    AuthErrorCode::PasskeyLimitReached.code()
+                    auth::AuthErrorCode::PasskeyLimitReached.code()
                 );
             }
             let sql = format!("{:?}", db.into_transaction_log());

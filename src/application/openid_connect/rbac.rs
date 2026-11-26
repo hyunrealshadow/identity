@@ -24,7 +24,7 @@ use identity_domain::{
 
 use crate::{
     application::openid_connect::provider::OpenIdProviderService,
-    error::{AppError, codes::openid_connect::OpenIdConnectErrorCode},
+    error::{AppError, codes::openid_connect},
 };
 
 #[must_use]
@@ -127,7 +127,7 @@ pub(crate) async fn validate_business_authorization(
         subject_user_oid,
         audience,
     } = token;
-    let invalid = || AppError::from_code(OpenIdConnectErrorCode::InvalidToken);
+    let invalid = || openid_connect::error::InvalidToken.into_error();
     if principal == AccessTokenPrincipal::User && has_non_business_authorization_scope(scope) {
         return Err(invalid());
     }
@@ -139,12 +139,12 @@ pub(crate) async fn validate_business_authorization(
     }
     let snapshot = persisted
         .to_snapshot()
-        .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?;
+        .map_err(openid_connect::error::InvalidToken::map_source())?;
     let repository = ports.repository.ok_or_else(invalid)?;
     let state = repository
         .validate_snapshot(&snapshot)
         .await
-        .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?;
+        .map_err(openid_connect::error::InvalidToken::map_source())?;
 
     match (principal, snapshot.user_oid) {
         (AccessTokenPrincipal::User, Some(snapshot_user)) => {
@@ -165,7 +165,7 @@ pub(crate) async fn validate_business_authorization(
         .provider_service
         .client_scopes_for_resource(live_client, &persisted.resource_uri, principal)
         .await
-        .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?;
+        .map_err(openid_connect::error::InvalidToken::map_source())?;
     if scope
         .names()
         .into_iter()
@@ -179,7 +179,7 @@ pub(crate) async fn validate_business_authorization(
         .provider_service
         .select_resources(&resource, &resource, persisted_scope)
         .await
-        .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?;
+        .map_err(openid_connect::error::InvalidToken::map_source())?;
     if selection.resources.len() != 1
         || selection.resources[0] != persisted.resource_uri
         || ScopeSet::parse(&selection.scope)
@@ -191,8 +191,8 @@ pub(crate) async fn validate_business_authorization(
         return Err(invalid());
     }
 
-    let effective = effective_scope_names(&state)
-        .map_err(AppError::map_source(OpenIdConnectErrorCode::InvalidToken))?;
+    let effective =
+        effective_scope_names(&state).map_err(openid_connect::error::InvalidToken::map_source())?;
     let required = match principal {
         AccessTokenPrincipal::User => business_scope_names(scope),
         AccessTokenPrincipal::Client => machine_resource_scope_names(scope),

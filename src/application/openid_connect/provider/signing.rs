@@ -1,5 +1,5 @@
 use super::OpenIdProviderService;
-use crate::error::{AppError, codes::provider::ProviderErrorCode};
+use crate::error::{AppError, codes::provider};
 use identity_domain::key::{JwaSigningAlgorithm, JwkAlgorithm, JwsAlgorithm, Key, KeyData};
 
 pub trait SigningAlgorithmDetector: Send + Sync {
@@ -35,12 +35,12 @@ impl OpenIdProviderService {
                 let keys = key_repo
                     .list_active_asymmetric()
                     .await
-                    .map_err(AppError::map_source(ProviderErrorCode::KeyLookupFailed))?;
+                    .map_err(provider::error::KeyLookupFailed::map_source())?;
                 if let Some(key_jwk_repo) = &self.key_jwk_repo {
                     let bindings = key_jwk_repo
                         .list_active()
                         .await
-                        .map_err(AppError::map_source(ProviderErrorCode::KeyLookupFailed))?;
+                        .map_err(provider::error::KeyLookupFailed::map_source())?;
                     let mut algorithms = bindings
                         .into_iter()
                         .filter(|binding| keys.iter().any(|key| key.oid == binding.key_oid))

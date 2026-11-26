@@ -18,7 +18,7 @@ use identity_domain::{
 
 use crate::error::{
     AppError,
-    codes::{common::CommonErrorCode, user_management::UserManagementErrorCode},
+    codes::{common, user_management},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,10 +71,8 @@ impl InstanceOverviewService {
         time_zone: &str,
     ) -> Result<InstanceUserOverviewView, AppError> {
         let time_zone = TimeZone::parse(time_zone).map_err(|_| {
-            AppError::from_code(UserManagementErrorCode::ValidationFailed).with_field_error(
-                "timeZone",
-                AppError::from_code(CommonErrorCode::InvalidTimeZone),
-            )
+            user_management::error::ValidationFailed::new()
+                .with_field_error("timeZone", common::error::InvalidTimeZone)
         })?;
         let window = NewUserWindow::ending_at_in_zone(generated_at, time_zone);
         let counts = self

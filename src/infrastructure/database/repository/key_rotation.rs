@@ -3,7 +3,7 @@ use std::error::Error;
 use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use identity_application::{
-    error::{AppError, codes::common::CommonErrorCode},
+    error::{AppError, codes::common},
     key::{
         asymmetric::{GeneratedKeyJwk, KeyJwkGenerator},
         rotation::{KEY_LIFETIME, KEY_ROTATION_AGE, KeyRotationRepository, RotationMaterial},
@@ -46,7 +46,7 @@ impl KeyRotationRepositoryImpl {
 }
 
 fn internal(error: impl Error + Send + Sync + 'static) -> AppError {
-    AppError::from_code(CommonErrorCode::InternalError).with_source(error)
+    common::error::InternalError.with_source(error)
 }
 
 #[async_trait]

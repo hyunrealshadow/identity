@@ -3,7 +3,7 @@
 pub(crate) use discovery::normalize_issuer;
 
 use crate::{
-    error::{AppError, codes::common::CommonErrorCode},
+    error::{AppError, codes::common},
     setting::{OpenIdConnectSettings, PushedAuthorizationSettings, SettingsSource},
 };
 use identity_domain::{
@@ -104,13 +104,13 @@ impl OpenIdProviderService {
                     let found = repo
                         .find_by_uri(resource)
                         .await
-                        .map_err(AppError::map_source(CommonErrorCode::ResourceLookupFailed))?;
+                        .map_err(common::error::ResourceLookupFailed::map_source())?;
                     if found.is_none() {
-                        return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
+                        return Err(common::error::InvalidTarget.into_error());
                     }
                     return Ok(true);
                 }
-                None => return Err(AppError::from_code(CommonErrorCode::InvalidTarget)),
+                None => return Err(common::error::InvalidTarget.into_error()),
             }
         }
         Ok(false)
@@ -133,7 +133,7 @@ impl OpenIdProviderService {
             && let Some(codes) = repo
                 .client_scope_codes(client.client().oid, resource_uri, principal)
                 .await
-                .map_err(AppError::map_source(CommonErrorCode::ResourceLookupFailed))?
+                .map_err(common::error::ResourceLookupFailed::map_source())?
         {
             return Ok(codes.into_iter().collect());
         }
@@ -151,7 +151,7 @@ impl OpenIdProviderService {
             && let Some(fingerprint) = repo
                 .client_authority_fingerprint(client.client().oid)
                 .await
-                .map_err(AppError::map_source(CommonErrorCode::ResourceLookupFailed))?
+                .map_err(common::error::ResourceLookupFailed::map_source())?
         {
             return Ok(fingerprint);
         }
@@ -201,7 +201,7 @@ impl OpenIdProviderService {
         resources: &[String],
         scope: &str,
     ) -> Result<ScopeSet, AppError> {
-        ScopeSet::parse(scope).map_err(AppError::map_source(CommonErrorCode::InvalidScope))?;
+        ScopeSet::parse(scope).map_err(common::error::InvalidScope::map_source())?;
         let mut supported = self.supported_scopes_for_resources(resources).await?;
         if resources.is_empty() || resources.iter().any(|resource| resource == API_RESOURCE) {
             supported.extend(
@@ -226,11 +226,11 @@ impl OpenIdProviderService {
                 resolved.insert(name.as_str());
             }
             if !found {
-                return Err(AppError::from_code(CommonErrorCode::InvalidScope));
+                return Err(common::error::InvalidScope.into_error());
             }
         }
         ScopeSet::parse(&resolved.into_iter().collect::<Vec<_>>().join(" "))
-            .map_err(AppError::map_source(CommonErrorCode::InvalidScope))
+            .map_err(common::error::InvalidScope::map_source())
     }
 
     /// Expand selectors against the global registered catalog. Callers that know

@@ -20,7 +20,7 @@ use crate::{
     application::{
         error::{
             AppError,
-            codes::{common::CommonErrorCode, install::InstallErrorCode},
+            codes::{common, install},
         },
         install::{InstallRepository, InstallationData},
         key::rotation::KEY_LIFETIME,
@@ -93,9 +93,9 @@ impl InstallRepository for InstallRepositoryImpl {
         let key_oid = data.key_oid;
         let client_oid = data.client_id;
         let normalized_username = normalize_username(&data.username)
-            .ok_or_else(|| AppError::from_code(InstallErrorCode::UsernameRequired))?;
-        let normalized_email = normalize_email(&data.email)
-            .map_err(|_| AppError::from_code(InstallErrorCode::EmailInvalid))?;
+            .ok_or_else(|| install::error::UsernameRequired.into_error())?;
+        let normalized_email =
+            normalize_email(&data.email).map_err(|_| install::error::EmailInvalid.into_error())?;
         let password_json = to_value(&data.password).map_err(AppError::internal)?;
         let key_json =
             to_value(KeyData::Asymmetric(data.key_data.clone())).map_err(AppError::internal)?;
@@ -107,7 +107,7 @@ impl InstallRepository for InstallRepositoryImpl {
             .await?
             .initialized
         {
-            return Err(AppError::from_code(InstallErrorCode::AlreadyInitialized));
+            return Err(install::error::AlreadyInitialized.into());
         }
 
         if UserEntity::find()
@@ -117,7 +117,7 @@ impl InstallRepository for InstallRepositoryImpl {
             .map_err(AppError::internal)?
             .is_some()
         {
-            return Err(AppError::from_code(InstallErrorCode::UsernameExists));
+            return Err(install::error::UsernameExists.into());
         }
 
         if UserEntity::find()
@@ -127,7 +127,7 @@ impl InstallRepository for InstallRepositoryImpl {
             .map_err(AppError::internal)?
             .is_some()
         {
-            return Err(AppError::from_code(InstallErrorCode::EmailExists));
+            return Err(install::error::EmailExists.into());
         }
 
         let created_user = user::ActiveModel {
@@ -178,7 +178,7 @@ impl InstallRepository for InstallRepositoryImpl {
             ))
             .await
             .map_err(AppError::internal)?
-            .ok_or_else(|| AppError::from_code(CommonErrorCode::InternalError))?;
+            .ok_or_else(|| common::error::InternalError.into_error())?;
         let owner_group_id = owner_group
             .try_get::<i64>("", "id")
             .map_err(AppError::internal)?;
@@ -301,7 +301,7 @@ impl InstallRepository for InstallRepositoryImpl {
             .await
             .map_err(AppError::internal)?;
         if assigned_scopes.len() != assigned_scope_names.len() {
-            return Err(AppError::from_code(CommonErrorCode::InternalError));
+            return Err(common::error::InternalError.into());
         }
         ClientScopeEntity::insert_many(assigned_scopes.into_iter().map(|scope| {
             client_scope::ActiveModel {
@@ -444,7 +444,7 @@ fn installation_console_config(
                 base.join("callback").map_err(AppError::internal)?.as_str(),
             )
             .map(Some)
-            .map_err(|_| AppError::from_code(InstallErrorCode::DomainInvalid))
+            .map_err(|_| install::error::DomainInvalid.into_error())
         }
         _ => Ok(fallback.cloned()),
     }

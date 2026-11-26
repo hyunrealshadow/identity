@@ -2,7 +2,10 @@ use chrono::Utc;
 use identity_domain::openid_connect::par::PAR_REQUEST_URI_PREFIX;
 use serde_json::{Value, from_slice};
 
-use crate::{error::codes::common::CommonErrorCode, openid_connect::par::request_uri_digest};
+use crate::{
+    error::codes::{authorize, common},
+    openid_connect::par::request_uri_digest,
+};
 
 use super::*;
 
@@ -24,11 +27,11 @@ impl AuthorizeService {
                 ..Default::default()
             };
             if params != expected {
-                return Err(AppError::from_code(CommonErrorCode::InvalidRequest));
+                return Err(common::error::InvalidRequest.into_error());
             }
             let client_oid =
                 identity_domain::openid_connect::identifier::parse_client_id(&params.client_id)
-                    .map_err(|_| AppError::from_code(AuthorizeErrorCode::RequestUriInvalid))?;
+                    .map_err(|_| authorize::error::RequestUriInvalid.into_error())?;
             let stored = self
                 .client_authorization_repo
                 .consume_pushed_authorization_request(
@@ -37,13 +40,11 @@ impl AuthorizeService {
                     Utc::now(),
                 )
                 .await
-                .map_err(AppError::map_source(
-                    CommonErrorCode::PushedRequestStorageFailed,
-                ))?
-                .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::RequestUriInvalid))?;
+                .map_err(common::error::PushedRequestStorageFailed::map_source())?
+                .ok_or_else(|| authorize::error::RequestUriInvalid.into_error())?;
             let stored = stored.parameters;
             if stored.client_id != params.client_id || stored.request_uri.is_some() {
-                return Err(AppError::from_code(AuthorizeErrorCode::RequestUriInvalid));
+                return Err(authorize::error::RequestUriInvalid.into_error());
             }
             return self.validate_request_params(stored, true).await;
         }
@@ -55,7 +56,7 @@ impl AuthorizeService {
         params: AuthorizationRequestParams,
     ) -> Result<(AuthorizationRequest, OpenIdConnectClient), AppError> {
         if params.request_uri.is_some() {
-            return Err(AppError::from_code(CommonErrorCode::InvalidRequest));
+            return Err(common::error::InvalidRequest.into_error());
         }
         self.validate_request_params(params, true).await
     }
@@ -86,9 +87,7 @@ impl AuthorizeService {
         params: &AuthorizationRequestParams,
     ) -> Result<(), AppError> {
         if params.request.is_some() && params.request_uri.is_some() {
-            return Err(AppError::from_code(
-                AuthorizeErrorCode::RequestAndUriConflict,
-            ));
+            return Err(authorize::error::RequestAndUriConflict.into_error());
         }
 
         Ok(())
@@ -109,8 +108,7 @@ impl AuthorizeService {
 
         if !missing_fields.is_empty() {
             return Err(
-                AppError::from_code(AuthorizeErrorCode::RequiredParamMissing)
-                    .with_param("fields", missing_fields.join(", ")),
+                authorize::error::RequiredParamMissing::new(missing_fields.join(", ")).into_error(),
             );
         }
 
@@ -125,38 +123,30 @@ impl AuthorizeService {
         let header_segment = raw
             .split('.')
             .next()
-            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::IdTokenHintIssuerInvalid))?;
+            .ok_or_else(|| authorize::error::IdTokenHintIssuerInvalid.into_error())?;
         let header = URL_SAFE_NO_PAD
             .decode(header_segment)
-            .map_err(AppError::map_source(
-                AuthorizeErrorCode::IdTokenHintIssuerInvalid,
-            ))?;
-        let header = from_slice::<Value>(&header).map_err(AppError::map_source(
-            AuthorizeErrorCode::IdTokenHintIssuerInvalid,
-        ))?;
+            .map_err(authorize::error::IdTokenHintIssuerInvalid::map_source())?;
+        let header = from_slice::<Value>(&header)
+            .map_err(authorize::error::IdTokenHintIssuerInvalid::map_source())?;
         if !cfg!(feature = "allow-none-alg")
             && header
                 .get(JwtClaimNames::ALG)
                 .and_then(|value| value.as_str())
                 .is_none_or(|alg| alg.eq_ignore_ascii_case("none"))
         {
-            return Err(AppError::from_code(
-                AuthorizeErrorCode::IdTokenHintIssuerInvalid,
-            ));
+            return Err(authorize::error::IdTokenHintIssuerInvalid.into_error());
         }
 
         let payload_segment = raw
             .split('.')
             .nth(1)
-            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::IdTokenHintIssuerInvalid))?;
+            .ok_or_else(|| authorize::error::IdTokenHintIssuerInvalid.into_error())?;
         let payload = URL_SAFE_NO_PAD
             .decode(payload_segment)
-            .map_err(AppError::map_source(
-                AuthorizeErrorCode::IdTokenHintIssuerInvalid,
-            ))?;
-        let payload = from_slice::<Value>(&payload).map_err(AppError::map_source(
-            AuthorizeErrorCode::IdTokenHintIssuerInvalid,
-        ))?;
+            .map_err(authorize::error::IdTokenHintIssuerInvalid::map_source())?;
+        let payload = from_slice::<Value>(&payload)
+            .map_err(authorize::error::IdTokenHintIssuerInvalid::map_source())?;
 
         if payload
             .get(JwtClaimNames::ISS)
@@ -166,9 +156,7 @@ impl AuthorizeService {
             return Ok(());
         }
 
-        Err(AppError::from_code(
-            AuthorizeErrorCode::IdTokenHintIssuerInvalid,
-        ))
+        Err(authorize::error::IdTokenHintIssuerInvalid.into_error())
     }
 
     fn validate_redirect_uri(
@@ -179,9 +167,7 @@ impl AuthorizeService {
         let allowed = client.has_redirect_uri_str(redirect_uri);
 
         if !allowed {
-            return Err(AppError::from_code(
-                AuthorizeErrorCode::RedirectUriNotRegistered,
-            ));
+            return Err(authorize::error::RedirectUriNotRegistered.into_error());
         }
 
         Ok(())
@@ -199,8 +185,7 @@ impl AuthorizeService {
 
         if !unassigned.is_empty() {
             return Err(
-                AppError::from_code(AuthorizeErrorCode::ScopeNotAssignedToClient)
-                    .with_param("scopes", unassigned.join(", ")),
+                authorize::error::ScopeNotAssignedToClient::new(unassigned.join(", ")).into_error(),
             );
         }
 

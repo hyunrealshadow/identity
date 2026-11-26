@@ -5,8 +5,7 @@ use std::{
 
 use chrono::Utc;
 use identity_application::{
-    error::codes::authorize_http::AuthorizeHttpErrorCode,
-    openid_connect::authorize::ContinueContext,
+    error::codes::authorize_http, openid_connect::authorize::ContinueContext,
 };
 use identity_domain::auth::{SessionOid, acr_satisfies_any};
 use uuid::Uuid;
@@ -216,9 +215,7 @@ pub(super) async fn load_active_interaction(
         .load_continue_context_by_login(login_id)
         .await?;
     if continue_context.expires_at <= Utc::now() || continue_context.completed_at.is_some() {
-        return Err(AppError::from_code(
-            AuthorizeHttpErrorCode::ContinueInteractionUnavailable,
-        ));
+        return Err(authorize_http::error::ContinueInteractionUnavailable.into());
     }
     Ok(continue_context)
 }
@@ -248,9 +245,7 @@ mod tests {
     };
 
     use chrono::{DateTime, Duration, Utc};
-    use identity_application::error::{
-        AppError, code::AppErrorCode, codes::authorize::AuthorizeErrorCode,
-    };
+    use identity_application::error::{code::AppErrorCode, codes::authorize};
     use identity_domain::{
         auth::{AMR_PASSWORD, AuthenticationContextClass, model::ActiveSession},
         openid_connect::{AuthorizationRequest, ResponseType, ScopeSet},
@@ -628,9 +623,7 @@ mod tests {
             slice::from_ref(&competing_session),
             "login-123".to_string(),
             |_session_oid, _user_oid, _source| async {
-                Err(AppError::from_code(
-                    AuthorizeErrorCode::AuthzInteractionConflict,
-                ))
+                Err(authorize::error::AuthzInteractionConflict.into())
             },
         )
         .await
@@ -638,7 +631,7 @@ mod tests {
 
         assert_eq!(
             error.code(),
-            AuthorizeErrorCode::AuthzInteractionConflict.code()
+            authorize::AuthorizeErrorCode::AuthzInteractionConflict.code()
         );
     }
 }

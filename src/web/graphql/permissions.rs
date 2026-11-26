@@ -5,7 +5,7 @@ use identity_application::{
         CurrentManagementAuthority, DEFAULT_RECENT_AAL2_TTL, ManagementAuthorizationRequest,
         ManagementTarget, evaluate_management_authority,
     },
-    error::{AppError, codes::common::CommonErrorCode},
+    error::{AppError, codes::common},
 };
 use identity_domain::{
     authorization::ManagementAuthorityRepository,
@@ -56,8 +56,8 @@ impl EffectivePermissionsProvider for LiveEffectivePermissions {
         let resource = OAuthResourceRepositoryImpl::new(request.state.resources().db().clone())
             .find_by_uri(API_RESOURCE)
             .await
-            .map_err(AppError::map_source(CommonErrorCode::ResourceLookupFailed))?
-            .ok_or_else(|| AppError::from_code(CommonErrorCode::ResourceLookupFailed))?;
+            .map_err(common::error::ResourceLookupFailed::map_source())?
+            .ok_or_else(|| common::error::ResourceLookupFailed.into_error())?;
         if !resource.enabled {
             return Ok(empty());
         }

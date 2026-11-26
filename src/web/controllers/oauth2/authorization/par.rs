@@ -5,7 +5,10 @@ use identity_application::{
     error::{
         AppError,
         code::AppErrorCode,
-        codes::{common::CommonErrorCode, token::TokenErrorCode},
+        codes::{
+            common,
+            token::{self, TokenErrorCode},
+        },
         kind::ErrorKind,
     },
     openid_connect::{authorize::AuthorizationRequestParams, par::PushedAuthorizationParams},
@@ -104,15 +107,14 @@ fn parse_pushed_parameters(
     body: &[u8],
     headers: &HeaderMap,
 ) -> Result<PushedAuthorizationParams, AppError> {
-    let encoded =
-        str::from_utf8(body).map_err(AppError::map_source(CommonErrorCode::InvalidRequest))?;
+    let encoded = str::from_utf8(body).map_err(common::error::InvalidRequest::map_source())?;
     for component in encoded.split(['&', '=']) {
-        decode(component).map_err(AppError::map_source(CommonErrorCode::InvalidRequest))?;
+        decode(component).map_err(common::error::InvalidRequest::map_source())?;
     }
     let mut pairs = BTreeMap::<String, String>::new();
     for (key, value) in parse(body) {
         if key != "resource" && pairs.insert(key.into_owned(), value.into_owned()).is_some() {
-            return Err(AppError::from_code(CommonErrorCode::InvalidRequest));
+            return Err(common::error::InvalidRequest.into());
         }
     }
     if pairs.contains_key("request")
@@ -127,16 +129,16 @@ fn parse_pushed_parameters(
             )
         })
     {
-        return Err(AppError::from_code(CommonErrorCode::InvalidRequest));
+        return Err(common::error::InvalidRequest.into());
     }
     let basic = parse_basic_client_auth(headers);
     if pairs.contains_key("client_secret")
         && (pairs.contains_key("client_assertion") || pairs.contains_key("client_assertion_type"))
     {
-        return Err(AppError::from_code(CommonErrorCode::InvalidRequest));
+        return Err(common::error::InvalidRequest.into());
     }
     if headers.contains_key(header::AUTHORIZATION) && basic.is_none() {
-        return Err(AppError::from_code(TokenErrorCode::ClientAuthRequired));
+        return Err(token::error::ClientAuthRequired.into());
     }
     if let Some((id, _)) = &basic
         && (pairs.contains_key("client_secret")
@@ -144,11 +146,11 @@ fn parse_pushed_parameters(
             || pairs.contains_key("client_assertion_type")
             || pairs.get("client_id").is_some_and(|value| value != id))
     {
-        return Err(AppError::from_code(CommonErrorCode::InvalidRequest));
+        return Err(common::error::InvalidRequest.into());
     }
     let mut authorization: AuthorizationRequestParams = parse_authorize_pairs(body).into();
     if authorization.request.is_none() && authorization.client_id.is_empty() {
-        return Err(AppError::from_code(TokenErrorCode::ClientIdRequired));
+        return Err(token::error::ClientIdRequired.into());
     }
     if let Some((id, _)) = &basic {
         authorization.client_id = id.clone();
@@ -158,7 +160,7 @@ fn parse_pushed_parameters(
         .map(|value| {
             value
                 .parse::<ClientAssertionType>()
-                .map_err(|_| AppError::from_code(TokenErrorCode::ClientAuthRequired))
+                .map_err(|_| token::error::ClientAuthRequired.into_error())
         })
         .transpose()?;
     let client_secret = basic
@@ -193,7 +195,7 @@ async fn parse_request(depot: &mut Depot, req: &mut Request) -> Result<(), ParWe
             })
         });
     if !is_form {
-        return Err(AppError::from_code(CommonErrorCode::InvalidRequest).into());
+        return Err(common::error::InvalidRequest.into_error().into());
     }
     let body = req
         .payload_with_max_size(64 * 1024)
@@ -202,7 +204,7 @@ async fn parse_request(depot: &mut Depot, req: &mut Request) -> Result<(), ParWe
             let status = matches!(&error, ParseError::PayloadTooLarge)
                 .then_some(StatusCode::PAYLOAD_TOO_LARGE);
             ParWebError {
-                error: AppError::from_code(CommonErrorCode::InvalidRequest).with_source(error),
+                error: common::error::InvalidRequest.with_source(error),
                 status,
             }
         })?;
@@ -238,7 +240,6 @@ pub async fn method_not_allowed(res: &mut Response) {
 #[cfg(test)]
 mod tests {
     use http::{HeaderMap, HeaderValue};
-    use identity_application::error::codes::authorize::AuthorizeErrorCode;
     use salvo::test::{ResponseExt, TestClient};
     use serde_json::{Value, to_value};
 
@@ -248,49 +249,53 @@ mod tests {
     async fn par_error_projection_matches_protocol_writer_and_status_overrides() {
         for (source, status_override, expected_code, expected_status) in [
             (
-                AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid),
+                identity_application::error::codes::authorize::error::ResponseTypeInvalid::new(
+                    "unknown",
+                )
+                .into_error(),
                 None,
                 "unsupported_response_type",
                 StatusCode::BAD_REQUEST,
             ),
             (
-                AppError::from_code(AuthorizeErrorCode::RequestUriInvalid),
+                identity_application::error::codes::authorize::error::RequestUriInvalid
+                    .into_error(),
                 None,
                 "invalid_request_uri",
                 StatusCode::BAD_REQUEST,
             ),
             (
-                AppError::from_code(CommonErrorCode::InvalidScope),
+                common::error::InvalidScope.into_error(),
                 None,
                 "invalid_scope",
                 StatusCode::BAD_REQUEST,
             ),
             (
-                AppError::from_code(TokenErrorCode::ClientIdInvalid),
+                token::error::ClientIdInvalid.into_error(),
                 None,
                 "invalid_client",
                 StatusCode::UNAUTHORIZED,
             ),
             (
-                AppError::from_code(TokenErrorCode::AssertionVerifyFailed),
+                token::error::AssertionVerifyFailed.into_error(),
                 None,
                 "invalid_client",
                 StatusCode::UNAUTHORIZED,
             ),
             (
-                AppError::from_code(TokenErrorCode::RefreshTokenNotFound),
+                token::error::RefreshTokenNotFound.into_error(),
                 None,
                 "invalid_grant",
                 StatusCode::BAD_REQUEST,
             ),
             (
-                AppError::from_code(CommonErrorCode::InternalError),
+                common::error::InternalError.into_error(),
                 None,
                 "server_error",
                 StatusCode::INTERNAL_SERVER_ERROR,
             ),
             (
-                AppError::from_code(CommonErrorCode::InvalidRequest),
+                common::error::InvalidRequest.into_error(),
                 Some(StatusCode::PAYLOAD_TOO_LARGE),
                 "invalid_request",
                 StatusCode::PAYLOAD_TOO_LARGE,

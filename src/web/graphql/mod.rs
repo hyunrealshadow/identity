@@ -27,8 +27,9 @@ use crate::{
 use chrono::DateTime;
 use identity_application::{
     error::{
-        AppError, code::AppErrorCode,
-        codes::graphql_transport::GraphqlTransportErrorCode as TransportError, params::ErrorParams,
+        AppError,
+        code::AppErrorCode,
+        codes::graphql_transport::{self, GraphqlTransportErrorCode as TransportError},
     },
     setting::application_origins,
 };
@@ -469,7 +470,7 @@ fn attach_correlation(
             let code = limit_error(&error.message).unwrap_or(TransportError::InvalidRequest);
             error.message = localized_transport_error_with_limit(code, locale, config);
             extensions.set("code", code.code());
-            extensions.set("kind", AppError::from_code(code).kind().as_str());
+            extensions.set("kind", code.kind().as_str());
         }
         extensions.set("requestId", correlation.request_id.clone());
         if let Some(trace_id) = &correlation.trace_id {
@@ -494,15 +495,18 @@ fn localized_transport_error_with_limit(
     locale: &LanguageIdentifier,
     config: &GraphqlConfig,
 ) -> String {
-    let max = match code {
-        TransportError::QueryTooDeep => config.max_depth,
-        TransportError::QueryTooComplex => config.max_complexity,
+    let err: AppError = match code {
+        TransportError::QueryTooDeep => {
+            graphql_transport::error::QueryTooDeep::new(config.max_depth).into()
+        }
+        TransportError::QueryTooComplex => {
+            graphql_transport::error::QueryTooComplex::new(config.max_complexity).into()
+        }
         _ => return localized_transport_error(code, locale),
     };
-    let params = ErrorParams::new().insert("max", max.to_string());
     error_i18n()
         .expect("error i18n is initialized during startup")
-        .t_code_with_params(locale, code.code(), &params)
+        .t_code_with_params(locale, code.code(), err.params())
 }
 
 fn write_unauthorized(
@@ -526,7 +530,7 @@ fn write_protocol_error(
     correlation: &RequestCorrelation,
 ) {
     res.status_code(status);
-    let mut extensions = json!({"code": code.code(), "kind": format!("{:?}", AppError::from_code(code).kind()).to_lowercase(), "requestId": correlation.request_id});
+    let mut extensions = json!({"code": code.code(), "kind": format!("{:?}", code.kind()).to_lowercase(), "requestId": correlation.request_id});
     let mut envelope = json!({"requestId": correlation.request_id});
     if let Some(trace_id) = &correlation.trace_id {
         extensions["traceId"] = json!(trace_id);

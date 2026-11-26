@@ -30,7 +30,7 @@ use crate::{
         RenderedEmail, built_in_template, effective_template,
         template::{MAX_BODY_LENGTH, MAX_SUBJECT_LENGTH, MAX_TEMPLATE_TRANSLATIONS},
     },
-    error::{AppError, codes::instance::InstanceErrorCode},
+    error::{AppError, codes::instance},
     observability::{BusinessEvent, EventValue},
     rbac::RbacManagementAuthority,
 };
@@ -302,8 +302,8 @@ pub struct SendTestEmailCommand {
     pub template: Option<SendTestEmailTemplate>,
 }
 
-fn invalid(code: InstanceErrorCode, field: &str) -> AppError {
-    AppError::from_code(code).with_field(field.to_owned())
+fn invalid(error: impl Into<AppError>, field: &str) -> AppError {
+    error.into().with_field(field.to_owned())
 }
 
 fn trimmed(value: &str) -> String {
@@ -318,16 +318,14 @@ fn optional(value: Option<String>) -> Option<String> {
 
 fn check_length(value: &str, max: usize, field: &str) -> Result<(), AppError> {
     if value.chars().count() > max {
-        return Err(AppError::from_code(InstanceErrorCode::EmailTemplateTooLong)
-            .with_param("max", max.to_string())
-            .with_field(field.to_owned()));
+        return Err(instance::error::EmailTemplateTooLong::new(max).with_field(field.to_owned()));
     }
     Ok(())
 }
 
 fn required(value: &str, field: &str) -> Result<(), AppError> {
     if value.is_empty() {
-        return Err(invalid(InstanceErrorCode::EmailSettingRequired, field));
+        return Err(invalid(instance::error::EmailSettingRequired, field));
     }
     check_length(value, MAX_FIELD_LENGTH, field)
 }
@@ -336,14 +334,14 @@ fn check_token_endpoint(value: &str) -> Result<(), AppError> {
     let field = "authentication.tokenEndpoint";
     required(value, field)?;
     let url = Url::parse(value)
-        .map_err(|_| invalid(InstanceErrorCode::InvalidEmailTokenEndpoint, field))?;
+        .map_err(|_| invalid(instance::error::InvalidEmailTokenEndpoint, field))?;
     // Plain HTTP only reaches a token endpoint on this machine.
     let loopback = matches!(url.host_str(), Some("localhost" | "127.0.0.1" | "[::1]"));
     if url.scheme() != "https" && !(url.scheme() == "http" && loopback) {
-        return Err(invalid(InstanceErrorCode::InvalidEmailTokenEndpoint, field));
+        return Err(invalid(instance::error::InvalidEmailTokenEndpoint, field));
     }
     if !url.username().is_empty() || url.password().is_some() || url.fragment().is_some() {
-        return Err(invalid(InstanceErrorCode::InvalidEmailTokenEndpoint, field));
+        return Err(invalid(instance::error::InvalidEmailTokenEndpoint, field));
     }
     Ok(())
 }
@@ -374,7 +372,7 @@ impl PreparedAuthentication {
                     (None, SmtpAuthentication::Password { password, .. }) => password.clone(),
                     (None, _) => {
                         return Err(invalid(
-                            InstanceErrorCode::EmailSettingRequired,
+                            instance::error::EmailSettingRequired,
                             "authentication.password",
                         ));
                     }
@@ -399,7 +397,7 @@ impl PreparedAuthentication {
                             .or_else(|| stored.and_then(|stored| stored.refresh_token.clone()))
                             .ok_or_else(|| {
                                 invalid(
-                                    InstanceErrorCode::EmailSettingRequired,
+                                    instance::error::EmailSettingRequired,
                                     "authentication.refreshToken",
                                 )
                             })?,
@@ -415,7 +413,7 @@ impl InstanceSettingService {
     fn email_dependencies(&self) -> Result<&EmailManagementDependencies, AppError> {
         self.email
             .as_ref()
-            .ok_or_else(|| AppError::from_code(InstanceErrorCode::EmailDeliveryNotConfigured))
+            .ok_or_else(|| instance::error::EmailDeliveryNotConfigured.into())
     }
 
     async fn protect_secret(
@@ -427,9 +425,10 @@ impl InstanceSettingService {
             return Ok(None);
         };
         if secret.len() > MAX_SECRET_LENGTH {
-            return Err(AppError::from_code(InstanceErrorCode::EmailTemplateTooLong)
-                .with_param("max", MAX_SECRET_LENGTH.to_string())
-                .with_field(field.to_owned()));
+            return Err(
+                instance::error::EmailTemplateTooLong::new(MAX_SECRET_LENGTH)
+                    .with_field(field.to_owned()),
+            );
         }
         let token = self
             .email_dependencies()?
@@ -517,13 +516,13 @@ impl InstanceSettingService {
                 required(&host, "host")?;
             }
             if host.chars().count() > MAX_HOST_LENGTH || host.contains(char::is_whitespace) {
-                return Err(invalid(InstanceErrorCode::InvalidEmailAddress, "host"));
+                return Err(invalid(instance::error::InvalidEmailAddress, "host"));
             }
             if command.enabled || !sender_address.is_empty() {
                 required(&sender_address, "senderAddress")?;
                 if !sender_address.validate_email() {
                     return Err(invalid(
-                        InstanceErrorCode::InvalidEmailAddress,
+                        instance::error::InvalidEmailAddress,
                         "senderAddress",
                     ));
                 }
@@ -622,13 +621,11 @@ impl InstanceSettingService {
             let dependencies = self.email_dependencies()?;
             let recipient = trimmed(&command.recipient);
             if !recipient.validate_email() {
-                return Err(invalid(InstanceErrorCode::InvalidEmailAddress, "recipient"));
+                return Err(invalid(instance::error::InvalidEmailAddress, "recipient"));
             }
             let state = self.repository.load().await.map_err(map_repository_error)?;
             if !state.email_delivery.is_configured() {
-                return Err(AppError::from_code(
-                    InstanceErrorCode::EmailDeliveryNotConfigured,
-                ));
+                return Err(instance::error::EmailDeliveryNotConfigured.into());
             }
             let message = prepare_test_message(
                 dependencies.renderer.as_ref(),
@@ -641,11 +638,7 @@ impl InstanceSettingService {
                 .send(&state.email_delivery, message)
                 .await
                 .map_err(|error| {
-                    AppError::from_code(InstanceErrorCode::TestEmailFailed)
-                        .with_param(
-                            "detail",
-                            error.detail().unwrap_or(error.reason()).to_owned(),
-                        )
+                    instance::error::TestEmailFailed::new(error.detail().unwrap_or(error.reason()))
                         .with_source(error)
                 })
         }
@@ -712,9 +705,7 @@ impl TemplateCheck {
 
 fn canonical_locale(locale: &str, field: &str) -> Result<String, AppError> {
     identity_domain::rbac::metadata::canonicalize_locale(locale).map_err(|_| {
-        AppError::from_code(InstanceErrorCode::UnsupportedEmailLocale)
-            .with_param("locale", locale.to_owned())
-            .with_field(field.to_owned())
+        instance::error::UnsupportedEmailLocale::new(locale).with_field(field.to_owned())
     })
 }
 
@@ -729,9 +720,10 @@ fn check_draft(
     check_template(renderer, kind, None, &draft.default)
         .map_err(|check| check.into_error("default."))?;
     if draft.translations.len() > MAX_TEMPLATE_TRANSLATIONS {
-        return Err(AppError::from_code(InstanceErrorCode::EmailTemplateTooLong)
-            .with_param("max", MAX_TEMPLATE_TRANSLATIONS.to_string())
-            .with_field("translations"));
+        return Err(
+            instance::error::EmailTemplateTooLong::new(MAX_TEMPLATE_TRANSLATIONS)
+                .with_field("translations"),
+        );
     }
     let mut translations = BTreeMap::new();
     for (index, (locale, content)) in draft.translations.into_iter().enumerate() {
@@ -739,8 +731,7 @@ fn check_draft(
         check_template(renderer, kind, Some(&locale), &content)
             .map_err(|check| check.into_error(&format!("translations.{index}.content.")))?;
         if translations.insert(locale.clone(), content).is_some() {
-            return Err(AppError::from_code(InstanceErrorCode::DuplicateEmailLocale)
-                .with_param("locale", locale)
+            return Err(instance::error::DuplicateEmailLocale::new(locale)
                 .with_field(format!("translations.{index}.locale")));
         }
     }
@@ -762,14 +753,13 @@ fn check_template(
     ] {
         if value.chars().count() > max {
             return Err(TemplateCheck {
-                error: AppError::from_code(InstanceErrorCode::EmailTemplateTooLong)
-                    .with_param("max", max.to_string()),
+                error: instance::error::EmailTemplateTooLong::new(max).into(),
                 part,
             });
         }
         if value.trim().is_empty() {
             return Err(TemplateCheck {
-                error: AppError::from_code(InstanceErrorCode::EmailSettingRequired),
+                error: instance::error::EmailSettingRequired.into(),
                 part,
             });
         }
@@ -780,15 +770,13 @@ fn check_template(
         renderer
             .render(content, &first)
             .map_err(|EmailTemplateRenderError { part, detail }| TemplateCheck {
-                error: AppError::from_code(InstanceErrorCode::InvalidEmailTemplate)
-                    .with_param("detail", detail),
+                error: instance::error::InvalidEmailTemplate::new(detail).into(),
                 part: part.as_str(),
             })?;
     for context in contexts {
         renderer.render(content, &context).map_err(
             |EmailTemplateRenderError { part, detail }| TemplateCheck {
-                error: AppError::from_code(InstanceErrorCode::InvalidEmailTemplate)
-                    .with_param("detail", detail),
+                error: instance::error::InvalidEmailTemplate::new(detail).into(),
                 part: part.as_str(),
             },
         )?;
@@ -868,7 +856,7 @@ mod tests {
         .unwrap_err();
         assert_eq!(
             switched.code(),
-            InstanceErrorCode::EmailSettingRequired as u32
+            instance::InstanceErrorCode::EmailSettingRequired as u32
         );
 
         let missing_refresh = oauth_input(Xoauth2Grant::RefreshToken)
@@ -876,7 +864,7 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             missing_refresh.code(),
-            InstanceErrorCode::EmailSettingRequired as u32
+            instance::InstanceErrorCode::EmailSettingRequired as u32
         );
     }
 
@@ -980,7 +968,7 @@ mod tests {
         .unwrap_err();
         assert_eq!(
             duplicate.code(),
-            InstanceErrorCode::DuplicateEmailLocale as u32
+            instance::InstanceErrorCode::DuplicateEmailLocale as u32
         );
         assert_eq!(field(&duplicate), "translations.1.locale");
     }
@@ -999,7 +987,7 @@ mod tests {
         .unwrap_err();
         assert_eq!(
             broken.code(),
-            InstanceErrorCode::InvalidEmailTemplate as u32
+            instance::InstanceErrorCode::InvalidEmailTemplate as u32
         );
         assert_eq!(field(&broken), "translations.0.content.html");
 

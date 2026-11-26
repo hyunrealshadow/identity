@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use super::{TokenRevocationParams, TokenService, resolve_client_id};
 use crate::{
-    application::error::{AppError, codes::token::TokenErrorCode},
+    application::error::{AppError, codes::token},
     domain::{
         client_authorization::{
             ClientAuthenticationMode, ClientAuthorizationData, ClientAuthorizationType,
@@ -30,15 +30,15 @@ impl TokenService {
         if params.client_secret.is_none() && params.client_assertion.is_none() {
             let client_oid =
                 identity_domain::openid_connect::identifier::parse_client_id(&client_id)
-                    .map_err(AppError::map_source(TokenErrorCode::ClientIdInvalid))?;
+                    .map_err(token::error::ClientIdInvalid::map_source())?;
             let client = self
                 .client_repo
                 .find_by_oid(client_oid)
                 .await
-                .map_err(AppError::map_source(TokenErrorCode::ClientLookupFailed))?
-                .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))?;
+                .map_err(token::error::ClientLookupFailed::map_source())?
+                .ok_or_else(|| token::error::ClientNotFound.into_error())?;
             if !client.metadata().settings.allow_public_client_flow {
-                return Err(AppError::from_code(TokenErrorCode::ClientAuthRequired));
+                return Err(token::error::ClientAuthRequired.into_error());
             }
             if !client
                 .metadata()
@@ -77,7 +77,7 @@ impl TokenService {
             methods.allows_token_endpoint_auth_method(TokenEndpointAuthMethod::None)
         };
         if !valid_proof {
-            return Err(AppError::from_code(TokenErrorCode::ClientAuthRequired));
+            return Err(token::error::ClientAuthRequired.into_error());
         }
         let request_mode = ClientAuthenticationMode::from_credentials(
             params.client_secret.is_some() || params.client_assertion.is_some(),
@@ -94,28 +94,24 @@ impl TokenService {
                 .client_authorization_repo
                 .find_by_oid(oid)
                 .await
-                .map_err(AppError::map_source(
-                    TokenErrorCode::RefreshTokenLookupFailed,
-                ))?;
+                .map_err(token::error::RefreshTokenLookupFailed::map_source())?;
             if let Some(record) =
                 record.filter(|record| record.type_ == ClientAuthorizationType::RefreshToken)
             {
                 if record.client_oid != client_oid {
-                    return Err(AppError::from_code(
-                        TokenErrorCode::RefreshTokenClientMismatch,
-                    ));
+                    return Err(token::error::RefreshTokenClientMismatch.into_error());
                 }
                 let issued_mode = match &record.data {
                     ClientAuthorizationData::RefreshToken(data) => data.client_authentication_mode,
                     _ => None,
                 };
                 if effective_issued_mode(issued_mode, client.metadata()) != request_mode {
-                    return Err(AppError::from_code(TokenErrorCode::ClientAuthRequired));
+                    return Err(token::error::ClientAuthRequired.into_error());
                 }
                 self.client_authorization_repo
                     .revoke_refresh_grant_for_client(oid, client_oid, Utc::now())
                     .await
-                    .map_err(AppError::map_source(TokenErrorCode::RevokeRefreshFailed))?;
+                    .map_err(token::error::RevokeRefreshFailed::map_source())?;
                 return Ok(());
             }
         }
@@ -126,29 +122,25 @@ impl TokenService {
                 .client_authorization_repo
                 .find_by_oid(oid)
                 .await
-                .map_err(AppError::map_source(
-                    TokenErrorCode::RefreshTokenLookupFailed,
-                ))?;
+                .map_err(token::error::RefreshTokenLookupFailed::map_source())?;
             if let Some(record) = record.filter(|record| {
                 record.type_ == ClientAuthorizationType::AccessToken
                     && record.client_oid == token_client_oid
             }) {
                 if record.client_oid != client_oid {
-                    return Err(AppError::from_code(
-                        TokenErrorCode::RefreshTokenClientMismatch,
-                    ));
+                    return Err(token::error::RefreshTokenClientMismatch.into_error());
                 }
                 let issued_mode = match &record.data {
                     ClientAuthorizationData::AccessToken(data) => data.client_authentication_mode,
                     _ => None,
                 };
                 if effective_issued_mode(issued_mode, client.metadata()) != request_mode {
-                    return Err(AppError::from_code(TokenErrorCode::ClientAuthRequired));
+                    return Err(token::error::ClientAuthRequired.into_error());
                 }
                 self.client_authorization_repo
                     .revoke_access_token_for_client(oid, client_oid, Utc::now())
                     .await
-                    .map_err(AppError::map_source(TokenErrorCode::RevokeRefreshFailed))?;
+                    .map_err(token::error::RevokeRefreshFailed::map_source())?;
             }
         }
         Ok(())
@@ -170,9 +162,7 @@ impl TokenService {
                 .client_authorization_repo
                 .find_by_oid(oid)
                 .await
-                .map_err(AppError::map_source(
-                    TokenErrorCode::RefreshTokenLookupFailed,
-                ))?;
+                .map_err(token::error::RefreshTokenLookupFailed::map_source())?;
             if let Some(record) = record
                 && record.client_oid == client_oid
                 && matches!(
@@ -184,7 +174,7 @@ impl TokenService {
                 self.client_authorization_repo
                     .revoke_refresh_grant_for_client(oid, client_oid, Utc::now())
                     .await
-                    .map_err(AppError::map_source(TokenErrorCode::RevokeRefreshFailed))?;
+                    .map_err(token::error::RevokeRefreshFailed::map_source())?;
                 return Ok(());
             }
         }
@@ -195,9 +185,7 @@ impl TokenService {
                 .client_authorization_repo
                 .find_by_oid(oid)
                 .await
-                .map_err(AppError::map_source(
-                    TokenErrorCode::RefreshTokenLookupFailed,
-                ))?;
+                .map_err(token::error::RefreshTokenLookupFailed::map_source())?;
             if let Some(record) = record
                 && record.client_oid == client_oid
                 && matches!(
@@ -209,11 +197,11 @@ impl TokenService {
                 self.client_authorization_repo
                     .revoke_access_token_for_client(oid, client_oid, Utc::now())
                     .await
-                    .map_err(AppError::map_source(TokenErrorCode::RevokeRefreshFailed))?;
+                    .map_err(token::error::RevokeRefreshFailed::map_source())?;
                 return Ok(());
             }
         }
-        Err(AppError::from_code(TokenErrorCode::ClientAuthRequired))
+        Err(token::error::ClientAuthRequired.into_error())
     }
 
     pub(super) async fn verified_access_token_oid(
@@ -269,7 +257,7 @@ impl TokenService {
             .key_jwk_repo
             .list_active()
             .await
-            .map_err(AppError::map_source(TokenErrorCode::KeyListFailed))?;
+            .map_err(token::error::KeyListFailed::map_source())?;
         let Some(binding) = bindings.iter().find(|binding| {
             Uuid::from(binding.oid) == kid && binding.algorithm == JwkAlgorithm::Signing(alg)
         }) else {
@@ -279,7 +267,7 @@ impl TokenService {
             .key_repo
             .find_by_oid(binding.key_oid)
             .await
-            .map_err(AppError::map_source(TokenErrorCode::KeyListFailed))?;
+            .map_err(token::error::KeyListFailed::map_source())?;
         let Some(key) = key else {
             return Ok(None);
         };

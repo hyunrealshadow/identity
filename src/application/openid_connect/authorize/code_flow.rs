@@ -1,6 +1,6 @@
 use super::AuthorizeService;
 use super::implicit_flow::AuthenticationContext;
-use crate::error::{AppError, codes::authorize::AuthorizeErrorCode};
+use crate::error::{AppError, codes::authorize};
 use crate::{
     observability::{BusinessEvent, EventValue},
     openid_connect::session::calculate_session_state,
@@ -34,9 +34,8 @@ impl AuthorizeService {
         request: &AuthorizationRequestData,
         context: AuthorizationCodeContext<'_>,
     ) -> Result<Url, AppError> {
-        let redirect_uri = Url::parse(&request.redirect_uri).map_err(AppError::map_source(
-            AuthorizeErrorCode::StoredRedirectUriInvalid,
-        ))?;
+        let redirect_uri = Url::parse(&request.redirect_uri)
+            .map_err(authorize::error::StoredRedirectUriInvalid::map_source())?;
 
         let (protected_code, _) = self.create_authorization_code(request, context).await?;
 
@@ -69,7 +68,7 @@ impl AuthorizeService {
         } = context;
         let authorization_snapshot = match (&request.management, rbac_snapshot) {
             (Some(_), Some(_)) => {
-                return Err(AppError::from_code(AuthorizeErrorCode::ScopeInvalid));
+                return Err(authorize::error::ScopeInvalid.into_error());
             }
             (Some(management), None) => {
                 Some(AuthorizationSnapshotData::Management((*management).clone()))
@@ -82,9 +81,8 @@ impl AuthorizeService {
         let record = self
             .client_authorization_repo
             .create(
-                Uuid::parse_str(&request.client_id).map_err(AppError::map_source(
-                    AuthorizeErrorCode::StoredClientIdInvalid,
-                ))?,
+                Uuid::parse_str(&request.client_id)
+                    .map_err(authorize::error::StoredClientIdInvalid::map_source())?,
                 ClientAuthorizationData::AuthorizationCode(AuthorizationCodeData {
                     scope: request.scope.clone(),
                     resources: request.resources.clone(),
@@ -110,13 +108,13 @@ impl AuthorizeService {
                 Utc::now() + Duration::minutes(10),
             )
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::StoreCodeFailed))?;
+            .map_err(authorize::error::StoreCodeFailed::map_source())?;
 
         let protected_code = self
             .data_protector
             .protect("authorization-code", record.oid.as_bytes())
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::StoreCodeFailed))?;
+            .map_err(authorize::error::StoreCodeFailed::map_source())?;
 
         self.events.emit(
             BusinessEvent::business("authorization_code.created")
@@ -157,14 +155,12 @@ pub(super) fn session_state_for_authorize_response(
     request: &AuthorizationRequestData,
     protected_session_id: &str,
 ) -> Result<String, AppError> {
-    let redirect_uri = Url::parse(&request.redirect_uri).map_err(AppError::map_source(
-        AuthorizeErrorCode::StoredRedirectUriInvalid,
-    ))?;
+    let redirect_uri = Url::parse(&request.redirect_uri)
+        .map_err(authorize::error::StoredRedirectUriInvalid::map_source())?;
     let origin = redirect_uri.origin().ascii_serialization();
     // The relying party recomputes this from its protocol `client_id`.
-    let client_oid = Uuid::parse_str(&request.client_id).map_err(AppError::map_source(
-        AuthorizeErrorCode::StoredClientIdInvalid,
-    ))?;
+    let client_oid = Uuid::parse_str(&request.client_id)
+        .map_err(authorize::error::StoredClientIdInvalid::map_source())?;
     Ok(calculate_session_state(
         &identity_domain::openid_connect::identifier::client_id(client_oid),
         &origin,

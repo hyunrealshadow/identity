@@ -27,6 +27,7 @@ use crate::{
         },
         openid_connect::GrantType,
     },
+    error::codes::token,
     observability::{BusinessEvent, EventValue},
     openid_connect::resource::ResourceSelection,
 };
@@ -88,14 +89,13 @@ impl TokenService {
             .client_repo
             .find_by_oid(authenticated_client_oid)
             .await
-            .map_err(AppError::map_source(TokenErrorCode::ClientLookupFailed))?
-            .ok_or_else(|| AppError::from_code(TokenErrorCode::ClientNotFound))?;
+            .map_err(token::error::ClientLookupFailed::map_source())?
+            .ok_or_else(|| token::error::ClientNotFound.into_error())?;
 
         // Re-check the grant at redemption: a client whose registration
         // changed after the user approved must not receive tokens.
         if !client.allows_grant(GrantType::DeviceCode) {
-            return Err(AppError::from_code(TokenErrorCode::ClientGrantNotAllowed)
-                .with_param("grant_type", GrantType::DeviceCode.as_str()));
+            return Err(token::error::ClientGrantNotAllowed.into_error());
         }
 
         Span::current().record("client_oid", display(authenticated_client_oid));
@@ -105,15 +105,11 @@ impl TokenService {
             .device_repo
             .find_device_request_by_device_code_digest(&digest)
             .await
-            .map_err(AppError::map_source(
-                TokenErrorCode::DeviceRequestLookupFailed,
-            ))?
-            .ok_or_else(|| AppError::from_code(TokenErrorCode::DeviceCodeNotFound))?;
+            .map_err(token::error::DeviceRequestLookupFailed::map_source())?
+            .ok_or_else(|| token::error::DeviceCodeNotFound.into_error())?;
 
         if record.client_oid != authenticated_client_oid {
-            return Err(AppError::from_code(
-                TokenErrorCode::DeviceCodeClientMismatch,
-            ));
+            return Err(token::error::DeviceCodeClientMismatch.into_error());
         }
         event
             .attributes
@@ -121,7 +117,7 @@ impl TokenService {
 
         let data = match &record.data {
             ClientAuthorizationData::DeviceAuthorizationRequest(data) => data.clone(),
-            _ => return Err(AppError::from_code(TokenErrorCode::DeviceCodeNotFound)),
+            _ => return Err(token::error::DeviceCodeNotFound.into_error()),
         };
         let issued_mode = data.client_authentication_mode.unwrap_or_else(|| {
             if client.metadata().effective_token_endpoint_auth_methods()
@@ -133,35 +129,31 @@ impl TokenService {
             }
         });
         if issued_mode != client_authentication_mode {
-            return Err(AppError::from_code(
-                TokenErrorCode::DeviceCodeClientMismatch,
-            ));
+            return Err(token::error::DeviceCodeClientMismatch.into_error());
         }
         let now = Utc::now();
         if record.expires_at <= now {
-            return Err(AppError::from_code(TokenErrorCode::DeviceCodeExpired));
+            return Err(token::error::DeviceCodeExpired.into_error());
         }
 
         let approval = match data.status {
             DeviceRequestStatus::Denied => {
-                return Err(AppError::from_code(TokenErrorCode::DeviceCodeDenied));
+                return Err(token::error::DeviceCodeDenied.into_error());
             }
             DeviceRequestStatus::Consumed => {
-                return Err(AppError::from_code(TokenErrorCode::DeviceCodeNotFound));
+                return Err(token::error::DeviceCodeNotFound.into_error());
             }
             DeviceRequestStatus::Pending => {
                 return Err(match self.poll_schedule(&record, now).await? {
-                    PollDecision::Pending => AppError::from_code(TokenErrorCode::DeviceCodePending),
-                    PollDecision::SlowDown => {
-                        AppError::from_code(TokenErrorCode::DeviceCodeSlowDown)
-                    }
+                    PollDecision::Pending => token::error::DeviceCodePending.into_error(),
+                    PollDecision::SlowDown => token::error::DeviceCodeSlowDown.into_error(),
                     PollDecision::Terminal(error) => error,
                 });
             }
             DeviceRequestStatus::Approved => data
                 .approval
                 .clone()
-                .ok_or_else(|| AppError::from_code(TokenErrorCode::DeviceRequestStateInvalid))?,
+                .ok_or_else(|| token::error::DeviceRequestStateInvalid.into_error())?,
         };
 
         let device_authorization_oid = approval.device_authorization_oid;
@@ -173,20 +165,16 @@ impl TokenService {
             .device_repo
             .find_device_authorization_by_oid(device_authorization_oid)
             .await
-            .map_err(AppError::map_source(
-                TokenErrorCode::DeviceRelationLookupFailed,
-            ))?
-            .ok_or_else(|| AppError::from_code(TokenErrorCode::DeviceCodeRevoked))?;
+            .map_err(token::error::DeviceRelationLookupFailed::map_source())?
+            .ok_or_else(|| token::error::DeviceCodeRevoked.into_error())?;
         if relation.revoked_at.is_some() || relation.expires_at <= now {
-            return Err(AppError::from_code(TokenErrorCode::DeviceCodeRevoked));
+            return Err(token::error::DeviceCodeRevoked.into_error());
         }
 
-        let scope = ScopeSet::parse(&approval.approved_scope).map_err(AppError::map_source(
-            TokenErrorCode::DeviceRequestStateInvalid,
-        ))?;
+        let scope = ScopeSet::parse(&approval.approved_scope)
+            .map_err(token::error::DeviceRequestStateInvalid::map_source())?;
         if scope.has_management_scopes() {
-            return Err(AppError::from_code(TokenErrorCode::ClientGrantNotAllowed)
-                .with_param("grant_type", GrantType::DeviceCode.as_str()));
+            return Err(token::error::ClientGrantNotAllowed.into_error());
         }
         if self
             .provider_service
@@ -195,8 +183,7 @@ impl TokenService {
         {
             // Business RBAC is not enabled for device authorization in this
             // release. Reject instead of issuing a permissive legacy token.
-            return Err(AppError::from_code(TokenErrorCode::ClientGrantNotAllowed)
-                .with_param("grant_type", GrantType::DeviceCode.as_str()));
+            return Err(token::error::ClientGrantNotAllowed.into_error());
         }
         let selection = self
             .provider_service
@@ -207,17 +194,16 @@ impl TokenService {
         } else {
             &data.resources
         };
-        let user_oid = Uuid::parse_str(&approval.user_oid).map_err(AppError::map_source(
-            TokenErrorCode::DeviceRequestStateInvalid,
-        ))?;
+        let user_oid = Uuid::parse_str(&approval.user_oid)
+            .map_err(token::error::DeviceRequestStateInvalid::map_source())?;
         let user = self
             .user_repo
             .find_by_oid(UserOid(user_oid))
             .await
-            .map_err(AppError::map_source(TokenErrorCode::UserLookupFailed))?
-            .ok_or_else(|| AppError::from_code(TokenErrorCode::DeviceCodeUserNotFound))?;
+            .map_err(token::error::UserLookupFailed::map_source())?
+            .ok_or_else(|| token::error::DeviceCodeUserNotFound.into_error())?;
         if !user.enabled || user.locked {
-            return Err(AppError::from_code(TokenErrorCode::DeviceCodeUserNotFound));
+            return Err(token::error::DeviceCodeUserNotFound.into_error());
         }
 
         self.issue_device_tokens(
@@ -246,9 +232,8 @@ impl TokenService {
             .device_repo
             .record_device_poll(record.oid, now)
             .await
-            .map_err(AppError::map_source(
-                TokenErrorCode::DeviceRequestLookupFailed,
-            ))? {
+            .map_err(token::error::DeviceRequestLookupFailed::map_source())?
+        {
             DevicePollOutcome::Accepted => Ok(PollDecision::Pending),
             DevicePollOutcome::TooFrequent => Ok(PollDecision::SlowDown),
             DevicePollOutcome::NotPollable => {
@@ -258,36 +243,34 @@ impl TokenService {
                     .device_repo
                     .find_device_request_by_oid(record.oid)
                     .await
-                    .map_err(AppError::map_source(
-                        TokenErrorCode::DeviceRequestLookupFailed,
-                    ))?;
+                    .map_err(token::error::DeviceRequestLookupFailed::map_source())?;
                 let Some(current) = current else {
-                    return Ok(PollDecision::Terminal(AppError::from_code(
-                        TokenErrorCode::DeviceCodeNotFound,
-                    )));
+                    return Ok(PollDecision::Terminal(
+                        token::error::DeviceCodeNotFound.into_error(),
+                    ));
                 };
                 if current.expires_at <= now {
-                    return Ok(PollDecision::Terminal(AppError::from_code(
-                        TokenErrorCode::DeviceCodeExpired,
-                    )));
+                    return Ok(PollDecision::Terminal(
+                        token::error::DeviceCodeExpired.into_error(),
+                    ));
                 }
                 match &current.data {
                     ClientAuthorizationData::DeviceAuthorizationRequest(data) => {
                         match data.status {
                             DeviceRequestStatus::Denied => Ok(PollDecision::Terminal(
-                                AppError::from_code(TokenErrorCode::DeviceCodeDenied),
+                                token::error::DeviceCodeDenied.into_error(),
                             )),
                             DeviceRequestStatus::Consumed => Ok(PollDecision::Terminal(
-                                AppError::from_code(TokenErrorCode::DeviceCodeNotFound),
+                                token::error::DeviceCodeNotFound.into_error(),
                             )),
                             DeviceRequestStatus::Approved | DeviceRequestStatus::Pending => {
                                 Ok(PollDecision::Pending)
                             }
                         }
                     }
-                    _ => Ok(PollDecision::Terminal(AppError::from_code(
-                        TokenErrorCode::DeviceCodeNotFound,
-                    ))),
+                    _ => Ok(PollDecision::Terminal(
+                        token::error::DeviceCodeNotFound.into_error(),
+                    )),
                 }
             }
         }
@@ -385,7 +368,7 @@ impl TokenService {
                     self.data_protector
                         .protect("refresh-token", refresh_token_oid.as_bytes())
                         .await
-                        .map_err(AppError::map_source(TokenErrorCode::SignRefreshTokenFailed))?,
+                        .map_err(token::error::SignRefreshTokenFailed::map_source())?,
                 )
             } else {
                 None
@@ -436,14 +419,14 @@ impl TokenService {
             .device_repo
             .consume_device_request_with_tokens(request_oid, records, Utc::now())
             .await
-            .map_err(AppError::map_source(TokenErrorCode::DeviceRedemptionFailed))?;
+            .map_err(token::error::DeviceRedemptionFailed::map_source())?;
         match outcome {
             DeviceConsumeOutcome::Consumed => {}
             DeviceConsumeOutcome::NotRedeemable => {
-                return Err(AppError::from_code(TokenErrorCode::DeviceCodeNotFound));
+                return Err(token::error::DeviceCodeNotFound.into_error());
             }
             DeviceConsumeOutcome::AuthorizationRevoked => {
-                return Err(AppError::from_code(TokenErrorCode::DeviceCodeRevoked));
+                return Err(token::error::DeviceCodeRevoked.into_error());
             }
         }
 

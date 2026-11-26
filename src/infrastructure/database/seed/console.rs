@@ -36,7 +36,7 @@ use super::{
 };
 use crate::{
     application::{
-        error::{AppError, codes::common::CommonErrorCode},
+        error::{AppError, codes::common},
         setting::ConsoleClientIdSetting,
     },
     database::{
@@ -211,9 +211,9 @@ async fn ensure_console_client_scopes_in_transaction(
         .one(db)
         .await
         .map_err(AppError::internal)?
-        .ok_or_else(|| AppError::from_code(CommonErrorCode::InternalError))?;
+        .ok_or_else(|| common::error::InternalError.into_error())?;
     if !existing.built_in || existing.protocol != CONSOLE_CLIENT_PROTOCOL {
-        return Err(AppError::from_code(CommonErrorCode::Forbidden));
+        return Err(common::error::Forbidden.into());
     }
     validate_catalog().map_err(AppError::internal)?;
     let graphql_resource_oid = graphql_resource_oid(db).await?;
@@ -259,15 +259,15 @@ pub async fn ensure_console_client_in_transaction(
 ) -> Result<(), AppError> {
     let oid = read_setting::<ConsoleClientIdSetting, _>(db)
         .await?
-        .ok_or_else(|| AppError::from_code(CommonErrorCode::InternalError))?;
+        .ok_or_else(|| common::error::InternalError.into_error())?;
     let existing = ClientEntity::find()
         .filter(ClientColumn::Oid.eq(oid))
         .one(db)
         .await
         .map_err(AppError::internal)?
-        .ok_or_else(|| AppError::from_code(CommonErrorCode::InternalError))?;
+        .ok_or_else(|| common::error::InternalError.into_error())?;
     if !existing.built_in || existing.protocol != CONSOLE_CLIENT_PROTOCOL {
-        return Err(AppError::from_code(CommonErrorCode::Forbidden));
+        return Err(common::error::Forbidden.into());
     }
     configure_console_client(db, config, existing.id, oid, false).await
 }

@@ -36,7 +36,7 @@ use crate::{
     data_protection::DataProtector,
     error::{
         AppError,
-        codes::{authorization::AuthorizationErrorCode, instance::InstanceErrorCode},
+        codes::{authorization, instance},
     },
     observability::{BusinessEvent, EventSink, EventValue, NoopEventSink, error_outcome},
     rbac::{
@@ -386,9 +386,7 @@ impl KeyManagementService {
                     created_at,
                     tie: crate::rbac::cursor::RbacTie::Oid(oid),
                 }) => Ok(Some((created_at, oid))),
-                Some(_) => Err(AppError::from_code(
-                    crate::error::codes::rbac::RbacErrorCode::InvalidCursor,
-                )),
+                Some(_) => Err(crate::error::codes::rbac::error::InvalidCursor.into()),
             }
         };
         let now = Utc::now();
@@ -454,8 +452,7 @@ impl KeyManagementService {
             let key = algorithm
                 .key_algorithm_for_new_key(command.key_algorithm)
                 .ok_or_else(|| {
-                    AppError::from_code(InstanceErrorCode::UnsupportedKeyAlgorithm)
-                        .with_param("algorithm", algorithm.as_str())
+                    instance::error::UnsupportedKeyAlgorithm::new(algorithm.as_str())
                         .with_field("keyAlgorithm")
                 })?;
             let data = self
@@ -537,7 +534,7 @@ impl KeyManagementService {
                 .find_material(command.key_oid)
                 .await
                 .map_err(map_repository_error)?
-                .ok_or_else(|| AppError::from_code(InstanceErrorCode::KeyNotFound))?;
+                .ok_or(instance::error::KeyNotFound)?;
             // Generation happens outside the transaction; the repository
             // re-checks that the key is still in use before storing it.
             let material = self.generator.generate(&previous)?;
@@ -629,20 +626,14 @@ fn normalize_filter(mut filter: ManagedKeyFilter) -> ManagedKeyFilter {
 fn map_repository_error(error: KeyManagementRepositoryError) -> AppError {
     use KeyManagementRepositoryError as Error;
     match error {
-        error @ Error::Storage(_) => {
-            AppError::from_code(InstanceErrorCode::StorageFailed).with_source(error)
-        }
+        error @ Error::Storage(_) => instance::error::StorageFailed.with_source(error),
         Error::Authorization(source) => AppError::from(source),
-        error @ Error::AuditFailed(_) => {
-            AppError::from_code(AuthorizationErrorCode::AuditWriteFailed).with_source(error)
-        }
-        Error::LastRecoverableAdministrator => {
-            AppError::from_code(AuthorizationErrorCode::LastOwnerProtected)
-        }
-        Error::NotFound => AppError::from_code(InstanceErrorCode::KeyNotFound),
-        Error::NotActive => AppError::from_code(InstanceErrorCode::KeyNotCurrent),
-        Error::LastActiveKey => AppError::from_code(InstanceErrorCode::LastActiveKey),
-        Error::AlreadyRevoked => AppError::from_code(InstanceErrorCode::KeyAlreadyRevoked),
+        error @ Error::AuditFailed(_) => authorization::error::AuditWriteFailed.with_source(error),
+        Error::LastRecoverableAdministrator => authorization::error::LastOwnerProtected.into(),
+        Error::NotFound => instance::error::KeyNotFound.into(),
+        Error::NotActive => instance::error::KeyNotCurrent.into(),
+        Error::LastActiveKey => instance::error::LastActiveKey.into(),
+        Error::AlreadyRevoked => instance::error::KeyAlreadyRevoked.into(),
     }
 }
 

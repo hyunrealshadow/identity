@@ -11,7 +11,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     data_protection::DataProtector,
-    error::{AppError, codes::user_management::UserManagementErrorCode},
+    error::{AppError, codes::user_management},
     user::management::{
         model::{UserFilter, UserOrder},
         repository::UserSortKey,
@@ -117,15 +117,12 @@ pub(crate) async fn encode_cursor(
             name_normalized: Some(name_normalized.clone()),
         },
     };
-    let bytes = serde_json::to_vec(&payload).map_err(|error| {
-        AppError::from_code(UserManagementErrorCode::InvalidCursor).with_source(error)
-    })?;
+    let bytes =
+        serde_json::to_vec(&payload).map_err(user_management::error::InvalidCursor::map_source())?;
     protector
         .protect(USER_CURSOR_PURPOSE, &bytes)
         .await
-        .map_err(|error| {
-            AppError::from_code(UserManagementErrorCode::InvalidCursor).with_source(error)
-        })
+        .map_err(user_management::error::InvalidCursor::map_source())
 }
 
 pub(crate) async fn decode_cursor(
@@ -134,13 +131,13 @@ pub(crate) async fn decode_cursor(
     order: UserOrder,
     token: &str,
 ) -> Result<UserSortKey, AppError> {
-    let invalid = || AppError::from_code(UserManagementErrorCode::InvalidCursor);
+    let invalid = || user_management::error::InvalidCursor.into_error();
     let bytes = protector
         .unprotect(USER_CURSOR_PURPOSE, token)
         .await
-        .map_err(|error| invalid().with_source(error))?;
-    let payload: CursorPayload =
-        serde_json::from_slice(&bytes).map_err(|error| invalid().with_source(error))?;
+        .map_err(user_management::error::InvalidCursor::map_source())?;
+    let payload: CursorPayload = serde_json::from_slice(&bytes)
+        .map_err(user_management::error::InvalidCursor::map_source())?;
     if payload.v != USER_CURSOR_VERSION
         || payload.order != order.as_u8()
         || payload.filter != filter_fingerprint(filter, order)

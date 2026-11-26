@@ -1,5 +1,5 @@
 use super::AuthorizeService;
-use crate::error::{AppError, codes::authorize::AuthorizeErrorCode};
+use crate::error::{AppError, codes::authorize};
 use crate::observability::{BusinessEvent, EventValue};
 use chrono::{Duration, Utc};
 use identity_domain::{
@@ -20,13 +20,11 @@ impl AuthorizeService {
             .client_authorization_repo
             .find_by_oid(authorization_request_id)
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::LoadRequestFailed))?
-            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::AuthzRequestNotFound))?;
+            .map_err(authorize::error::LoadRequestFailed::map_source())?
+            .ok_or_else(|| authorize::error::AuthzRequestNotFound.into_error())?;
 
         if record.type_ != ClientAuthorizationType::AuthorizationRequest {
-            return Err(AppError::from_code(
-                AuthorizeErrorCode::AuthzRequestTypeMismatch,
-            ));
+            return Err(authorize::error::AuthzRequestTypeMismatch.into_error());
         }
 
         Ok(record)
@@ -37,9 +35,7 @@ impl AuthorizeService {
     ) -> Result<StoredAuthorizationRequest, AppError> {
         match data {
             ClientAuthorizationData::AuthorizationRequest(stored) => Ok(stored),
-            _ => Err(AppError::from_code(
-                AuthorizeErrorCode::DeserializeRequestFailed,
-            )),
+            _ => Err(authorize::error::DeserializeRequestFailed.into_error()),
         }
     }
 
@@ -57,7 +53,7 @@ impl AuthorizeService {
             .client_authorization_repo
             .create(request.client_id, data, Utc::now() + Duration::minutes(10))
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::StoreRequestFailed))?;
+            .map_err(authorize::error::StoreRequestFailed::map_source())?;
         self.events.emit(
             BusinessEvent::business("authorization.request.created")
                 .outcome("success")

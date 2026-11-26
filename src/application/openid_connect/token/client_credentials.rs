@@ -11,6 +11,7 @@ use identity_domain::{
 use super::{exchange::issuance_result, signing::SignAccessTokenInput};
 use crate::{
     domain::openid_connect::TokenEndpointAuthMethod,
+    error::codes::token,
     observability::{BusinessEvent, EventValue},
 };
 
@@ -81,11 +82,10 @@ impl TokenService {
             false
         };
         if !valid_proof {
-            return Err(AppError::from_code(TokenErrorCode::ClientAuthRequired));
+            return Err(token::error::ClientAuthRequired.into_error());
         }
         if !client.allows_grant(GrantType::ClientCredentials) {
-            return Err(AppError::from_code(TokenErrorCode::ClientGrantNotAllowed)
-                .with_param("grant_type", GrantType::ClientCredentials.as_str()));
+            return Err(token::error::ClientGrantNotAllowed.into_error());
         }
 
         let requested_scope = params.scope.unwrap_or_default();
@@ -103,18 +103,15 @@ impl TokenService {
             || requested.offline_access
             || requested.has_api_scopes()
         {
-            return Err(AppError::from_code(
-                TokenErrorCode::ClientCredentialsScopeNotAllowed,
-            ));
+            return Err(token::error::ClientCredentialsScopeNotAllowed.into_error());
         }
 
         let selection = self
             .provider_service
             .select_resources(&params.resources, &[], &requested.to_scope_string())
             .await?;
-        let selected = ScopeSet::parse(&selection.scope).map_err(AppError::map_source(
-            TokenErrorCode::ClientCredentialsScopeNotAllowed,
-        ))?;
+        let selected = ScopeSet::parse(&selection.scope)
+            .map_err(token::error::ClientCredentialsScopeNotAllowed::map_source())?;
         self.provider_service
             .validate_client_resource_ceiling(
                 &client,
@@ -123,27 +120,22 @@ impl TokenService {
                 identity_domain::client_authorization::AccessTokenPrincipal::Client,
             )
             .await
-            .map_err(|_| AppError::from_code(TokenErrorCode::ClientCredentialsScopeNotAllowed))?;
+            .map_err(|_| token::error::ClientCredentialsScopeNotAllowed.into_error())?;
 
         let authorization_snapshot = if selected.has_resource_permissions() {
             if selection.resources.len() != 1 {
-                return Err(AppError::from_code(
-                    TokenErrorCode::ClientCredentialsScopeNotAllowed,
-                ));
+                return Err(token::error::ClientCredentialsScopeNotAllowed.into_error());
             }
-            let repository = self.rbac_authorization_repo.as_ref().ok_or_else(|| {
-                AppError::from_code(TokenErrorCode::ClientCredentialsScopeNotAllowed)
-            })?;
+            let repository = self
+                .rbac_authorization_repo
+                .as_ref()
+                .ok_or_else(|| token::error::ClientCredentialsScopeNotAllowed.into_error())?;
             let resource = repository
                 .resource_state(&selection.resources[0])
                 .await
-                .map_err(AppError::map_source(
-                    TokenErrorCode::ClientCredentialsScopeNotAllowed,
-                ))?;
+                .map_err(token::error::ClientCredentialsScopeNotAllowed::map_source())?;
             if !resource.enabled {
-                return Err(AppError::from_code(
-                    TokenErrorCode::ClientCredentialsScopeNotAllowed,
-                ));
+                return Err(token::error::ClientCredentialsScopeNotAllowed.into_error());
             }
             // Re-read the canonical scope rows in the same authoritative
             // snapshot: a scope accepted during target resolution must still
@@ -153,9 +145,7 @@ impl TokenService {
                     continue;
                 }
                 if resource.enabled_permission_for_scope(name).is_none() {
-                    return Err(AppError::from_code(
-                        TokenErrorCode::ClientCredentialsScopeNotAllowed,
-                    ));
+                    return Err(token::error::ClientCredentialsScopeNotAllowed.into_error());
                 }
             }
             Some(AuthorizationSnapshotData::Business(
@@ -196,7 +186,7 @@ impl TokenService {
                 Utc::now() + Duration::hours(1),
             )
             .await
-            .map_err(AppError::map_source(TokenErrorCode::SignAccessTokenFailed))?;
+            .map_err(token::error::SignAccessTokenFailed::map_source())?;
         event
             .attributes
             .push(("access_token_oid", EventValue::Text(record.oid.to_string())));

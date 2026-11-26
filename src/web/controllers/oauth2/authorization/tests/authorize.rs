@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use http::{HeaderMap, StatusCode, header};
-use identity_application::error::{AppError, codes::common::CommonErrorCode};
+use identity_application::error::codes::common;
 use identity_domain::openid_connect::{
     AuthorizationRequest, OAuthErrorCode, PromptValue, ResponseType, ScopeSet,
 };
@@ -37,7 +37,7 @@ async fn action_error_boundary_never_redirects_without_a_registered_client() {
     });
     let mut request = TestClient::get("http://localhost/oauth2/authorize").build();
     let mut response = Response::new();
-    AuthorizationWebError(AppError::from_code(CommonErrorCode::InvalidScope))
+    AuthorizationWebError(common::error::InvalidScope.into())
         .write(&mut request, &mut depot, &mut response)
         .await;
 

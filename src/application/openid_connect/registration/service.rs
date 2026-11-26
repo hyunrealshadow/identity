@@ -25,7 +25,7 @@ use super::{
 };
 use crate::{
     application::{
-        error::{AppError, codes::registration::RegistrationErrorCode},
+        error::{AppError, codes::registration},
         setting::{OpenIdConnectSettings, SettingsSource},
     },
     domain::{
@@ -174,11 +174,9 @@ impl DynamicClientRegistrationService {
                 &error,
                 OpenIdConnectClientRepositoryError::InvalidMetadataValue { field: "scope", .. }
             ) {
-                return AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
-                    .with_param("field", "scope")
-                    .with_source(error);
+                return registration::error::InvalidClientMetadata.with_source(error);
             }
-            AppError::from_code(RegistrationErrorCode::ClientCreateFailed).with_source(error)
+            registration::error::ClientCreateFailed.with_source(error)
         })?;
         response.client_id = identity_domain::openid_connect::identifier::client_id(client_id);
         response.registration_client_uri = Some(registration_client_uri(issuer, client_id)?);
@@ -198,9 +196,7 @@ impl DynamicClientRegistrationService {
         AppError,
     > {
         if !self.enabled() {
-            return Err(AppError::from_code(
-                RegistrationErrorCode::DynamicRegistrationDisabled,
-            ));
+            return Err(registration::error::DynamicRegistrationDisabled.into_error());
         }
         let response_types = parse_metadata_values::<ResponseType>(
             "response_types",
@@ -219,26 +215,20 @@ impl DynamicClientRegistrationService {
             .iter()
             .any(|grant| matches!(grant, GrantType::AuthorizationCode | GrantType::Implicit));
         if request.redirect_uris.is_empty() && uses_redirect_flow {
-            return Err(AppError::from_code(
-                RegistrationErrorCode::RedirectUrisRequired,
-            ));
+            return Err(registration::error::RedirectUrisRequired.into_error());
         }
         let parsed_redirect_uris = request
             .redirect_uris
             .iter()
             .map(|raw| {
-                Url::parse(raw).map_err(AppError::map_source(
-                    RegistrationErrorCode::InvalidRedirectUri,
-                ))
+                Url::parse(raw).map_err(registration::error::InvalidRedirectUri::map_source())
             })
             .collect::<Result<Vec<_>, _>>()?;
         if parsed_redirect_uris
             .iter()
             .any(|uri| uri.fragment().is_some())
         {
-            return Err(AppError::from_code(
-                RegistrationErrorCode::InvalidRedirectUri,
-            ));
+            return Err(registration::error::InvalidRedirectUri.into_error());
         }
 
         let platform = parse_application_type(request.application_type.as_deref())?;
@@ -246,9 +236,7 @@ impl DynamicClientRegistrationService {
             .iter()
             .any(|uri| !platform.allows_redirect_uri_scheme(uri))
         {
-            return Err(AppError::from_code(
-                RegistrationErrorCode::InvalidRedirectUri,
-            ));
+            return Err(registration::error::InvalidRedirectUri.into_error());
         }
         let subject_type = request
             .subject_type
@@ -256,12 +244,10 @@ impl DynamicClientRegistrationService {
             .map(str::parse::<SubjectType>)
             .transpose()
             .map_err(|error| {
-                AppError::from_code(RegistrationErrorCode::UnsupportedSubjectType)
-                    .with_param(
-                        "subject_type",
-                        request.subject_type.as_deref().unwrap_or_default(),
-                    )
-                    .with_source(error)
+                registration::error::UnsupportedSubjectType::new(
+                    request.subject_type.as_deref().unwrap_or_default(),
+                )
+                .with_source(error)
             })?;
         validate_sector_identifier_uri(
             request.sector_identifier_uri.as_ref(),
@@ -270,60 +256,38 @@ impl DynamicClientRegistrationService {
         .await?;
         validate_initiate_login_uri(request.initiate_login_uri.as_ref())?;
         if request.default_max_age.is_some_and(|value| value < 0) {
-            return Err(
-                AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
-                    .with_param("field", "default_max_age"),
-            );
+            return Err(registration::error::InvalidClientMetadata.into_error());
         }
         let token_auth_method = request
             .token_endpoint_auth_method
             .as_deref()
             .unwrap_or("client_secret_basic")
             .parse::<TokenEndpointAuthMethod>()
-            .map_err(|error| {
-                AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
-                    .with_param("field", "token_endpoint_auth_method")
-                    .with_source(error)
-            })?;
+            .map_err(registration::error::InvalidClientMetadata::map_source())?;
         if grant_types.contains(&GrantType::ClientCredentials)
             && token_auth_method == TokenEndpointAuthMethod::None
         {
-            return Err(
-                AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
-                    .with_param("field", "token_endpoint_auth_method"),
-            );
+            return Err(registration::error::InvalidClientMetadata.into_error());
         }
         if request.id_token_encrypted_response_enc.is_some()
             && request.id_token_encrypted_response_alg.is_none()
         {
-            return Err(
-                AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
-                    .with_param("field", "id_token_encrypted_response_alg"),
-            );
+            return Err(registration::error::InvalidClientMetadata.into_error());
         }
         if request.userinfo_encrypted_response_enc.is_some()
             && request.userinfo_encrypted_response_alg.is_none()
         {
-            return Err(
-                AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
-                    .with_param("field", "userinfo_encrypted_response_alg"),
-            );
+            return Err(registration::error::InvalidClientMetadata.into_error());
         }
         if request.frontchannel_logout_session_required == Some(true)
             && request.frontchannel_logout_uri.is_none()
         {
-            return Err(
-                AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
-                    .with_param("field", "frontchannel_logout_uri"),
-            );
+            return Err(registration::error::InvalidClientMetadata.into_error());
         }
         if request.backchannel_logout_session_required == Some(true)
             && request.backchannel_logout_uri.is_none()
         {
-            return Err(
-                AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
-                    .with_param("field", "backchannel_logout_uri"),
-            );
+            return Err(registration::error::InvalidClientMetadata.into_error());
         }
         for (field, value) in [
             (
@@ -346,10 +310,7 @@ impl DynamicClientRegistrationService {
             .as_deref()
             .map(str::parse::<JwsAlgorithm>)
             .transpose()
-            .map_err(|_| {
-                AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
-                    .with_param("field", "token_endpoint_auth_signing_alg")
-            })?;
+            .map_err(|_| registration::error::InvalidClientMetadata.into_error())?;
         if auth_signing_alg.is_some_and(|alg| {
             !matches!(
                 (token_auth_method, alg),
@@ -362,10 +323,7 @@ impl DynamicClientRegistrationService {
                 )
             )
         }) {
-            return Err(
-                AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
-                    .with_param("field", "token_endpoint_auth_signing_alg"),
-            );
+            return Err(registration::error::InvalidClientMetadata.into_error());
         }
         reject_none_algorithm(
             "id_token_signed_response_alg",
@@ -431,11 +389,8 @@ impl DynamicClientRegistrationService {
         let registration_access_token = generate_registration_access_token();
         let assigned_scopes = split_scope(request.scope.as_deref());
         let raw_scope = assigned_scopes.join(" ");
-        ScopeSet::parse(request.scope.as_deref().unwrap_or(&raw_scope)).map_err(|error| {
-            AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
-                .with_param("field", "scope")
-                .with_source(error)
-        })?;
+        ScopeSet::parse(request.scope.as_deref().unwrap_or(&raw_scope))
+            .map_err(registration::error::InvalidClientMetadata::map_source())?;
         let mut seen = BTreeSet::new();
         let assigned_scopes = assigned_scopes
             .into_iter()
@@ -445,10 +400,7 @@ impl DynamicClientRegistrationService {
             .iter()
             .any(|scope| !is_publicly_registerable_scope(scope))
         {
-            return Err(
-                AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
-                    .with_param("field", "scope"),
-            );
+            return Err(registration::error::InvalidClientMetadata.into_error());
         }
         let available = if let Some(catalog) = &self.scope_catalog {
             catalog
@@ -476,10 +428,7 @@ impl DynamicClientRegistrationService {
                 }
             }
             if !found {
-                return Err(
-                    AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
-                        .with_param("field", "scope"),
-                );
+                return Err(registration::error::InvalidClientMetadata.into_error());
             }
         }
         let assigned_scopes = concrete.into_iter().collect::<Vec<_>>();
@@ -685,28 +634,18 @@ impl DynamicClientRegistrationService {
                 )
             })
         {
-            return Err(AppError::from_code(
-                RegistrationErrorCode::InvalidClientMetadata,
-            ));
+            return Err(registration::error::InvalidClientMetadata.into_error());
         }
         let client_oid = identity_domain::openid_connect::identifier::parse_client_id(client_id)
-            .map_err(|_| {
-                AppError::from_code(RegistrationErrorCode::InvalidRegistrationAccessToken)
-            })?;
+            .map_err(|_| registration::error::InvalidRegistrationAccessToken.into_error())?;
         let existing = self
             .repo
             .find_by_registration_access_token(client_oid, registration_access_token)
             .await
-            .map_err(AppError::map_source(
-                RegistrationErrorCode::ClientLookupFailed,
-            ))?
-            .ok_or_else(|| {
-                AppError::from_code(RegistrationErrorCode::InvalidRegistrationAccessToken)
-            })?;
+            .map_err(registration::error::ClientLookupFailed::map_source())?
+            .ok_or_else(|| registration::error::InvalidRegistrationAccessToken.into_error())?;
         if existing.client().built_in {
-            return Err(AppError::from_code(
-                RegistrationErrorCode::ClientUpdateForbidden,
-            ));
+            return Err(registration::error::ClientUpdateForbidden.into_error());
         }
         let current_secret = request.client_secret.clone();
         let existing_scopes = existing.assigned_scopes().to_vec();
@@ -728,10 +667,7 @@ impl DynamicClientRegistrationService {
                 .as_deref()
                 .is_some_and(|grants| grants.contains(&GrantType::ClientCredentials))
         {
-            return Err(
-                AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
-                    .with_param("field", "grant_types"),
-            );
+            return Err(registration::error::InvalidClientMetadata.into_error());
         }
         // Preserve the exact existing trusted assignments on safe metadata
         // updates. The repository resolves the same canonical scope IDs; the
@@ -801,9 +737,7 @@ impl DynamicClientRegistrationService {
                 // Neither an active reader nor a supplied current secret can
                 // identify the existing material. Never persist the freshly
                 // generated secret as if it were the original authority.
-                return Err(AppError::from_code(
-                    RegistrationErrorCode::ClientLookupFailed,
-                ));
+                return Err(registration::error::ClientLookupFailed.into_error());
             };
             registration.credentials.retain(|credential| {
                 !matches!(credential, OpenIdConnectCredentialData::ClientSecret { .. })
@@ -826,13 +760,12 @@ impl DynamicClientRegistrationService {
             .await
             .map_err(|error| match error {
                 OpenIdConnectClientRepositoryError::InvalidMetadataValue { .. } => {
-                    AppError::from_code(RegistrationErrorCode::InvalidClientMetadata)
+                    registration::error::InvalidClientMetadata.into_error()
                 }
                 OpenIdConnectClientRepositoryError::ClientNotFound => {
-                    AppError::from_code(RegistrationErrorCode::InvalidRegistrationAccessToken)
+                    registration::error::InvalidRegistrationAccessToken.into_error()
                 }
-                _ => AppError::from_code(RegistrationErrorCode::ClientUpdateFailed)
-                    .with_source(error),
+                _ => registration::error::ClientUpdateFailed.with_source(error),
             })?;
         response.client_id = identity_domain::openid_connect::identifier::client_id(client_oid);
         response.registration_client_uri = Some(registration_client_uri(issuer, client_oid)?);
@@ -873,9 +806,7 @@ impl DynamicClientRegistrationService {
                 OpenIdConnectCredentialType::ClientJsonWebKeySet,
             )
             .await
-            .map_err(|error| {
-                AppError::from_code(RegistrationErrorCode::ClientLookupFailed).with_source(error)
-            })?;
+            .map_err(registration::error::ClientLookupFailed::map_source())?;
         Ok(credentials
             .into_iter()
             .find_map(|credential| match credential.data {
@@ -897,9 +828,7 @@ impl DynamicClientRegistrationService {
                 OpenIdConnectCredentialType::ClientSecret,
             )
             .await
-            .map_err(|error| {
-                AppError::from_code(RegistrationErrorCode::ClientLookupFailed).with_source(error)
-            })?;
+            .map_err(registration::error::ClientLookupFailed::map_source())?;
         Ok(credentials
             .into_iter()
             .find_map(|credential| match credential.data {
@@ -917,25 +846,17 @@ impl DynamicClientRegistrationService {
         issuer: &Url,
     ) -> Result<DynamicClientRegistrationResponse, AppError> {
         if !self.enabled() {
-            return Err(AppError::from_code(
-                RegistrationErrorCode::DynamicRegistrationDisabled,
-            ));
+            return Err(registration::error::DynamicRegistrationDisabled.into_error());
         }
 
         let client_oid = identity_domain::openid_connect::identifier::parse_client_id(client_id)
-            .map_err(|_| {
-                AppError::from_code(RegistrationErrorCode::InvalidRegistrationAccessToken)
-            })?;
+            .map_err(|_| registration::error::InvalidRegistrationAccessToken.into_error())?;
         let client = self
             .repo
             .find_by_registration_access_token(client_oid, registration_access_token)
             .await
-            .map_err(AppError::map_source(
-                RegistrationErrorCode::ClientLookupFailed,
-            ))?
-            .ok_or_else(|| {
-                AppError::from_code(RegistrationErrorCode::InvalidRegistrationAccessToken)
-            })?;
+            .map_err(registration::error::ClientLookupFailed::map_source())?
+            .ok_or_else(|| registration::error::InvalidRegistrationAccessToken.into_error())?;
 
         response_from_client(&client, Some(registration_access_token.to_owned()), issuer)
     }
@@ -947,39 +868,27 @@ impl DynamicClientRegistrationService {
         registration_access_token: &str,
     ) -> Result<(), AppError> {
         if !self.enabled() {
-            return Err(AppError::from_code(
-                RegistrationErrorCode::DynamicRegistrationDisabled,
-            ));
+            return Err(registration::error::DynamicRegistrationDisabled.into_error());
         }
 
         let client_oid = identity_domain::openid_connect::identifier::parse_client_id(client_id)
-            .map_err(|_| {
-                AppError::from_code(RegistrationErrorCode::InvalidRegistrationAccessToken)
-            })?;
+            .map_err(|_| registration::error::InvalidRegistrationAccessToken.into_error())?;
         let client = self
             .repo
             .find_by_registration_access_token(client_oid, registration_access_token)
             .await
-            .map_err(AppError::map_source(
-                RegistrationErrorCode::ClientLookupFailed,
-            ))?
-            .ok_or_else(|| {
-                AppError::from_code(RegistrationErrorCode::InvalidRegistrationAccessToken)
-            })?;
+            .map_err(registration::error::ClientLookupFailed::map_source())?
+            .ok_or_else(|| registration::error::InvalidRegistrationAccessToken.into_error())?;
 
         if client.client().built_in {
-            return Err(AppError::from_code(
-                RegistrationErrorCode::BuiltInClientCannotBeDeleted,
-            ));
+            return Err(registration::error::BuiltInClientCannotBeDeleted.into_error());
         }
 
         let client_oid = client.client().oid;
         self.repo
             .delete_by_oid(client_oid)
             .await
-            .map_err(AppError::map_source(
-                RegistrationErrorCode::ClientDeleteFailed,
-            ))?;
+            .map_err(registration::error::ClientDeleteFailed::map_source())?;
         self.record_client_change("client.deleted", client_oid, "success");
 
         Ok(())

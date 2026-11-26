@@ -2,11 +2,10 @@ use std::{
     backtrace::Backtrace,
     error::Error as StdError,
     fmt::{Display, Formatter, Result as FmtResult},
-    mem,
 };
 
 use super::{
-    code::AppErrorCode, codes::common::CommonErrorCode, kind::ErrorKind, params::ErrorParams,
+    code::AppErrorCode, codes::common, kind::ErrorKind, params::ErrorParams,
     validation::ValidationError,
 };
 
@@ -27,20 +26,14 @@ pub struct AppError {
 
 impl AppError {
     pub fn internal(source: impl StdError + Send + Sync + 'static) -> Self {
-        Self::from_code(CommonErrorCode::InternalError).with_source(source)
+        common::error::InternalError.with_source(source)
     }
 
-    pub fn map_source<E: StdError + Send + Sync + 'static>(
-        code: impl AppErrorCode,
-    ) -> impl FnOnce(E) -> Self {
-        move |source| Self::from_code(code).with_source(source)
-    }
-
-    pub fn from_code(code: impl AppErrorCode) -> Self {
+    pub(crate) fn from_parts(code: impl AppErrorCode, params: ErrorParams) -> Self {
         Self {
             kind: code.kind(),
             code: code.code(),
-            params: ErrorParams::new(),
+            params,
             details: None,
             source: None,
             backtrace: (code.kind() == ErrorKind::Internal)
@@ -48,18 +41,17 @@ impl AppError {
         }
     }
 
-    pub fn with_param(mut self, key: &'static str, value: impl Into<String>) -> Self {
-        self.params = mem::take(&mut self.params).insert(key, value);
-        self
-    }
-
     pub fn with_source(mut self, source: impl StdError + Send + Sync + 'static) -> Self {
         self.source = Some(Box::new(source));
         self
     }
 
-    pub fn with_field_error(mut self, field: impl Into<String>, error: AppError) -> Self {
-        self.push_field_error(field, error);
+    pub fn with_field_error(
+        mut self,
+        field: impl Into<String>,
+        error: impl Into<AppError>,
+    ) -> Self {
+        self.push_field_error(field, error.into());
         self
     }
 

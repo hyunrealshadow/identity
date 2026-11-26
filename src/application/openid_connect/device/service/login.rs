@@ -7,7 +7,7 @@ use super::{
         description, request_data, verification_status,
     },
 };
-use crate::error::{AppError, codes::device::DeviceAuthorizationErrorCode};
+use crate::error::{AppError, codes::device};
 use chrono::Utc;
 use identity_domain::{
     auth::{LoginStatus, SessionOid, model::Login},
@@ -24,23 +24,17 @@ impl DeviceAuthorizationService {
         self.device_repo
             .find_device_request_by_oid(login.client_authorization_oid)
             .await
-            .map_err(AppError::map_source(
-                DeviceAuthorizationErrorCode::LoadRequestFailed,
-            ))
+            .map_err(device::error::LoadRequestFailed::map_source())
     }
 
     pub async fn begin_verification(&self, user_code: &str) -> Result<(Uuid, Uuid), AppError> {
         let record = self.resolve_verification(user_code).await?;
         let data = request_data(&record)?;
         if record.expires_at <= Utc::now() {
-            return Err(AppError::from_code(
-                DeviceAuthorizationErrorCode::RequestExpired,
-            ));
+            return Err(device::error::RequestExpired.into_error());
         }
         if !data.is_pending() || data.claimed_login_oid.is_some() {
-            return Err(AppError::from_code(
-                DeviceAuthorizationErrorCode::UserCodeNotFound,
-            ));
+            return Err(device::error::UserCodeNotFound.into_error());
         }
         Ok((record.client_oid, record.oid))
     }
@@ -59,13 +53,9 @@ impl DeviceAuthorizationService {
                 Utc::now(),
             )
             .await
-            .map_err(AppError::map_source(
-                DeviceAuthorizationErrorCode::StoreDecisionFailed,
-            ))?
+            .map_err(device::error::StoreDecisionFailed::map_source())?
         {
-            return Err(AppError::from_code(
-                DeviceAuthorizationErrorCode::UserCodeNotFound,
-            ));
+            return Err(device::error::UserCodeNotFound.into_error());
         }
         Ok(())
     }
@@ -74,20 +64,16 @@ impl DeviceAuthorizationService {
         let record = self
             .login_request(login)
             .await?
-            .ok_or_else(|| AppError::from_code(DeviceAuthorizationErrorCode::UserCodeNotFound))?;
+            .ok_or_else(|| device::error::UserCodeNotFound.into_error())?;
         let data = request_data(&record)?;
         if data.claimed_login_oid != Some(login.oid)
             || login.session_oid.is_none()
             || login.status != LoginStatus::AUTHENTICATED
         {
-            return Err(AppError::from_code(
-                DeviceAuthorizationErrorCode::VerificationLoginRequired,
-            ));
+            return Err(device::error::VerificationLoginRequired.into_error());
         }
         if record.revoked_at.is_some() || record.expires_at <= Utc::now() {
-            return Err(AppError::from_code(
-                DeviceAuthorizationErrorCode::RequestExpired,
-            ));
+            return Err(device::error::RequestExpired.into_error());
         }
         Ok(record)
     }
@@ -113,9 +99,7 @@ impl DeviceAuthorizationService {
     ) -> Result<(), AppError> {
         let record = self.bound_request(login).await?;
         if login.user_oid != Some(user.user_oid) {
-            return Err(AppError::from_code(
-                DeviceAuthorizationErrorCode::VerificationLoginRequired,
-            ));
+            return Err(device::error::VerificationLoginRequired.into_error());
         }
         self.record_decision(&record, &request_data(&record)?, user, decision)
             .await

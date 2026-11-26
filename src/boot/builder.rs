@@ -5,7 +5,7 @@ use std::{
 };
 
 use identity_application::{
-    error::{AppError, codes::install::InstallErrorCode},
+    error::codes::install,
     install::{InstallInput, InstallService},
     setting::{
         ConsoleClientIdSetting, ConsoleDomainSetting, DomainSetting, InstallationSettings,
@@ -171,10 +171,8 @@ impl AppBuilder {
         let settings = Arc::new(AppRuntimeSettings::from_db(db.clone()).await?);
         // The configured key decides both the key type and the algorithm it
         // signs with by default; keys that cannot sign are rejected here.
-        let unsupported = || {
-            AppError::from_code(InstallErrorCode::UnsupportedAlgorithm)
-                .with_param("algorithm", cfg.key_algorithm.to_string())
-        };
+        let unsupported =
+            || install::error::UnsupportedAlgorithm::new(cfg.key_algorithm).into_error();
         let signing_algorithm = JwaSigningAlgorithm::primary_for_key_type(&cfg.key_algorithm)
             .ok_or_else(unsupported)?;
 

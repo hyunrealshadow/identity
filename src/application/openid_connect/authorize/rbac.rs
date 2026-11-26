@@ -24,10 +24,7 @@ use uuid::Uuid;
 use crate::{
     error::{
         AppError,
-        codes::{
-            authorization::AuthorizationErrorCode, authorize::AuthorizeErrorCode,
-            common::CommonErrorCode,
-        },
+        codes::{authorization, authorize, common},
     },
     observability::{BusinessEvent, EventValue},
     openid_connect::rbac as shared,
@@ -58,8 +55,8 @@ impl AuthorizeService {
         request: &AuthorizationRequestData,
         user_oid: Uuid,
     ) -> Result<RbacApproval, AppError> {
-        let requested = ScopeSet::parse(&request.scope)
-            .map_err(AppError::map_source(AuthorizeErrorCode::ScopeInvalid))?;
+        let requested =
+            ScopeSet::parse(&request.scope).map_err(authorize::error::ScopeInvalid::map_source())?;
         if requested.has_management_scopes() {
             // Management has its own clipping path.
             return Ok(RbacApproval {
@@ -84,40 +81,37 @@ impl AuthorizeService {
         }
 
         if request.resources.len() != 1 {
-            return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
+            return Err(common::error::InvalidTarget.into_error());
         }
         let resource_uri = &request.resources[0];
 
         // Business authorization is code + S256 PKCE only. Implicit/hybrid
         // response types are rejected here as well as during request parsing.
         if request.response_type != ResponseType::Code {
-            return Err(AppError::from_code(AuthorizeErrorCode::ResponseTypeInvalid)
-                .with_param("response_type", request.response_type.to_string()));
+            return Err(
+                authorize::error::ResponseTypeInvalid::new(&request.response_type).into_error(),
+            );
         }
         if requested.has_api_scopes() {
-            return Err(AppError::from_code(AuthorizeErrorCode::ScopeInvalid));
+            return Err(authorize::error::ScopeInvalid.into_error());
         }
         if request.code_challenge.as_deref().is_none_or(str::is_empty)
             || request.code_challenge_method != Some(CodeChallengeMethod::S256)
         {
-            return Err(
-                AppError::from_code(AuthorizeErrorCode::CodeChallengeMethodInvalid)
-                    .with_param("code_challenge_method", "S256"),
-            );
+            return Err(authorize::error::CodeChallengeMethodInvalid::new("S256").into_error());
         }
 
         // Re-read the live client and its current allowed scopes. A client
         // assignment change after request validation must not be bypassed by an
         // already stored request.
-        let client_oid = Uuid::parse_str(&request.client_id).map_err(AppError::map_source(
-            AuthorizeErrorCode::StoredClientIdInvalid,
-        ))?;
+        let client_oid = Uuid::parse_str(&request.client_id)
+            .map_err(authorize::error::StoredClientIdInvalid::map_source())?;
         let client = self
             .client_repo
             .find_by_oid(client_oid)
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::ClientLookupFailed))?
-            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClientNotFound))?;
+            .map_err(authorize::error::ClientLookupFailed::map_source())?
+            .ok_or_else(|| authorize::error::ClientNotFound.into_error())?;
 
         let client_scopes = self
             .provider_service
@@ -134,8 +128,7 @@ impl AuthorizeService {
             .collect::<Vec<_>>();
         if !unassigned.is_empty() {
             return Err(
-                AppError::from_code(AuthorizeErrorCode::ScopeNotAssignedToClient)
-                    .with_param("scopes", unassigned.join(", ")),
+                authorize::error::ScopeNotAssignedToClient::new(unassigned.join(", ")).into_error(),
             );
         }
 
@@ -149,26 +142,24 @@ impl AuthorizeService {
                 .select_resources(&request.resources, &request.resources, &request.scope)
                 .await?;
             if selection.scope != request.scope {
-                return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
+                return Err(common::error::InvalidTarget.into_error());
             }
         }
 
         let repository = self
             .rbac_authorization_repo
             .as_ref()
-            .ok_or_else(|| AppError::from_code(AuthorizationErrorCode::RbacPolicyUnavailable))?;
+            .ok_or_else(|| authorization::error::RbacPolicyUnavailable.into_error())?;
         let state = repository
             .authorization_state(UserOid(user_oid), resource_uri)
             .await
             .map_err(rbac_authorization_error)?;
         if state.user_enabled == Some(false) || state.user_locked == Some(true) {
-            return Err(AppError::from_code(
-                AuthorizeErrorCode::ImplicitUserNotFound,
-            ));
+            return Err(authorize::error::ImplicitUserNotFound.into_error());
         }
         // Never mint a business snapshot for a resource that is no longer live.
         if !state.resource.enabled {
-            return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
+            return Err(common::error::InvalidTarget.into_error());
         }
 
         let requested_count = requested_business.len() as i64;
@@ -178,16 +169,16 @@ impl AuthorizeService {
             (BTreeSet::new(), Vec::new())
         } else {
             let effective = effective_permissions(&state)
-                .map_err(AppError::map_source(AuthorizeErrorCode::ScopeInvalid))?;
+                .map_err(authorize::error::ScopeInvalid::map_source())?;
             let effective_scopes = effective_scope_names(&state)
-                .map_err(AppError::map_source(AuthorizeErrorCode::ScopeInvalid))?;
+                .map_err(authorize::error::ScopeInvalid::map_source())?;
 
             // Every requested business name must still be a known, enabled
             // permission of this resource. Missing mappings are configuration
             // or client errors and must not be silently dropped.
             for scope in &requested_business {
                 if state.resource.enabled_permission_for_scope(scope).is_none() {
-                    return Err(AppError::from_code(CommonErrorCode::InvalidTarget));
+                    return Err(common::error::InvalidTarget.into_error());
                 }
             }
 
@@ -258,12 +249,12 @@ fn build_approval_snapshot(
             .iter()
             .find(|binding| binding.oid == *binding_oid)
             .ok_or_else(|| {
-                AppError::from_code(AuthorizeErrorCode::ScopeInvalid)
-                    .with_source(RbacApprovalError::MissingBinding)
+                authorize::error::ScopeInvalid.with_source(RbacApprovalError::MissingBinding)
             })?;
         if !binding.is_active() || !role_oids.contains(&binding.role_oid) {
-            return Err(AppError::from_code(AuthorizeErrorCode::ScopeInvalid)
-                .with_source(RbacApprovalError::InactiveBinding));
+            return Err(
+                authorize::error::ScopeInvalid.with_source(RbacApprovalError::InactiveBinding)
+            );
         }
         bindings.push(UserRoleSnapshot::from_binding(binding));
     }
@@ -274,18 +265,16 @@ fn build_approval_snapshot(
             .iter()
             .find(|role| role.oid == *role_oid)
             .ok_or_else(|| {
-                AppError::from_code(AuthorizeErrorCode::ScopeInvalid)
-                    .with_source(RbacApprovalError::MissingRole)
+                authorize::error::ScopeInvalid.with_source(RbacApprovalError::MissingRole)
             })?;
         if !role.enabled {
-            return Err(AppError::from_code(AuthorizeErrorCode::ScopeInvalid)
-                .with_source(RbacApprovalError::DisabledRole));
+            return Err(authorize::error::ScopeInvalid.with_source(RbacApprovalError::DisabledRole));
         }
         roles.push(RoleAuthorizationSnapshot { role_oid: role.oid });
     }
 
     let user_version = state.user_authorization_version.ok_or_else(|| {
-        AppError::from_code(AuthorizeErrorCode::ScopeInvalid)
+        authorize::error::ScopeInvalid
             .with_source(RbacApprovalError::MissingUserAuthorizationVersion)
     })?;
     let snapshot = BusinessAuthorizationSnapshot::for_user(
@@ -316,17 +305,15 @@ enum RbacApprovalError {
 
 fn rbac_authorization_error(error: RbacAuthorizationError) -> AppError {
     match error {
-        RbacAuthorizationError::UserNotFound => {
-            AppError::from_code(AuthorizeErrorCode::ImplicitUserNotFound)
-        }
+        RbacAuthorizationError::UserNotFound => authorize::error::ImplicitUserNotFound.into_error(),
         RbacAuthorizationError::ResourceNotFound | RbacAuthorizationError::CorruptRecord => {
-            AppError::from_code(CommonErrorCode::InvalidTarget)
+            common::error::InvalidTarget.into_error()
         }
         other @ RbacAuthorizationError::Snapshot(_) => {
-            AppError::from_code(CommonErrorCode::InvalidTarget).with_source(other)
+            common::error::InvalidTarget.with_source(other)
         }
         other @ RbacAuthorizationError::Storage(_) => {
-            AppError::from_code(AuthorizationErrorCode::RbacPolicyUnavailable).with_source(other)
+            authorization::error::RbacPolicyUnavailable.with_source(other)
         }
     }
 }

@@ -1,3 +1,5 @@
+use crate::error::codes::authorize;
+
 use super::*;
 
 #[derive(Debug, Clone)]
@@ -14,22 +16,20 @@ impl AuthorizeService {
     ) -> Result<Url, AppError> {
         let client_id =
             identity_domain::openid_connect::identifier::parse_client_id(request.client_id.trim())
-                .map_err(AppError::map_source(AuthorizeErrorCode::ClientIdInvalid))?;
+                .map_err(authorize::error::ClientIdInvalid::map_source())?;
 
         let client = self
             .client_repo
             .find_by_oid(client_id)
             .await
-            .map_err(AppError::map_source(AuthorizeErrorCode::ClientLookupFailed))?
-            .ok_or_else(|| AppError::from_code(AuthorizeErrorCode::ClientNotFound))?;
+            .map_err(authorize::error::ClientLookupFailed::map_source())?
+            .ok_or_else(|| authorize::error::ClientNotFound.into_error())?;
 
         let mut redirect_uri = client
             .metadata()
             .initiate_login_uri
             .clone()
-            .ok_or_else(|| {
-                AppError::from_code(AuthorizeErrorCode::InitiateLoginUriNotRegistered)
-            })?;
+            .ok_or_else(|| authorize::error::InitiateLoginUriNotRegistered.into_error())?;
         let issuer = self.provider_service.issuer()?;
 
         {
