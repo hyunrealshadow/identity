@@ -1,10 +1,22 @@
+import { AuditErrorCode } from '@identity/graphql-access'
 import type { LuceneFieldValueOption } from '@identity/lucene-input'
 
 import type { MessageKey } from '#/lib/i18n'
 
-/** Server error codes (E30003–E30014) that reject the query statement itself. */
+/** Server error codes that reject the query statement itself. */
 export const AUDIT_QUERY_ERROR_CODES: ReadonlySet<number> = new Set([
-  30003, 30004, 30005, 30006, 30007, 30008, 30009, 30010, 30011, 30012, 30013, 30014,
+  AuditErrorCode.QueryTooLong,
+  AuditErrorCode.QueryTooManyClauses,
+  AuditErrorCode.QueryTooDeep,
+  AuditErrorCode.QuerySyntaxError,
+  AuditErrorCode.QueryUnknownField,
+  AuditErrorCode.QueryInvalidDate,
+  AuditErrorCode.QueryInvalidIdentifier,
+  AuditErrorCode.QueryUnsupportedOperator,
+  AuditErrorCode.QueryUnsupportedRangeField,
+  AuditErrorCode.QueryUnsupportedRegex,
+  AuditErrorCode.QueryUnsupportedSyntax,
+  AuditErrorCode.QueryUnknownValue,
 ])
 
 /**

@@ -29,7 +29,8 @@ export interface GraphQLIssue {
   message: string
   path?: ReadonlyArray<string | number>
   kind?: string
-  code?: string | number
+  /** Catalog code; absent on transport-level and locally raised failures. */
+  code?: number
   fields: GraphQLFieldError[]
   requestId?: string
   traceId?: string
@@ -158,19 +159,7 @@ function exts(value: unknown): Record<string, unknown> {
     : {}
 }
 
-function stableCode(value: unknown): string | number | undefined {
-  return typeof value === 'string' || typeof value === 'number' ? value : undefined
-}
-
-function stepUpCode(value: unknown): boolean {
-  const code = typeof value === 'string' ? value.toLowerCase() : ''
-  return (
-    code === 'insufficient_user_authentication' ||
-    code === 'insufficient_authentication' ||
-    code === 'authentication_required' ||
-    code === 'step_up_required'
-  )
-}
+const STEP_UP_ERROR = 'insufficient_user_authentication'
 
 function acrValue(value: unknown): string | undefined {
   if (typeof value === 'string' && value.trim()) return value.trim()
@@ -204,7 +193,7 @@ function parseWwwAuthenticate(header: string | null): GraphQLStepUp | undefined 
     parameters.set(match[1].toLowerCase(), (match[2] ?? match[3] ?? '').replace(/\\(.)/g, '$1'))
   }
 
-  if (!stepUpCode(parameters.get('error'))) return undefined
+  if (parameters.get('error') !== STEP_UP_ERROR) return undefined
 
   const result: GraphQLStepUp = { source: 'www-authenticate' }
   const acr = acrValue(parameters.get('acr_values'))
@@ -239,28 +228,18 @@ function issueStepUp(
   requestIdValue: string | undefined,
   traceIdValue: string | undefined,
 ): GraphQLStepUp | undefined {
-  if (!stepUpCode(extensions.code) && !stepUpCode(extensions.kind)) return undefined
+  const challenge = exts(extensions.challenge)
+  if (challenge.error !== STEP_UP_ERROR) return undefined
   const stepUp: GraphQLStepUp = { source: 'graphql' }
-  const acr = acrValue(extensions.acr_values ?? extensions.acrValues)
-  const maxAge = maxAgeValue(extensions.max_age ?? extensions.maxAge)
-  const scopes = scopeValues(extensions.required_scopes ?? extensions.requiredScopes)
+  const acr = acrValue(challenge.acrValues)
+  const maxAge = maxAgeValue(challenge.maxAge)
   if (acr) stepUp.acrValues = acr
   if (maxAge !== undefined) stepUp.maxAge = maxAge
-  if (scopes) stepUp.requiredScopes = scopes
   if (requestIdValue) stepUp.requestId = requestIdValue
   if (traceIdValue) stepUp.traceId = traceIdValue
   return stepUp
 }
 
-function isForbiddenCode(kind: string | undefined, code: string | number | undefined): boolean {
-  const value = `${kind ?? ''} ${String(code ?? '')}`.toLowerCase()
-  return (
-    value.includes('forbidden') ||
-    value.includes('insufficient_scope') ||
-    value.includes('permission_denied') ||
-    value.includes('access_denied')
-  )
-}
 
 export async function executeGraphQL<TData, TVariables>(
   document: string | DocumentSource<TData, TVariables>,
@@ -418,8 +397,7 @@ export async function executeGraphQL<TData, TVariables>(
     }
     if (Array.isArray(record.path)) issue.path = record.path as ReadonlyArray<string | number>
     if (typeof extensions.kind === 'string') issue.kind = extensions.kind
-    const code = stableCode(extensions.code)
-    if (code !== undefined) issue.code = code
+    if (typeof extensions.code === 'number') issue.code = extensions.code
     const errorStepUp = issueStepUp(extensions, errorRequestId, errorTraceId)
     if (errorRequestId) issue.requestId = errorRequestId
     if (errorTraceId) issue.traceId = errorTraceId
@@ -431,14 +409,9 @@ export async function executeGraphQL<TData, TVariables>(
   const graphqlStepUp = issues.find((issue) => issue.stepUp)?.stepUp
   const stepUp = mergeStepUp(graphqlStepUp, headerStepUp)
   const unauthorized = !stepUp && (
-    response.status === 401 ||
-    issues.some((issue) => {
-      const value = `${issue.kind ?? ''} ${String(issue.code ?? '')}`.toLowerCase()
-      return value.includes('unauthenticated') || value.includes('unauthorized')
-    }))
+    response.status === 401 || issues.some((issue) => issue.kind === 'unauthorized'))
   const forbidden =
-    response.status === 403 ||
-    issues.some((issue) => isForbiddenCode(issue.kind, issue.code))
+    response.status === 403 || issues.some((issue) => issue.kind === 'forbidden')
   const data = body.data ?? null
   const partial = data !== null && issues.length > 0
 

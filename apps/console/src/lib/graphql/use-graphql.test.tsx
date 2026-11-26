@@ -98,9 +98,9 @@ function challengeResponse() {
         {
           message: 'challenge',
           extensions: {
-            code: 'insufficient_user_authentication',
-            acr_values: 'aal2',
-            max_age: 0,
+            kind: 'forbidden',
+            code: 28008,
+            challenge: { error: 'insufficient_user_authentication', acrValues: 'aal2', maxAge: 0 },
           },
         },
       ],
@@ -172,8 +172,8 @@ describe('useGraphQL automatic reauthentication', () => {
             {
               message: 'forbidden',
               extensions: {
-                kind: 'authorization_error',
-                code: 'permission_denied',
+                kind: 'forbidden',
+                code: 10004,
               },
             },
           ],
@@ -208,7 +208,7 @@ describe('useGraphQL automatic reauthentication', () => {
         JSON.stringify({
           data: null,
           errors: [
-            { message: 'expired', extensions: { code: 'unauthenticated' } },
+            { message: 'expired', extensions: { kind: 'unauthorized', code: 28107 } },
           ],
         }),
         { status: 401, headers: { 'Content-Type': 'application/json' } },
@@ -300,7 +300,7 @@ describe('useGraphQL automatic reauthentication', () => {
     expect(result?.unauthorized).toBe(false)
     expect(result?.stepUp).toBeUndefined()
     expect(result?.failure?.code).toBe('insufficient_scope')
-    expect(result?.errors[0]?.code).toBe('insufficient_scope')
+    expect(result?.errors[0]?.extensions?.challenge).toMatchObject({ error: 'insufficient_scope' })
     expect(result?.errors[0]?.message).toBeTruthy()
     // Local decisions have no server request or trace to report.
     expect(result?.requestId).toBeUndefined()
@@ -354,7 +354,9 @@ describe('useGraphQL automatic reauthentication', () => {
       maxAge: 300,
     })
     expect(result?.failure?.code).toBe('insufficient_user_authentication')
-    expect(result?.errors[0]?.code).toBe('insufficient_user_authentication')
+    expect(result?.errors[0]?.extensions?.challenge).toMatchObject({
+      error: 'insufficient_user_authentication',
+    })
     expect(result?.forbidden).toBe(false)
     expect(result?.unauthorized).toBe(false)
     expect(result?.requestId).toBeUndefined()

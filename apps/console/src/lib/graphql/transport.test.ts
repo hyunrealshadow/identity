@@ -16,12 +16,15 @@ describe('executeGraphQL', () => {
               path: ['updateProfile', 'user'],
               extensions: {
                 kind: 'validation',
-                code: 'insufficient_user_authentication',
+                code: 28008,
                 requestId: 'err-req',
                 traceId: TRACE,
                 fields: { givenName: 'invalid value' },
-                acr_values: 'urn:extension',
-                max_age: 120,
+                challenge: {
+                  error: 'insufficient_user_authentication',
+                  acrValues: 'urn:extension',
+                  maxAge: 120,
+                },
               },
             },
           ],
@@ -118,7 +121,7 @@ describe('executeGraphQL', () => {
     const fetchMock = vi.fn<typeof fetch>().mockResolvedValue(
       new Response(
         JSON.stringify({
-          errors: [{ message: 'expired', extensions: { code: 'unauthenticated' } }],
+          errors: [{ message: 'expired', extensions: { kind: 'unauthorized', code: 28107 } }],
         }),
         {
           status: 401,
@@ -146,7 +149,7 @@ describe('executeGraphQL', () => {
       new Response(
         JSON.stringify({
           data: null,
-          errors: [{ message: 'failed', extensions: { kind: 'conflict', code: 'conflict' } }],
+          errors: [{ message: 'failed', extensions: { kind: 'conflict', code: 17008 } }],
         }),
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       ),
@@ -160,7 +163,7 @@ describe('executeGraphQL', () => {
       fetchImpl: fetchMock,
     })
 
-    expect(result.failure).toMatchObject({ kind: 'graphql', code: 'conflict' })
+    expect(result.failure).toMatchObject({ kind: 'graphql', code: '17008' })
     expect(fetchMock).toHaveBeenCalledTimes(1)
   })
 })

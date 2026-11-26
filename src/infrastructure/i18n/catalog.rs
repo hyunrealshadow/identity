@@ -197,6 +197,8 @@ mod tests {
     fn missing_keys_and_parameters_and_malformed_fluent_are_rejected() {
         let inventory = [PublicErrorDefinition {
             code: 1,
+            group: "NegativeErrorCode",
+            name: "Negative",
             kind: ErrorKind::Validation,
             fluent_key: "E1".to_owned(),
             usage_module: "negative",

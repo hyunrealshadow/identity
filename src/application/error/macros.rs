@@ -41,6 +41,16 @@ macro_rules! define_error_codes {
                 self as u32
             }
 
+            fn group(self) -> &'static str {
+                stringify!($EnumName)
+            }
+
+            fn name(self) -> &'static str {
+                match self {
+                    $(Self::$Variant => stringify!($Variant),)*
+                }
+            }
+
             fn required_params(self) -> &'static [&'static str] {
                 match self {
                     $(Self::$Variant => &[$($(stringify!($req)),+)?],)*
@@ -307,6 +317,18 @@ macro_rules! define_error_code_registry {
             fn code(self) -> u32 {
                 match self {
                     $(Self::$Variant(code) => code.code(),)*
+                }
+            }
+
+            fn group(self) -> &'static str {
+                match self {
+                    $(Self::$Variant(code) => code.group(),)*
+                }
+            }
+
+            fn name(self) -> &'static str {
+                match self {
+                    $(Self::$Variant(code) => code.name(),)*
                 }
             }
 

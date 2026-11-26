@@ -10,15 +10,18 @@ import { preflightOperation, type PreflightContext, type PreflightResult } from 
 import { translate } from './i18n'
 import { requestLocale } from './i18n.server'
 
+/** What the caller can do to be allowed (RFC 9470 / RFC 6750 error codes). */
+export type GraphqlChallenge =
+  | { error: 'insufficient_user_authentication'; acrValues?: string; maxAge?: number }
+  | { error: 'insufficient_scope'; scopes: string[] }
+
 export interface GraphqlError {
   message: string
   extensions?: {
     kind?: string
-    code?: string | number
-    requiredScope?: string
-    requiredScopes?: string[]
-    acr_values?: string
-    max_age?: number
+    /** Catalog code; absent only on errors raised locally by preflight. */
+    code?: number
+    challenge?: GraphqlChallenge
     fields?: Array<{ field: string; code: number; message: string }>
   }
 }
@@ -208,11 +211,10 @@ function assertPreflightRejection(result: PreflightResult) {
   throw new GraphqlRequestError([{
     message,
     extensions: {
-      kind: 'authorization_error',
-      code: authentication ? 'insufficient_user_authentication' : 'insufficient_scope',
-      requiredScopes: result.requiredScopes,
-      acr_values: result.acrValues,
-      max_age: result.maxAge,
+      kind: authentication ? 'unauthorized' : 'forbidden',
+      challenge: authentication
+        ? { error: 'insufficient_user_authentication', acrValues: result.acrValues, maxAge: result.maxAge }
+        : { error: 'insufficient_scope', scopes: result.requiredScopes },
     },
   }], challenge)
 }

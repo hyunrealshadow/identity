@@ -66,20 +66,20 @@ function localFailure<TData>(
     errors: [
       {
         message,
-        kind: options.forbidden
-          ? 'authorization_error'
-          : 'authentication_error',
-        code,
+        kind: options.forbidden ? 'forbidden' : 'unauthorized',
         fields: [],
         ...(options.stepUp ? { stepUp: options.stepUp } : {}),
-        ...(options.requiredScopes && options.requiredScopes.length > 0
-          ? {
-              extensions: {
-                code,
-                requiredScopes: [...options.requiredScopes],
-              },
-            }
-          : {}),
+        extensions: {
+          kind: options.forbidden ? 'forbidden' : 'unauthorized',
+          challenge:
+            code === 'insufficient_scope'
+              ? { error: code, scopes: [...(options.requiredScopes ?? [])] }
+              : {
+                  error: code,
+                  ...(options.stepUp?.acrValues ? { acrValues: options.stepUp.acrValues } : {}),
+                  ...(options.stepUp?.maxAge !== undefined ? { maxAge: options.stepUp.maxAge } : {}),
+                },
+        },
       },
     ],
     failure: {

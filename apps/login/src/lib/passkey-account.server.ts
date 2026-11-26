@@ -1,3 +1,4 @@
+import { AuthErrorCode } from '@identity/graphql-access'
 import { AuthenticationContextClass } from '@identity/graphql-access'
 import { accountOperations } from './account-operations'
 import { getRequestHeader } from '@tanstack/react-start/server'
@@ -59,7 +60,7 @@ export async function passkeyAccountAction(input: {
     if (error instanceof AccountSessionExpiredError) {
       return { redirect: (await restartAccountSignIn(PASSKEY_MANAGEMENT_CONTINUATION)).toString() }
     }
-    if (error instanceof GraphqlRequestError && error.errors.some(({ extensions }) => Number(extensions?.code) === 11019)) {
+    if (error instanceof GraphqlRequestError && error.errors.some(({ extensions }) => extensions?.code === AuthErrorCode.PasskeyLimitReached)) {
       return { error: translate(locale, 'passkeyLimitReached', { limit: MAX_PASSKEYS_PER_ACCOUNT }) }
     }
     if (error instanceof GraphqlRequestError && requiresAccountReauthentication(error)) {

@@ -224,7 +224,7 @@ describe('executeAccountAction', () => {
   })
 
   it('checks authentication freshness before confirming MFA enrollment', async () => {
-    mocks.identityGraphql.mockRejectedValueOnce(new GraphqlRequestError([{ message: 'step up', extensions: { code: 'insufficient_user_authentication' } }], { acrValues: 'aal1', maxAge: 300 }))
+    mocks.identityGraphql.mockRejectedValueOnce(new GraphqlRequestError([{ message: 'step up', extensions: { kind: 'unauthorized', challenge: { error: 'insufficient_user_authentication' } } }], { acrValues: 'aal1', maxAge: 300 }))
 
     mocks.mfaUiState.mockResolvedValue({ enrollment: { enrollment_token: 'sealed-enrollment' } })
     const result = await executeAccountAction({
@@ -272,7 +272,7 @@ describe('executeAccountAction', () => {
       .mockRejectedValueOnce(new GraphqlRequestError(
         [{
           message: 'recent authentication is required',
-          extensions: { code: 'insufficient_user_authentication' },
+          extensions: { kind: 'unauthorized', challenge: { error: 'insufficient_user_authentication' } },
         }],
         { acrValues: 'aal1', maxAge: 300 },
       ))
@@ -313,7 +313,7 @@ describe('executeAccountAction', () => {
 
   it('honors the directive-derived challenge instead of a submitted assurance flag', async () => {
     mocks.preflightIdentityGraphql.mockRejectedValueOnce(new GraphqlRequestError([
-      { message: 'step up', extensions: { code: 'insufficient_user_authentication' } },
+      { message: 'step up', extensions: { kind: 'unauthorized', challenge: { error: 'insufficient_user_authentication' } } },
     ], { acrValues: 'aal2', maxAge: 3600 }))
     const result = await executeAccountAction({
       action: 'prepare-change-password', values: { requires_aal2: 'false', login_hint: 'alice' },
@@ -326,7 +326,7 @@ describe('executeAccountAction', () => {
   })
 
   it('keeps the password scope when starting AAL2 password reauthentication', async () => {
-    mocks.preflightIdentityGraphql.mockRejectedValueOnce(new GraphqlRequestError([{ message: 'step up', extensions: { code: 'insufficient_user_authentication' } }], { acrValues: 'aal2', maxAge: 3600 }))
+    mocks.preflightIdentityGraphql.mockRejectedValueOnce(new GraphqlRequestError([{ message: 'step up', extensions: { kind: 'unauthorized', challenge: { error: 'insufficient_user_authentication' } } }], { acrValues: 'aal2', maxAge: 3600 }))
 
     const result = await executeAccountAction({
       action: 'prepare-change-password',
@@ -365,7 +365,7 @@ describe('executeAccountAction', () => {
   })
 
   it('starts reauthentication locally when the token is not fresh', async () => {
-    mocks.preflightIdentityGraphql.mockRejectedValueOnce(new GraphqlRequestError([{ message: 'step up', extensions: { code: 'insufficient_user_authentication' } }], { acrValues: 'aal2', maxAge: 3600 }))
+    mocks.preflightIdentityGraphql.mockRejectedValueOnce(new GraphqlRequestError([{ message: 'step up', extensions: { kind: 'unauthorized', challenge: { error: 'insufficient_user_authentication' } } }], { acrValues: 'aal2', maxAge: 3600 }))
 
     const result = await executeAccountAction({
       action: 'prepare-disable-totp',
@@ -389,7 +389,7 @@ describe('executeAccountAction', () => {
   })
 
   it('requires fresh AAL2 before regenerating recovery codes', async () => {
-    mocks.identityGraphql.mockRejectedValueOnce(new GraphqlRequestError([{ message: 'step up', extensions: { code: 'insufficient_user_authentication' } }], { acrValues: 'aal2', maxAge: 3600 }))
+    mocks.identityGraphql.mockRejectedValueOnce(new GraphqlRequestError([{ message: 'step up', extensions: { kind: 'unauthorized', challenge: { error: 'insufficient_user_authentication' } } }], { acrValues: 'aal2', maxAge: 3600 }))
 
     const result = await executeAccountAction({
       action: 'regenerate-recovery-codes',
@@ -571,7 +571,7 @@ it('prepares authentication for a browser-prechecked action without submitting i
 
 it('returns a real challenge from a preflight-only request without executing the pending mutation', async () => {
   mocks.preflightIdentityGraphql.mockRejectedValueOnce(new GraphqlRequestError([
-    { message: 'step up', extensions: { code: 'insufficient_user_authentication' } },
+    { message: 'step up', extensions: { kind: 'unauthorized', challenge: { error: 'insufficient_user_authentication' } } },
   ], { maxAge: 300 }))
   const result = await executeAccountAction({ action: 'update-username', values: { login_hint: 'person' }, preflightOnly: true })
   expect(result.reauth).toBeTruthy()
@@ -592,7 +592,7 @@ it.each([
   ['prepare-manage-passkeys', 'passkeys'],
 ])('redirects %s to AAL2 before opening or changing settings', async (action, continuation) => {
   mocks.identityGraphql.mockRejectedValueOnce(new GraphqlRequestError([
-    { message: 'step up', extensions: { code: 'insufficient_user_authentication' } },
+    { message: 'step up', extensions: { kind: 'unauthorized', challenge: { error: 'insufficient_user_authentication' } } },
   ], { acrValues: 'aal2', maxAge: 3600 }))
   const result = await executeAccountAction({ action, values: { login_hint: 'person', preferred_mfa_method: 'passkey' } })
   expect(result.reauth).toBeTruthy()
@@ -622,7 +622,7 @@ it('does not treat a missing preflight credential as an elevation request', asyn
 
 it('checks live access even when a stale page supplies a login hint', async () => {
   mocks.preflightIdentityGraphql.mockRejectedValueOnce(new GraphqlRequestError([
-    { message: 'freshness required', extensions: { code: 'insufficient_user_authentication' } },
+    { message: 'freshness required', extensions: { kind: 'unauthorized', challenge: { error: 'insufficient_user_authentication' } } },
   ], { acrValues: 'aal2', maxAge: 300 }))
   mocks.identityGraphql.mockResolvedValueOnce(undefined)
   expect(await executeAccountAction({ action: 'update-username', values: { login_hint: 'stale-page' }, preflightOnly: true })).toHaveProperty('redirect')
@@ -632,7 +632,7 @@ it('checks live access even when a stale page supplies a login hint', async () =
 
 it('keeps permission denial separate from authentication recovery', async () => {
   mocks.identityGraphql.mockRejectedValueOnce(new GraphqlRequestError([
-    { message: 'Permission denied', extensions: { code: 'insufficient_scope', requiredScope: 'user.write' } },
+    { message: 'Permission denied', extensions: { kind: 'forbidden', challenge: { error: 'insufficient_scope', scopes: ['user.write'] } } },
   ]))
   expect(await executeAccountAction({ action: 'update-username', values: { username: 'someone' } })).toEqual({ ok: false })
   expect(mocks.startPopupReauthorization).not.toHaveBeenCalled()
@@ -647,7 +647,7 @@ it('does not retry an elevation popup after the account session is lost', async 
 
 it('does not turn a failed live-session lookup into either a popup or a login redirect', async () => {
   mocks.preflightIdentityGraphql.mockRejectedValueOnce(new GraphqlRequestError([
-    { message: 'freshness required', extensions: { code: 'insufficient_user_authentication' } },
+    { message: 'freshness required', extensions: { kind: 'unauthorized', challenge: { error: 'insufficient_user_authentication' } } },
   ], { maxAge: 300 }))
   mocks.identityGraphql.mockRejectedValueOnce(new GraphqlRequestError([{ message: 'Service unavailable' }]))
   expect(await executeAccountAction({ action: 'update-username', values: {}, preflightOnly: true })).toEqual({ ok: false })

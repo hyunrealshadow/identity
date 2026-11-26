@@ -26,7 +26,9 @@ impl From<ManagementAuthorizationError> for AppError {
         match error {
             Error::MissingPrincipal => AuthzError::MissingPrincipal::new().into(),
             Error::InsufficientScope { required } => {
-                AuthzError::InsufficientScope::new(required.name()).into()
+                AuthzError::InsufficientScope::new(required.name())
+                    .into_error()
+                    .with_required_scopes([required.name()])
             }
             Error::NoCurrentGrant
             | Error::InconsistentAuthority

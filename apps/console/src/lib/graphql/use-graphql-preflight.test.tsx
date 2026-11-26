@@ -80,9 +80,9 @@ function challengeResponse() {
         {
           message: 'challenge',
           extensions: {
-            code: 'insufficient_user_authentication',
-            acr_values: 'aal2',
-            max_age: 0,
+            kind: 'forbidden',
+            code: 28008,
+            challenge: { error: 'insufficient_user_authentication', acrValues: 'aal2', maxAge: 0 },
           },
         },
       ],

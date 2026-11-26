@@ -1,3 +1,4 @@
+import { UserManagementErrorCode } from '@identity/graphql-access'
 import type {
   GraphQLFailure,
   GraphQLIssue,
@@ -33,16 +34,14 @@ function extensionObject(
 }
 
 /**
- * User-management version conflicts use the stable numeric application code
- * 16008. The backend exposes the current version only when available, so the
- * parser tolerates top-level and nested version params for display. Detection
- * stays code-only, so identifier uniqueness conflicts never become version
+ * User-management version conflicts use a stable numeric application code.
+ * The backend exposes the current version only when available, so the parser
+ * tolerates top-level and nested version params for display. Detection stays
+ * code-only, so identifier uniqueness conflicts never become version
  * conflicts.
  */
-const VERSION_CONFLICT_CODE = 16008
-
 function isVersionConflictCode(code: unknown): boolean {
-  return code === VERSION_CONFLICT_CODE || code === '16008'
+  return code === UserManagementErrorCode.VersionConflict
 }
 
 function currentVersionOf(issue: GraphQLIssue): string | undefined {

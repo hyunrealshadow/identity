@@ -23,7 +23,7 @@ fn main() {
             .into_iter()
             .map(|definition| {
                 serde_json::json!({
-                    "code": definition.code, "kind": definition.kind.as_str(),
+                    "code": definition.code, "group": definition.group, "name": definition.name, "kind": definition.kind.as_str(),
                     "fluentKey": definition.fluent_key, "requiredParams": definition.required,
                     "optionalParams": definition.optional, "module": definition.usage_module,
                 })

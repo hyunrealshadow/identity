@@ -10,11 +10,11 @@ describe('account reauthentication', () => {
   it('does not turn a permission denial into an authentication challenge', () => {
     for (const requiredScope of ['user.write', 'password.change']) {
       expect(requiresAccountReauthentication(new GraphqlRequestError([{
-        message: 'insufficient scope', extensions: { code: 'insufficient_scope', requiredScope },
+        message: 'insufficient scope', extensions: { kind: 'forbidden', challenge: { error: 'insufficient_scope', scopes: [requiredScope] } },
       }]))).toBe(false)
     }
     expect(requiresAccountReauthentication(new GraphqlRequestError([{
-      message: 'recent authentication required', extensions: { code: 'insufficient_user_authentication' },
+      message: 'recent authentication required', extensions: { kind: 'unauthorized', challenge: { error: 'insufficient_user_authentication' } },
     }], { acrValues: 'aal2', maxAge: 300 }))).toBe(true)
   })
 

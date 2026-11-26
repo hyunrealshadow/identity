@@ -9,9 +9,7 @@ export const PASSKEY_MANAGEMENT_CONTINUATION = '/account/security?confirm=passke
 
 export function requiresAccountReauthentication(error: GraphqlRequestError) {
   return error.challenge !== undefined || error.errors.some(
-    ({ extensions }) =>
-      extensions?.code === 'FRESH_AUTHENTICATION_REQUIRED' ||
-      extensions?.code === 'insufficient_user_authentication',
+    ({ extensions }) => extensions?.challenge?.error === 'insufficient_user_authentication',
   )
 }
 

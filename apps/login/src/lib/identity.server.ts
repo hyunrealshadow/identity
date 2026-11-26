@@ -1,3 +1,4 @@
+import { AuthErrorCode } from '@identity/graphql-access'
 import {
   getRequestHeader,
   setResponseHeader,
@@ -18,7 +19,10 @@ const SESSION_COOKIE_NAME = 'identity.sessions'
 const SESSION_HEADER_NAME = 'x-sessions'
 const CSRF_HEADER_NAME = 'x-csrf-token'
 const SESSION_MAX_AGE = 7 * 24 * 60 * 60
-const TERMINAL_LOGIN_ERROR_CODES = new Set([11004, 11005])
+const TERMINAL_LOGIN_ERROR_CODES = new Set<number>([
+  AuthErrorCode.LoginExpired,
+  AuthErrorCode.InvalidLoginState,
+])
 /** Endpoints whose `authenticated` answer establishes or renews a session. */
 const AUTHENTICATING_PATHS = new Set([
   '/api/auth/login/challenge',

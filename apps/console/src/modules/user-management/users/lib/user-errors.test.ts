@@ -73,11 +73,11 @@ describe('versionConflict', () => {
     })
   })
 
-  it('accepts the decimal string code and camelCase nested version', () => {
+  it('reads a camelCase nested version', () => {
     const result = versionConflict([
       issue({
         kind: 'conflict',
-        code: '16008',
+        code: 16008,
         extensions: { params: { currentVersion: CURRENT_VERSION } },
       }),
     ])

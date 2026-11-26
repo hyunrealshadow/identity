@@ -31,7 +31,7 @@ describe('RBAC error presentation', () => {
         {
           message: 'role name already exists',
           kind: 'conflict',
-          code: 'role_name_conflict',
+          code: 17004,
           fields: [{ path: 'input.names', message: 'Taken' }],
         },
       ]),

@@ -3,6 +3,8 @@ use super::{code::AppErrorCode, codes::ErrorCode, kind::ErrorKind};
 #[derive(Debug, Clone)]
 pub struct PublicErrorDefinition {
     pub code: u32,
+    pub group: &'static str,
+    pub name: &'static str,
     pub kind: ErrorKind,
     pub fluent_key: String,
     pub usage_module: &'static str,
@@ -18,6 +20,8 @@ pub fn public_error_inventory() -> Vec<PublicErrorDefinition> {
         .into_iter()
         .map(|code| PublicErrorDefinition {
             code: code.code(),
+            group: code.group(),
+            name: code.name(),
             kind: code.kind(),
             fluent_key: format!("E{}", code.code()),
             usage_module: code

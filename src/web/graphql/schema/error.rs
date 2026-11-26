@@ -81,25 +81,33 @@ fn apply_extensions(
 ) {
     extensions.set("kind", error.kind().as_str());
     extensions.set("code", error.code());
-    if let Some(step_up) = error.step_up() {
-        extensions.set("applicationCode", error.code());
-        extensions.set("code", "insufficient_user_authentication");
-        if let Some(acr) = step_up.acr {
-            extensions.set("acr_values", acr.as_str());
-        }
-        if let Some(max_age) = step_up.max_age_secs {
-            extensions.set("max_age", max_age);
-        }
-    } else if let [first, ..] = error.required_scopes() {
-        extensions.set("applicationCode", error.code());
-        extensions.set("code", "insufficient_scope");
-        extensions.set("requiredScope", first.clone());
-        extensions.set("requiredScopes", error.required_scopes().to_vec());
+    if let Some(challenge) = challenge(error) {
+        extensions.set(
+            "challenge",
+            Value::from_json(challenge).unwrap_or(Value::Null),
+        );
     }
     extensions.set(
         "fields",
         Value::from_json(SerdeJsonValue::Array(fields)).unwrap_or(Value::Null),
     );
+}
+
+/// The authorization challenge a client can satisfy, named after the bearer
+/// token error codes of RFC 9470 and RFC 6750. `code` stays the catalog code.
+fn challenge(error: &AppError) -> Option<SerdeJsonValue> {
+    if let Some(step_up) = error.step_up() {
+        let mut challenge = json!({ "error": "insufficient_user_authentication" });
+        if let Some(acr) = step_up.acr {
+            challenge["acrValues"] = json!(acr.as_str());
+        }
+        if let Some(max_age) = step_up.max_age_secs {
+            challenge["maxAge"] = json!(max_age);
+        }
+        return Some(challenge);
+    }
+    let scopes = error.required_scopes();
+    (!scopes.is_empty()).then(|| json!({ "error": "insufficient_scope", "scopes": scopes }))
 }
 
 /// Catalog message for `code`, or the generic internal message when the
@@ -147,8 +155,20 @@ mod tests {
     };
     use identity_domain::auth::AuthenticationContextClass;
 
+    fn challenge_of(projected: &Error) -> SerdeJsonValue {
+        projected
+            .extensions
+            .as_ref()
+            .unwrap()
+            .get("challenge")
+            .unwrap()
+            .clone()
+            .into_json()
+            .unwrap()
+    }
+
     #[test]
-    fn step_up_challenge_projects_graphql_extensions_and_source() {
+    fn step_up_keeps_the_catalog_code_and_carries_a_typed_challenge() {
         let challenge = StepUpChallenge {
             acr: Some(AuthenticationContextClass::MultiFactor),
             max_age_secs: Some(900),
@@ -160,22 +180,17 @@ mod tests {
         let projected = project(&I18n::disabled(), &langid!("en-US"), &error);
         let extensions = projected.extensions.as_ref().unwrap();
 
+        assert_eq!(extensions.get("code"), Some(&Value::from(error.code())));
         assert_eq!(
-            extensions.get("applicationCode"),
-            Some(&Value::from(error.code()))
+            challenge_of(&projected),
+            json!({ "error": "insufficient_user_authentication", "acrValues": "aal2", "maxAge": 900 })
         );
-        assert_eq!(
-            extensions.get("code"),
-            Some(&Value::from("insufficient_user_authentication"))
-        );
-        assert_eq!(extensions.get("acr_values"), Some(&Value::from("aal2")));
-        assert_eq!(extensions.get("max_age"), Some(&Value::from(900_u64)));
         let source = projected.source.as_ref().unwrap();
         assert_eq!(source.downcast_ref::<StepUpChallenge>(), Some(&challenge));
     }
 
     #[test]
-    fn missing_catalog_entries_never_expose_raw_keys() {
+    fn missing_scope_is_a_forbidden_rejection_with_the_scopes_to_request() {
         let error = graphql::error::InsufficientScope::new("user.read")
             .into_error()
             .with_required_scopes(["user.read"]);
@@ -185,13 +200,11 @@ mod tests {
 
         assert_eq!(projected.message, "发生意外错误，请重试");
         assert_eq!(extensions.get("kind"), Some(&Value::from("forbidden")));
+        assert_eq!(extensions.get("code"), Some(&Value::from(error.code())));
         assert_eq!(
-            extensions.get("code"),
-            Some(&Value::from("insufficient_scope"))
+            challenge_of(&projected),
+            json!({ "error": "insufficient_scope", "scopes": ["user.read"] })
         );
-        assert_eq!(
-            extensions.get("requiredScope"),
-            Some(&Value::from("user.read"))
-        );
+        assert!(projected.source.is_none());
     }
 }

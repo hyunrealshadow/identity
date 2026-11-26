@@ -1,6 +1,8 @@
 [
   {
     "code": 10000,
+    "group": "CommonErrorCode",
+    "name": "InvalidRequest",
     "kind": "validation",
     "fluentKey": "E10000",
     "requiredParams": [],
@@ -9,6 +11,8 @@
   },
   {
     "code": 10001,
+    "group": "CommonErrorCode",
+    "name": "InternalError",
     "kind": "internal",
     "fluentKey": "E10001",
     "requiredParams": [],
@@ -17,6 +21,8 @@
   },
   {
     "code": 10002,
+    "group": "CommonErrorCode",
+    "name": "ValidationFailed",
     "kind": "validation",
     "fluentKey": "E10002",
     "requiredParams": [],
@@ -25,6 +31,8 @@
   },
   {
     "code": 10003,
+    "group": "CommonErrorCode",
+    "name": "Unauthorized",
     "kind": "unauthorized",
     "fluentKey": "E10003",
     "requiredParams": [],
@@ -33,6 +41,8 @@
   },
   {
     "code": 10004,
+    "group": "CommonErrorCode",
+    "name": "Forbidden",
     "kind": "forbidden",
     "fluentKey": "E10004",
     "requiredParams": [],
@@ -41,6 +51,8 @@
   },
   {
     "code": 10005,
+    "group": "CommonErrorCode",
+    "name": "NotFound",
     "kind": "not_found",
     "fluentKey": "E10005",
     "requiredParams": [],
@@ -49,6 +61,8 @@
   },
   {
     "code": 10006,
+    "group": "CommonErrorCode",
+    "name": "InvalidTarget",
     "kind": "validation",
     "fluentKey": "E10006",
     "requiredParams": [],
@@ -57,6 +71,8 @@
   },
   {
     "code": 10007,
+    "group": "CommonErrorCode",
+    "name": "ResourceLookupFailed",
     "kind": "internal",
     "fluentKey": "E10007",
     "requiredParams": [],
@@ -65,6 +81,8 @@
   },
   {
     "code": 10008,
+    "group": "CommonErrorCode",
+    "name": "PushedRequestStorageFailed",
     "kind": "internal",
     "fluentKey": "E10008",
     "requiredParams": [],
@@ -73,6 +91,8 @@
   },
   {
     "code": 10009,
+    "group": "CommonErrorCode",
+    "name": "InvalidScope",
     "kind": "validation",
     "fluentKey": "E10009",
     "requiredParams": [],
@@ -81,6 +101,8 @@
   },
   {
     "code": 10010,
+    "group": "CommonErrorCode",
+    "name": "InvalidTimeZone",
     "kind": "validation",
     "fluentKey": "E10010",
     "requiredParams": [],
@@ -89,6 +111,8 @@
   },
   {
     "code": 11000,
+    "group": "AuthErrorCode",
+    "name": "UserNotFound",
     "kind": "not_found",
     "fluentKey": "E11000",
     "requiredParams": [],
@@ -97,6 +121,8 @@
   },
   {
     "code": 11001,
+    "group": "AuthErrorCode",
+    "name": "InvalidCredential",
     "kind": "unauthorized",
     "fluentKey": "E11001",
     "requiredParams": [],
@@ -105,6 +131,8 @@
   },
   {
     "code": 11002,
+    "group": "AuthErrorCode",
+    "name": "UserLocked",
     "kind": "forbidden",
     "fluentKey": "E11002",
     "requiredParams": [],
@@ -113,6 +141,8 @@
   },
   {
     "code": 11003,
+    "group": "AuthErrorCode",
+    "name": "UserDisabled",
     "kind": "forbidden",
     "fluentKey": "E11003",
     "requiredParams": [],
@@ -121,6 +151,8 @@
   },
   {
     "code": 11004,
+    "group": "AuthErrorCode",
+    "name": "LoginExpired",
     "kind": "gone",
     "fluentKey": "E11004",
     "requiredParams": [],
@@ -129,6 +161,8 @@
   },
   {
     "code": 11005,
+    "group": "AuthErrorCode",
+    "name": "InvalidLoginState",
     "kind": "conflict",
     "fluentKey": "E11005",
     "requiredParams": [],
@@ -137,6 +171,8 @@
   },
   {
     "code": 11006,
+    "group": "AuthErrorCode",
+    "name": "CredentialTypeUnsupported",
     "kind": "validation",
     "fluentKey": "E11006",
     "requiredParams": [
@@ -147,6 +183,8 @@
   },
   {
     "code": 11007,
+    "group": "AuthErrorCode",
+    "name": "InvalidOtp",
     "kind": "unauthorized",
     "fluentKey": "E11007",
     "requiredParams": [],
@@ -155,6 +193,8 @@
   },
   {
     "code": 11008,
+    "group": "AuthErrorCode",
+    "name": "TooManyAttempts",
     "kind": "rate_limit",
     "fluentKey": "E11008",
     "requiredParams": [],
@@ -163,6 +203,8 @@
   },
   {
     "code": 11009,
+    "group": "AuthErrorCode",
+    "name": "SessionNotFound",
     "kind": "not_found",
     "fluentKey": "E11009",
     "requiredParams": [
@@ -173,6 +215,8 @@
   },
   {
     "code": 11010,
+    "group": "AuthErrorCode",
+    "name": "SessionExpired",
     "kind": "unauthorized",
     "fluentKey": "E11010",
     "requiredParams": [],
@@ -181,6 +225,8 @@
   },
   {
     "code": 11011,
+    "group": "AuthErrorCode",
+    "name": "SessionRevoked",
     "kind": "unauthorized",
     "fluentKey": "E11011",
     "requiredParams": [],
@@ -189,6 +235,8 @@
   },
   {
     "code": 11012,
+    "group": "AuthErrorCode",
+    "name": "IdentifierRequired",
     "kind": "validation",
     "fluentKey": "E11012",
     "requiredParams": [],
@@ -197,6 +245,8 @@
   },
   {
     "code": 11013,
+    "group": "AuthErrorCode",
+    "name": "PasswordTooShort",
     "kind": "validation",
     "fluentKey": "E11013",
     "requiredParams": [],
@@ -205,6 +255,8 @@
   },
   {
     "code": 11014,
+    "group": "AuthErrorCode",
+    "name": "PasswordUnchanged",
     "kind": "validation",
     "fluentKey": "E11014",
     "requiredParams": [],
@@ -213,6 +265,8 @@
   },
   {
     "code": 11015,
+    "group": "AuthErrorCode",
+    "name": "TotpAlreadyEnabled",
     "kind": "conflict",
     "fluentKey": "E11015",
     "requiredParams": [],
@@ -221,6 +275,8 @@
   },
   {
     "code": 11016,
+    "group": "AuthErrorCode",
+    "name": "TotpNotEnabled",
     "kind": "conflict",
     "fluentKey": "E11016",
     "requiredParams": [],
@@ -229,6 +285,8 @@
   },
   {
     "code": 11017,
+    "group": "AuthErrorCode",
+    "name": "InvalidTotpEnrollment",
     "kind": "validation",
     "fluentKey": "E11017",
     "requiredParams": [],
@@ -237,6 +295,8 @@
   },
   {
     "code": 11018,
+    "group": "AuthErrorCode",
+    "name": "DeviceAuthorizationRevocationFailed",
     "kind": "internal",
     "fluentKey": "E11018",
     "requiredParams": [],
@@ -245,6 +305,8 @@
   },
   {
     "code": 11019,
+    "group": "AuthErrorCode",
+    "name": "PasskeyLimitReached",
     "kind": "conflict",
     "fluentKey": "E11019",
     "requiredParams": [
@@ -255,6 +317,8 @@
   },
   {
     "code": 11020,
+    "group": "AuthErrorCode",
+    "name": "InvalidMfaEnrollment",
     "kind": "validation",
     "fluentKey": "E11020",
     "requiredParams": [],
@@ -263,6 +327,8 @@
   },
   {
     "code": 11021,
+    "group": "AuthErrorCode",
+    "name": "MfaNotEnabled",
     "kind": "conflict",
     "fluentKey": "E11021",
     "requiredParams": [],
@@ -271,6 +337,8 @@
   },
   {
     "code": 11022,
+    "group": "AuthErrorCode",
+    "name": "PasswordTooLong",
     "kind": "validation",
     "fluentKey": "E11022",
     "requiredParams": [],
@@ -279,6 +347,8 @@
   },
   {
     "code": 11023,
+    "group": "AuthErrorCode",
+    "name": "PasswordTooWeak",
     "kind": "validation",
     "fluentKey": "E11023",
     "requiredParams": [],
@@ -287,6 +357,8 @@
   },
   {
     "code": 11024,
+    "group": "AuthErrorCode",
+    "name": "PasswordTooSimilar",
     "kind": "validation",
     "fluentKey": "E11024",
     "requiredParams": [],
@@ -295,6 +367,8 @@
   },
   {
     "code": 11025,
+    "group": "AuthErrorCode",
+    "name": "PasswordBreached",
     "kind": "validation",
     "fluentKey": "E11025",
     "requiredParams": [],
@@ -303,6 +377,8 @@
   },
   {
     "code": 11026,
+    "group": "AuthErrorCode",
+    "name": "PasswordCheckUnavailable",
     "kind": "internal",
     "fluentKey": "E11026",
     "requiredParams": [],
@@ -311,6 +387,8 @@
   },
   {
     "code": 11027,
+    "group": "AuthErrorCode",
+    "name": "InvalidAccountOrPassword",
     "kind": "unauthorized",
     "fluentKey": "E11027",
     "requiredParams": [],
@@ -319,6 +397,8 @@
   },
   {
     "code": 11028,
+    "group": "AuthErrorCode",
+    "name": "EmailCodeResendTooSoon",
     "kind": "rate_limit",
     "fluentKey": "E11028",
     "requiredParams": [
@@ -329,6 +409,8 @@
   },
   {
     "code": 11029,
+    "group": "AuthErrorCode",
+    "name": "EmailDeliveryFailed",
     "kind": "internal",
     "fluentKey": "E11029",
     "requiredParams": [],
@@ -337,6 +419,8 @@
   },
   {
     "code": 11030,
+    "group": "AuthErrorCode",
+    "name": "PasswordResetUnavailable",
     "kind": "validation",
     "fluentKey": "E11030",
     "requiredParams": [],
@@ -345,6 +429,8 @@
   },
   {
     "code": 11031,
+    "group": "AuthErrorCode",
+    "name": "PasswordResetLinkInvalid",
     "kind": "validation",
     "fluentKey": "E11031",
     "requiredParams": [],
@@ -353,6 +439,8 @@
   },
   {
     "code": 11032,
+    "group": "AuthErrorCode",
+    "name": "PasswordResetResendTooSoon",
     "kind": "rate_limit",
     "fluentKey": "E11032",
     "requiredParams": [
@@ -363,6 +451,8 @@
   },
   {
     "code": 11033,
+    "group": "AuthErrorCode",
+    "name": "PasswordResetDeliveryFailed",
     "kind": "internal",
     "fluentKey": "E11033",
     "requiredParams": [],
@@ -371,6 +461,8 @@
   },
   {
     "code": 11034,
+    "group": "AuthErrorCode",
+    "name": "PasswordReused",
     "kind": "validation",
     "fluentKey": "E11034",
     "requiredParams": [
@@ -381,6 +473,8 @@
   },
   {
     "code": 11035,
+    "group": "AuthErrorCode",
+    "name": "RegistrationUnavailable",
     "kind": "validation",
     "fluentKey": "E11035",
     "requiredParams": [],
@@ -389,6 +483,8 @@
   },
   {
     "code": 11036,
+    "group": "AuthErrorCode",
+    "name": "RegistrationLinkInvalid",
     "kind": "validation",
     "fluentKey": "E11036",
     "requiredParams": [],
@@ -397,6 +493,8 @@
   },
   {
     "code": 11037,
+    "group": "AuthErrorCode",
+    "name": "RegistrationResendTooSoon",
     "kind": "rate_limit",
     "fluentKey": "E11037",
     "requiredParams": [
@@ -407,6 +505,8 @@
   },
   {
     "code": 11038,
+    "group": "AuthErrorCode",
+    "name": "InvitationLinkInvalid",
     "kind": "validation",
     "fluentKey": "E11038",
     "requiredParams": [],
@@ -415,6 +515,8 @@
   },
   {
     "code": 12000,
+    "group": "KeyErrorCode",
+    "name": "NotFound",
     "kind": "not_found",
     "fluentKey": "E12000",
     "requiredParams": [],
@@ -423,6 +525,8 @@
   },
   {
     "code": 12001,
+    "group": "KeyErrorCode",
+    "name": "Revoked",
     "kind": "unauthorized",
     "fluentKey": "E12001",
     "requiredParams": [],
@@ -431,6 +535,8 @@
   },
   {
     "code": 12002,
+    "group": "KeyErrorCode",
+    "name": "UnsupportedAlgorithm",
     "kind": "validation",
     "fluentKey": "E12002",
     "requiredParams": [
@@ -441,6 +547,8 @@
   },
   {
     "code": 12003,
+    "group": "KeyErrorCode",
+    "name": "InvalidCertificatePem",
     "kind": "validation",
     "fluentKey": "E12003",
     "requiredParams": [],
@@ -449,6 +557,8 @@
   },
   {
     "code": 12004,
+    "group": "KeyErrorCode",
+    "name": "InvalidKeyType",
     "kind": "validation",
     "fluentKey": "E12004",
     "requiredParams": [],
@@ -457,6 +567,8 @@
   },
   {
     "code": 12005,
+    "group": "KeyErrorCode",
+    "name": "CertificateRequiresAsymmetricKey",
     "kind": "validation",
     "fluentKey": "E12005",
     "requiredParams": [],
@@ -465,6 +577,8 @@
   },
   {
     "code": 12006,
+    "group": "KeyErrorCode",
+    "name": "JwkGenerationFailed",
     "kind": "internal",
     "fluentKey": "E12006",
     "requiredParams": [],
@@ -473,6 +587,8 @@
   },
   {
     "code": 12007,
+    "group": "KeyErrorCode",
+    "name": "JwkSerializationFailed",
     "kind": "internal",
     "fluentKey": "E12007",
     "requiredParams": [],
@@ -481,6 +597,8 @@
   },
   {
     "code": 13000,
+    "group": "InstallErrorCode",
+    "name": "AlreadyInitialized",
     "kind": "conflict",
     "fluentKey": "E13000",
     "requiredParams": [],
@@ -489,6 +607,8 @@
   },
   {
     "code": 13001,
+    "group": "InstallErrorCode",
+    "name": "UsernameRequired",
     "kind": "validation",
     "fluentKey": "E13001",
     "requiredParams": [],
@@ -497,6 +617,8 @@
   },
   {
     "code": 13002,
+    "group": "InstallErrorCode",
+    "name": "EmailRequired",
     "kind": "validation",
     "fluentKey": "E13002",
     "requiredParams": [],
@@ -505,6 +627,8 @@
   },
   {
     "code": 13003,
+    "group": "InstallErrorCode",
+    "name": "PasswordRequired",
     "kind": "validation",
     "fluentKey": "E13003",
     "requiredParams": [],
@@ -513,6 +637,8 @@
   },
   {
     "code": 13004,
+    "group": "InstallErrorCode",
+    "name": "DomainRequired",
     "kind": "validation",
     "fluentKey": "E13004",
     "requiredParams": [],
@@ -521,6 +647,8 @@
   },
   {
     "code": 13005,
+    "group": "InstallErrorCode",
+    "name": "DomainInvalid",
     "kind": "validation",
     "fluentKey": "E13005",
     "requiredParams": [],
@@ -529,6 +657,8 @@
   },
   {
     "code": 13006,
+    "group": "InstallErrorCode",
+    "name": "EmailInvalid",
     "kind": "validation",
     "fluentKey": "E13006",
     "requiredParams": [],
@@ -537,6 +667,8 @@
   },
   {
     "code": 13007,
+    "group": "InstallErrorCode",
+    "name": "UsernameExists",
     "kind": "conflict",
     "fluentKey": "E13007",
     "requiredParams": [],
@@ -545,6 +677,8 @@
   },
   {
     "code": 13008,
+    "group": "InstallErrorCode",
+    "name": "EmailExists",
     "kind": "conflict",
     "fluentKey": "E13008",
     "requiredParams": [],
@@ -553,6 +687,8 @@
   },
   {
     "code": 13009,
+    "group": "InstallErrorCode",
+    "name": "UnsupportedAlgorithm",
     "kind": "validation",
     "fluentKey": "E13009",
     "requiredParams": [
@@ -563,6 +699,8 @@
   },
   {
     "code": 13010,
+    "group": "InstallErrorCode",
+    "name": "ApplicationUrlInvalid",
     "kind": "validation",
     "fluentKey": "E13010",
     "requiredParams": [],
@@ -571,6 +709,8 @@
   },
   {
     "code": 13011,
+    "group": "InstallErrorCode",
+    "name": "ConsoleUrlRequired",
     "kind": "validation",
     "fluentKey": "E13011",
     "requiredParams": [],
@@ -579,6 +719,8 @@
   },
   {
     "code": 13012,
+    "group": "InstallErrorCode",
+    "name": "ConsoleUrlInvalid",
     "kind": "validation",
     "fluentKey": "E13012",
     "requiredParams": [],
@@ -587,6 +729,8 @@
   },
   {
     "code": 14000,
+    "group": "DataProtectionErrorCode",
+    "name": "InvalidProtectedPayload",
     "kind": "validation",
     "fluentKey": "E14000",
     "requiredParams": [],
@@ -595,6 +739,8 @@
   },
   {
     "code": 14001,
+    "group": "DataProtectionErrorCode",
+    "name": "KeyRingEmpty",
     "kind": "internal",
     "fluentKey": "E14001",
     "requiredParams": [],
@@ -603,6 +749,8 @@
   },
   {
     "code": 14002,
+    "group": "DataProtectionErrorCode",
+    "name": "EncryptionFailed",
     "kind": "internal",
     "fluentKey": "E14002",
     "requiredParams": [],
@@ -611,6 +759,8 @@
   },
   {
     "code": 15000,
+    "group": "AccountErrorCode",
+    "name": "ValidationFailed",
     "kind": "validation",
     "fluentKey": "E15000",
     "requiredParams": [],
@@ -619,6 +769,8 @@
   },
   {
     "code": 15001,
+    "group": "AccountErrorCode",
+    "name": "UsernameRequired",
     "kind": "validation",
     "fluentKey": "E15001",
     "requiredParams": [],
@@ -627,6 +779,8 @@
   },
   {
     "code": 15002,
+    "group": "AccountErrorCode",
+    "name": "UsernameInvalid",
     "kind": "validation",
     "fluentKey": "E15002",
     "requiredParams": [],
@@ -635,6 +789,8 @@
   },
   {
     "code": 15003,
+    "group": "AccountErrorCode",
+    "name": "EmailRequired",
     "kind": "validation",
     "fluentKey": "E15003",
     "requiredParams": [],
@@ -643,6 +799,8 @@
   },
   {
     "code": 15004,
+    "group": "AccountErrorCode",
+    "name": "EmailInvalid",
     "kind": "validation",
     "fluentKey": "E15004",
     "requiredParams": [],
@@ -651,6 +809,8 @@
   },
   {
     "code": 15005,
+    "group": "AccountErrorCode",
+    "name": "UsernameExists",
     "kind": "conflict",
     "fluentKey": "E15005",
     "requiredParams": [],
@@ -659,6 +819,8 @@
   },
   {
     "code": 15006,
+    "group": "AccountErrorCode",
+    "name": "EmailExists",
     "kind": "conflict",
     "fluentKey": "E15006",
     "requiredParams": [],
@@ -667,6 +829,8 @@
   },
   {
     "code": 15007,
+    "group": "AccountErrorCode",
+    "name": "EmailVerificationUnavailable",
     "kind": "forbidden",
     "fluentKey": "E15007",
     "requiredParams": [],
@@ -675,6 +839,8 @@
   },
   {
     "code": 15008,
+    "group": "AccountErrorCode",
+    "name": "EmailVerificationResendTooSoon",
     "kind": "rate_limit",
     "fluentKey": "E15008",
     "requiredParams": [
@@ -685,6 +851,8 @@
   },
   {
     "code": 15009,
+    "group": "AccountErrorCode",
+    "name": "EmailVerificationLimitReached",
     "kind": "rate_limit",
     "fluentKey": "E15009",
     "requiredParams": [],
@@ -693,6 +861,8 @@
   },
   {
     "code": 15010,
+    "group": "AccountErrorCode",
+    "name": "EmailAlreadyVerified",
     "kind": "conflict",
     "fluentKey": "E15010",
     "requiredParams": [],
@@ -701,6 +871,8 @@
   },
   {
     "code": 15011,
+    "group": "AccountErrorCode",
+    "name": "EmailVerificationInvalid",
     "kind": "gone",
     "fluentKey": "E15011",
     "requiredParams": [],
@@ -709,6 +881,8 @@
   },
   {
     "code": 15012,
+    "group": "AccountErrorCode",
+    "name": "EmailVerificationDeliveryFailed",
     "kind": "internal",
     "fluentKey": "E15012",
     "requiredParams": [],
@@ -717,6 +891,8 @@
   },
   {
     "code": 16000,
+    "group": "UserManagementErrorCode",
+    "name": "ValidationFailed",
     "kind": "validation",
     "fluentKey": "E16000",
     "requiredParams": [],
@@ -727,6 +903,8 @@
   },
   {
     "code": 16007,
+    "group": "UserManagementErrorCode",
+    "name": "UserNotFound",
     "kind": "not_found",
     "fluentKey": "E16007",
     "requiredParams": [],
@@ -735,6 +913,8 @@
   },
   {
     "code": 16008,
+    "group": "UserManagementErrorCode",
+    "name": "VersionConflict",
     "kind": "conflict",
     "fluentKey": "E16008",
     "requiredParams": [
@@ -745,6 +925,8 @@
   },
   {
     "code": 16009,
+    "group": "UserManagementErrorCode",
+    "name": "InvalidVersion",
     "kind": "validation",
     "fluentKey": "E16009",
     "requiredParams": [],
@@ -753,6 +935,8 @@
   },
   {
     "code": 16011,
+    "group": "UserManagementErrorCode",
+    "name": "ReasonTooLong",
     "kind": "validation",
     "fluentKey": "E16011",
     "requiredParams": [
@@ -763,6 +947,8 @@
   },
   {
     "code": 16012,
+    "group": "UserManagementErrorCode",
+    "name": "PageSizeInvalid",
     "kind": "validation",
     "fluentKey": "E16012",
     "requiredParams": [
@@ -773,6 +959,8 @@
   },
   {
     "code": 16013,
+    "group": "UserManagementErrorCode",
+    "name": "PageArgumentsConflict",
     "kind": "validation",
     "fluentKey": "E16013",
     "requiredParams": [],
@@ -781,6 +969,8 @@
   },
   {
     "code": 16014,
+    "group": "UserManagementErrorCode",
+    "name": "InvalidFilter",
     "kind": "validation",
     "fluentKey": "E16014",
     "requiredParams": [
@@ -793,6 +983,8 @@
   },
   {
     "code": 16015,
+    "group": "UserManagementErrorCode",
+    "name": "InvalidDateRange",
     "kind": "validation",
     "fluentKey": "E16015",
     "requiredParams": [
@@ -803,6 +995,8 @@
   },
   {
     "code": 16016,
+    "group": "UserManagementErrorCode",
+    "name": "InvalidCursor",
     "kind": "validation",
     "fluentKey": "E16016",
     "requiredParams": [],
@@ -811,6 +1005,8 @@
   },
   {
     "code": 16017,
+    "group": "UserManagementErrorCode",
+    "name": "InvalidTheme",
     "kind": "validation",
     "fluentKey": "E16017",
     "requiredParams": [],
@@ -819,6 +1015,8 @@
   },
   {
     "code": 16018,
+    "group": "UserManagementErrorCode",
+    "name": "InvalidClientMutationId",
     "kind": "validation",
     "fluentKey": "E16018",
     "requiredParams": [
@@ -829,6 +1027,8 @@
   },
   {
     "code": 16019,
+    "group": "UserManagementErrorCode",
+    "name": "StorageFailed",
     "kind": "internal",
     "fluentKey": "E16019",
     "requiredParams": [],
@@ -837,6 +1037,8 @@
   },
   {
     "code": 16020,
+    "group": "UserManagementErrorCode",
+    "name": "AccessInvalidationFailed",
     "kind": "internal",
     "fluentKey": "E16020",
     "requiredParams": [],
@@ -845,6 +1047,8 @@
   },
   {
     "code": 16021,
+    "group": "UserManagementErrorCode",
+    "name": "UserNotDisabled",
     "kind": "conflict",
     "fluentKey": "E16021",
     "requiredParams": [],
@@ -853,6 +1057,8 @@
   },
   {
     "code": 16022,
+    "group": "UserManagementErrorCode",
+    "name": "UserHasNoPassword",
     "kind": "conflict",
     "fluentKey": "E16022",
     "requiredParams": [],
@@ -861,6 +1067,8 @@
   },
   {
     "code": 16023,
+    "group": "UserManagementErrorCode",
+    "name": "SessionNotFound",
     "kind": "not_found",
     "fluentKey": "E16023",
     "requiredParams": [],
@@ -869,6 +1077,8 @@
   },
   {
     "code": 16024,
+    "group": "UserManagementErrorCode",
+    "name": "SelfCredentialActionNotAllowed",
     "kind": "conflict",
     "fluentKey": "E16024",
     "requiredParams": [],
@@ -877,6 +1087,8 @@
   },
   {
     "code": 16025,
+    "group": "UserManagementErrorCode",
+    "name": "InvitationUnavailable",
     "kind": "forbidden",
     "fluentKey": "E16025",
     "requiredParams": [],
@@ -885,6 +1097,8 @@
   },
   {
     "code": 16026,
+    "group": "UserManagementErrorCode",
+    "name": "InvitationNotPending",
     "kind": "conflict",
     "fluentKey": "E16026",
     "requiredParams": [],
@@ -893,6 +1107,8 @@
   },
   {
     "code": 16027,
+    "group": "UserManagementErrorCode",
+    "name": "InvitationResendTooSoon",
     "kind": "rate_limit",
     "fluentKey": "E16027",
     "requiredParams": [
@@ -903,6 +1119,8 @@
   },
   {
     "code": 16028,
+    "group": "UserManagementErrorCode",
+    "name": "InvitationDeliveryFailed",
     "kind": "internal",
     "fluentKey": "E16028",
     "requiredParams": [],
@@ -911,6 +1129,8 @@
   },
   {
     "code": 16029,
+    "group": "UserManagementErrorCode",
+    "name": "CredentialChoiceRequired",
     "kind": "validation",
     "fluentKey": "E16029",
     "requiredParams": [],
@@ -919,6 +1139,8 @@
   },
   {
     "code": 16030,
+    "group": "UserManagementErrorCode",
+    "name": "InvitationUserDisabled",
     "kind": "conflict",
     "fluentKey": "E16030",
     "requiredParams": [],
@@ -927,6 +1149,8 @@
   },
   {
     "code": 17000,
+    "group": "RbacErrorCode",
+    "name": "ValidationFailed",
     "kind": "validation",
     "fluentKey": "E17000",
     "requiredParams": [],
@@ -937,6 +1161,8 @@
   },
   {
     "code": 17001,
+    "group": "RbacErrorCode",
+    "name": "ResourceNotFound",
     "kind": "not_found",
     "fluentKey": "E17001",
     "requiredParams": [],
@@ -945,6 +1171,8 @@
   },
   {
     "code": 17002,
+    "group": "RbacErrorCode",
+    "name": "ScopeNotFound",
     "kind": "not_found",
     "fluentKey": "E17002",
     "requiredParams": [],
@@ -953,6 +1181,8 @@
   },
   {
     "code": 17003,
+    "group": "RbacErrorCode",
+    "name": "PermissionNotFound",
     "kind": "not_found",
     "fluentKey": "E17003",
     "requiredParams": [],
@@ -961,6 +1191,8 @@
   },
   {
     "code": 17004,
+    "group": "RbacErrorCode",
+    "name": "RoleNotFound",
     "kind": "not_found",
     "fluentKey": "E17004",
     "requiredParams": [],
@@ -969,6 +1201,8 @@
   },
   {
     "code": 17005,
+    "group": "RbacErrorCode",
+    "name": "BindingNotFound",
     "kind": "not_found",
     "fluentKey": "E17005",
     "requiredParams": [],
@@ -977,6 +1211,8 @@
   },
   {
     "code": 17006,
+    "group": "RbacErrorCode",
+    "name": "UserNotFound",
     "kind": "not_found",
     "fluentKey": "E17006",
     "requiredParams": [],
@@ -985,6 +1221,8 @@
   },
   {
     "code": 17007,
+    "group": "RbacErrorCode",
+    "name": "ClientNotFound",
     "kind": "not_found",
     "fluentKey": "E17007",
     "requiredParams": [],
@@ -993,6 +1231,8 @@
   },
   {
     "code": 17008,
+    "group": "RbacErrorCode",
+    "name": "VersionConflict",
     "kind": "conflict",
     "fluentKey": "E17008",
     "requiredParams": [
@@ -1003,6 +1243,8 @@
   },
   {
     "code": 17009,
+    "group": "RbacErrorCode",
+    "name": "UserVersionStale",
     "kind": "conflict",
     "fluentKey": "E17009",
     "requiredParams": [
@@ -1013,6 +1255,8 @@
   },
   {
     "code": 17010,
+    "group": "RbacErrorCode",
+    "name": "PolicyVersionStale",
     "kind": "conflict",
     "fluentKey": "E17010",
     "requiredParams": [
@@ -1023,6 +1267,8 @@
   },
   {
     "code": 17011,
+    "group": "RbacErrorCode",
+    "name": "DuplicateResourceUri",
     "kind": "conflict",
     "fluentKey": "E17011",
     "requiredParams": [],
@@ -1033,6 +1279,8 @@
   },
   {
     "code": 17012,
+    "group": "RbacErrorCode",
+    "name": "DuplicateScopeCode",
     "kind": "conflict",
     "fluentKey": "E17012",
     "requiredParams": [],
@@ -1043,6 +1291,8 @@
   },
   {
     "code": 17013,
+    "group": "RbacErrorCode",
+    "name": "DuplicatePermissionCode",
     "kind": "conflict",
     "fluentKey": "E17013",
     "requiredParams": [],
@@ -1053,6 +1303,8 @@
   },
   {
     "code": 17014,
+    "group": "RbacErrorCode",
+    "name": "DuplicatePermissionScope",
     "kind": "conflict",
     "fluentKey": "E17014",
     "requiredParams": [],
@@ -1063,6 +1315,8 @@
   },
   {
     "code": 17016,
+    "group": "RbacErrorCode",
+    "name": "ReservedResourceProtected",
     "kind": "forbidden",
     "fluentKey": "E17016",
     "requiredParams": [],
@@ -1073,6 +1327,8 @@
   },
   {
     "code": 17017,
+    "group": "RbacErrorCode",
+    "name": "BuiltInScopeProtected",
     "kind": "forbidden",
     "fluentKey": "E17017",
     "requiredParams": [],
@@ -1083,6 +1339,8 @@
   },
   {
     "code": 17018,
+    "group": "RbacErrorCode",
+    "name": "ScopeNotAcceptedByResource",
     "kind": "validation",
     "fluentKey": "E17018",
     "requiredParams": [
@@ -1095,6 +1353,8 @@
   },
   {
     "code": 17019,
+    "group": "RbacErrorCode",
+    "name": "ScopeReferencedByPermission",
     "kind": "conflict",
     "fluentKey": "E17019",
     "requiredParams": [
@@ -1105,6 +1365,8 @@
   },
   {
     "code": 17020,
+    "group": "RbacErrorCode",
+    "name": "PolicyDowngradeBlocked",
     "kind": "conflict",
     "fluentKey": "E17020",
     "requiredParams": [],
@@ -1115,6 +1377,8 @@
   },
   {
     "code": 17021,
+    "group": "RbacErrorCode",
+    "name": "IncompleteScopeMapping",
     "kind": "conflict",
     "fluentKey": "E17021",
     "requiredParams": [
@@ -1125,6 +1389,8 @@
   },
   {
     "code": 17022,
+    "group": "RbacErrorCode",
+    "name": "ClientProtected",
     "kind": "forbidden",
     "fluentKey": "E17022",
     "requiredParams": [],
@@ -1135,6 +1401,8 @@
   },
   {
     "code": 17023,
+    "group": "RbacErrorCode",
+    "name": "ClientScopeNotBusiness",
     "kind": "validation",
     "fluentKey": "E17023",
     "requiredParams": [
@@ -1145,6 +1413,8 @@
   },
   {
     "code": 17024,
+    "group": "RbacErrorCode",
+    "name": "RolePermissionLimitExceeded",
     "kind": "validation",
     "fluentKey": "E17024",
     "requiredParams": [
@@ -1155,6 +1425,8 @@
   },
   {
     "code": 17025,
+    "group": "RbacErrorCode",
+    "name": "UserRoleLimitExceeded",
     "kind": "validation",
     "fluentKey": "E17025",
     "requiredParams": [
@@ -1165,6 +1437,8 @@
   },
   {
     "code": 17026,
+    "group": "RbacErrorCode",
+    "name": "RoleNotAssigned",
     "kind": "conflict",
     "fluentKey": "E17026",
     "requiredParams": [],
@@ -1175,6 +1449,8 @@
   },
   {
     "code": 17027,
+    "group": "RbacErrorCode",
+    "name": "RoleDisabled",
     "kind": "conflict",
     "fluentKey": "E17027",
     "requiredParams": [],
@@ -1185,6 +1461,8 @@
   },
   {
     "code": 17028,
+    "group": "RbacErrorCode",
+    "name": "StorageFailed",
     "kind": "internal",
     "fluentKey": "E17028",
     "requiredParams": [],
@@ -1193,6 +1471,8 @@
   },
   {
     "code": 17029,
+    "group": "RbacErrorCode",
+    "name": "InvalidResourceUri",
     "kind": "validation",
     "fluentKey": "E17029",
     "requiredParams": [],
@@ -1203,6 +1483,8 @@
   },
   {
     "code": 17030,
+    "group": "RbacErrorCode",
+    "name": "InvalidScopeName",
     "kind": "validation",
     "fluentKey": "E17030",
     "requiredParams": [],
@@ -1213,6 +1495,8 @@
   },
   {
     "code": 17031,
+    "group": "RbacErrorCode",
+    "name": "InvalidScopeDescription",
     "kind": "validation",
     "fluentKey": "E17031",
     "requiredParams": [],
@@ -1223,6 +1507,8 @@
   },
   {
     "code": 17032,
+    "group": "RbacErrorCode",
+    "name": "InvalidPermissionDescription",
     "kind": "validation",
     "fluentKey": "E17032",
     "requiredParams": [],
@@ -1233,6 +1519,8 @@
   },
   {
     "code": 17033,
+    "group": "RbacErrorCode",
+    "name": "InvalidRoleName",
     "kind": "validation",
     "fluentKey": "E17033",
     "requiredParams": [],
@@ -1243,6 +1531,8 @@
   },
   {
     "code": 17035,
+    "group": "RbacErrorCode",
+    "name": "InvalidReason",
     "kind": "validation",
     "fluentKey": "E17035",
     "requiredParams": [],
@@ -1254,6 +1544,8 @@
   },
   {
     "code": 17036,
+    "group": "RbacErrorCode",
+    "name": "InvalidVersion",
     "kind": "validation",
     "fluentKey": "E17036",
     "requiredParams": [],
@@ -1262,6 +1554,8 @@
   },
   {
     "code": 17037,
+    "group": "RbacErrorCode",
+    "name": "InvalidCursor",
     "kind": "validation",
     "fluentKey": "E17037",
     "requiredParams": [],
@@ -1270,6 +1564,8 @@
   },
   {
     "code": 17038,
+    "group": "RbacErrorCode",
+    "name": "PageSizeInvalid",
     "kind": "validation",
     "fluentKey": "E17038",
     "requiredParams": [
@@ -1280,6 +1576,8 @@
   },
   {
     "code": 17039,
+    "group": "RbacErrorCode",
+    "name": "PageArgumentsConflict",
     "kind": "validation",
     "fluentKey": "E17039",
     "requiredParams": [],
@@ -1288,6 +1586,8 @@
   },
   {
     "code": 17040,
+    "group": "RbacErrorCode",
+    "name": "InvalidFilter",
     "kind": "validation",
     "fluentKey": "E17040",
     "requiredParams": [
@@ -1300,6 +1600,8 @@
   },
   {
     "code": 17041,
+    "group": "RbacErrorCode",
+    "name": "InvalidClientMutationId",
     "kind": "validation",
     "fluentKey": "E17041",
     "requiredParams": [
@@ -1310,6 +1612,8 @@
   },
   {
     "code": 17042,
+    "group": "RbacErrorCode",
+    "name": "InvalidCollectionSize",
     "kind": "validation",
     "fluentKey": "E17042",
     "requiredParams": [
@@ -1320,6 +1624,8 @@
   },
   {
     "code": 17043,
+    "group": "RbacErrorCode",
+    "name": "EmptyUpdate",
     "kind": "validation",
     "fluentKey": "E17043",
     "requiredParams": [],
@@ -1328,6 +1634,8 @@
   },
   {
     "code": 17045,
+    "group": "RbacErrorCode",
+    "name": "InvalidPermissionCode",
     "kind": "validation",
     "fluentKey": "E17045",
     "requiredParams": [],
@@ -1338,6 +1646,8 @@
   },
   {
     "code": 17046,
+    "group": "RbacErrorCode",
+    "name": "InvalidDescriptionLocale",
     "kind": "validation",
     "fluentKey": "E17046",
     "requiredParams": [],
@@ -1348,6 +1658,8 @@
   },
   {
     "code": 17047,
+    "group": "RbacErrorCode",
+    "name": "InvalidResourceName",
     "kind": "validation",
     "fluentKey": "E17047",
     "requiredParams": [],
@@ -1358,6 +1670,8 @@
   },
   {
     "code": 17048,
+    "group": "RbacErrorCode",
+    "name": "InvalidLocalizedMetadata",
     "kind": "validation",
     "fluentKey": "E17048",
     "requiredParams": [],
@@ -1370,6 +1684,8 @@
   },
   {
     "code": 17049,
+    "group": "RbacErrorCode",
+    "name": "BuiltInDefinitionProtected",
     "kind": "forbidden",
     "fluentKey": "E17049",
     "requiredParams": [],
@@ -1381,6 +1697,8 @@
   },
   {
     "code": 17050,
+    "group": "RbacErrorCode",
+    "name": "DelegationCeilingExceeded",
     "kind": "forbidden",
     "fluentKey": "E17050",
     "requiredParams": [],
@@ -1391,6 +1709,8 @@
   },
   {
     "code": 17051,
+    "group": "RbacErrorCode",
+    "name": "BuiltInIdentityConflict",
     "kind": "internal",
     "fluentKey": "E17051",
     "requiredParams": [],
@@ -1401,6 +1721,8 @@
   },
   {
     "code": 17052,
+    "group": "RbacErrorCode",
+    "name": "InvalidBuiltInPermissionReference",
     "kind": "validation",
     "fluentKey": "E17052",
     "requiredParams": [],
@@ -1411,6 +1733,8 @@
   },
   {
     "code": 17053,
+    "group": "RbacErrorCode",
+    "name": "ClientGrantNotAllowed",
     "kind": "validation",
     "fluentKey": "E17053",
     "requiredParams": [
@@ -1421,6 +1745,8 @@
   },
   {
     "code": 18000,
+    "group": "ClientErrorCode",
+    "name": "ValidationFailed",
     "kind": "validation",
     "fluentKey": "E18000",
     "requiredParams": [],
@@ -1431,6 +1757,8 @@
   },
   {
     "code": 18001,
+    "group": "ClientErrorCode",
+    "name": "ClientNotFound",
     "kind": "not_found",
     "fluentKey": "E18001",
     "requiredParams": [],
@@ -1439,6 +1767,8 @@
   },
   {
     "code": 18002,
+    "group": "ClientErrorCode",
+    "name": "CredentialNotFound",
     "kind": "not_found",
     "fluentKey": "E18002",
     "requiredParams": [],
@@ -1447,6 +1777,8 @@
   },
   {
     "code": 18003,
+    "group": "ClientErrorCode",
+    "name": "VersionConflict",
     "kind": "conflict",
     "fluentKey": "E18003",
     "requiredParams": [
@@ -1457,6 +1789,8 @@
   },
   {
     "code": 18004,
+    "group": "ClientErrorCode",
+    "name": "BuiltInProtected",
     "kind": "forbidden",
     "fluentKey": "E18004",
     "requiredParams": [],
@@ -1465,6 +1799,8 @@
   },
   {
     "code": 18005,
+    "group": "ClientErrorCode",
+    "name": "InvalidName",
     "kind": "validation",
     "fluentKey": "E18005",
     "requiredParams": [],
@@ -1475,6 +1811,8 @@
   },
   {
     "code": 18006,
+    "group": "ClientErrorCode",
+    "name": "InvalidDescription",
     "kind": "validation",
     "fluentKey": "E18006",
     "requiredParams": [
@@ -1485,6 +1823,8 @@
   },
   {
     "code": 18007,
+    "group": "ClientErrorCode",
+    "name": "InvalidLocale",
     "kind": "validation",
     "fluentKey": "E18007",
     "requiredParams": [
@@ -1495,6 +1835,8 @@
   },
   {
     "code": 18008,
+    "group": "ClientErrorCode",
+    "name": "DuplicateLocale",
     "kind": "validation",
     "fluentKey": "E18008",
     "requiredParams": [
@@ -1505,6 +1847,8 @@
   },
   {
     "code": 18009,
+    "group": "ClientErrorCode",
+    "name": "InvalidRedirectUri",
     "kind": "validation",
     "fluentKey": "E18009",
     "requiredParams": [
@@ -1515,6 +1859,8 @@
   },
   {
     "code": 18010,
+    "group": "ClientErrorCode",
+    "name": "InvalidPostLogoutRedirectUri",
     "kind": "validation",
     "fluentKey": "E18010",
     "requiredParams": [
@@ -1525,6 +1871,8 @@
   },
   {
     "code": 18011,
+    "group": "ClientErrorCode",
+    "name": "DuplicatePlatform",
     "kind": "validation",
     "fluentKey": "E18011",
     "requiredParams": [
@@ -1535,6 +1883,8 @@
   },
   {
     "code": 18012,
+    "group": "ClientErrorCode",
+    "name": "InvalidGrantTypes",
     "kind": "validation",
     "fluentKey": "E18012",
     "requiredParams": [],
@@ -1543,6 +1893,8 @@
   },
   {
     "code": 18013,
+    "group": "ClientErrorCode",
+    "name": "UnsupportedGrantType",
     "kind": "validation",
     "fluentKey": "E18013",
     "requiredParams": [
@@ -1553,6 +1905,8 @@
   },
   {
     "code": 18015,
+    "group": "ClientErrorCode",
+    "name": "RedirectUriRequired",
     "kind": "validation",
     "fluentKey": "E18015",
     "requiredParams": [],
@@ -1561,6 +1915,8 @@
   },
   {
     "code": 18017,
+    "group": "ClientErrorCode",
+    "name": "RefreshTokenRequiresInteractiveGrant",
     "kind": "validation",
     "fluentKey": "E18017",
     "requiredParams": [],
@@ -1569,6 +1925,8 @@
   },
   {
     "code": 18018,
+    "group": "ClientErrorCode",
+    "name": "CredentialNotSecret",
     "kind": "validation",
     "fluentKey": "E18018",
     "requiredParams": [],
@@ -1577,6 +1935,8 @@
   },
   {
     "code": 18019,
+    "group": "ClientErrorCode",
+    "name": "CredentialRevoked",
     "kind": "conflict",
     "fluentKey": "E18019",
     "requiredParams": [],
@@ -1585,6 +1945,8 @@
   },
   {
     "code": 18021,
+    "group": "ClientErrorCode",
+    "name": "InvalidSecretLifetime",
     "kind": "validation",
     "fluentKey": "E18021",
     "requiredParams": [
@@ -1596,6 +1958,8 @@
   },
   {
     "code": 18022,
+    "group": "ClientErrorCode",
+    "name": "InvalidFilter",
     "kind": "validation",
     "fluentKey": "E18022",
     "requiredParams": [
@@ -1606,6 +1970,8 @@
   },
   {
     "code": 18023,
+    "group": "ClientErrorCode",
+    "name": "InvalidReason",
     "kind": "validation",
     "fluentKey": "E18023",
     "requiredParams": [
@@ -1616,6 +1982,8 @@
   },
   {
     "code": 18024,
+    "group": "ClientErrorCode",
+    "name": "InvalidClientMutationId",
     "kind": "validation",
     "fluentKey": "E18024",
     "requiredParams": [
@@ -1626,6 +1994,8 @@
   },
   {
     "code": 18025,
+    "group": "ClientErrorCode",
+    "name": "EmptyUpdate",
     "kind": "validation",
     "fluentKey": "E18025",
     "requiredParams": [],
@@ -1634,6 +2004,8 @@
   },
   {
     "code": 18026,
+    "group": "ClientErrorCode",
+    "name": "InvalidCollectionSize",
     "kind": "validation",
     "fluentKey": "E18026",
     "requiredParams": [
@@ -1644,6 +2016,8 @@
   },
   {
     "code": 18027,
+    "group": "ClientErrorCode",
+    "name": "StorageFailed",
     "kind": "internal",
     "fluentKey": "E18027",
     "requiredParams": [],
@@ -1652,6 +2026,8 @@
   },
   {
     "code": 18028,
+    "group": "ClientErrorCode",
+    "name": "InvalidPublicKey",
     "kind": "validation",
     "fluentKey": "E18028",
     "requiredParams": [],
@@ -1660,6 +2036,8 @@
   },
   {
     "code": 18029,
+    "group": "ClientErrorCode",
+    "name": "PrivateKeyNotAccepted",
     "kind": "validation",
     "fluentKey": "E18029",
     "requiredParams": [],
@@ -1668,6 +2046,8 @@
   },
   {
     "code": 18030,
+    "group": "ClientErrorCode",
+    "name": "CertificateExpired",
     "kind": "validation",
     "fluentKey": "E18030",
     "requiredParams": [],
@@ -1676,6 +2056,8 @@
   },
   {
     "code": 18031,
+    "group": "ClientErrorCode",
+    "name": "PublicKeyExpiryRequired",
     "kind": "validation",
     "fluentKey": "E18031",
     "requiredParams": [],
@@ -1684,6 +2066,8 @@
   },
   {
     "code": 18032,
+    "group": "ClientErrorCode",
+    "name": "InvalidCredentialExpiry",
     "kind": "validation",
     "fluentKey": "E18032",
     "requiredParams": [
@@ -1695,6 +2079,8 @@
   },
   {
     "code": 18033,
+    "group": "ClientErrorCode",
+    "name": "InvalidJwksUri",
     "kind": "validation",
     "fluentKey": "E18033",
     "requiredParams": [],
@@ -1703,6 +2089,8 @@
   },
   {
     "code": 18034,
+    "group": "ClientErrorCode",
+    "name": "JwksUnavailable",
     "kind": "validation",
     "fluentKey": "E18034",
     "requiredParams": [],
@@ -1711,6 +2099,8 @@
   },
   {
     "code": 18035,
+    "group": "ClientErrorCode",
+    "name": "CredentialLimitReached",
     "kind": "validation",
     "fluentKey": "E18035",
     "requiredParams": [
@@ -1721,6 +2111,8 @@
   },
   {
     "code": 18036,
+    "group": "ClientErrorCode",
+    "name": "InvalidMetadataUri",
     "kind": "validation",
     "fluentKey": "E18036",
     "requiredParams": [
@@ -1731,6 +2123,8 @@
   },
   {
     "code": 18037,
+    "group": "ClientErrorCode",
+    "name": "InvalidContact",
     "kind": "validation",
     "fluentKey": "E18037",
     "requiredParams": [
@@ -1741,6 +2135,8 @@
   },
   {
     "code": 18038,
+    "group": "ClientErrorCode",
+    "name": "UnsupportedAlgorithm",
     "kind": "validation",
     "fluentKey": "E18038",
     "requiredParams": [
@@ -1751,6 +2147,8 @@
   },
   {
     "code": 18039,
+    "group": "ClientErrorCode",
+    "name": "EncryptionAlgorithmRequired",
     "kind": "validation",
     "fluentKey": "E18039",
     "requiredParams": [],
@@ -1759,6 +2157,8 @@
   },
   {
     "code": 18040,
+    "group": "ClientErrorCode",
+    "name": "LogoutUriRequired",
     "kind": "validation",
     "fluentKey": "E18040",
     "requiredParams": [],
@@ -1767,6 +2167,8 @@
   },
   {
     "code": 18041,
+    "group": "ClientErrorCode",
+    "name": "InvalidDefaultMaxAge",
     "kind": "validation",
     "fluentKey": "E18041",
     "requiredParams": [
@@ -1777,6 +2179,8 @@
   },
   {
     "code": 18042,
+    "group": "ClientErrorCode",
+    "name": "UnsupportedAcrValue",
     "kind": "validation",
     "fluentKey": "E18042",
     "requiredParams": [
@@ -1787,6 +2191,8 @@
   },
   {
     "code": 18043,
+    "group": "ClientErrorCode",
+    "name": "SectorIdentifierRequired",
     "kind": "validation",
     "fluentKey": "E18043",
     "requiredParams": [],
@@ -1795,6 +2201,8 @@
   },
   {
     "code": 18044,
+    "group": "ClientErrorCode",
+    "name": "SectorIdentifierMismatch",
     "kind": "validation",
     "fluentKey": "E18044",
     "requiredParams": [],
@@ -1803,6 +2211,8 @@
   },
   {
     "code": 18045,
+    "group": "ClientErrorCode",
+    "name": "SectorIdentifierUnavailable",
     "kind": "validation",
     "fluentKey": "E18045",
     "requiredParams": [],
@@ -1811,6 +2221,8 @@
   },
   {
     "code": 19000,
+    "group": "GroupErrorCode",
+    "name": "ValidationFailed",
     "kind": "validation",
     "fluentKey": "E19000",
     "requiredParams": [],
@@ -1821,6 +2233,8 @@
   },
   {
     "code": 19001,
+    "group": "GroupErrorCode",
+    "name": "GroupNotFound",
     "kind": "not_found",
     "fluentKey": "E19001",
     "requiredParams": [],
@@ -1829,6 +2243,8 @@
   },
   {
     "code": 19002,
+    "group": "GroupErrorCode",
+    "name": "MembershipNotFound",
     "kind": "not_found",
     "fluentKey": "E19002",
     "requiredParams": [],
@@ -1837,6 +2253,8 @@
   },
   {
     "code": 19003,
+    "group": "GroupErrorCode",
+    "name": "RoleBindingNotFound",
     "kind": "not_found",
     "fluentKey": "E19003",
     "requiredParams": [],
@@ -1845,6 +2263,8 @@
   },
   {
     "code": 19004,
+    "group": "GroupErrorCode",
+    "name": "VersionConflict",
     "kind": "conflict",
     "fluentKey": "E19004",
     "requiredParams": [
@@ -1855,6 +2275,8 @@
   },
   {
     "code": 19006,
+    "group": "GroupErrorCode",
+    "name": "InvalidName",
     "kind": "validation",
     "fluentKey": "E19006",
     "requiredParams": [],
@@ -1865,6 +2287,8 @@
   },
   {
     "code": 19007,
+    "group": "GroupErrorCode",
+    "name": "InvalidDescription",
     "kind": "validation",
     "fluentKey": "E19007",
     "requiredParams": [],
@@ -1875,6 +2299,8 @@
   },
   {
     "code": 19008,
+    "group": "GroupErrorCode",
+    "name": "InvalidLocale",
     "kind": "validation",
     "fluentKey": "E19008",
     "requiredParams": [],
@@ -1885,6 +2311,8 @@
   },
   {
     "code": 19010,
+    "group": "GroupErrorCode",
+    "name": "BuiltInProtected",
     "kind": "forbidden",
     "fluentKey": "E19010",
     "requiredParams": [],
@@ -1895,6 +2323,8 @@
   },
   {
     "code": 19011,
+    "group": "GroupErrorCode",
+    "name": "Disabled",
     "kind": "conflict",
     "fluentKey": "E19011",
     "requiredParams": [],
@@ -1903,6 +2333,8 @@
   },
   {
     "code": 19012,
+    "group": "GroupErrorCode",
+    "name": "InvalidReason",
     "kind": "validation",
     "fluentKey": "E19012",
     "requiredParams": [
@@ -1913,6 +2345,8 @@
   },
   {
     "code": 19013,
+    "group": "GroupErrorCode",
+    "name": "InvalidVersion",
     "kind": "validation",
     "fluentKey": "E19013",
     "requiredParams": [],
@@ -1921,6 +2355,8 @@
   },
   {
     "code": 19014,
+    "group": "GroupErrorCode",
+    "name": "InvalidClientMutationId",
     "kind": "validation",
     "fluentKey": "E19014",
     "requiredParams": [
@@ -1931,6 +2367,8 @@
   },
   {
     "code": 19015,
+    "group": "GroupErrorCode",
+    "name": "EmptyUpdate",
     "kind": "validation",
     "fluentKey": "E19015",
     "requiredParams": [],
@@ -1939,6 +2377,8 @@
   },
   {
     "code": 19016,
+    "group": "GroupErrorCode",
+    "name": "InvalidCollectionSize",
     "kind": "validation",
     "fluentKey": "E19016",
     "requiredParams": [
@@ -1949,6 +2389,8 @@
   },
   {
     "code": 19017,
+    "group": "GroupErrorCode",
+    "name": "RoleNotFound",
     "kind": "not_found",
     "fluentKey": "E19017",
     "requiredParams": [],
@@ -1957,6 +2399,8 @@
   },
   {
     "code": 19018,
+    "group": "GroupErrorCode",
+    "name": "RoleDisabled",
     "kind": "conflict",
     "fluentKey": "E19018",
     "requiredParams": [],
@@ -1965,6 +2409,8 @@
   },
   {
     "code": 19019,
+    "group": "GroupErrorCode",
+    "name": "DelegationCeilingExceeded",
     "kind": "forbidden",
     "fluentKey": "E19019",
     "requiredParams": [
@@ -1975,6 +2421,8 @@
   },
   {
     "code": 19020,
+    "group": "GroupErrorCode",
+    "name": "MembershipAlreadyActive",
     "kind": "conflict",
     "fluentKey": "E19020",
     "requiredParams": [],
@@ -1983,6 +2431,8 @@
   },
   {
     "code": 19021,
+    "group": "GroupErrorCode",
+    "name": "MembershipNotActive",
     "kind": "conflict",
     "fluentKey": "E19021",
     "requiredParams": [],
@@ -1991,6 +2441,8 @@
   },
   {
     "code": 19022,
+    "group": "GroupErrorCode",
+    "name": "StorageFailed",
     "kind": "internal",
     "fluentKey": "E19022",
     "requiredParams": [],
@@ -1999,6 +2451,8 @@
   },
   {
     "code": 19025,
+    "group": "GroupErrorCode",
+    "name": "InvalidFilter",
     "kind": "validation",
     "fluentKey": "E19025",
     "requiredParams": [
@@ -2011,6 +2465,8 @@
   },
   {
     "code": 19026,
+    "group": "GroupErrorCode",
+    "name": "UserNotFound",
     "kind": "not_found",
     "fluentKey": "E19026",
     "requiredParams": [],
@@ -2019,6 +2475,8 @@
   },
   {
     "code": 19027,
+    "group": "GroupErrorCode",
+    "name": "InvalidMetadata",
     "kind": "validation",
     "fluentKey": "E19027",
     "requiredParams": [
@@ -2029,6 +2487,8 @@
   },
   {
     "code": 19028,
+    "group": "GroupErrorCode",
+    "name": "DuplicateLocale",
     "kind": "validation",
     "fluentKey": "E19028",
     "requiredParams": [],
@@ -2039,6 +2499,8 @@
   },
   {
     "code": 19029,
+    "group": "GroupErrorCode",
+    "name": "NameRequired",
     "kind": "validation",
     "fluentKey": "E19029",
     "requiredParams": [],
@@ -2047,6 +2509,8 @@
   },
   {
     "code": 20000,
+    "group": "ProviderErrorCode",
+    "name": "NotInitialized",
     "kind": "validation",
     "fluentKey": "E20000",
     "requiredParams": [],
@@ -2055,6 +2519,8 @@
   },
   {
     "code": 20001,
+    "group": "ProviderErrorCode",
+    "name": "DomainMissing",
     "kind": "validation",
     "fluentKey": "E20001",
     "requiredParams": [],
@@ -2063,6 +2529,8 @@
   },
   {
     "code": 20002,
+    "group": "ProviderErrorCode",
+    "name": "IssuerMustUseHttps",
     "kind": "validation",
     "fluentKey": "E20002",
     "requiredParams": [],
@@ -2071,6 +2539,8 @@
   },
   {
     "code": 20003,
+    "group": "ProviderErrorCode",
+    "name": "IssuerMustNotHaveQueryOrFragment",
     "kind": "validation",
     "fluentKey": "E20003",
     "requiredParams": [],
@@ -2079,6 +2549,8 @@
   },
   {
     "code": 20004,
+    "group": "ProviderErrorCode",
+    "name": "IssuerUrlParseFailed",
     "kind": "internal",
     "fluentKey": "E20004",
     "requiredParams": [],
@@ -2087,6 +2559,8 @@
   },
   {
     "code": 20005,
+    "group": "ProviderErrorCode",
+    "name": "KeyLookupFailed",
     "kind": "internal",
     "fluentKey": "E20005",
     "requiredParams": [],
@@ -2095,6 +2569,8 @@
   },
   {
     "code": 21000,
+    "group": "OpenIdConnectErrorCode",
+    "name": "InvalidToken",
     "kind": "unauthorized",
     "fluentKey": "E21000",
     "requiredParams": [],
@@ -2103,6 +2579,8 @@
   },
   {
     "code": 21001,
+    "group": "OpenIdConnectErrorCode",
+    "name": "InsufficientScope",
     "kind": "forbidden",
     "fluentKey": "E21001",
     "requiredParams": [],
@@ -2111,6 +2589,8 @@
   },
   {
     "code": 21002,
+    "group": "OpenIdConnectErrorCode",
+    "name": "UserNotFound",
     "kind": "not_found",
     "fluentKey": "E21002",
     "requiredParams": [],
@@ -2119,6 +2599,8 @@
   },
   {
     "code": 21003,
+    "group": "OpenIdConnectErrorCode",
+    "name": "PostLogoutRedirectUriNotRegistered",
     "kind": "validation",
     "fluentKey": "E21003",
     "requiredParams": [],
@@ -2127,6 +2609,8 @@
   },
   {
     "code": 21004,
+    "group": "OpenIdConnectErrorCode",
+    "name": "IdTokenHintIssuerInvalid",
     "kind": "validation",
     "fluentKey": "E21004",
     "requiredParams": [],
@@ -2135,6 +2619,8 @@
   },
   {
     "code": 21005,
+    "group": "OpenIdConnectErrorCode",
+    "name": "PostLogoutRedirectUriInvalid",
     "kind": "validation",
     "fluentKey": "E21005",
     "requiredParams": [],
@@ -2143,6 +2629,8 @@
   },
   {
     "code": 21006,
+    "group": "OpenIdConnectErrorCode",
+    "name": "LogoutClientRequired",
     "kind": "validation",
     "fluentKey": "E21006",
     "requiredParams": [],
@@ -2151,6 +2639,8 @@
   },
   {
     "code": 21007,
+    "group": "OpenIdConnectErrorCode",
+    "name": "LogoutClientInvalid",
     "kind": "validation",
     "fluentKey": "E21007",
     "requiredParams": [],
@@ -2159,6 +2649,8 @@
   },
   {
     "code": 21008,
+    "group": "OpenIdConnectErrorCode",
+    "name": "LogoutClientLookupFailed",
     "kind": "internal",
     "fluentKey": "E21008",
     "requiredParams": [],
@@ -2167,6 +2659,8 @@
   },
   {
     "code": 21009,
+    "group": "OpenIdConnectErrorCode",
+    "name": "LogoutClientNotFound",
     "kind": "validation",
     "fluentKey": "E21009",
     "requiredParams": [],
@@ -2175,6 +2669,8 @@
   },
   {
     "code": 21010,
+    "group": "OpenIdConnectErrorCode",
+    "name": "IdTokenHintInvalid",
     "kind": "validation",
     "fluentKey": "E21010",
     "requiredParams": [],
@@ -2183,6 +2679,8 @@
   },
   {
     "code": 21011,
+    "group": "OpenIdConnectErrorCode",
+    "name": "IdTokenHintRequired",
     "kind": "validation",
     "fluentKey": "E21011",
     "requiredParams": [],
@@ -2191,6 +2689,8 @@
   },
   {
     "code": 21012,
+    "group": "OpenIdConnectErrorCode",
+    "name": "BearerSchemeInvalid",
     "kind": "validation",
     "fluentKey": "E21012",
     "requiredParams": [],
@@ -2199,6 +2699,8 @@
   },
   {
     "code": 21013,
+    "group": "OpenIdConnectErrorCode",
+    "name": "AuthorizationHeaderRequired",
     "kind": "validation",
     "fluentKey": "E21013",
     "requiredParams": [],
@@ -2207,6 +2709,8 @@
   },
   {
     "code": 21014,
+    "group": "OpenIdConnectErrorCode",
+    "name": "AccessTokenRequired",
     "kind": "validation",
     "fluentKey": "E21014",
     "requiredParams": [],
@@ -2215,6 +2719,8 @@
   },
   {
     "code": 22000,
+    "group": "AuthorizeHttpErrorCode",
+    "name": "PostContentTypeInvalid",
     "kind": "validation",
     "fluentKey": "E22000",
     "requiredParams": [],
@@ -2223,6 +2729,8 @@
   },
   {
     "code": 22001,
+    "group": "AuthorizeHttpErrorCode",
+    "name": "MethodNotAllowed",
     "kind": "validation",
     "fluentKey": "E22001",
     "requiredParams": [
@@ -2233,6 +2741,8 @@
   },
   {
     "code": 22002,
+    "group": "AuthorizeHttpErrorCode",
+    "name": "RequiredParamMissing",
     "kind": "validation",
     "fluentKey": "E22002",
     "requiredParams": [
@@ -2243,6 +2753,8 @@
   },
   {
     "code": 22003,
+    "group": "AuthorizeHttpErrorCode",
+    "name": "InternalClientLoginRequired",
     "kind": "validation",
     "fluentKey": "E22003",
     "requiredParams": [],
@@ -2251,6 +2763,8 @@
   },
   {
     "code": 22004,
+    "group": "AuthorizeHttpErrorCode",
+    "name": "ConsentSessionNotFound",
     "kind": "validation",
     "fluentKey": "E22004",
     "requiredParams": [],
@@ -2259,6 +2773,8 @@
   },
   {
     "code": 22005,
+    "group": "AuthorizeHttpErrorCode",
+    "name": "ContinueInteractionUnavailable",
     "kind": "gone",
     "fluentKey": "E22005",
     "requiredParams": [],
@@ -2267,6 +2783,8 @@
   },
   {
     "code": 22006,
+    "group": "AuthorizeHttpErrorCode",
+    "name": "LoginDomainNotConfigured",
     "kind": "internal",
     "fluentKey": "E22006",
     "requiredParams": [
@@ -2277,6 +2795,8 @@
   },
   {
     "code": 23000,
+    "group": "AuthorizeErrorCode",
+    "name": "ClientIdInvalid",
     "kind": "validation",
     "fluentKey": "E23000",
     "requiredParams": [],
@@ -2285,6 +2805,8 @@
   },
   {
     "code": 23001,
+    "group": "AuthorizeErrorCode",
+    "name": "ClientNotFound",
     "kind": "validation",
     "fluentKey": "E23001",
     "requiredParams": [],
@@ -2293,6 +2815,8 @@
   },
   {
     "code": 23002,
+    "group": "AuthorizeErrorCode",
+    "name": "ClientLookupFailed",
     "kind": "internal",
     "fluentKey": "E23002",
     "requiredParams": [],
@@ -2301,6 +2825,8 @@
   },
   {
     "code": 23003,
+    "group": "AuthorizeErrorCode",
+    "name": "ResponseTypeInvalid",
     "kind": "validation",
     "fluentKey": "E23003",
     "requiredParams": [
@@ -2311,6 +2837,8 @@
   },
   {
     "code": 23066,
+    "group": "AuthorizeErrorCode",
+    "name": "ResponseModeInvalid",
     "kind": "validation",
     "fluentKey": "E23066",
     "requiredParams": [
@@ -2321,6 +2849,8 @@
   },
   {
     "code": 23004,
+    "group": "AuthorizeErrorCode",
+    "name": "RedirectUriInvalid",
     "kind": "validation",
     "fluentKey": "E23004",
     "requiredParams": [],
@@ -2329,6 +2859,8 @@
   },
   {
     "code": 23005,
+    "group": "AuthorizeErrorCode",
+    "name": "ScopeInvalid",
     "kind": "validation",
     "fluentKey": "E23005",
     "requiredParams": [],
@@ -2337,6 +2869,8 @@
   },
   {
     "code": 23006,
+    "group": "AuthorizeErrorCode",
+    "name": "OpenidScopeRequired",
     "kind": "validation",
     "fluentKey": "E23006",
     "requiredParams": [],
@@ -2345,6 +2879,8 @@
   },
   {
     "code": 23007,
+    "group": "AuthorizeErrorCode",
+    "name": "DisplayValueInvalid",
     "kind": "validation",
     "fluentKey": "E23007",
     "requiredParams": [
@@ -2355,6 +2891,8 @@
   },
   {
     "code": 23008,
+    "group": "AuthorizeErrorCode",
+    "name": "PromptValueInvalid",
     "kind": "validation",
     "fluentKey": "E23008",
     "requiredParams": [
@@ -2365,6 +2903,8 @@
   },
   {
     "code": 23057,
+    "group": "AuthorizeErrorCode",
+    "name": "PromptNoneCombined",
     "kind": "validation",
     "fluentKey": "E23057",
     "requiredParams": [],
@@ -2373,6 +2913,8 @@
   },
   {
     "code": 23009,
+    "group": "AuthorizeErrorCode",
+    "name": "MaxAgeInvalid",
     "kind": "validation",
     "fluentKey": "E23009",
     "requiredParams": [],
@@ -2381,6 +2923,8 @@
   },
   {
     "code": 23010,
+    "group": "AuthorizeErrorCode",
+    "name": "RequestUriInvalid",
     "kind": "validation",
     "fluentKey": "E23010",
     "requiredParams": [],
@@ -2389,6 +2933,8 @@
   },
   {
     "code": 23011,
+    "group": "AuthorizeErrorCode",
+    "name": "CodeChallengeMethodInvalid",
     "kind": "validation",
     "fluentKey": "E23011",
     "requiredParams": [
@@ -2399,6 +2945,8 @@
   },
   {
     "code": 23012,
+    "group": "AuthorizeErrorCode",
+    "name": "RequestAndUriConflict",
     "kind": "validation",
     "fluentKey": "E23012",
     "requiredParams": [],
@@ -2407,6 +2955,8 @@
   },
   {
     "code": 23013,
+    "group": "AuthorizeErrorCode",
+    "name": "RequiredParamMissing",
     "kind": "validation",
     "fluentKey": "E23013",
     "requiredParams": [
@@ -2417,6 +2967,8 @@
   },
   {
     "code": 23014,
+    "group": "AuthorizeErrorCode",
+    "name": "RedirectUriNotRegistered",
     "kind": "validation",
     "fluentKey": "E23014",
     "requiredParams": [],
@@ -2425,6 +2977,8 @@
   },
   {
     "code": 23015,
+    "group": "AuthorizeErrorCode",
+    "name": "RequestUriNotHttps",
     "kind": "validation",
     "fluentKey": "E23015",
     "requiredParams": [],
@@ -2433,6 +2987,8 @@
   },
   {
     "code": 23016,
+    "group": "AuthorizeErrorCode",
+    "name": "RequestUriHasFragment",
     "kind": "validation",
     "fluentKey": "E23016",
     "requiredParams": [],
@@ -2441,6 +2997,8 @@
   },
   {
     "code": 23017,
+    "group": "AuthorizeErrorCode",
+    "name": "RequestUriUnsafeHost",
     "kind": "validation",
     "fluentKey": "E23017",
     "requiredParams": [],
@@ -2449,6 +3007,8 @@
   },
   {
     "code": 23018,
+    "group": "AuthorizeErrorCode",
+    "name": "RequestUriNotRegistered",
     "kind": "validation",
     "fluentKey": "E23018",
     "requiredParams": [],
@@ -2457,6 +3017,8 @@
   },
   {
     "code": 23019,
+    "group": "AuthorizeErrorCode",
+    "name": "RequestUriFetchFailed",
     "kind": "validation",
     "fluentKey": "E23019",
     "requiredParams": [],
@@ -2465,6 +3027,8 @@
   },
   {
     "code": 23020,
+    "group": "AuthorizeErrorCode",
+    "name": "RequestUriNot200",
     "kind": "validation",
     "fluentKey": "E23020",
     "requiredParams": [],
@@ -2473,6 +3037,8 @@
   },
   {
     "code": 23021,
+    "group": "AuthorizeErrorCode",
+    "name": "RequestUriTooLarge",
     "kind": "validation",
     "fluentKey": "E23021",
     "requiredParams": [],
@@ -2481,6 +3047,8 @@
   },
   {
     "code": 23022,
+    "group": "AuthorizeErrorCode",
+    "name": "RequestUriReadFailed",
     "kind": "validation",
     "fluentKey": "E23022",
     "requiredParams": [],
@@ -2489,6 +3057,8 @@
   },
   {
     "code": 23023,
+    "group": "AuthorizeErrorCode",
+    "name": "RequestObjectHeaderInvalid",
     "kind": "validation",
     "fluentKey": "E23023",
     "requiredParams": [],
@@ -2497,6 +3067,8 @@
   },
   {
     "code": 23024,
+    "group": "AuthorizeErrorCode",
+    "name": "RequestObjectDecodeFailed",
     "kind": "validation",
     "fluentKey": "E23024",
     "requiredParams": [],
@@ -2505,6 +3077,8 @@
   },
   {
     "code": 23025,
+    "group": "AuthorizeErrorCode",
+    "name": "RequestObjectAlgUnsupported",
     "kind": "validation",
     "fluentKey": "E23025",
     "requiredParams": [
@@ -2515,6 +3089,8 @@
   },
   {
     "code": 23026,
+    "group": "AuthorizeErrorCode",
+    "name": "CredentialLookupFailed",
     "kind": "internal",
     "fluentKey": "E23026",
     "requiredParams": [],
@@ -2523,6 +3099,8 @@
   },
   {
     "code": 23027,
+    "group": "AuthorizeErrorCode",
+    "name": "RequestObjectKeyInvalid",
     "kind": "validation",
     "fluentKey": "E23027",
     "requiredParams": [],
@@ -2531,6 +3109,8 @@
   },
   {
     "code": 23028,
+    "group": "AuthorizeErrorCode",
+    "name": "RequestObjectVerifyFailed",
     "kind": "validation",
     "fluentKey": "E23028",
     "requiredParams": [],
@@ -2539,6 +3119,8 @@
   },
   {
     "code": 23029,
+    "group": "AuthorizeErrorCode",
+    "name": "RequestObjectIssMismatch",
     "kind": "validation",
     "fluentKey": "E23029",
     "requiredParams": [],
@@ -2547,6 +3129,8 @@
   },
   {
     "code": 23030,
+    "group": "AuthorizeErrorCode",
+    "name": "RequestObjectAudMismatch",
     "kind": "validation",
     "fluentKey": "E23030",
     "requiredParams": [],
@@ -2555,6 +3139,8 @@
   },
   {
     "code": 23031,
+    "group": "AuthorizeErrorCode",
+    "name": "RequestObjectExpired",
     "kind": "validation",
     "fluentKey": "E23031",
     "requiredParams": [],
@@ -2563,6 +3149,8 @@
   },
   {
     "code": 23032,
+    "group": "AuthorizeErrorCode",
+    "name": "RequestObjectNotYetValid",
     "kind": "validation",
     "fluentKey": "E23032",
     "requiredParams": [],
@@ -2571,6 +3159,8 @@
   },
   {
     "code": 23033,
+    "group": "AuthorizeErrorCode",
+    "name": "RequestObjectIatFuture",
     "kind": "validation",
     "fluentKey": "E23033",
     "requiredParams": [],
@@ -2579,6 +3169,8 @@
   },
   {
     "code": 23034,
+    "group": "AuthorizeErrorCode",
+    "name": "RequestObjectFieldMismatch",
     "kind": "validation",
     "fluentKey": "E23034",
     "requiredParams": [],
@@ -2589,6 +3181,8 @@
   },
   {
     "code": 23035,
+    "group": "AuthorizeErrorCode",
+    "name": "RequestObjectJsonInvalid",
     "kind": "validation",
     "fluentKey": "E23035",
     "requiredParams": [],
@@ -2597,6 +3191,8 @@
   },
   {
     "code": 23036,
+    "group": "AuthorizeErrorCode",
+    "name": "ClaimsParamInvalid",
     "kind": "validation",
     "fluentKey": "E23036",
     "requiredParams": [],
@@ -2605,6 +3201,8 @@
   },
   {
     "code": 23037,
+    "group": "AuthorizeErrorCode",
+    "name": "ClaimsNotObject",
     "kind": "validation",
     "fluentKey": "E23037",
     "requiredParams": [],
@@ -2613,6 +3211,8 @@
   },
   {
     "code": 23038,
+    "group": "AuthorizeErrorCode",
+    "name": "ClaimsFieldNotObject",
     "kind": "validation",
     "fluentKey": "E23038",
     "requiredParams": [],
@@ -2621,6 +3221,8 @@
   },
   {
     "code": 23039,
+    "group": "AuthorizeErrorCode",
+    "name": "RequestObjectEncodingInvalid",
     "kind": "validation",
     "fluentKey": "E23039",
     "requiredParams": [],
@@ -2629,6 +3231,8 @@
   },
   {
     "code": 23040,
+    "group": "AuthorizeErrorCode",
+    "name": "RequestObjectBase64Invalid",
     "kind": "validation",
     "fluentKey": "E23040",
     "requiredParams": [],
@@ -2637,6 +3241,8 @@
   },
   {
     "code": 23041,
+    "group": "AuthorizeErrorCode",
+    "name": "RequestObjectPayloadInvalid",
     "kind": "validation",
     "fluentKey": "E23041",
     "requiredParams": [],
@@ -2645,6 +3251,8 @@
   },
   {
     "code": 23042,
+    "group": "AuthorizeErrorCode",
+    "name": "SerializeRequestFailed",
     "kind": "internal",
     "fluentKey": "E23042",
     "requiredParams": [],
@@ -2653,6 +3261,8 @@
   },
   {
     "code": 23043,
+    "group": "AuthorizeErrorCode",
+    "name": "StoreRequestFailed",
     "kind": "internal",
     "fluentKey": "E23043",
     "requiredParams": [],
@@ -2661,6 +3271,8 @@
   },
   {
     "code": 23044,
+    "group": "AuthorizeErrorCode",
+    "name": "StoreLoginFailed",
     "kind": "internal",
     "fluentKey": "E23044",
     "requiredParams": [],
@@ -2669,6 +3281,8 @@
   },
   {
     "code": 23045,
+    "group": "AuthorizeErrorCode",
+    "name": "LoadRequestFailed",
     "kind": "internal",
     "fluentKey": "E23045",
     "requiredParams": [],
@@ -2677,6 +3291,8 @@
   },
   {
     "code": 23046,
+    "group": "AuthorizeErrorCode",
+    "name": "AuthzRequestNotFound",
     "kind": "validation",
     "fluentKey": "E23046",
     "requiredParams": [],
@@ -2685,6 +3301,8 @@
   },
   {
     "code": 23047,
+    "group": "AuthorizeErrorCode",
+    "name": "AuthzRequestTypeMismatch",
     "kind": "validation",
     "fluentKey": "E23047",
     "requiredParams": [],
@@ -2693,6 +3311,8 @@
   },
   {
     "code": 23048,
+    "group": "AuthorizeErrorCode",
+    "name": "DeserializeRequestFailed",
     "kind": "internal",
     "fluentKey": "E23048",
     "requiredParams": [],
@@ -2701,6 +3321,8 @@
   },
   {
     "code": 23049,
+    "group": "AuthorizeErrorCode",
+    "name": "StoredClientIdInvalid",
     "kind": "internal",
     "fluentKey": "E23049",
     "requiredParams": [],
@@ -2709,6 +3331,8 @@
   },
   {
     "code": 23050,
+    "group": "AuthorizeErrorCode",
+    "name": "LoadLoginFailed",
     "kind": "internal",
     "fluentKey": "E23050",
     "requiredParams": [],
@@ -2717,6 +3341,8 @@
   },
   {
     "code": 23051,
+    "group": "AuthorizeErrorCode",
+    "name": "LoginNotFound",
     "kind": "validation",
     "fluentKey": "E23051",
     "requiredParams": [],
@@ -2725,6 +3351,8 @@
   },
   {
     "code": 23052,
+    "group": "AuthorizeErrorCode",
+    "name": "StoredRedirectUriInvalid",
     "kind": "internal",
     "fluentKey": "E23052",
     "requiredParams": [],
@@ -2733,6 +3361,8 @@
   },
   {
     "code": 23053,
+    "group": "AuthorizeErrorCode",
+    "name": "SerializeCodeFailed",
     "kind": "internal",
     "fluentKey": "E23053",
     "requiredParams": [],
@@ -2741,6 +3371,8 @@
   },
   {
     "code": 23054,
+    "group": "AuthorizeErrorCode",
+    "name": "StoreCodeFailed",
     "kind": "internal",
     "fluentKey": "E23054",
     "requiredParams": [],
@@ -2749,6 +3381,8 @@
   },
   {
     "code": 23055,
+    "group": "AuthorizeErrorCode",
+    "name": "LoginIdInvalid",
     "kind": "validation",
     "fluentKey": "E23055",
     "requiredParams": [],
@@ -2757,6 +3391,8 @@
   },
   {
     "code": 23056,
+    "group": "AuthorizeErrorCode",
+    "name": "ScopeNotAssignedToClient",
     "kind": "validation",
     "fluentKey": "E23056",
     "requiredParams": [
@@ -2767,6 +3403,8 @@
   },
   {
     "code": 23058,
+    "group": "AuthorizeErrorCode",
+    "name": "ImplicitNonceRequired",
     "kind": "validation",
     "fluentKey": "E23058",
     "requiredParams": [],
@@ -2775,6 +3413,8 @@
   },
   {
     "code": 23059,
+    "group": "AuthorizeErrorCode",
+    "name": "ImplicitUserNotFound",
     "kind": "validation",
     "fluentKey": "E23059",
     "requiredParams": [],
@@ -2783,6 +3423,8 @@
   },
   {
     "code": 23060,
+    "group": "AuthorizeErrorCode",
+    "name": "IdTokenHintIssuerInvalid",
     "kind": "validation",
     "fluentKey": "E23060",
     "requiredParams": [],
@@ -2791,6 +3433,8 @@
   },
   {
     "code": 23061,
+    "group": "AuthorizeErrorCode",
+    "name": "RequestObjectEncryptionUnsupported",
     "kind": "validation",
     "fluentKey": "E23061",
     "requiredParams": [],
@@ -2799,6 +3443,8 @@
   },
   {
     "code": 23062,
+    "group": "AuthorizeErrorCode",
+    "name": "AuthzInteractionConflict",
     "kind": "validation",
     "fluentKey": "E23062",
     "requiredParams": [],
@@ -2807,6 +3453,8 @@
   },
   {
     "code": 23063,
+    "group": "AuthorizeErrorCode",
+    "name": "StoredSessionIdInvalid",
     "kind": "internal",
     "fluentKey": "E23063",
     "requiredParams": [],
@@ -2815,6 +3463,8 @@
   },
   {
     "code": 23064,
+    "group": "AuthorizeErrorCode",
+    "name": "EncryptionKeyNotFound",
     "kind": "internal",
     "fluentKey": "E23064",
     "requiredParams": [],
@@ -2823,6 +3473,8 @@
   },
   {
     "code": 23065,
+    "group": "AuthorizeErrorCode",
+    "name": "EncryptionFailed",
     "kind": "internal",
     "fluentKey": "E23065",
     "requiredParams": [],
@@ -2831,6 +3483,8 @@
   },
   {
     "code": 23067,
+    "group": "AuthorizeErrorCode",
+    "name": "InitiateLoginUriNotRegistered",
     "kind": "validation",
     "fluentKey": "E23067",
     "requiredParams": [],
@@ -2839,6 +3493,8 @@
   },
   {
     "code": 23068,
+    "group": "AuthorizeErrorCode",
+    "name": "ClientGrantNotAllowed",
     "kind": "validation",
     "fluentKey": "E23068",
     "requiredParams": [],
@@ -2847,6 +3503,8 @@
   },
   {
     "code": 24000,
+    "group": "TokenErrorCode",
+    "name": "UnsupportedGrantType",
     "kind": "validation",
     "fluentKey": "E24000",
     "requiredParams": [
@@ -2857,6 +3515,8 @@
   },
   {
     "code": 24001,
+    "group": "TokenErrorCode",
+    "name": "ClientIdRequired",
     "kind": "validation",
     "fluentKey": "E24001",
     "requiredParams": [],
@@ -2865,6 +3525,8 @@
   },
   {
     "code": 24002,
+    "group": "TokenErrorCode",
+    "name": "CodeLookupFailed",
     "kind": "internal",
     "fluentKey": "E24002",
     "requiredParams": [],
@@ -2873,6 +3535,8 @@
   },
   {
     "code": 24003,
+    "group": "TokenErrorCode",
+    "name": "AuthCodeNotFound",
     "kind": "validation",
     "fluentKey": "E24003",
     "requiredParams": [],
@@ -2881,6 +3545,8 @@
   },
   {
     "code": 24004,
+    "group": "TokenErrorCode",
+    "name": "CodeClientMismatch",
     "kind": "validation",
     "fluentKey": "E24004",
     "requiredParams": [],
@@ -2889,6 +3555,8 @@
   },
   {
     "code": 24005,
+    "group": "TokenErrorCode",
+    "name": "AuthCodeInvalid",
     "kind": "validation",
     "fluentKey": "E24005",
     "requiredParams": [],
@@ -2897,6 +3565,8 @@
   },
   {
     "code": 24052,
+    "group": "TokenErrorCode",
+    "name": "AuthCodeRevoked",
     "kind": "validation",
     "fluentKey": "E24052",
     "requiredParams": [],
@@ -2905,6 +3575,8 @@
   },
   {
     "code": 24053,
+    "group": "TokenErrorCode",
+    "name": "AuthCodeExpired",
     "kind": "validation",
     "fluentKey": "E24053",
     "requiredParams": [],
@@ -2913,6 +3585,8 @@
   },
   {
     "code": 24054,
+    "group": "TokenErrorCode",
+    "name": "AuthCodeSessionNotFound",
     "kind": "validation",
     "fluentKey": "E24054",
     "requiredParams": [],
@@ -2921,6 +3595,8 @@
   },
   {
     "code": 24055,
+    "group": "TokenErrorCode",
+    "name": "AuthCodeSessionInactive",
     "kind": "validation",
     "fluentKey": "E24055",
     "requiredParams": [],
@@ -2929,6 +3605,8 @@
   },
   {
     "code": 24056,
+    "group": "TokenErrorCode",
+    "name": "AuthCodeSessionRevoked",
     "kind": "validation",
     "fluentKey": "E24056",
     "requiredParams": [],
@@ -2937,6 +3615,8 @@
   },
   {
     "code": 24057,
+    "group": "TokenErrorCode",
+    "name": "AuthCodeSessionExpired",
     "kind": "validation",
     "fluentKey": "E24057",
     "requiredParams": [],
@@ -2945,6 +3625,8 @@
   },
   {
     "code": 24058,
+    "group": "TokenErrorCode",
+    "name": "AuthCodeSessionUserMismatch",
     "kind": "validation",
     "fluentKey": "E24058",
     "requiredParams": [],
@@ -2953,6 +3635,8 @@
   },
   {
     "code": 24059,
+    "group": "TokenErrorCode",
+    "name": "AuthCodeClaimFailed",
     "kind": "validation",
     "fluentKey": "E24059",
     "requiredParams": [],
@@ -2961,6 +3645,8 @@
   },
   {
     "code": 24060,
+    "group": "TokenErrorCode",
+    "name": "AuthCodeSessionLookupFailed",
     "kind": "internal",
     "fluentKey": "E24060",
     "requiredParams": [],
@@ -2969,6 +3655,8 @@
   },
   {
     "code": 24006,
+    "group": "TokenErrorCode",
+    "name": "DeserializeCodeFailed",
     "kind": "internal",
     "fluentKey": "E24006",
     "requiredParams": [],
@@ -2977,6 +3665,8 @@
   },
   {
     "code": 24007,
+    "group": "TokenErrorCode",
+    "name": "RedirectUriMismatch",
     "kind": "validation",
     "fluentKey": "E24007",
     "requiredParams": [],
@@ -2985,6 +3675,8 @@
   },
   {
     "code": 24008,
+    "group": "TokenErrorCode",
+    "name": "CodeVerifierRequired",
     "kind": "validation",
     "fluentKey": "E24008",
     "requiredParams": [],
@@ -2993,6 +3685,8 @@
   },
   {
     "code": 24009,
+    "group": "TokenErrorCode",
+    "name": "StoredUserOidInvalid",
     "kind": "internal",
     "fluentKey": "E24009",
     "requiredParams": [],
@@ -3001,6 +3695,8 @@
   },
   {
     "code": 24010,
+    "group": "TokenErrorCode",
+    "name": "UserLookupFailed",
     "kind": "internal",
     "fluentKey": "E24010",
     "requiredParams": [],
@@ -3009,6 +3705,8 @@
   },
   {
     "code": 24011,
+    "group": "TokenErrorCode",
+    "name": "AuthCodeUserNotFound",
     "kind": "validation",
     "fluentKey": "E24011",
     "requiredParams": [],
@@ -3017,6 +3715,8 @@
   },
   {
     "code": 24012,
+    "group": "TokenErrorCode",
+    "name": "RevokeCodeFailed",
     "kind": "internal",
     "fluentKey": "E24012",
     "requiredParams": [],
@@ -3025,6 +3725,8 @@
   },
   {
     "code": 24013,
+    "group": "TokenErrorCode",
+    "name": "RefreshTokenLookupFailed",
     "kind": "internal",
     "fluentKey": "E24013",
     "requiredParams": [],
@@ -3033,6 +3735,8 @@
   },
   {
     "code": 24014,
+    "group": "TokenErrorCode",
+    "name": "RefreshTokenNotFound",
     "kind": "validation",
     "fluentKey": "E24014",
     "requiredParams": [],
@@ -3041,6 +3745,8 @@
   },
   {
     "code": 24015,
+    "group": "TokenErrorCode",
+    "name": "RefreshTokenInvalid",
     "kind": "validation",
     "fluentKey": "E24015",
     "requiredParams": [],
@@ -3049,6 +3755,8 @@
   },
   {
     "code": 24016,
+    "group": "TokenErrorCode",
+    "name": "DeserializeRefreshFailed",
     "kind": "internal",
     "fluentKey": "E24016",
     "requiredParams": [],
@@ -3057,6 +3765,8 @@
   },
   {
     "code": 24017,
+    "group": "TokenErrorCode",
+    "name": "RefreshTokenSubMissing",
     "kind": "validation",
     "fluentKey": "E24017",
     "requiredParams": [],
@@ -3065,6 +3775,8 @@
   },
   {
     "code": 24018,
+    "group": "TokenErrorCode",
+    "name": "RefreshTokenUseMissing",
     "kind": "validation",
     "fluentKey": "E24018",
     "requiredParams": [],
@@ -3073,6 +3785,8 @@
   },
   {
     "code": 24019,
+    "group": "TokenErrorCode",
+    "name": "RefreshTokenUseInvalid",
     "kind": "validation",
     "fluentKey": "E24019",
     "requiredParams": [],
@@ -3081,6 +3795,8 @@
   },
   {
     "code": 24020,
+    "group": "TokenErrorCode",
+    "name": "RefreshTokenClientMismatch",
     "kind": "validation",
     "fluentKey": "E24020",
     "requiredParams": [],
@@ -3089,6 +3805,8 @@
   },
   {
     "code": 24021,
+    "group": "TokenErrorCode",
+    "name": "RefreshTokenSubInvalid",
     "kind": "validation",
     "fluentKey": "E24021",
     "requiredParams": [],
@@ -3097,6 +3815,8 @@
   },
   {
     "code": 24022,
+    "group": "TokenErrorCode",
+    "name": "RefreshTokenUserNotFound",
     "kind": "validation",
     "fluentKey": "E24022",
     "requiredParams": [],
@@ -3105,6 +3825,8 @@
   },
   {
     "code": 24023,
+    "group": "TokenErrorCode",
+    "name": "RevokeRefreshFailed",
     "kind": "internal",
     "fluentKey": "E24023",
     "requiredParams": [],
@@ -3113,6 +3835,8 @@
   },
   {
     "code": 24024,
+    "group": "TokenErrorCode",
+    "name": "KeyListFailed",
     "kind": "internal",
     "fluentKey": "E24024",
     "requiredParams": [],
@@ -3121,6 +3845,8 @@
   },
   {
     "code": 24025,
+    "group": "TokenErrorCode",
+    "name": "NoSigningKeyAvailable",
     "kind": "internal",
     "fluentKey": "E24025",
     "requiredParams": [],
@@ -3129,6 +3855,8 @@
   },
   {
     "code": 24026,
+    "group": "TokenErrorCode",
+    "name": "ClientIdInvalid",
     "kind": "validation",
     "fluentKey": "E24026",
     "requiredParams": [],
@@ -3137,6 +3865,8 @@
   },
   {
     "code": 24027,
+    "group": "TokenErrorCode",
+    "name": "ClientNotFound",
     "kind": "validation",
     "fluentKey": "E24027",
     "requiredParams": [],
@@ -3145,6 +3875,8 @@
   },
   {
     "code": 24028,
+    "group": "TokenErrorCode",
+    "name": "ClientLookupFailed",
     "kind": "internal",
     "fluentKey": "E24028",
     "requiredParams": [],
@@ -3153,6 +3885,8 @@
   },
   {
     "code": 24029,
+    "group": "TokenErrorCode",
+    "name": "CredentialLookupFailed",
     "kind": "internal",
     "fluentKey": "E24029",
     "requiredParams": [],
@@ -3161,6 +3895,8 @@
   },
   {
     "code": 24030,
+    "group": "TokenErrorCode",
+    "name": "ClientCredentialsInvalid",
     "kind": "validation",
     "fluentKey": "E24030",
     "requiredParams": [],
@@ -3169,6 +3905,8 @@
   },
   {
     "code": 24031,
+    "group": "TokenErrorCode",
+    "name": "ClientAuthRequired",
     "kind": "validation",
     "fluentKey": "E24031",
     "requiredParams": [],
@@ -3177,6 +3915,8 @@
   },
   {
     "code": 24032,
+    "group": "TokenErrorCode",
+    "name": "AssertionIssMissing",
     "kind": "validation",
     "fluentKey": "E24032",
     "requiredParams": [],
@@ -3185,6 +3925,8 @@
   },
   {
     "code": 24033,
+    "group": "TokenErrorCode",
+    "name": "AssertionSubMissing",
     "kind": "validation",
     "fluentKey": "E24033",
     "requiredParams": [],
@@ -3193,6 +3935,8 @@
   },
   {
     "code": 24034,
+    "group": "TokenErrorCode",
+    "name": "AssertionIssSubMismatch",
     "kind": "validation",
     "fluentKey": "E24034",
     "requiredParams": [],
@@ -3201,6 +3945,8 @@
   },
   {
     "code": 24035,
+    "group": "TokenErrorCode",
+    "name": "AssertionAudMismatch",
     "kind": "validation",
     "fluentKey": "E24035",
     "requiredParams": [],
@@ -3209,6 +3955,8 @@
   },
   {
     "code": 24036,
+    "group": "TokenErrorCode",
+    "name": "AssertionExpired",
     "kind": "validation",
     "fluentKey": "E24036",
     "requiredParams": [],
@@ -3217,6 +3965,8 @@
   },
   {
     "code": 24037,
+    "group": "TokenErrorCode",
+    "name": "AssertionNotYetValid",
     "kind": "validation",
     "fluentKey": "E24037",
     "requiredParams": [],
@@ -3225,6 +3975,8 @@
   },
   {
     "code": 24038,
+    "group": "TokenErrorCode",
+    "name": "AssertionHeaderInvalid",
     "kind": "validation",
     "fluentKey": "E24038",
     "requiredParams": [],
@@ -3233,6 +3985,8 @@
   },
   {
     "code": 24039,
+    "group": "TokenErrorCode",
+    "name": "AssertionVerifyFailed",
     "kind": "validation",
     "fluentKey": "E24039",
     "requiredParams": [],
@@ -3241,6 +3995,8 @@
   },
   {
     "code": 24040,
+    "group": "TokenErrorCode",
+    "name": "AssertionAlgUnsupported",
     "kind": "validation",
     "fluentKey": "E24040",
     "requiredParams": [
@@ -3251,6 +4007,8 @@
   },
   {
     "code": 24041,
+    "group": "TokenErrorCode",
+    "name": "AssertionKeyInvalid",
     "kind": "validation",
     "fluentKey": "E24041",
     "requiredParams": [],
@@ -3259,6 +4017,8 @@
   },
   {
     "code": 24042,
+    "group": "TokenErrorCode",
+    "name": "RefreshTokenVerifyFailed",
     "kind": "validation",
     "fluentKey": "E24042",
     "requiredParams": [],
@@ -3267,6 +4027,8 @@
   },
   {
     "code": 24043,
+    "group": "TokenErrorCode",
+    "name": "SignAccessTokenFailed",
     "kind": "internal",
     "fluentKey": "E24043",
     "requiredParams": [],
@@ -3275,6 +4037,8 @@
   },
   {
     "code": 24044,
+    "group": "TokenErrorCode",
+    "name": "SignIdTokenFailed",
     "kind": "internal",
     "fluentKey": "E24044",
     "requiredParams": [],
@@ -3283,6 +4047,8 @@
   },
   {
     "code": 24045,
+    "group": "TokenErrorCode",
+    "name": "SignRefreshTokenFailed",
     "kind": "internal",
     "fluentKey": "E24045",
     "requiredParams": [],
@@ -3291,6 +4057,8 @@
   },
   {
     "code": 24046,
+    "group": "TokenErrorCode",
+    "name": "SerializeRefreshFailed",
     "kind": "internal",
     "fluentKey": "E24046",
     "requiredParams": [],
@@ -3299,6 +4067,8 @@
   },
   {
     "code": 24047,
+    "group": "TokenErrorCode",
+    "name": "StoreRefreshFailed",
     "kind": "internal",
     "fluentKey": "E24047",
     "requiredParams": [],
@@ -3307,6 +4077,8 @@
   },
   {
     "code": 24048,
+    "group": "TokenErrorCode",
+    "name": "PkceMethodUnsupported",
     "kind": "validation",
     "fluentKey": "E24048",
     "requiredParams": [
@@ -3317,6 +4089,8 @@
   },
   {
     "code": 24049,
+    "group": "TokenErrorCode",
+    "name": "PkceVerifierMismatch",
     "kind": "validation",
     "fluentKey": "E24049",
     "requiredParams": [],
@@ -3325,6 +4099,8 @@
   },
   {
     "code": 24050,
+    "group": "TokenErrorCode",
+    "name": "EncryptionKeyNotFound",
     "kind": "internal",
     "fluentKey": "E24050",
     "requiredParams": [],
@@ -3333,6 +4109,8 @@
   },
   {
     "code": 24051,
+    "group": "TokenErrorCode",
+    "name": "EncryptionFailed",
     "kind": "internal",
     "fluentKey": "E24051",
     "requiredParams": [],
@@ -3341,6 +4119,8 @@
   },
   {
     "code": 24061,
+    "group": "TokenErrorCode",
+    "name": "ClientGrantNotAllowed",
     "kind": "validation",
     "fluentKey": "E24061",
     "requiredParams": [],
@@ -3349,6 +4129,8 @@
   },
   {
     "code": 24062,
+    "group": "TokenErrorCode",
+    "name": "DeviceCodeNotFound",
     "kind": "validation",
     "fluentKey": "E24062",
     "requiredParams": [],
@@ -3357,6 +4139,8 @@
   },
   {
     "code": 24063,
+    "group": "TokenErrorCode",
+    "name": "DeviceCodeClientMismatch",
     "kind": "validation",
     "fluentKey": "E24063",
     "requiredParams": [],
@@ -3365,6 +4149,8 @@
   },
   {
     "code": 24064,
+    "group": "TokenErrorCode",
+    "name": "DeviceCodePending",
     "kind": "validation",
     "fluentKey": "E24064",
     "requiredParams": [],
@@ -3373,6 +4159,8 @@
   },
   {
     "code": 24065,
+    "group": "TokenErrorCode",
+    "name": "DeviceCodeSlowDown",
     "kind": "validation",
     "fluentKey": "E24065",
     "requiredParams": [],
@@ -3381,6 +4169,8 @@
   },
   {
     "code": 24066,
+    "group": "TokenErrorCode",
+    "name": "DeviceCodeDenied",
     "kind": "validation",
     "fluentKey": "E24066",
     "requiredParams": [],
@@ -3389,6 +4179,8 @@
   },
   {
     "code": 24067,
+    "group": "TokenErrorCode",
+    "name": "DeviceCodeExpired",
     "kind": "validation",
     "fluentKey": "E24067",
     "requiredParams": [],
@@ -3397,6 +4189,8 @@
   },
   {
     "code": 24068,
+    "group": "TokenErrorCode",
+    "name": "DeviceCodeRevoked",
     "kind": "validation",
     "fluentKey": "E24068",
     "requiredParams": [],
@@ -3405,6 +4199,8 @@
   },
   {
     "code": 24069,
+    "group": "TokenErrorCode",
+    "name": "DeviceCodeUserNotFound",
     "kind": "validation",
     "fluentKey": "E24069",
     "requiredParams": [],
@@ -3413,6 +4209,8 @@
   },
   {
     "code": 24070,
+    "group": "TokenErrorCode",
+    "name": "DeviceRequestStateInvalid",
     "kind": "internal",
     "fluentKey": "E24070",
     "requiredParams": [],
@@ -3421,6 +4219,8 @@
   },
   {
     "code": 24071,
+    "group": "TokenErrorCode",
+    "name": "DeviceRequestLookupFailed",
     "kind": "internal",
     "fluentKey": "E24071",
     "requiredParams": [],
@@ -3429,6 +4229,8 @@
   },
   {
     "code": 24072,
+    "group": "TokenErrorCode",
+    "name": "DeviceRelationLookupFailed",
     "kind": "internal",
     "fluentKey": "E24072",
     "requiredParams": [],
@@ -3437,6 +4239,8 @@
   },
   {
     "code": 24073,
+    "group": "TokenErrorCode",
+    "name": "DeviceRedemptionFailed",
     "kind": "internal",
     "fluentKey": "E24073",
     "requiredParams": [],
@@ -3445,6 +4249,8 @@
   },
   {
     "code": 24074,
+    "group": "TokenErrorCode",
+    "name": "RefreshScopeNotAllowed",
     "kind": "validation",
     "fluentKey": "E24074",
     "requiredParams": [],
@@ -3453,6 +4259,8 @@
   },
   {
     "code": 24075,
+    "group": "TokenErrorCode",
+    "name": "ClientCredentialsScopeNotAllowed",
     "kind": "validation",
     "fluentKey": "E24075",
     "requiredParams": [],
@@ -3461,6 +4269,8 @@
   },
   {
     "code": 25000,
+    "group": "RegistrationErrorCode",
+    "name": "DynamicRegistrationDisabled",
     "kind": "validation",
     "fluentKey": "E25000",
     "requiredParams": [],
@@ -3469,6 +4279,8 @@
   },
   {
     "code": 25001,
+    "group": "RegistrationErrorCode",
+    "name": "RedirectUrisRequired",
     "kind": "validation",
     "fluentKey": "E25001",
     "requiredParams": [],
@@ -3477,6 +4289,8 @@
   },
   {
     "code": 25002,
+    "group": "RegistrationErrorCode",
+    "name": "UnsupportedApplicationType",
     "kind": "validation",
     "fluentKey": "E25002",
     "requiredParams": [
@@ -3487,6 +4301,8 @@
   },
   {
     "code": 25003,
+    "group": "RegistrationErrorCode",
+    "name": "UnsupportedSubjectType",
     "kind": "validation",
     "fluentKey": "E25003",
     "requiredParams": [
@@ -3497,6 +4313,8 @@
   },
   {
     "code": 25004,
+    "group": "RegistrationErrorCode",
+    "name": "ClientCreateFailed",
     "kind": "internal",
     "fluentKey": "E25004",
     "requiredParams": [],
@@ -3505,6 +4323,8 @@
   },
   {
     "code": 25005,
+    "group": "RegistrationErrorCode",
+    "name": "InvalidRegistrationAccessToken",
     "kind": "unauthorized",
     "fluentKey": "E25005",
     "requiredParams": [],
@@ -3513,6 +4333,8 @@
   },
   {
     "code": 25006,
+    "group": "RegistrationErrorCode",
+    "name": "ClientLookupFailed",
     "kind": "internal",
     "fluentKey": "E25006",
     "requiredParams": [],
@@ -3521,6 +4343,8 @@
   },
   {
     "code": 25007,
+    "group": "RegistrationErrorCode",
+    "name": "NoneNotSupported",
     "kind": "validation",
     "fluentKey": "E25007",
     "requiredParams": [
@@ -3531,6 +4355,8 @@
   },
   {
     "code": 25008,
+    "group": "RegistrationErrorCode",
+    "name": "InvalidRedirectUri",
     "kind": "validation",
     "fluentKey": "E25008",
     "requiredParams": [],
@@ -3539,6 +4365,8 @@
   },
   {
     "code": 25009,
+    "group": "RegistrationErrorCode",
+    "name": "InvalidClientMetadata",
     "kind": "validation",
     "fluentKey": "E25009",
     "requiredParams": [],
@@ -3547,6 +4375,8 @@
   },
   {
     "code": 25010,
+    "group": "RegistrationErrorCode",
+    "name": "ClientDeleteFailed",
     "kind": "internal",
     "fluentKey": "E25010",
     "requiredParams": [],
@@ -3555,6 +4385,8 @@
   },
   {
     "code": 25011,
+    "group": "RegistrationErrorCode",
+    "name": "BuiltInClientCannotBeDeleted",
     "kind": "validation",
     "fluentKey": "E25011",
     "requiredParams": [],
@@ -3563,6 +4395,8 @@
   },
   {
     "code": 25012,
+    "group": "RegistrationErrorCode",
+    "name": "ClientUpdateFailed",
     "kind": "internal",
     "fluentKey": "E25012",
     "requiredParams": [],
@@ -3571,6 +4405,8 @@
   },
   {
     "code": 25013,
+    "group": "RegistrationErrorCode",
+    "name": "ClientUpdateForbidden",
     "kind": "forbidden",
     "fluentKey": "E25013",
     "requiredParams": [],
@@ -3579,6 +4415,8 @@
   },
   {
     "code": 26001,
+    "group": "DeviceAuthorizationErrorCode",
+    "name": "GrantNotAllowed",
     "kind": "validation",
     "fluentKey": "E26001",
     "requiredParams": [],
@@ -3587,6 +4425,8 @@
   },
   {
     "code": 26002,
+    "group": "DeviceAuthorizationErrorCode",
+    "name": "ScopeInvalid",
     "kind": "validation",
     "fluentKey": "E26002",
     "requiredParams": [],
@@ -3595,6 +4435,8 @@
   },
   {
     "code": 26003,
+    "group": "DeviceAuthorizationErrorCode",
+    "name": "ScopeNotAssignedToClient",
     "kind": "validation",
     "fluentKey": "E26003",
     "requiredParams": [],
@@ -3603,6 +4445,8 @@
   },
   {
     "code": 26005,
+    "group": "DeviceAuthorizationErrorCode",
+    "name": "UserCodeUnavailable",
     "kind": "internal",
     "fluentKey": "E26005",
     "requiredParams": [],
@@ -3611,6 +4455,8 @@
   },
   {
     "code": 26006,
+    "group": "DeviceAuthorizationErrorCode",
+    "name": "CodeGenerationFailed",
     "kind": "internal",
     "fluentKey": "E26006",
     "requiredParams": [],
@@ -3619,6 +4465,8 @@
   },
   {
     "code": 26007,
+    "group": "DeviceAuthorizationErrorCode",
+    "name": "StoreRequestFailed",
     "kind": "internal",
     "fluentKey": "E26007",
     "requiredParams": [],
@@ -3627,6 +4475,8 @@
   },
   {
     "code": 26009,
+    "group": "DeviceAuthorizationErrorCode",
+    "name": "IssuerInvalid",
     "kind": "internal",
     "fluentKey": "E26009",
     "requiredParams": [],
@@ -3635,6 +4485,8 @@
   },
   {
     "code": 26023,
+    "group": "DeviceAuthorizationErrorCode",
+    "name": "LoginDomainInvalid",
     "kind": "internal",
     "fluentKey": "E26023",
     "requiredParams": [],
@@ -3643,6 +4495,8 @@
   },
   {
     "code": 26010,
+    "group": "DeviceAuthorizationErrorCode",
+    "name": "UserCodeNotFound",
     "kind": "validation",
     "fluentKey": "E26010",
     "requiredParams": [],
@@ -3651,6 +4505,8 @@
   },
   {
     "code": 26012,
+    "group": "DeviceAuthorizationErrorCode",
+    "name": "LoadRequestFailed",
     "kind": "internal",
     "fluentKey": "E26012",
     "requiredParams": [],
@@ -3659,6 +4515,8 @@
   },
   {
     "code": 26013,
+    "group": "DeviceAuthorizationErrorCode",
+    "name": "DeserializeRequestFailed",
     "kind": "internal",
     "fluentKey": "E26013",
     "requiredParams": [],
@@ -3667,6 +4525,8 @@
   },
   {
     "code": 26014,
+    "group": "DeviceAuthorizationErrorCode",
+    "name": "RequestAlreadyDecided",
     "kind": "conflict",
     "fluentKey": "E26014",
     "requiredParams": [],
@@ -3675,6 +4535,8 @@
   },
   {
     "code": 26015,
+    "group": "DeviceAuthorizationErrorCode",
+    "name": "InvalidAuthorizationState",
     "kind": "internal",
     "fluentKey": "E26015",
     "requiredParams": [],
@@ -3683,6 +4545,8 @@
   },
   {
     "code": 26016,
+    "group": "DeviceAuthorizationErrorCode",
+    "name": "StoreDecisionFailed",
     "kind": "internal",
     "fluentKey": "E26016",
     "requiredParams": [],
@@ -3691,6 +4555,8 @@
   },
   {
     "code": 26017,
+    "group": "DeviceAuthorizationErrorCode",
+    "name": "UserLookupFailed",
     "kind": "internal",
     "fluentKey": "E26017",
     "requiredParams": [],
@@ -3699,6 +4565,8 @@
   },
   {
     "code": 26020,
+    "group": "DeviceAuthorizationErrorCode",
+    "name": "ClientLookupFailed",
     "kind": "internal",
     "fluentKey": "E26020",
     "requiredParams": [],
@@ -3707,6 +4575,8 @@
   },
   {
     "code": 26021,
+    "group": "DeviceAuthorizationErrorCode",
+    "name": "ClientNotFound",
     "kind": "validation",
     "fluentKey": "E26021",
     "requiredParams": [],
@@ -3715,6 +4585,8 @@
   },
   {
     "code": 26018,
+    "group": "DeviceAuthorizationErrorCode",
+    "name": "UserNotFound",
     "kind": "validation",
     "fluentKey": "E26018",
     "requiredParams": [],
@@ -3723,6 +4595,8 @@
   },
   {
     "code": 26019,
+    "group": "DeviceAuthorizationErrorCode",
+    "name": "RequestExpired",
     "kind": "gone",
     "fluentKey": "E26019",
     "requiredParams": [],
@@ -3731,6 +4605,8 @@
   },
   {
     "code": 26022,
+    "group": "DeviceAuthorizationErrorCode",
+    "name": "VerificationLoginRequired",
     "kind": "unauthorized",
     "fluentKey": "E26022",
     "requiredParams": [],
@@ -3739,6 +4615,8 @@
   },
   {
     "code": 27000,
+    "group": "AuthorizationErrorCode",
+    "name": "InvalidPrincipal",
     "kind": "unauthorized",
     "fluentKey": "E27000",
     "requiredParams": [],
@@ -3749,6 +4627,8 @@
   },
   {
     "code": 27001,
+    "group": "AuthorizationErrorCode",
+    "name": "MissingPrincipal",
     "kind": "unauthorized",
     "fluentKey": "E27001",
     "requiredParams": [],
@@ -3759,6 +4639,8 @@
   },
   {
     "code": 27002,
+    "group": "AuthorizationErrorCode",
+    "name": "InsufficientScope",
     "kind": "forbidden",
     "fluentKey": "E27002",
     "requiredParams": [
@@ -3769,6 +4651,8 @@
   },
   {
     "code": 27003,
+    "group": "AuthorizationErrorCode",
+    "name": "ForbiddenManagementAuthority",
     "kind": "forbidden",
     "fluentKey": "E27003",
     "requiredParams": [],
@@ -3779,6 +4663,8 @@
   },
   {
     "code": 27004,
+    "group": "AuthorizationErrorCode",
+    "name": "TargetForbidden",
     "kind": "forbidden",
     "fluentKey": "E27004",
     "requiredParams": [],
@@ -3789,6 +4675,8 @@
   },
   {
     "code": 27005,
+    "group": "AuthorizationErrorCode",
+    "name": "AuthorizationVersionStale",
     "kind": "unauthorized",
     "fluentKey": "E27005",
     "requiredParams": [],
@@ -3797,6 +4685,8 @@
   },
   {
     "code": 27006,
+    "group": "AuthorizationErrorCode",
+    "name": "AuthorizationSnapshotExpired",
     "kind": "unauthorized",
     "fluentKey": "E27006",
     "requiredParams": [],
@@ -3805,6 +4695,8 @@
   },
   {
     "code": 27007,
+    "group": "AuthorizationErrorCode",
+    "name": "LastOwnerProtected",
     "kind": "conflict",
     "fluentKey": "E27007",
     "requiredParams": [],
@@ -3813,6 +4705,8 @@
   },
   {
     "code": 27008,
+    "group": "AuthorizationErrorCode",
+    "name": "OwnerTargetProtected",
     "kind": "forbidden",
     "fluentKey": "E27008",
     "requiredParams": [],
@@ -3821,6 +4715,8 @@
   },
   {
     "code": 27011,
+    "group": "AuthorizationErrorCode",
+    "name": "GrantNotFound",
     "kind": "not_found",
     "fluentKey": "E27011",
     "requiredParams": [],
@@ -3829,6 +4725,8 @@
   },
   {
     "code": 27014,
+    "group": "AuthorizationErrorCode",
+    "name": "DuplicatePermissionCode",
     "kind": "conflict",
     "fluentKey": "E27014",
     "requiredParams": [],
@@ -3839,6 +4737,8 @@
   },
   {
     "code": 27015,
+    "group": "AuthorizationErrorCode",
+    "name": "ReservedManagementScope",
     "kind": "validation",
     "fluentKey": "E27015",
     "requiredParams": [
@@ -3849,6 +4749,8 @@
   },
   {
     "code": 27016,
+    "group": "AuthorizationErrorCode",
+    "name": "InvalidManagementScope",
     "kind": "validation",
     "fluentKey": "E27016",
     "requiredParams": [
@@ -3859,6 +4761,8 @@
   },
   {
     "code": 27017,
+    "group": "AuthorizationErrorCode",
+    "name": "BusinessScopeBoundaryViolation",
     "kind": "validation",
     "fluentKey": "E27017",
     "requiredParams": [
@@ -3871,6 +4775,8 @@
   },
   {
     "code": 27018,
+    "group": "AuthorizationErrorCode",
+    "name": "RbacPolicyUnavailable",
     "kind": "internal",
     "fluentKey": "E27018",
     "requiredParams": [],
@@ -3879,6 +4785,8 @@
   },
   {
     "code": 27019,
+    "group": "AuthorizationErrorCode",
+    "name": "AuditWriteFailed",
     "kind": "internal",
     "fluentKey": "E27019",
     "requiredParams": [],
@@ -3887,6 +4795,8 @@
   },
   {
     "code": 27020,
+    "group": "AuthorizationErrorCode",
+    "name": "InvalidTarget",
     "kind": "validation",
     "fluentKey": "E27020",
     "requiredParams": [],
@@ -3897,6 +4807,8 @@
   },
   {
     "code": 27021,
+    "group": "AuthorizationErrorCode",
+    "name": "MissingHumanAuthentication",
     "kind": "unauthorized",
     "fluentKey": "E27021",
     "requiredParams": [
@@ -3907,6 +4819,8 @@
   },
   {
     "code": 27022,
+    "group": "AuthorizationErrorCode",
+    "name": "HumanOnlyManagementCapability",
     "kind": "forbidden",
     "fluentKey": "E27022",
     "requiredParams": [
@@ -3917,6 +4831,8 @@
   },
   {
     "code": 27023,
+    "group": "AuthorizationErrorCode",
+    "name": "MachineAssuranceNotAllowed",
     "kind": "forbidden",
     "fluentKey": "E27023",
     "requiredParams": [],
@@ -3925,6 +4841,8 @@
   },
   {
     "code": 27024,
+    "group": "AuthorizationErrorCode",
+    "name": "AuthorizationSnapshotOidMismatch",
     "kind": "unauthorized",
     "fluentKey": "E27024",
     "requiredParams": [],
@@ -3933,6 +4851,8 @@
   },
   {
     "code": 27026,
+    "group": "AuthorizationErrorCode",
+    "name": "InvalidPermissionDefinition",
     "kind": "validation",
     "fluentKey": "E27026",
     "requiredParams": [],
@@ -3943,6 +4863,8 @@
   },
   {
     "code": 27027,
+    "group": "AuthorizationErrorCode",
+    "name": "InvalidRoleDefinition",
     "kind": "validation",
     "fluentKey": "E27027",
     "requiredParams": [],
@@ -3953,6 +4875,8 @@
   },
   {
     "code": 27028,
+    "group": "AuthorizationErrorCode",
+    "name": "VersionConflict",
     "kind": "conflict",
     "fluentKey": "E27028",
     "requiredParams": [
@@ -3963,6 +4887,8 @@
   },
   {
     "code": 28000,
+    "group": "GraphqlErrorCode",
+    "name": "ValidationFailed",
     "kind": "validation",
     "fluentKey": "E28000",
     "requiredParams": [],
@@ -3971,6 +4897,8 @@
   },
   {
     "code": 28001,
+    "group": "GraphqlErrorCode",
+    "name": "InvalidCursor",
     "kind": "validation",
     "fluentKey": "E28001",
     "requiredParams": [],
@@ -3979,6 +4907,8 @@
   },
   {
     "code": 28002,
+    "group": "GraphqlErrorCode",
+    "name": "PageSizeInvalid",
     "kind": "validation",
     "fluentKey": "E28002",
     "requiredParams": [
@@ -3989,6 +4919,8 @@
   },
   {
     "code": 28003,
+    "group": "GraphqlErrorCode",
+    "name": "InvalidGlobalId",
     "kind": "validation",
     "fluentKey": "E28003",
     "requiredParams": [],
@@ -3997,6 +4929,8 @@
   },
   {
     "code": 28004,
+    "group": "GraphqlErrorCode",
+    "name": "UnsupportedNodeType",
     "kind": "validation",
     "fluentKey": "E28004",
     "requiredParams": [],
@@ -4005,6 +4939,8 @@
   },
   {
     "code": 28005,
+    "group": "GraphqlErrorCode",
+    "name": "InsufficientScope",
     "kind": "forbidden",
     "fluentKey": "E28005",
     "requiredParams": [
@@ -4015,6 +4951,8 @@
   },
   {
     "code": 28006,
+    "group": "GraphqlErrorCode",
+    "name": "UserAuthenticationRequired",
     "kind": "forbidden",
     "fluentKey": "E28006",
     "requiredParams": [],
@@ -4023,6 +4961,8 @@
   },
   {
     "code": 28007,
+    "group": "GraphqlErrorCode",
+    "name": "Forbidden",
     "kind": "forbidden",
     "fluentKey": "E28007",
     "requiredParams": [],
@@ -4031,6 +4971,8 @@
   },
   {
     "code": 28008,
+    "group": "GraphqlErrorCode",
+    "name": "RecentAuthenticationRequired",
     "kind": "forbidden",
     "fluentKey": "E28008",
     "requiredParams": [],
@@ -4039,6 +4981,8 @@
   },
   {
     "code": 28009,
+    "group": "GraphqlErrorCode",
+    "name": "BrowserSessionRequired",
     "kind": "forbidden",
     "fluentKey": "E28009",
     "requiredParams": [],
@@ -4047,6 +4991,8 @@
   },
   {
     "code": 28010,
+    "group": "GraphqlErrorCode",
+    "name": "InvalidTheme",
     "kind": "validation",
     "fluentKey": "E28010",
     "requiredParams": [],
@@ -4055,6 +5001,8 @@
   },
   {
     "code": 28011,
+    "group": "GraphqlErrorCode",
+    "name": "Internal",
     "kind": "internal",
     "fluentKey": "E28011",
     "requiredParams": [],
@@ -4063,6 +5011,8 @@
   },
   {
     "code": 28012,
+    "group": "GraphqlErrorCode",
+    "name": "AuthenticationContextUnavailable",
     "kind": "unauthorized",
     "fluentKey": "E28012",
     "requiredParams": [],
@@ -4071,6 +5021,8 @@
   },
   {
     "code": 28013,
+    "group": "GraphqlErrorCode",
+    "name": "InvalidSessionId",
     "kind": "validation",
     "fluentKey": "E28013",
     "requiredParams": [],
@@ -4079,6 +5031,8 @@
   },
   {
     "code": 28014,
+    "group": "GraphqlErrorCode",
+    "name": "PageArgumentsConflict",
     "kind": "validation",
     "fluentKey": "E28014",
     "requiredParams": [],
@@ -4087,6 +5041,8 @@
   },
   {
     "code": 28015,
+    "group": "GraphqlErrorCode",
+    "name": "InstanceMetadataUnavailable",
     "kind": "internal",
     "fluentKey": "E28015",
     "requiredParams": [],
@@ -4095,6 +5051,8 @@
   },
   {
     "code": 28016,
+    "group": "GraphqlErrorCode",
+    "name": "InvalidPasskeyChallenge",
     "kind": "validation",
     "fluentKey": "E28016",
     "requiredParams": [],
@@ -4103,6 +5061,8 @@
   },
   {
     "code": 28017,
+    "group": "GraphqlErrorCode",
+    "name": "InvalidPasskeyId",
     "kind": "validation",
     "fluentKey": "E28017",
     "requiredParams": [],
@@ -4111,6 +5071,8 @@
   },
   {
     "code": 28018,
+    "group": "GraphqlErrorCode",
+    "name": "SerializationFailed",
     "kind": "internal",
     "fluentKey": "E28018",
     "requiredParams": [],
@@ -4119,6 +5081,8 @@
   },
   {
     "code": 28019,
+    "group": "GraphqlErrorCode",
+    "name": "AccountUnavailable",
     "kind": "not_found",
     "fluentKey": "E28019",
     "requiredParams": [],
@@ -4127,6 +5091,8 @@
   },
   {
     "code": 28100,
+    "group": "GraphqlTransportErrorCode",
+    "name": "InvalidRequest",
     "kind": "validation",
     "fluentKey": "E28100",
     "requiredParams": [],
@@ -4135,6 +5101,8 @@
   },
   {
     "code": 28101,
+    "group": "GraphqlTransportErrorCode",
+    "name": "UnsupportedMediaType",
     "kind": "validation",
     "fluentKey": "E28101",
     "requiredParams": [],
@@ -4143,6 +5111,8 @@
   },
   {
     "code": 28102,
+    "group": "GraphqlTransportErrorCode",
+    "name": "PayloadTooLarge",
     "kind": "validation",
     "fluentKey": "E28102",
     "requiredParams": [],
@@ -4151,6 +5121,8 @@
   },
   {
     "code": 28103,
+    "group": "GraphqlTransportErrorCode",
+    "name": "UriTooLong",
     "kind": "validation",
     "fluentKey": "E28103",
     "requiredParams": [],
@@ -4159,6 +5131,8 @@
   },
   {
     "code": 28104,
+    "group": "GraphqlTransportErrorCode",
+    "name": "MethodNotAllowed",
     "kind": "validation",
     "fluentKey": "E28104",
     "requiredParams": [],
@@ -4167,6 +5141,8 @@
   },
   {
     "code": 28105,
+    "group": "GraphqlTransportErrorCode",
+    "name": "OriginDenied",
     "kind": "forbidden",
     "fluentKey": "E28105",
     "requiredParams": [],
@@ -4175,6 +5151,8 @@
   },
   {
     "code": 28106,
+    "group": "GraphqlTransportErrorCode",
+    "name": "TimedOut",
     "kind": "internal",
     "fluentKey": "E28106",
     "requiredParams": [],
@@ -4183,6 +5161,8 @@
   },
   {
     "code": 28107,
+    "group": "GraphqlTransportErrorCode",
+    "name": "Unauthenticated",
     "kind": "unauthorized",
     "fluentKey": "E28107",
     "requiredParams": [],
@@ -4191,6 +5171,8 @@
   },
   {
     "code": 28108,
+    "group": "GraphqlTransportErrorCode",
+    "name": "Internal",
     "kind": "internal",
     "fluentKey": "E28108",
     "requiredParams": [],
@@ -4199,6 +5181,8 @@
   },
   {
     "code": 28109,
+    "group": "GraphqlTransportErrorCode",
+    "name": "InvalidToken",
     "kind": "unauthorized",
     "fluentKey": "E28109",
     "requiredParams": [],
@@ -4207,6 +5191,8 @@
   },
   {
     "code": 28110,
+    "group": "GraphqlTransportErrorCode",
+    "name": "QueryTooDeep",
     "kind": "validation",
     "fluentKey": "E28110",
     "requiredParams": [
@@ -4217,6 +5203,8 @@
   },
   {
     "code": 28111,
+    "group": "GraphqlTransportErrorCode",
+    "name": "QueryTooComplex",
     "kind": "validation",
     "fluentKey": "E28111",
     "requiredParams": [
@@ -4227,6 +5215,8 @@
   },
   {
     "code": 29000,
+    "group": "InstanceErrorCode",
+    "name": "VersionConflict",
     "kind": "conflict",
     "fluentKey": "E29000",
     "requiredParams": [],
@@ -4237,6 +5227,8 @@
   },
   {
     "code": 29001,
+    "group": "InstanceErrorCode",
+    "name": "SettingOutOfRange",
     "kind": "validation",
     "fluentKey": "E29001",
     "requiredParams": [
@@ -4248,6 +5240,8 @@
   },
   {
     "code": 29002,
+    "group": "InstanceErrorCode",
+    "name": "InvalidClientMutationId",
     "kind": "validation",
     "fluentKey": "E29002",
     "requiredParams": [
@@ -4258,6 +5252,8 @@
   },
   {
     "code": 29003,
+    "group": "InstanceErrorCode",
+    "name": "StorageFailed",
     "kind": "internal",
     "fluentKey": "E29003",
     "requiredParams": [],
@@ -4266,6 +5262,8 @@
   },
   {
     "code": 29004,
+    "group": "InstanceErrorCode",
+    "name": "KeyNotFound",
     "kind": "not_found",
     "fluentKey": "E29004",
     "requiredParams": [],
@@ -4274,6 +5272,8 @@
   },
   {
     "code": 29005,
+    "group": "InstanceErrorCode",
+    "name": "KeyNotCurrent",
     "kind": "conflict",
     "fluentKey": "E29005",
     "requiredParams": [],
@@ -4282,6 +5282,8 @@
   },
   {
     "code": 29006,
+    "group": "InstanceErrorCode",
+    "name": "LastActiveKey",
     "kind": "conflict",
     "fluentKey": "E29006",
     "requiredParams": [],
@@ -4290,6 +5292,8 @@
   },
   {
     "code": 29007,
+    "group": "InstanceErrorCode",
+    "name": "KeyAlreadyRevoked",
     "kind": "conflict",
     "fluentKey": "E29007",
     "requiredParams": [],
@@ -4298,6 +5302,8 @@
   },
   {
     "code": 29008,
+    "group": "InstanceErrorCode",
+    "name": "UnsupportedKeyAlgorithm",
     "kind": "validation",
     "fluentKey": "E29008",
     "requiredParams": [
@@ -4308,6 +5314,8 @@
   },
   {
     "code": 29009,
+    "group": "InstanceErrorCode",
+    "name": "EmailDeliveryNotConfigured",
     "kind": "conflict",
     "fluentKey": "E29009",
     "requiredParams": [],
@@ -4316,6 +5324,8 @@
   },
   {
     "code": 29010,
+    "group": "InstanceErrorCode",
+    "name": "InvalidEmailTemplate",
     "kind": "validation",
     "fluentKey": "E29010",
     "requiredParams": [
@@ -4326,6 +5336,8 @@
   },
   {
     "code": 29011,
+    "group": "InstanceErrorCode",
+    "name": "TestEmailFailed",
     "kind": "internal",
     "fluentKey": "E29011",
     "requiredParams": [
@@ -4336,6 +5348,8 @@
   },
   {
     "code": 29012,
+    "group": "InstanceErrorCode",
+    "name": "EmailSettingRequired",
     "kind": "validation",
     "fluentKey": "E29012",
     "requiredParams": [],
@@ -4344,6 +5358,8 @@
   },
   {
     "code": 29013,
+    "group": "InstanceErrorCode",
+    "name": "InvalidEmailAddress",
     "kind": "validation",
     "fluentKey": "E29013",
     "requiredParams": [],
@@ -4352,6 +5368,8 @@
   },
   {
     "code": 29014,
+    "group": "InstanceErrorCode",
+    "name": "InvalidEmailTokenEndpoint",
     "kind": "validation",
     "fluentKey": "E29014",
     "requiredParams": [],
@@ -4360,6 +5378,8 @@
   },
   {
     "code": 29015,
+    "group": "InstanceErrorCode",
+    "name": "UnsupportedEmailLocale",
     "kind": "validation",
     "fluentKey": "E29015",
     "requiredParams": [
@@ -4370,6 +5390,8 @@
   },
   {
     "code": 29016,
+    "group": "InstanceErrorCode",
+    "name": "EmailTemplateTooLong",
     "kind": "validation",
     "fluentKey": "E29016",
     "requiredParams": [
@@ -4380,6 +5402,8 @@
   },
   {
     "code": 29017,
+    "group": "InstanceErrorCode",
+    "name": "DuplicateEmailLocale",
     "kind": "validation",
     "fluentKey": "E29017",
     "requiredParams": [
@@ -4390,6 +5414,8 @@
   },
   {
     "code": 30000,
+    "group": "AuditErrorCode",
+    "name": "InvalidCursor",
     "kind": "validation",
     "fluentKey": "E30000",
     "requiredParams": [],
@@ -4398,6 +5424,8 @@
   },
   {
     "code": 30001,
+    "group": "AuditErrorCode",
+    "name": "InvalidPageSize",
     "kind": "validation",
     "fluentKey": "E30001",
     "requiredParams": [
@@ -4408,6 +5436,8 @@
   },
   {
     "code": 30002,
+    "group": "AuditErrorCode",
+    "name": "InvalidTimeZone",
     "kind": "validation",
     "fluentKey": "E30002",
     "requiredParams": [
@@ -4418,6 +5448,8 @@
   },
   {
     "code": 30003,
+    "group": "AuditErrorCode",
+    "name": "QueryTooLong",
     "kind": "validation",
     "fluentKey": "E30003",
     "requiredParams": [
@@ -4430,6 +5462,8 @@
   },
   {
     "code": 30004,
+    "group": "AuditErrorCode",
+    "name": "QueryTooManyClauses",
     "kind": "validation",
     "fluentKey": "E30004",
     "requiredParams": [
@@ -4440,6 +5474,8 @@
   },
   {
     "code": 30005,
+    "group": "AuditErrorCode",
+    "name": "QueryTooDeep",
     "kind": "validation",
     "fluentKey": "E30005",
     "requiredParams": [
@@ -4450,6 +5486,8 @@
   },
   {
     "code": 30006,
+    "group": "AuditErrorCode",
+    "name": "QuerySyntaxError",
     "kind": "validation",
     "fluentKey": "E30006",
     "requiredParams": [],
@@ -4458,6 +5496,8 @@
   },
   {
     "code": 30007,
+    "group": "AuditErrorCode",
+    "name": "QueryUnknownField",
     "kind": "validation",
     "fluentKey": "E30007",
     "requiredParams": [
@@ -4468,6 +5508,8 @@
   },
   {
     "code": 30008,
+    "group": "AuditErrorCode",
+    "name": "QueryInvalidDate",
     "kind": "validation",
     "fluentKey": "E30008",
     "requiredParams": [
@@ -4478,6 +5520,8 @@
   },
   {
     "code": 30009,
+    "group": "AuditErrorCode",
+    "name": "QueryInvalidIdentifier",
     "kind": "validation",
     "fluentKey": "E30009",
     "requiredParams": [
@@ -4489,6 +5533,8 @@
   },
   {
     "code": 30010,
+    "group": "AuditErrorCode",
+    "name": "QueryUnsupportedOperator",
     "kind": "validation",
     "fluentKey": "E30010",
     "requiredParams": [
@@ -4499,6 +5545,8 @@
   },
   {
     "code": 30011,
+    "group": "AuditErrorCode",
+    "name": "QueryUnsupportedRangeField",
     "kind": "validation",
     "fluentKey": "E30011",
     "requiredParams": [
@@ -4509,6 +5557,8 @@
   },
   {
     "code": 30012,
+    "group": "AuditErrorCode",
+    "name": "QueryUnsupportedRegex",
     "kind": "validation",
     "fluentKey": "E30012",
     "requiredParams": [],
@@ -4517,6 +5567,8 @@
   },
   {
     "code": 30013,
+    "group": "AuditErrorCode",
+    "name": "QueryUnsupportedSyntax",
     "kind": "validation",
     "fluentKey": "E30013",
     "requiredParams": [],
@@ -4525,6 +5577,8 @@
   },
   {
     "code": 30014,
+    "group": "AuditErrorCode",
+    "name": "QueryUnknownValue",
     "kind": "validation",
     "fluentKey": "E30014",
     "requiredParams": [

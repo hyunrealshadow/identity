@@ -4,6 +4,12 @@ pub trait AppErrorCode: Copy {
     fn kind(self) -> ErrorKind;
     fn code(self) -> u32;
 
+    /// Enum that owns the code, such as `AuthErrorCode`.
+    fn group(self) -> &'static str;
+
+    /// Variant name within [`Self::group`], such as `InvalidOtp`.
+    fn name(self) -> &'static str;
+
     /// Parameters the localized message of this code always receives.
     fn required_params(self) -> &'static [&'static str] {
         &[]

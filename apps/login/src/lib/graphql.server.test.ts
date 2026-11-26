@@ -83,7 +83,7 @@ describe('identityGraphql', () => {
     const fetch = vi.fn()
     vi.stubGlobal('fetch', fetch)
     await expect(identityGraphql('mutation { updateProfile(input: {}) { user { id } } }')).rejects.toMatchObject({
-      errors: [{ message: '没有执行此操作的权限', extensions: { code: 'insufficient_scope', requiredScopes: ['user.write'] } }],
+      errors: [{ message: '没有执行此操作的权限', extensions: { kind: 'forbidden', challenge: { error: 'insufficient_scope', scopes: ['user.write'] } } }],
     })
     expect(fetch).not.toHaveBeenCalled()
     expect(mocks.clearAuthorizationCookie).not.toHaveBeenCalled()
@@ -110,7 +110,7 @@ describe('identityGraphql', () => {
       { authorization: 'elevated' },
     )).rejects.toMatchObject({
       challenge: { acrValues: 'aal2', maxAge: 3600 },
-      errors: [{ extensions: { code: 'insufficient_user_authentication' } }],
+      errors: [{ extensions: { challenge: { error: 'insufficient_user_authentication' } } }],
     })
     expect(fetch).toHaveBeenCalledOnce()
   })
@@ -125,7 +125,7 @@ describe('identityGraphql', () => {
       undefined,
       { authorization: 'elevated' },
     )).rejects.toMatchObject({
-      errors: [{ message: '没有执行此操作的权限', extensions: { code: 'insufficient_scope' } }],
+      errors: [{ message: '没有执行此操作的权限', extensions: { kind: 'forbidden', challenge: { error: 'insufficient_scope' } } }],
     })
     expect(fetch).not.toHaveBeenCalled()
   })
@@ -136,7 +136,7 @@ describe('identityGraphql', () => {
     vi.stubGlobal('fetch', fetch)
     await expect(identityGraphql('mutation { updateUsername(input: {username: "new-name"}) { user { id } } }')).rejects.toMatchObject({
       challenge: { maxAge: 300 },
-      errors: [{ extensions: { code: 'insufficient_user_authentication' } }],
+      errors: [{ extensions: { challenge: { error: 'insufficient_user_authentication' } } }],
     })
     expect(fetch).not.toHaveBeenCalled()
   })

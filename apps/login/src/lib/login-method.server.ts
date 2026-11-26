@@ -1,3 +1,4 @@
+import { AuthErrorCode, AuthorizeHttpErrorCode } from '@identity/graphql-access'
 import { withUiLocales } from './ui-locale'
 import {
   errorMessage,
@@ -106,7 +107,7 @@ export async function submitLoginMethod(request: Request, method: string) {
   } catch (error) {
     if (isTerminalLoginError(error)) {
       const restart =
-        error instanceof IdentityApiError && error.code === 11004
+        error instanceof IdentityApiError && error.code === AuthErrorCode.LoginExpired
           ? 'required'
           : undefined
       return formErrorResponse(
@@ -230,7 +231,7 @@ export async function restartLoginResponse(
     return navigationResponse(request, `/login?${search}`)
   } catch (error) {
     const restartUnavailable =
-      error instanceof IdentityApiError && error.code === 22005
+      error instanceof IdentityApiError && error.code === AuthorizeHttpErrorCode.ContinueInteractionUnavailable
     return formErrorResponse(
       request,
       pathname,

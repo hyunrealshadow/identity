@@ -1,3 +1,4 @@
+import { DeviceAuthorizationErrorCode } from '@identity/graphql-access'
 import { errorMessage, IdentityApiError, identityJson } from './identity.server'
 
 import type { Locale } from './i18n'
@@ -6,7 +7,7 @@ import type {
   DeviceVerificationPageData,
 } from './identity-types'
 
-const DEVICE_CODE_UNKNOWN = 26010
+const DEVICE_CODE_UNKNOWN = DeviceAuthorizationErrorCode.UserCodeNotFound
 
 type DeviceFailure =
   | { status: 'unknown' }

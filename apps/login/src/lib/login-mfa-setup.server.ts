@@ -1,3 +1,4 @@
+import { AuthErrorCode } from '@identity/graphql-access'
 import { withUiLocales } from './ui-locale'
 import {
   errorMessage,
@@ -98,7 +99,7 @@ export async function submitLoginMfaSetup(request: Request) {
   function failureResponse(error: unknown) {
     if (isTerminalLoginError(error)) {
       const restart =
-        error instanceof IdentityApiError && error.code === 11004
+        error instanceof IdentityApiError && error.code === AuthErrorCode.LoginExpired
           ? 'required'
           : undefined
       return formErrorResponse(

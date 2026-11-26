@@ -36,7 +36,7 @@ it('passes the credential JSON to the authenticated completion mutation', async 
 })
 
 it('binds reauthentication to the current account and honors AAL2', async () => {
-  mocks.graphql.mockRejectedValueOnce(new GraphqlRequestError([{ message: 'step up', extensions: { code: 'insufficient_user_authentication' } }], { acrValues: 'aal2', maxAge: 3600 }))
+  mocks.graphql.mockRejectedValueOnce(new GraphqlRequestError([{ message: 'step up', extensions: { kind: 'unauthorized', challenge: { error: 'insufficient_user_authentication' } } }], { acrValues: 'aal2', maxAge: 3600 }))
   mocks.graphql.mockResolvedValueOnce({ account: { username: 'person' } })
   mocks.reauthorize.mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: '/reauth' } }))
   expect(await passkeyAccountAction({ action: 'delete', id: 'key' })).toEqual({ redirect: '/reauth' })

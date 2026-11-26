@@ -321,13 +321,11 @@ async fn graphql_http_reports_the_required_scope() {
 
     assert_eq!(response.status_code, Some(StatusCode::OK));
     let body: Value = response.take_json().await.unwrap();
+    assert_eq!(body["errors"][0]["extensions"]["kind"], "forbidden");
+    assert_eq!(body["errors"][0]["extensions"]["code"], 28005);
     assert_eq!(
-        body["errors"][0]["extensions"]["requiredScope"],
-        "user.read"
-    );
-    assert_eq!(
-        body["errors"][0]["extensions"]["code"],
-        "insufficient_scope"
+        body["errors"][0]["extensions"]["challenge"],
+        serde_json::json!({ "error": "insufficient_scope", "scopes": ["user.read"] })
     );
     assert!(body["data"]["account"].is_null());
     assert_eq!(
@@ -636,8 +634,11 @@ async fn graphql_http_account_access_queries_require_only_user_read() {
         assert_eq!(response.status_code, Some(StatusCode::OK));
         let body: Value = response.take_json().await.unwrap();
         let error = &body["errors"][0];
-        assert_eq!(error["extensions"]["code"], "insufficient_scope");
-        assert_eq!(error["extensions"]["requiredScope"], "user.read");
+        assert_eq!(error["extensions"]["code"], 28005);
+        assert_eq!(
+            error["extensions"]["challenge"],
+            serde_json::json!({ "error": "insufficient_scope", "scopes": ["user.read"] })
+        );
         assert!(body["data"].is_null());
     }
 }

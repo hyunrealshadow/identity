@@ -58,13 +58,7 @@ export function rbacConflict(
       ),
     )
     if (issue.fields.length > 0 && !versionField) continue
-    const value =
-      `${issue.kind ?? ''} ${String(issue.code ?? '')}`.toLowerCase()
-    if (
-      value.includes('conflict') ||
-      value.includes('stale') ||
-      value.includes('version_mismatch')
-    ) {
+    if (issue.kind === 'conflict') {
       return { conflict: true, currentVersion: currentVersion(issue) }
     }
   }

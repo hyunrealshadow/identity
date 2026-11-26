@@ -229,11 +229,17 @@ Responses use a single envelope:
 }
 ```
 
-- `code` is a stable numeric catalog key from `graphql/error-catalog.json` (the
-  catalog also carries the `E<code>` fluent key); messages are localized to the
-  request language and never expose internal details. Authentication step-up
-  errors instead use the string codes `insufficient_user_authentication` or
-  `insufficient_scope` with `acr_values`/`max_age` or `requiredScope`.
+- `code` is always a stable numeric catalog key from
+  `graphql/error-catalog.json` (the catalog also carries the `E<code>` fluent
+  key and the defining `group`/`name`); messages are localized to the request
+  language and never expose internal details. `pnpm errors:catalog` also
+  generates the named constants in `@identity/graphql-access`, so frontends
+  compare against `AuthErrorCode.LoginExpired` rather than a bare number.
+- `challenge`, when present, says what the caller can do to be allowed, using
+  the bearer token error codes:
+  `{ "error": "insufficient_user_authentication", "acrValues"?, "maxAge"? }`
+  (RFC 9470; also sent as `WWW-Authenticate` with HTTP 401) or
+  `{ "error": "insufficient_scope", "scopes": [...] }` (RFC 6750).
 - `kind` groups codes into `validation`, `conflict`, `forbidden`, `not_found`,
   `unauthorized`, `gone`, `rate_limit`, and `internal`.
 - `requestId` always correlates with `x-request-id` on the response and with
