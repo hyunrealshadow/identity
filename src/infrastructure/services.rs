@@ -10,6 +10,7 @@ use identity_application::{
         passkey::PasskeyService,
         session::SessionService,
     },
+    authorization::ManagementAccessService,
     client::ClientManagementService,
     console::ConsoleRuntimeService,
     data_protection::{DataProtector, DataProtectorImpl},
@@ -44,7 +45,7 @@ use identity_application::{
 use identity_domain::{
     openid_connect::{
         BUILTIN_CLIENT_SECRET_LIFETIME, OpenIdConnectClientRegistrationRepository,
-        OpenIdConnectClientRepository, OpenIdConnectCredentialRepository, WorkloadAuthenticator,
+        WorkloadAuthenticator,
     },
     rbac::RbacAuthorizationRepository,
 };
@@ -96,43 +97,18 @@ use crate::{
     openid_connect::backchannel_logout::HttpBackChannelLogoutSender,
 };
 
-pub type AppLoginService = LoginService;
-
-pub type AppSessionService = SessionService;
-
-pub type AppAccountService = AccountService;
-
-pub type AppMfaService = MfaService;
-
-pub type AppKeyService = AsymmetricKeyService;
-
-pub type AppInstallService = InstallService;
-
-pub type AppOpenIdProviderService = OpenIdProviderService;
-
-pub type AppOpenIdAuthorizeService = AuthorizeService;
-
-pub type AppOpenIdTokenService = TokenService;
-
-pub type AppOpenIdLogoutService = LogoutService;
-
-pub type AppOpenIdUserInfoService = UserInfoService;
-
-pub type AppDynamicClientRegistrationService = DynamicClientRegistrationService;
-
-pub type AppDeviceAuthorizationService = DeviceAuthorizationService;
 pub struct AppServices {
-    authorization: Arc<AuthorizationRepositoryImpl>,
-    login: AppLoginService,
+    management_access: ManagementAccessService,
+    login: LoginService,
     passkey: Arc<PasskeyService>,
-    account: AppAccountService,
-    session: AppSessionService,
-    mfa: Arc<AppMfaService>,
-    key: AppKeyService,
+    account: AccountService,
+    session: SessionService,
+    mfa: Arc<MfaService>,
+    key: AsymmetricKeyService,
     key_rotation: KeyRotationService,
     key_management: KeyManagementService,
     instance_setting: InstanceSettingService,
-    install: AppInstallService,
+    install: InstallService,
     audit_query: AuditQueryService,
     instance_overview: InstanceOverviewService,
     user_management: UserManagementService,
@@ -140,20 +116,18 @@ pub struct AppServices {
     rbac_management: RbacManagementService,
     group_management: GroupManagementService,
     client_management: ClientManagementService,
-    oidc: AppOpenIdProviderService,
-    oidc_authorize: AppOpenIdAuthorizeService,
+    oidc: OpenIdProviderService,
+    oidc_authorize: AuthorizeService,
     pushed_authorization: PushedAuthorizationService,
-    oidc_token: AppOpenIdTokenService,
-    oidc_logout: AppOpenIdLogoutService,
-    user_info: AppOpenIdUserInfoService,
-    dynamic_client_registration: AppDynamicClientRegistrationService,
-    device_authorization: AppDeviceAuthorizationService,
+    oidc_token: TokenService,
+    oidc_logout: LogoutService,
+    user_info: UserInfoService,
+    dynamic_client_registration: DynamicClientRegistrationService,
+    device_authorization: DeviceAuthorizationService,
     login_runtime: LoginRuntimeService,
     console_runtime: ConsoleRuntimeService,
     client_key_coverage: ClientKeyCoverageService,
     workload_authenticator: Arc<dyn WorkloadAuthenticator>,
-    oidc_client_repo: Arc<dyn OpenIdConnectClientRepository>,
-    oidc_credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
     data_protector: Arc<dyn DataProtector>,
     email_sender: Arc<dyn identity_application::email::EmailSender>,
     email_queue: crate::email::EmailQueue,
@@ -258,7 +232,10 @@ impl AppServices {
             .with_key_jwk_repo(Arc::new(KeyJwkRepositoryImpl::new(db.clone())))
             .with_signing_algorithm_detector(signing_algorithm_detector.clone());
         Ok(Self {
-            authorization: authorization.clone(),
+            management_access: ManagementAccessService::new(
+                authorization.clone(),
+                oauth_resource_repo.clone(),
+            ),
             passkey: passkey.clone(),
             login: LoginService::new(
                 Arc::new(UserRepositoryImpl::new(db.clone())),
@@ -515,8 +492,6 @@ impl AppServices {
             console_runtime: ConsoleRuntimeService::new(settings.store()),
             client_key_coverage: ClientKeyCoverageService::new(oidc_credential_repo.clone()),
             workload_authenticator,
-            oidc_client_repo,
-            oidc_credential_repo,
             data_protector,
             email_sender,
             email_queue,
@@ -530,17 +505,17 @@ impl AppServices {
     }
 
     #[must_use]
-    pub fn login(&self) -> &AppLoginService {
+    pub fn login(&self) -> &LoginService {
         &self.login
     }
 
     #[must_use]
-    pub fn session(&self) -> &AppSessionService {
+    pub fn session(&self) -> &SessionService {
         &self.session
     }
 
     #[must_use]
-    pub fn account(&self) -> &AppAccountService {
+    pub fn account(&self) -> &AccountService {
         &self.account
     }
 
@@ -553,12 +528,12 @@ impl AppServices {
     }
 
     #[must_use]
-    pub fn mfa(&self) -> &AppMfaService {
+    pub fn mfa(&self) -> &MfaService {
         &self.mfa
     }
 
     #[must_use]
-    pub fn key(&self) -> &AppKeyService {
+    pub fn key(&self) -> &AsymmetricKeyService {
         &self.key
     }
 
@@ -578,7 +553,7 @@ impl AppServices {
     }
 
     #[must_use]
-    pub fn install(&self) -> &AppInstallService {
+    pub fn install(&self) -> &InstallService {
         &self.install
     }
 
@@ -617,12 +592,12 @@ impl AppServices {
     }
 
     #[must_use]
-    pub fn oidc(&self) -> &AppOpenIdProviderService {
+    pub fn oidc(&self) -> &OpenIdProviderService {
         &self.oidc
     }
 
     #[must_use]
-    pub fn oidc_authorize(&self) -> &AppOpenIdAuthorizeService {
+    pub fn oidc_authorize(&self) -> &AuthorizeService {
         &self.oidc_authorize
     }
 
@@ -631,27 +606,27 @@ impl AppServices {
         &self.pushed_authorization
     }
 
-    pub fn oidc_token(&self) -> &AppOpenIdTokenService {
+    pub fn oidc_token(&self) -> &TokenService {
         &self.oidc_token
     }
 
     #[must_use]
-    pub fn oidc_logout(&self) -> &AppOpenIdLogoutService {
+    pub fn oidc_logout(&self) -> &LogoutService {
         &self.oidc_logout
     }
 
     #[must_use]
-    pub fn user_info(&self) -> &AppOpenIdUserInfoService {
+    pub fn user_info(&self) -> &UserInfoService {
         &self.user_info
     }
 
     #[must_use]
-    pub fn dynamic_client_registration(&self) -> &AppDynamicClientRegistrationService {
+    pub fn dynamic_client_registration(&self) -> &DynamicClientRegistrationService {
         &self.dynamic_client_registration
     }
 
     #[must_use]
-    pub fn oidc_device_authorization(&self) -> &AppDeviceAuthorizationService {
+    pub fn oidc_device_authorization(&self) -> &DeviceAuthorizationService {
         &self.device_authorization
     }
 
@@ -676,16 +651,6 @@ impl AppServices {
     }
 
     #[must_use]
-    pub fn oidc_client_repo(&self) -> &Arc<dyn OpenIdConnectClientRepository> {
-        &self.oidc_client_repo
-    }
-
-    #[must_use]
-    pub fn oidc_credential_repo(&self) -> &Arc<dyn OpenIdConnectCredentialRepository> {
-        &self.oidc_credential_repo
-    }
-
-    #[must_use]
     /// Delivers queued email.
     pub fn email_sender(&self) -> &Arc<dyn identity_application::email::EmailSender> {
         &self.email_sender
@@ -701,8 +666,8 @@ impl AppServices {
     }
 
     #[must_use]
-    pub fn authorization(&self) -> &Arc<AuthorizationRepositoryImpl> {
-        &self.authorization
+    pub fn management_access(&self) -> &ManagementAccessService {
+        &self.management_access
     }
 
     pub fn with_console_installation(

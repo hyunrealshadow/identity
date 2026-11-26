@@ -12,12 +12,12 @@ use uuid::Uuid;
 
 use crate::{
     application::{error::AppError, openid_connect::authorize::AuthorizeService},
-    boot::AppState,
     domain::{
         auth::model::ActiveSession,
         client_authorization::SelectionSource,
         openid_connect::{AuthorizationRequest, OAuthErrorCode, PromptValue},
     },
+    infrastructure::AppState,
 };
 
 #[derive(Debug)]

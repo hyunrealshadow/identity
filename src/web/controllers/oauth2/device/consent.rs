@@ -9,11 +9,11 @@ use crate::{
         error::{AppError, codes::device},
         openid_connect::device::{DeviceVerificationDecision, DeviceVerificationUser},
     },
-    boot::AppState,
     domain::{
         auth::model::{ActiveSession, Login},
         openid_connect::ScopeSet,
     },
+    infrastructure::AppState,
     web::{
         controllers::{
             response::json_response,

@@ -7,7 +7,7 @@ use sea_orm::{ConnectionTrait, sea_query::Query};
 use serde::Serialize;
 
 use crate::{
-    boot::AppState,
+    infrastructure::AppState,
     infrastructure::config::{HealthConfig, ServerConfig},
     web::controllers::response::{app_state, render_json, write_error_response},
 };

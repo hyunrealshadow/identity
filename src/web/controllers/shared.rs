@@ -27,12 +27,12 @@ use crate::{
         },
         setting::{AppSettings, SettingsSource},
     },
-    boot::AppState,
     controllers::response::redirect_to_response,
     domain::auth::{
         SESSION_EXPIRY,
         model::{ActiveSession, SessionOid},
     },
+    infrastructure::AppState,
 };
 
 pub const CSRF_HEADER_NAME: &str = "x-csrf-token";

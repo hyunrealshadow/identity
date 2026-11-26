@@ -10,7 +10,7 @@ use unic_langid::LanguageIdentifier;
 
 use crate::{
     application::error::{AppError, codes::common},
-    boot::AppState,
+    infrastructure::AppState,
     infrastructure::{
         i18n::{I18n, resolve_locale_from_headers},
         web::tera as web_tera,

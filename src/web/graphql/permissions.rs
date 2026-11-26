@@ -1,24 +1,14 @@
-use async_trait::async_trait;
-use chrono::Utc;
-use identity_application::{
-    authorization::{
-        CurrentManagementAuthority, DEFAULT_RECENT_AAL2_TTL, ManagementAuthorizationRequest,
-        ManagementTarget, evaluate_management_authority,
-    },
-    error::{AppError, codes::common},
-};
-use identity_domain::{
-    authorization::ManagementAuthorityRepository,
-    openid_connect::{API_RESOURCE, ScopeSet, resource::OAuthResourceRepository},
-};
-use identity_infrastructure::database::repository::oauth_resource::OAuthResourceRepositoryImpl;
 use std::collections::BTreeSet;
+
+use async_trait::async_trait;
+use identity_application::{authorization::ManagementAccessRequest, error::AppError};
 
 use super::schema::{
     RequestContext,
     authorization::{EffectivePermissionsProvider, EffectivePermissionsView},
 };
 
+/// Effective permissions from the live management access service.
 pub(super) struct LiveEffectivePermissions;
 
 #[async_trait]
@@ -27,93 +17,41 @@ impl EffectivePermissionsProvider for LiveEffectivePermissions {
         &self,
         request: &RequestContext,
     ) -> Result<EffectivePermissionsView, AppError> {
-        let repo = request.state.services().authorization();
-        let (eligible, current) = if let Some(user) = request.claims.user_oid {
-            let Some(authority) = repo
-                .find_user_permission_authority(user)
-                .await
-                .map_err(AppError::from)?
-            else {
-                return Ok(empty());
-            };
-            (
-                authority.permissions.clone(),
-                CurrentManagementAuthority::UserPermissions(authority),
-            )
-        } else {
-            let Some(authority) = repo
-                .find_client_scope_authority(request.claims.client_oid)
-                .await
-                .map_err(AppError::from)?
-            else {
-                return Ok(empty());
-            };
-            (
-                authority.permissions.clone(),
-                CurrentManagementAuthority::ClientScopes(authority),
-            )
-        };
-        let resource = OAuthResourceRepositoryImpl::new(request.state.resources().db().clone())
-            .find_by_uri(API_RESOURCE)
-            .await
-            .map_err(common::error::ResourceLookupFailed::map_source())?
-            .ok_or_else(|| common::error::ResourceLookupFailed.into_error())?;
-        if !resource.enabled {
-            return Ok(empty());
-        }
-        let allowed = ScopeSet::parse(&resource.scopes.join(" ")).map_err(AppError::internal)?;
-        let requestable = eligible
-            .into_iter()
-            .filter(|scope| allowed.management_scopes().contains(scope))
-            .collect::<BTreeSet<_>>();
         let snapshot = request
             .claims
             .management
             .as_ref()
             .map(|snapshot| snapshot.to_snapshot())
             .transpose()
-            .map_err(AppError::internal)?;
-        let version = ManagementAuthorityRepository::current_policy_version(repo.as_ref())
-            .await
-            .map_err(AppError::from)?;
-        let granted = request
+            .map_err(AppError::map_internal("graphql.management_snapshot"))?;
+        let scopes = request
             .claims
             .scope
             .management_scopes()
             .into_iter()
             .collect::<BTreeSet<_>>();
-        let effective_scopes = requestable
-            .iter()
-            .filter(|scope| {
-                evaluate_management_authority(&ManagementAuthorizationRequest {
-                    actor: &request.actor,
-                    token_scopes: &granted,
-                    required: **scope,
-                    target: ManagementTarget::instance(),
-                    current_authority: Some(&current),
-                    snapshot: snapshot.as_ref(),
-                    credential_client_boundary: None,
-                    current_policy_version: version,
-                    now: Utc::now(),
-                    recent_aal2_ttl: DEFAULT_RECENT_AAL2_TTL,
-                })
-                .is_ok()
+        let permissions = request
+            .state
+            .services()
+            .management_access()
+            .effective_permissions(&ManagementAccessRequest {
+                actor: &request.actor,
+                principal: request.management_principal(),
+                token_scopes: &scopes,
+                snapshot: snapshot.as_ref(),
             })
-            .map(|scope| scope.name().to_owned())
-            .collect();
+            .await?;
+        let names = |scopes: Vec<_>| {
+            scopes
+                .into_iter()
+                .map(|scope: identity_domain::authorization::ManagementScope| {
+                    scope.name().to_owned()
+                })
+                .collect()
+        };
         Ok(EffectivePermissionsView {
-            requestable_scopes: requestable
-                .iter()
-                .map(|scope| scope.name().to_owned())
-                .collect(),
-            effective_scopes,
+            requestable_scopes: names(permissions.requestable),
+            effective_scopes: names(permissions.effective),
         })
-    }
-}
-
-fn empty() -> EffectivePermissionsView {
-    EffectivePermissionsView {
-        requestable_scopes: vec![],
-        effective_scopes: vec![],
     }
 }

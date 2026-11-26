@@ -1,6 +1,6 @@
 use crate::error::{error_message, log_app_error};
 use http::{HeaderMap, StatusCode, header::HeaderName};
-use identity_domain::openid_connect::{AuthorizationRequestData, ResponseType, ScopeSet};
+use identity_domain::openid_connect::{AuthorizationRequestData, ResponseType};
 use salvo::{Depot, Request, Response, Writer, async_trait};
 use url::{Url, form_urlencoded::parse};
 
@@ -14,7 +14,6 @@ use super::{
 };
 use crate::{
     application::error::{AppError, codes::authorize},
-    boot::AppState,
     controllers::{
         response::{WebError, app_state, redirect_to_response, render_app_error, render_html},
         shared::{generate_csp_nonce, inline_script_csp_header_value, login_redirect},
@@ -22,6 +21,7 @@ use crate::{
     domain::openid_connect::{
         AuthorizationRequest, OAuthErrorCode, OAuthErrorResponse, ResponseMode,
     },
+    infrastructure::AppState,
     infrastructure::{i18n::resolve_locale_from_headers, web::tera as web_tera},
     web::views::oauth2::{ErrorPageData, FormPostField, FormPostPageData},
 };
@@ -232,86 +232,44 @@ async fn render_error(
 ) -> Response {
     log_app_error(&error, "authorization request failed");
 
-    let mut resolved_raw = raw.clone();
-    if resolved_raw
-        .redirect_uri
+    let Some(uri) = ctx
+        .services()
+        .oidc_authorize()
+        .error_redirect_uri(
+            raw.client_id.as_deref(),
+            raw.redirect_uri.as_deref(),
+            raw.scope.as_deref(),
+        )
+        .await
+    else {
+        return render_authorize_error_page(ctx, headers, error);
+    };
+    let issuer = match ctx.services().oidc_authorize().issuer() {
+        Ok(issuer) => issuer,
+        Err(error) => return render_authorize_error_page(ctx, headers, error),
+    };
+    let error_response =
+        localized_authorize_error_response(ctx, headers, &error).with_issuer(issuer.to_string());
+    let error_response = if let Some(s) = raw.state.clone() {
+        error_response.with_state(s)
+    } else {
+        error_response
+    };
+    if raw.response_mode.as_deref() == Some("form_post") {
+        return render_form_post_response(ctx, headers, &uri, &error_response);
+    }
+
+    let error_response = match raw
+        .response_type
         .as_deref()
-        .is_none_or(str::is_empty)
-        && resolved_raw
-            .scope
-            .as_deref()
-            .is_none_or(|scope| !ScopeSet::parse(scope).is_ok_and(|scope| scope.contains_openid()))
-        && let Some(client_oid) = resolved_raw
-            .client_id
-            .as_deref()
-            .and_then(|id| identity_domain::openid_connect::identifier::parse_client_id(id).ok())
-        && let Some(client) = ctx
-            .services()
-            .oidc_client_repo()
-            .find_by_oid(client_oid)
-            .await
-            .unwrap_or(None)
-        && let Some(only_uri) = client.single_redirect_uri()
+        .and_then(|value| value.parse::<ResponseType>().ok())
     {
-        resolved_raw.redirect_uri = Some(only_uri.to_owned());
-    }
-    let raw = &resolved_raw;
-
-    let can_redirect = raw.redirect_uri.as_deref().is_some_and(|u| !u.is_empty())
-        && raw.client_id.as_deref().is_some_and(|c| !c.is_empty());
-
-    if can_redirect
-        && let Some(redirect_uri) = raw.redirect_uri.as_deref()
-        && let Ok(uri) = Url::parse(redirect_uri)
-    {
-        let client_oid = raw
-            .client_id
-            .as_deref()
-            .and_then(|cid| identity_domain::openid_connect::identifier::parse_client_id(cid).ok());
-
-        if let Some(client_oid) = client_oid {
-            let client = ctx
-                .services()
-                .oidc_client_repo()
-                .find_by_oid(client_oid)
-                .await
-                .unwrap_or(None);
-            if !client.is_some_and(|c| c.has_redirect_uri_str(redirect_uri)) {
-                return render_authorize_error_page(ctx, headers, error);
-            }
-        } else {
-            return render_authorize_error_page(ctx, headers, error);
+        Some(response_type) if response_type.uses_front_channel_response() => {
+            error_response.to_fragment_redirect_url(&uri)
         }
-
-        let issuer = match ctx.services().oidc_authorize().issuer() {
-            Ok(issuer) => issuer,
-            Err(error) => return render_authorize_error_page(ctx, headers, error),
-        };
-        let error_response = localized_authorize_error_response(ctx, headers, &error)
-            .with_issuer(issuer.to_string());
-        let error_response = if let Some(s) = raw.state.clone() {
-            error_response.with_state(s)
-        } else {
-            error_response
-        };
-        if raw.response_mode.as_deref() == Some("form_post") {
-            return render_form_post_response(ctx, headers, &uri, &error_response);
-        }
-
-        let error_response = match raw
-            .response_type
-            .as_deref()
-            .and_then(|value| value.parse::<ResponseType>().ok())
-        {
-            Some(response_type) if response_type.uses_front_channel_response() => {
-                error_response.to_fragment_redirect_url(&uri)
-            }
-            _ => error_response.to_redirect_url(&uri),
-        };
-        return redirect_to_response(error_response.as_str());
-    }
-
-    render_authorize_error_page(ctx, headers, error)
+        _ => error_response.to_redirect_url(&uri),
+    };
+    redirect_to_response(error_response.as_str())
 }
 
 /// Uses normalized parameters; render_error verifies the redirect against

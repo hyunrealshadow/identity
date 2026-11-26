@@ -3,18 +3,11 @@ use std::collections::BTreeSet;
 
 use super::{access::AccessPolicy, authorization::request_context, error::app_error};
 use async_graphql::{Context, Guard, Result};
-use chrono::Utc;
 use identity_application::{
-    authorization::{
-        CurrentManagementAuthority, DEFAULT_RECENT_AAL2_TTL, ManagementAuthorizationRequest,
-        ManagementTarget, ManagementTargetKind, evaluate_management_authority,
-    },
+    authorization::{ManagementAccessRequest, ManagementTarget},
     error::codes::authorization,
 };
-use identity_domain::{
-    authorization::{ManagementAuthorityRepository, ManagementScope},
-    user::UserOid,
-};
+use identity_domain::authorization::ManagementScope;
 
 pub(crate) struct ManagementGuard {
     required: ManagementScope,
@@ -34,29 +27,6 @@ impl ManagementGuard {
 impl Guard for ManagementGuard {
     async fn check(&self, ctx: &Context<'_>) -> Result<()> {
         let request = request_context(ctx)?;
-        let repo = request.state.services().authorization();
-        let current = if let Some(user) = request.claims.user_oid {
-            repo.find_user_permission_authority(user)
-                .await
-                .map_err(|error| app_error(ctx, error))?
-                .map(CurrentManagementAuthority::UserPermissions)
-        } else {
-            repo.find_client_scope_authority(request.claims.client_oid)
-                .await
-                .map_err(|error| app_error(ctx, error))?
-                .map(CurrentManagementAuthority::ClientScopes)
-        };
-        let mut target = self.target;
-        // The flag now means "target is a full recoverable capability holder",
-        // never membership in a fixed role or built-in group.
-        target.is_instance_owner = if target.kind == ManagementTargetKind::User {
-            repo.find_user_permission_authority(UserOid(target.oid))
-                .await
-                .map_err(|error| app_error(ctx, error))?
-                .is_some_and(|authority| authority.has_full_management_permissions())
-        } else {
-            false
-        };
         let snapshot = request
             .claims
             .management
@@ -64,28 +34,28 @@ impl Guard for ManagementGuard {
             .map(|snapshot| snapshot.to_snapshot())
             .transpose()
             .map_err(|_| app_error(ctx, authorization::error::AuthorizationSnapshotExpired))?;
-        let policy_version = ManagementAuthorityRepository::current_policy_version(repo.as_ref())
-            .await
-            .map_err(|error| app_error(ctx, error))?;
         let scopes = request
             .claims
             .scope
             .management_scopes()
             .into_iter()
             .collect::<BTreeSet<_>>();
-        evaluate_management_authority(&ManagementAuthorizationRequest {
-            actor: &request.actor,
-            token_scopes: &scopes,
-            required: self.required,
-            target,
-            current_authority: current.as_ref(),
-            snapshot: snapshot.as_ref(),
-            credential_client_boundary: None,
-            current_policy_version: policy_version,
-            now: Utc::now(),
-            recent_aal2_ttl: DEFAULT_RECENT_AAL2_TTL,
-        })
-        .map_err(|error| app_error(ctx, error))?;
+        request
+            .state
+            .services()
+            .management_access()
+            .authorize(
+                &ManagementAccessRequest {
+                    actor: &request.actor,
+                    principal: request.management_principal(),
+                    token_scopes: &scopes,
+                    snapshot: snapshot.as_ref(),
+                },
+                self.required,
+                self.target,
+            )
+            .await
+            .map_err(|error| app_error(ctx, error))?;
         Ok(())
     }
 }

@@ -32,6 +32,7 @@ pub use identity_domain::openid_connect::model::authorization_request::Authoriza
 mod service;
 pub use service::{AuthorizeService, AuthorizeServiceDependencies};
 
+mod error_redirect;
 mod flow;
 pub use flow::AuthorizationApproval;
 mod login;

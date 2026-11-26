@@ -138,16 +138,14 @@ pub(crate) async fn request_authority(
         return Err(authorization::error::AuthorizationSnapshotExpired.into());
     }
     let (snapshot, boundary) = if request.claims.principal.is_machine() {
-        use identity_domain::authorization::ManagementAuthorityRepository;
         // The transport validated this client credential. Capture its live
         // boundary here; the write transaction compares it under its locks.
         let current = request
             .state
             .services()
-            .authorization()
-            .find_client_scope_authority(request.claims.client_oid)
-            .await
-            .map_err(AppError::from)?
+            .management_access()
+            .client_scope_authority(request.claims.client_oid)
+            .await?
             .ok_or_else(|| authorization::error::AuthorizationSnapshotExpired.into_error())?;
         (None, current.boundary)
     } else {

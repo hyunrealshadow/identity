@@ -1,5 +1,8 @@
 use async_graphql::Result;
-use identity_application::{error::codes::graphql, openid_connect::user_info::PrincipalClaims};
+use identity_application::{
+    authorization::ManagementPrincipal, error::codes::graphql,
+    openid_connect::user_info::PrincipalClaims,
+};
 use identity_domain::{
     authorization::ActorContext,
     client_authorization::AccessTokenPrincipal,
@@ -37,5 +40,13 @@ impl RequestContext {
 
     pub fn user_oid(&self) -> Result<UserOid> {
         Ok(self.user()?.oid)
+    }
+
+    /// The token's subject for management decisions.
+    pub fn management_principal(&self) -> ManagementPrincipal {
+        match self.claims.user_oid {
+            Some(user) => ManagementPrincipal::User(user),
+            None => ManagementPrincipal::Client(self.claims.client_oid),
+        }
     }
 }

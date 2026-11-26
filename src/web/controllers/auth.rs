@@ -572,7 +572,7 @@ async fn email_code(depot: &mut Depot, req: &mut Request, res: &mut Response) ->
 /// The login application page `route` for `login_id`, ending where an
 /// emailed link token is appended.
 fn login_link_prefix(
-    ctx: &crate::boot::AppState,
+    ctx: &crate::infrastructure::AppState,
     route: &str,
     login_id: &str,
     ui_locales: Option<&[String]>,
@@ -993,7 +993,7 @@ async fn required_password_change(
 /// Record the established session on the interaction and answer with where
 /// the browser continues.
 async fn render_authenticated(
-    ctx: &crate::boot::AppState,
+    ctx: &crate::infrastructure::AppState,
     headers: &HeaderMap,
     login_id: &str,
     session: &identity_domain::auth::model::Session,
@@ -1063,7 +1063,7 @@ fn enrollment_response(enrollment: login::LoginTotpEnrollment) -> MfaEnrollmentR
     }
 }
 
-fn enrollment_issuer(ctx: &crate::boot::AppState) -> Result<String, AppError> {
+fn enrollment_issuer(ctx: &crate::infrastructure::AppState) -> Result<String, AppError> {
     let issuer = ctx.services().oidc().issuer()?;
     Ok(issuer.host_str().unwrap_or("Identity").to_owned())
 }
