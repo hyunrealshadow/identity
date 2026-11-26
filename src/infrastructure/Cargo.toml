@@ -52,7 +52,7 @@ sha2 = { workspace = true }
 subtle = { workspace = true }
 tera = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["fs"] }
 totp-rs = { version = "6.0.0", features = ["gen_secret", "otpauth"] }
 tracing = { workspace = true }
 tracing-opentelemetry = { workspace = true }

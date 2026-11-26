@@ -1,8 +1,6 @@
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use rand::{RngExt, rng};
 
-use crate::openid_connect::remote::conformance_mode_active;
-
 pub(super) fn generate_client_secret() -> String {
     generate_url_safe_token()
 }
@@ -15,8 +13,4 @@ fn generate_url_safe_token() -> String {
     let mut bytes = [0_u8; 32];
     rng().fill(&mut bytes[..]);
     URL_SAFE_NO_PAD.encode(bytes)
-}
-
-pub(super) fn default_skip_consent() -> bool {
-    conformance_mode_active()
 }

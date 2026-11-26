@@ -1,9 +1,6 @@
-use std::sync::atomic::{AtomicBool, Ordering};
-
 use http::StatusCode;
 use identity_application::observability::{BusinessEvent, EventSeverity, EventValue, event_sink};
 use salvo::{Depot, Request, Response, Router, handler};
-use sea_orm::{ConnectionTrait, sea_query::Query};
 use serde::Serialize;
 
 use crate::{
@@ -11,10 +8,6 @@ use crate::{
     infrastructure::config::{HealthConfig, ServerConfig},
     web::controllers::response::{app_state, render_json, write_error_response},
 };
-
-/// Whether the last probe result matched the current one. Only transitions are
-/// recorded as key events; successful probes stay out of traces and INFO logs.
-static DATABASE_HEALTHY: AtomicBool = AtomicBool::new(true);
 
 #[derive(Debug, Serialize)]
 pub struct HealthResponse {
@@ -57,7 +50,7 @@ async fn health_handler(req: &mut Request, depot: &mut Depot, res: &mut Response
             ok = false;
         }
         let healthy = result.status == "ok";
-        let previous = DATABASE_HEALTHY.swap(healthy, Ordering::Relaxed);
+        let previous = state.resources().swap_database_healthy(healthy);
         if previous != healthy {
             let event = BusinessEvent::business("health.status.changed")
                 .severity(if healthy {
@@ -87,20 +80,16 @@ async fn health_handler(req: &mut Request, depot: &mut Depot, res: &mut Response
 }
 
 async fn check_database(state: &AppState) -> HealthCheckResult {
-    match state
-        .resources()
-        .db()
-        .execute(&Query::select().expr(1).to_owned())
-        .await
-    {
-        Ok(_) => HealthCheckResult {
+    if state.resources().ping_database().await {
+        HealthCheckResult {
             status: "ok",
             detail: None,
-        },
-        Err(_) => HealthCheckResult {
+        }
+    } else {
+        HealthCheckResult {
             status: "error",
             detail: None,
-        },
+        }
     }
 }
 

@@ -117,6 +117,30 @@ pub struct LogoutServiceDependencies {
     pub backchannel_sender: Arc<dyn BackChannelLogoutSender>,
 }
 
+async fn deliver_backchannel_logout(
+    sender: &dyn BackChannelLogoutSender,
+    events: &dyn EventSink,
+    notification: &BackChannelLogoutNotification,
+) {
+    let delivery = sender.send(notification).await;
+    let (outcome, reason) = match delivery {
+        BackChannelLogoutDelivery::Delivered => ("success", None),
+        BackChannelLogoutDelivery::Rejected => ("failure", Some("non_success_status")),
+        BackChannelLogoutDelivery::TransportFailed => ("failure", Some("transport_error")),
+    };
+
+    let mut event = BusinessEvent::audit("logout.backchannel.result")
+        .outcome(outcome)
+        .attribute(
+            "client_oid",
+            EventValue::Text(notification.client_id.to_string()),
+        );
+    if let Some(reason) = reason {
+        event = event.reason(reason);
+    }
+    events.emit(event);
+}
+
 impl LogoutService {
     pub fn new(deps: LogoutServiceDependencies) -> Self {
         Self {
@@ -418,12 +442,36 @@ impl LogoutService {
         session_oid: Option<SessionOid>,
         protected_session_id: Option<&str>,
     ) -> Result<(), AppError> {
+        const MAX_CONCURRENT_BACKCHANNEL_LOGOUTS: usize = 8;
+
         let notifications = self
             .backchannel_logout_notifications(session_oid, protected_session_id)
             .await?;
+        if notifications.is_empty() {
+            return Ok(());
+        }
 
+        let semaphore = Arc::new(tokio::sync::Semaphore::new(
+            MAX_CONCURRENT_BACKCHANNEL_LOGOUTS,
+        ));
+        let mut tasks = tokio::task::JoinSet::new();
         for notification in notifications {
-            self.notify_backchannel_logout(&notification).await;
+            let permit = semaphore
+                .clone()
+                .acquire_owned()
+                .await
+                .map_err(AppError::internal)?;
+            let sender = Arc::clone(&self.backchannel_sender);
+            let events = Arc::clone(&self.events);
+            tasks.spawn(async move {
+                let _permit = permit;
+                deliver_backchannel_logout(sender.as_ref(), events.as_ref(), &notification).await;
+            });
+        }
+        while let Some(joined) = tasks.join_next().await {
+            if let Err(error) = joined {
+                tracing::warn!(error = %error, "back-channel logout task failed");
+            }
         }
 
         Ok(())
@@ -432,27 +480,17 @@ impl LogoutService {
     /// One span and one result event per back-channel target. A failing target
     /// is reported as an observed notification result; it never claims that the
     /// remote session was actually revoked.
+    #[cfg(test)]
     pub(super) async fn notify_backchannel_logout(
         &self,
         notification: &BackChannelLogoutNotification,
     ) {
-        let delivery = self.backchannel_sender.send(notification).await;
-        let (outcome, reason) = match delivery {
-            BackChannelLogoutDelivery::Delivered => ("success", None),
-            BackChannelLogoutDelivery::Rejected => ("failure", Some("non_success_status")),
-            BackChannelLogoutDelivery::TransportFailed => ("failure", Some("transport_error")),
-        };
-
-        let mut event = BusinessEvent::audit("logout.backchannel.result")
-            .outcome(outcome)
-            .attribute(
-                "client_oid",
-                EventValue::Text(notification.client_id.to_string()),
-            );
-        if let Some(reason) = reason {
-            event = event.reason(reason);
-        }
-        self.events.emit(event);
+        deliver_backchannel_logout(
+            self.backchannel_sender.as_ref(),
+            self.events.as_ref(),
+            notification,
+        )
+        .await;
     }
 
     async fn load_signing_key(&self) -> Result<(String, String, JwaSigningAlgorithm), AppError> {

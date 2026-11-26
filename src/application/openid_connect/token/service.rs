@@ -108,4 +108,18 @@ impl TokenService {
         self.session_repo = Some(session_repo);
         self
     }
+
+    #[must_use]
+    pub fn with_remote_fetcher(
+        mut self,
+        remote_fetcher: Arc<dyn crate::openid_connect::remote::RemoteDocumentFetcher>,
+    ) -> Self {
+        self.client_authentication = Arc::new(
+            self.client_authentication
+                .as_ref()
+                .clone()
+                .with_remote_fetcher(remote_fetcher),
+        );
+        self
+    }
 }

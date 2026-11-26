@@ -1,7 +1,8 @@
 //! Real HTTP transport behavior with local protocol peers.
 use identity_application::openid_connect::remote::{
-    DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchError, fetch_document_after_url_validation,
+    DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchError,
 };
+use identity_infrastructure::openid_connect::remote::fetch_document_with_client;
 use reqwest::{Client, redirect::Policy};
 use std::time::Duration;
 use tokio::{
@@ -26,11 +27,7 @@ async fn fetch_request_object_rejects_oversized_chunked_response_before_completi
 
     let result = timeout(
         Duration::from_secs(2),
-        fetch_document_after_url_validation(
-            &client,
-            &request_uri,
-            DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
-        ),
+        fetch_document_with_client(&client, &request_uri, DEFAULT_REMOTE_DOCUMENT_MAX_BYTES),
     )
     .await;
 
@@ -51,13 +48,10 @@ async fn fetch_request_object_rejects_redirect_response() {
         .build()
         .unwrap();
 
-    let error = fetch_document_after_url_validation(
-        &client,
-        &request_uri,
-        DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
-    )
-    .await
-    .unwrap_err();
+    let error =
+        fetch_document_with_client(&client, &request_uri, DEFAULT_REMOTE_DOCUMENT_MAX_BYTES)
+            .await
+            .unwrap_err();
 
     assert!(
         matches!(error, RemoteFetchError::NotOk),

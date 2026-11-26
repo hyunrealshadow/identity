@@ -1670,3 +1670,28 @@ async fn update_fails_closed_when_existing_secret_material_cannot_be_identified(
 
     assert_eq!(error.code(), 25006);
 }
+
+#[tokio::test]
+async fn registration_rejects_unsafe_or_non_https_backchannel_logout_uri() {
+    for uri in [
+        "http://rp.example.com/backchannel_logout",
+        "https://127.0.0.1/backchannel_logout",
+        "https://[::ffff:127.0.0.1]/backchannel_logout",
+        "https://localhost/backchannel_logout",
+        "https://rp.example.com/backchannel_logout#frag",
+    ] {
+        let mut repo = MockOpenIdConnectClientRegistrationRepository::new();
+        repo.expect_create().never();
+        let service = DynamicClientRegistrationService::new(
+            Arc::new(TestRegistrationSetting(true)),
+            Arc::new(repo),
+        );
+        let request = from_value(json!({
+            "redirect_uris": ["https://rp.example.com/callback"],
+            "backchannel_logout_uri": uri
+        }))
+        .unwrap();
+        let error = service.register(request, &issuer()).await.unwrap_err();
+        assert_eq!(error.code(), 25009, "{uri} should be rejected");
+    }
+}

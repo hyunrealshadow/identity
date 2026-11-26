@@ -6,7 +6,7 @@
 //! live authority inside the mutation transaction.
 
 use identity_domain::audit::AuditAction;
-use std::{sync::Arc, time::Duration as TimeDuration};
+use std::sync::Arc;
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{Duration, Utc};
@@ -54,8 +54,8 @@ use crate::{
         ClientMetadataOptions, OpenIdProviderCapabilities, OpenIdProviderService,
     },
     openid_connect::remote::{
-        DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchPolicy, conformance_allows_invalid_certs,
-        fetch_https_public_document, remote_http_client, validate_https_public_url,
+        DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteDocumentFetcher,
+        UnconfiguredRemoteDocumentFetcher, validate_https_public_url,
     },
     rbac::{
         RbacManagementAuthority,
@@ -69,6 +69,7 @@ pub struct ClientManagementService {
     repository: Arc<dyn ClientManagementRepository>,
     data_protector: Arc<dyn DataProtector>,
     public_keys: Arc<dyn ClientPublicKeyReader>,
+    remote_fetcher: Arc<dyn RemoteDocumentFetcher>,
     /// Live supported metadata values; without it the static capabilities apply.
     provider: Option<Arc<OpenIdProviderService>>,
     events: Arc<dyn EventSink>,
@@ -85,9 +86,16 @@ impl ClientManagementService {
             repository,
             data_protector,
             public_keys,
+            remote_fetcher: Arc::new(UnconfiguredRemoteDocumentFetcher),
             provider: None,
             events: Arc::new(NoopEventSink),
         }
+    }
+
+    #[must_use]
+    pub fn with_remote_fetcher(mut self, remote_fetcher: Arc<dyn RemoteDocumentFetcher>) -> Self {
+        self.remote_fetcher = remote_fetcher;
+        self
     }
 
     /// Validate advanced metadata against the provider's capabilities.
@@ -280,7 +288,13 @@ impl ClientManagementService {
                 _ => None,
             };
             if let Some(current) = &current {
-                validate_subject_change(current, settings.as_ref(), advanced.as_ref()).await?;
+                validate_subject_change(
+                    self.remote_fetcher.as_ref(),
+                    current,
+                    settings.as_ref(),
+                    advanced.as_ref(),
+                )
+                .await?;
             }
             let names = command
                 .names
@@ -472,7 +486,12 @@ impl ClientManagementService {
             let reason = validate_reason(&command.reason)?;
             validate_client_mutation_id(command.client_mutation_id.as_deref())?;
             let jwks_uri = parse_jwks_uri(&command.jwks_uri)?;
-            let keys = fetch_client_jwks(self.public_keys.as_ref(), &jwks_uri).await?;
+            let keys = fetch_client_jwks(
+                self.remote_fetcher.as_ref(),
+                self.public_keys.as_ref(),
+                &jwks_uri,
+            )
+            .await?;
             let now = Utc::now();
             self.repository
                 .add_client_credential(AddClientCredentialTransaction {
@@ -821,17 +840,13 @@ fn key_credential(material: PublicKeyMaterial) -> OpenIdConnectCredentialData {
 
 /// Fetch the key set once and keep the keys that are usable public keys.
 async fn fetch_client_jwks(
+    remote_fetcher: &dyn RemoteDocumentFetcher,
     reader: &dyn ClientPublicKeyReader,
     jwks_uri: &Url,
 ) -> Result<Vec<PublicJwk>, AppError> {
     let unavailable = || client::error::JwksUnavailable.with_field("jwks_uri");
-    let client = remote_http_client(RemoteFetchPolicy::new(
-        DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
-        TimeDuration::from_secs(5),
-        conformance_allows_invalid_certs(),
-    ))
-    .map_err(|error| unavailable().with_source(error))?;
-    let body = fetch_https_public_document(&client, jwks_uri, DEFAULT_REMOTE_DOCUMENT_MAX_BYTES)
+    let body = remote_fetcher
+        .fetch_https_public_document(jwks_uri, DEFAULT_REMOTE_DOCUMENT_MAX_BYTES)
         .await
         .map_err(|error| unavailable().with_source(error))?;
     let document: RemoteJwks = serde_json::from_slice(&body).map_err(|_| unavailable())?;
@@ -912,6 +927,7 @@ fn map_repository_error(error: ClientManagementRepositoryError) -> AppError {
 /// stored client, and the repository's version check rejects a concurrent
 /// edit. The sector document is fetched only when an input actually changed.
 async fn validate_subject_change(
+    remote_fetcher: &dyn RemoteDocumentFetcher,
     current: &ClientRecord,
     settings: Option<&ClientProtocolSettings>,
     advanced: Option<&ClientAdvancedSettings>,
@@ -932,7 +948,7 @@ async fn validate_subject_change(
         .iter()
         .flat_map(|platform| platform.redirect_uris.iter().cloned())
         .collect::<Vec<_>>();
-    advanced::validate_subject_identifier(advanced, &redirect_uris).await
+    advanced::validate_subject_identifier(remote_fetcher, advanced, &redirect_uris).await
 }
 
 mod advanced;

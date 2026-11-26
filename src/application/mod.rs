@@ -26,8 +26,17 @@ mod tests {
     #[test]
     fn application_layer_does_not_depend_on_infrastructure() {
         let mut violations = Vec::new();
-        collect_infrastructure_references(Path::new("src/application"), &mut violations);
+        let mut scanned_files = 0;
+        collect_infrastructure_references(
+            Path::new(env!("CARGO_MANIFEST_DIR")),
+            &mut scanned_files,
+            &mut violations,
+        );
 
+        assert!(
+            scanned_files > 0,
+            "expected to scan Rust source files in identity-application"
+        );
         assert!(
             violations.is_empty(),
             "application layer must not depend on infrastructure:\n{}",
@@ -35,10 +44,18 @@ mod tests {
         );
     }
 
-    fn collect_infrastructure_references(path: &Path, violations: &mut Vec<String>) {
+    fn collect_infrastructure_references(
+        path: &Path,
+        scanned_files: &mut usize,
+        violations: &mut Vec<String>,
+    ) {
         if path.is_dir() {
             for entry in fs::read_dir(path).unwrap() {
-                collect_infrastructure_references(&entry.unwrap().path(), violations);
+                collect_infrastructure_references(
+                    &entry.unwrap().path(),
+                    scanned_files,
+                    violations,
+                );
             }
             return;
         }
@@ -47,10 +64,12 @@ mod tests {
             return;
         }
 
+        *scanned_files += 1;
         let content = fs::read_to_string(path).unwrap();
         let forbidden = [
-            "crate::infra".to_owned() + "structure",
-            "infra".to_owned() + "structure::",
+            concat!("identity_", "infrastructure"),
+            concat!("crate::", "infrastructure"),
+            concat!("infra", "structure::"),
         ];
         for (index, line) in content.lines().enumerate() {
             if forbidden.iter().any(|pattern| line.contains(pattern)) {

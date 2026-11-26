@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use identity_domain::openid_connect::scope_catalog::{ScopeCatalogRepository, ScopeDescription};
-use reqwest::Client;
 use url::Url;
 use uuid::Uuid;
 
@@ -10,7 +9,10 @@ use crate::{
     application::{
         data_protection::DataProtector,
         error::AppError,
-        openid_connect::provider::{OpenIdProviderService, SigningAlgorithmDetector},
+        openid_connect::{
+            provider::{OpenIdProviderService, SigningAlgorithmDetector},
+            remote::RemoteDocumentFetcher,
+        },
     },
     domain::{
         auth::repository::LoginRepository,

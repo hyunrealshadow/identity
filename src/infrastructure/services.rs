@@ -31,7 +31,6 @@ use identity_application::{
         par::PushedAuthorizationService,
         provider::OpenIdProviderService,
         registration::DynamicClientRegistrationService,
-        remote::{conformance_allows_invalid_certs, request_uri_http_client},
         token::{TokenService, TokenServiceDependencies},
         user_info::UserInfoService,
     },
@@ -94,7 +93,12 @@ use crate::{
         seed::console::ConsoleClientSeedConfig,
     },
     observability::events::sink,
-    openid_connect::backchannel_logout::HttpBackChannelLogoutSender,
+    openid_connect::{
+        backchannel_logout::HttpBackChannelLogoutSender,
+        remote::{
+            HttpRemoteDocumentFetcher, conformance_allows_invalid_certs, conformance_mode_active,
+        },
+    },
 };
 
 pub struct AppServices {
@@ -149,9 +153,12 @@ impl AppServices {
         settings: &AppRuntimeSettings,
         workload_authenticator: Arc<dyn WorkloadAuthenticator>,
     ) -> Result<Self, Error> {
-        let request_uri_http_client = request_uri_http_client()?;
+        let remote_fetcher: Arc<
+            dyn identity_application::openid_connect::remote::RemoteDocumentFetcher,
+        > = Arc::new(HttpRemoteDocumentFetcher::request_uri_default()?);
         let backchannel_sender = Arc::new(HttpBackChannelLogoutSender::new(
             conformance_allows_invalid_certs(),
+            conformance_mode_active(),
         )?);
         let key_repo = Arc::new(KeyRepositoryImpl::new(db.clone()));
         let signing_algorithm_detector = Arc::new(SigningAlgorithmDetectorImpl);
@@ -217,7 +224,7 @@ impl AppServices {
             ),
             signing_algorithm_detector: signing_algorithm_detector.clone(),
             data_protector: data_protector.clone(),
-            http_client: request_uri_http_client.clone(),
+            remote_fetcher: Arc::clone(&remote_fetcher),
         })
         .with_scope_catalog(Arc::new(ScopeCatalogRepositoryImpl::new(db.clone())))
         .with_session_repo(Arc::new(SessionRepositoryImpl::new(db.clone())))
@@ -362,21 +369,27 @@ impl AppServices {
                 data_protector.clone(),
                 Arc::new(ClientPublicKeyReaderImpl),
             )
+            .with_remote_fetcher(Arc::clone(&remote_fetcher))
             .with_provider(Arc::new(oidc_provider.clone()))
             .with_events(Arc::clone(&events)),
             oidc: oidc_provider.clone(),
             oidc_authorize: oidc_authorize.clone(),
             pushed_authorization: PushedAuthorizationService::new(
-                Arc::new(ClientAuthenticator::new(ClientAuthenticatorDependencies {
-                    client_repo: oidc_client_repo.clone(),
-                    credential_repo: oidc_credential_repo.clone(),
-                    provider_service: Arc::new(
-                        OpenIdProviderService::new(settings.store())
-                            .with_scope_catalog(scope_catalog.clone())
-                            .with_resource_repo(oauth_resource_repo.clone())
-                            .with_rbac_authorization_repository(rbac_authorization_repo.clone()),
-                    ),
-                })),
+                Arc::new(
+                    ClientAuthenticator::new(ClientAuthenticatorDependencies {
+                        client_repo: oidc_client_repo.clone(),
+                        credential_repo: oidc_credential_repo.clone(),
+                        provider_service: Arc::new(
+                            OpenIdProviderService::new(settings.store())
+                                .with_scope_catalog(scope_catalog.clone())
+                                .with_resource_repo(oauth_resource_repo.clone())
+                                .with_rbac_authorization_repository(
+                                    rbac_authorization_repo.clone(),
+                                ),
+                        ),
+                    })
+                    .with_remote_fetcher(Arc::clone(&remote_fetcher)),
+                ),
                 oidc_authorize,
                 client_authorization_repo,
                 Arc::new(
@@ -405,6 +418,7 @@ impl AppServices {
                 signing_algorithm_detector: signing_algorithm_detector.clone(),
                 data_protector: data_protector.clone(),
             })
+            .with_remote_fetcher(Arc::clone(&remote_fetcher))
             .with_runtime_key_ring(settings.key_ring())
             .with_session_repo(Arc::new(SessionRepositoryImpl::new(db.clone())))
             .with_management_authority_repository(authorization.clone())
@@ -454,13 +468,15 @@ impl AppServices {
                 settings.store(),
                 oidc_client_registration_repo.clone(),
             )
+            .with_remote_fetcher(Arc::clone(&remote_fetcher))
+            .with_default_skip_consent(conformance_mode_active())
             .with_credential_repository(oidc_credential_repo.clone())
             .with_scope_catalog(scope_catalog.clone())
             .with_events(Arc::clone(&events)),
             device_authorization: DeviceAuthorizationService::new(
                 DeviceAuthorizationServiceDependencies {
-                    client_authentication: Arc::new(ClientAuthenticator::new(
-                        ClientAuthenticatorDependencies {
+                    client_authentication: Arc::new(
+                        ClientAuthenticator::new(ClientAuthenticatorDependencies {
                             client_repo: oidc_client_repo.clone(),
                             credential_repo: oidc_credential_repo.clone(),
                             provider_service: Arc::new(
@@ -471,8 +487,9 @@ impl AppServices {
                                         rbac_authorization_repo.clone(),
                                     ),
                             ),
-                        },
-                    )),
+                        })
+                        .with_remote_fetcher(remote_fetcher),
+                    ),
                     client_repo: oidc_client_repo.clone(),
                     device_repo: Arc::new(DeviceAuthorizationRepositoryImpl::new(db.clone())),
                     provider_service: Arc::new(

@@ -5,7 +5,7 @@ use crate::{
     error::{AppError, codes::authorize},
     openid_connect::remote::{
         DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchError, RemoteUrlError,
-        fetch_https_public_document, validate_https_public_url,
+        validate_https_public_url,
     },
 };
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
@@ -62,13 +62,11 @@ impl AuthorizeService {
     }
 
     pub(super) async fn fetch_request_object(&self, request_uri: &Url) -> Result<String, AppError> {
-        let body = fetch_https_public_document(
-            &self.http_client,
-            request_uri,
-            DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
-        )
-        .await
-        .map_err(map_request_uri_fetch_error)?;
+        let body = self
+            .remote_fetcher
+            .fetch_https_public_document(request_uri, DEFAULT_REMOTE_DOCUMENT_MAX_BYTES)
+            .await
+            .map_err(map_request_uri_fetch_error)?;
 
         String::from_utf8(body).map_err(authorize::error::RequestUriReadFailed::map_source())
     }

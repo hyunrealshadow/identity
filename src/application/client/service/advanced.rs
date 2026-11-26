@@ -23,6 +23,7 @@ use crate::{
         registration::{
             fetch_sector_redirect_uris, sector_redirect_uris_include_registered_redirects,
         },
+        remote::{RemoteDocumentFetcher, validate_https_public_url},
     },
 };
 
@@ -45,6 +46,10 @@ fn web_uri(url: &Url) -> bool {
 
 fn https_uri(url: &Url) -> bool {
     url.scheme() == "https"
+}
+
+fn https_public_uri(url: &Url) -> bool {
+    validate_https_public_url(url).is_ok()
 }
 
 fn uri(
@@ -143,7 +148,7 @@ pub(crate) fn validate_advanced_settings(
     let backchannel_logout_uri = uri(
         settings.backchannel_logout_uri,
         "backchannel_logout_uri",
-        web_uri,
+        https_public_uri,
     )?;
     if settings.frontchannel_logout_session_required && frontchannel_logout_uri.is_none() {
         return Err(client::error::LogoutUriRequired.with_field(field("frontchannel_logout_uri")));
@@ -295,6 +300,7 @@ fn redirect_hosts(redirect_uris: &[String]) -> Vec<String> {
 /// identifier (OpenID Connect Core §8.1), and a registered sector document must
 /// list every redirect URI.
 pub(crate) async fn validate_subject_identifier(
+    remote_fetcher: &dyn RemoteDocumentFetcher,
     settings: &ClientAdvancedSettings,
     redirect_uris: &[String],
 ) -> Result<(), AppError> {
@@ -310,11 +316,13 @@ pub(crate) async fn validate_subject_identifier(
     let sector = Url::parse(sector).map_err(|_| {
         client::error::InvalidMetadataUri::new(sector).with_field(field("sector_identifier_uri"))
     })?;
-    let listed = fetch_sector_redirect_uris(&sector).await.map_err(|error| {
-        client::error::SectorIdentifierUnavailable
-            .with_field(field("sector_identifier_uri"))
-            .with_source(error)
-    })?;
+    let listed = fetch_sector_redirect_uris(remote_fetcher, &sector)
+        .await
+        .map_err(|error| {
+            client::error::SectorIdentifierUnavailable
+                .with_field(field("sector_identifier_uri"))
+                .with_source(error)
+        })?;
     if sector_redirect_uris_include_registered_redirects(&listed, redirect_uris) {
         Ok(())
     } else {
@@ -330,7 +338,9 @@ mod tests {
     use crate::{
         client::model::ClientAdvancedSettings,
         error::{AppError, code::AppErrorCode, codes::client::ClientErrorCode},
-        openid_connect::provider::ClientMetadataOptions,
+        openid_connect::{
+            provider::ClientMetadataOptions, remote::UnconfiguredRemoteDocumentFetcher,
+        },
     };
     use identity_domain::auth::AuthenticationContextClass;
 
@@ -489,12 +499,29 @@ mod tests {
                 policy_uri: Some("https://user:pass@example.com/policy".into()),
                 ..Default::default()
             },
+            ClientAdvancedSettings {
+                backchannel_logout_uri: Some("http://localhost/backchannel".into()),
+                ..Default::default()
+            },
+            ClientAdvancedSettings {
+                backchannel_logout_uri: Some("https://127.0.0.1/backchannel".into()),
+                ..Default::default()
+            },
+            ClientAdvancedSettings {
+                backchannel_logout_uri: Some("https://[::ffff:127.0.0.1]/backchannel".into()),
+                ..Default::default()
+            },
         ] {
             assert_eq!(
                 rejected(settings),
                 ClientErrorCode::InvalidMetadataUri.code()
             );
         }
+        validate(ClientAdvancedSettings {
+            backchannel_logout_uri: Some("https://rp.example.com/backchannel".into()),
+            ..Default::default()
+        })
+        .unwrap();
         assert_eq!(
             rejected(ClientAdvancedSettings {
                 default_max_age: Some(-1),
@@ -528,7 +555,7 @@ mod tests {
             "https://a.example.com/cb".to_owned(),
             "https://a.example.com/2".to_owned(),
         ];
-        validate_subject_identifier(&pairwise, &one_host)
+        validate_subject_identifier(&UnconfiguredRemoteDocumentFetcher, &pairwise, &one_host)
             .await
             .unwrap();
         let two_hosts = [
@@ -536,14 +563,18 @@ mod tests {
             "https://b.example.com/cb".to_owned(),
         ];
         assert_eq!(
-            validate_subject_identifier(&pairwise, &two_hosts)
+            validate_subject_identifier(&UnconfiguredRemoteDocumentFetcher, &pairwise, &two_hosts)
                 .await
                 .unwrap_err()
                 .code(),
             ClientErrorCode::SectorIdentifierRequired.code()
         );
-        validate_subject_identifier(&ClientAdvancedSettings::default(), &two_hosts)
-            .await
-            .unwrap();
+        validate_subject_identifier(
+            &UnconfiguredRemoteDocumentFetcher,
+            &ClientAdvancedSettings::default(),
+            &two_hosts,
+        )
+        .await
+        .unwrap();
     }
 }

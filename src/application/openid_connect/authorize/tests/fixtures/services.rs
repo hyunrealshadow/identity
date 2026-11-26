@@ -9,7 +9,7 @@ use crate::{
         authorize::tests::fixtures::repositories::{
             ClientAuthorizationState, mock_client_auth_repo_with_state,
         },
-        remote::test_http_client,
+        remote::test_remote_fetcher,
         tests::fixtures::mocks::{
             MockKeyJwkRepository, MockKeyRepository as MockallKeyRepository,
             MockOpenIdConnectCredentialRepository, MockUserRepository,
@@ -149,7 +149,7 @@ pub(in crate::openid_connect) fn build_test_service(
         provider_service: provider_service(),
         signing_algorithm_detector: test_signing_algorithm_detector(),
         data_protector: test_data_protector(),
-        http_client: test_http_client(),
+        remote_fetcher: test_remote_fetcher(),
     })
 }
 

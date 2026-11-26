@@ -1,7 +1,6 @@
-use std::sync::Arc;
+use std::{io::Error as IoError, sync::Arc};
 
 use chrono::Utc;
-use sea_orm::DbErr;
 use uuid::Uuid;
 
 use super::{OpenIdProviderService, SigningAlgorithmDetector};
@@ -17,7 +16,7 @@ use crate::{
     },
 };
 
-#[cfg(feature = "oidc-conformance")]
+#[cfg(feature = "allow-none-alg")]
 use std::iter;
 
 fn static_settings(
@@ -65,7 +64,7 @@ fn key_repo_failing() -> MockKeyRepository {
     mock.expect_find_by_oid().returning(|_| Ok(None));
     mock.expect_list_active_asymmetric().returning(|| {
         Err(KeyRepositoryError::ListAvailableFailed(Box::new(
-            DbErr::Custom("boom".to_owned()),
+            IoError::other("boom"),
         )))
     });
     mock.expect_list_decryptable_symmetric()

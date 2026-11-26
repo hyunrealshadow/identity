@@ -5,7 +5,7 @@ use crate::openid_connect::{
     authorize::tests::fixtures::repositories::{
         ClientAuthorizationState, mock_client_auth_repo_with_state,
     },
-    remote::test_http_client,
+    remote::test_remote_fetcher,
     tests::fixtures::mocks::{
         MockKeyJwkRepository, MockKeyRepository, MockOpenIdConnectCredentialRepository,
     },
@@ -56,7 +56,7 @@ pub(in crate::openid_connect) fn authorize_service_with_public_key(
         provider_service: provider_service(),
         signing_algorithm_detector: test_signing_algorithm_detector(),
         data_protector: test_data_protector(),
-        http_client: test_http_client(),
+        remote_fetcher: test_remote_fetcher(),
     })
 }
 
@@ -164,7 +164,7 @@ pub(in crate::openid_connect) fn authorize_service_with_request_object_encryptio
         provider_service: provider_service(),
         signing_algorithm_detector: test_signing_algorithm_detector(),
         data_protector: test_data_protector(),
-        http_client: test_http_client(),
+        remote_fetcher: test_remote_fetcher(),
     })
 }
 
@@ -186,7 +186,7 @@ pub(in crate::openid_connect) fn authorize_service_with_request_uri(
         provider_service: provider_service(),
         signing_algorithm_detector: test_signing_algorithm_detector(),
         data_protector: test_data_protector(),
-        http_client: test_http_client(),
+        remote_fetcher: test_remote_fetcher(),
     })
 }
 

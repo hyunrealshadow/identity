@@ -1,4 +1,4 @@
-use std::{str::FromStr, time::Duration};
+use std::str::FromStr;
 
 use serde_json::from_slice;
 use url::Url;
@@ -15,10 +15,7 @@ use crate::{
         jose::{
             REQUEST_OBJECT_CONTENT_ENCRYPTION_ALGORITHMS, REQUEST_OBJECT_ENCRYPTION_ALGORITHMS,
         },
-        remote::{
-            DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchPolicy, conformance_allows_invalid_certs,
-            fetch_https_public_document, remote_http_client,
-        },
+        remote::{DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteDocumentFetcher},
     },
 };
 
@@ -177,6 +174,7 @@ pub(super) fn validate_initiate_login_uri(value: Option<&Url>) -> Result<(), App
 }
 
 pub(super) async fn validate_sector_identifier_uri(
+    remote_fetcher: &dyn RemoteDocumentFetcher,
     sector_identifier_uri: Option<&Url>,
     redirect_uris: &[String],
 ) -> Result<(), AppError> {
@@ -184,7 +182,8 @@ pub(super) async fn validate_sector_identifier_uri(
         return Ok(());
     };
 
-    let sector_redirect_uris = fetch_sector_redirect_uris(sector_identifier_uri).await?;
+    let sector_redirect_uris =
+        fetch_sector_redirect_uris(remote_fetcher, sector_identifier_uri).await?;
     if sector_redirect_uris_include_registered_redirects(&sector_redirect_uris, redirect_uris) {
         Ok(())
     } else {
@@ -195,22 +194,13 @@ pub(super) async fn validate_sector_identifier_uri(
 /// Load a sector identifier document: a JSON array of redirect URIs served
 /// over public HTTPS.
 pub(crate) async fn fetch_sector_redirect_uris(
+    remote_fetcher: &dyn RemoteDocumentFetcher,
     sector_identifier_uri: &Url,
 ) -> Result<Vec<String>, AppError> {
-    let client = remote_http_client(RemoteFetchPolicy::new(
-        DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
-        Duration::from_secs(5),
-        conformance_allows_invalid_certs(),
-    ))
-    .map_err(registration::error::InvalidClientMetadata::map_source())?;
-
-    let body = fetch_https_public_document(
-        &client,
-        sector_identifier_uri,
-        DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
-    )
-    .await
-    .map_err(registration::error::InvalidClientMetadata::map_source())?;
+    let body = remote_fetcher
+        .fetch_https_public_document(sector_identifier_uri, DEFAULT_REMOTE_DOCUMENT_MAX_BYTES)
+        .await
+        .map_err(registration::error::InvalidClientMetadata::map_source())?;
 
     from_slice::<Vec<String>>(&body)
         .map_err(registration::error::InvalidClientMetadata::map_source())

@@ -8,7 +8,7 @@ use crate::{
         authorize::tests::fixtures::repositories::{
             ClientAuthorizationState, mock_client_auth_repo_with_state,
         },
-        remote::test_http_client,
+        remote::test_remote_fetcher,
         tests::fixtures::{
             client::{test_client, test_metadata, test_platforms, test_scopes},
             mocks::{MockKeyJwkRepository, MockOpenIdConnectCredentialRepository},
@@ -106,7 +106,7 @@ async fn parse_unsecured_request_object_is_accepted() {
         provider_service: provider_service(),
         signing_algorithm_detector: test_signing_algorithm_detector(),
         data_protector: test_data_protector(),
-        http_client: test_http_client(),
+        remote_fetcher: test_remote_fetcher(),
     });
     let client = FoundClientRepository
         .find_by_oid(Uuid::nil())
@@ -383,7 +383,7 @@ async fn parse_rs256_request_object_extracts_payload() {
         provider_service: provider_service(),
         signing_algorithm_detector: test_signing_algorithm_detector(),
         data_protector: test_data_protector(),
-        http_client: test_http_client(),
+        remote_fetcher: test_remote_fetcher(),
     });
 
     let client = FoundClientRepository
@@ -445,7 +445,7 @@ async fn parse_request_object_uses_registered_signing_algorithm() {
         provider_service: provider_service(),
         signing_algorithm_detector: test_signing_algorithm_detector(),
         data_protector: test_data_protector(),
-        http_client: test_http_client(),
+        remote_fetcher: test_remote_fetcher(),
     });
     let mut metadata = test_metadata(None, None);
     metadata.request_object_signing_algs = Some(vec!["RS384".parse().unwrap()]);

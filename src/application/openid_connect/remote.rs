@@ -1,17 +1,22 @@
 use std::{
-    env,
+    error::Error as StdError,
     io::Error as IoError,
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
-    time::Duration,
 };
 
-use http::HeaderMap;
-use reqwest::{Client, Error, StatusCode, redirect::Policy};
-use tokio::net::lookup_host;
-use tracing::Instrument as _;
+use async_trait::async_trait;
 use url::{Host, Url};
 
-use crate::observability::outbound_trace;
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[error("{0}")]
+pub struct RemoteTransportError(pub String);
+
+impl RemoteTransportError {
+    #[must_use]
+    pub fn from_error(error: &dyn StdError) -> Self {
+        Self(error.to_string())
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum RemoteUrlError {
@@ -26,7 +31,7 @@ pub enum RemoteFetchError {
     #[error("remote URL points to an unsafe host")]
     UnsafeHost,
     #[error("failed to fetch remote document")]
-    FetchFailed(#[source] Error),
+    FetchFailed(#[source] RemoteTransportError),
     #[error("failed to resolve remote host")]
     ResolveFailed(#[source] IoError),
     #[error("remote document did not return 200 OK")]
@@ -34,44 +39,52 @@ pub enum RemoteFetchError {
     #[error("remote document is too large")]
     TooLarge,
     #[error("failed to read remote document")]
-    ReadFailed(#[source] Error),
+    ReadFailed(#[source] RemoteTransportError),
 }
 
-#[derive(Clone, Copy)]
-pub struct RemoteFetchPolicy {
-    pub max_bytes: usize,
-    pub timeout: Duration,
-    pub allow_invalid_certs: bool,
-}
-
-impl RemoteFetchPolicy {
-    #[must_use]
-    pub const fn new(max_bytes: usize, timeout: Duration, allow_invalid_certs: bool) -> Self {
-        Self {
-            max_bytes,
-            timeout,
-            allow_invalid_certs,
+impl From<RemoteUrlError> for RemoteFetchError {
+    fn from(error: RemoteUrlError) -> Self {
+        match error {
+            RemoteUrlError::NotHttps => Self::NotHttps,
+            RemoteUrlError::UnsafeHost => Self::UnsafeHost,
         }
     }
 }
 
 pub const DEFAULT_REMOTE_DOCUMENT_MAX_BYTES: usize = 1024 * 1024;
 
-#[must_use]
-pub fn conformance_mode_active() -> bool {
-    conformance_mode_active_for(
-        cfg!(feature = "oidc-conformance"),
-        env::var("APP_ENV").ok().as_deref(),
-    )
+/// Application port for fetching bounded HTTPS documents from public remote
+/// endpoints (request_uri, client JWKS URI, sector_identifier_uri).
+#[async_trait]
+pub trait RemoteDocumentFetcher: Send + Sync {
+    async fn fetch_https_public_document(
+        &self,
+        url: &Url,
+        max_bytes: usize,
+    ) -> Result<Vec<u8>, RemoteFetchError>;
 }
 
-fn conformance_mode_active_for(feature_enabled: bool, app_env: Option<&str>) -> bool {
-    feature_enabled && app_env.is_some_and(|value| value.trim().eq_ignore_ascii_case("conformance"))
+/// Fail-closed default fetcher when no HTTP transport adapter is attached.
+pub struct UnconfiguredRemoteDocumentFetcher;
+
+#[async_trait]
+impl RemoteDocumentFetcher for UnconfiguredRemoteDocumentFetcher {
+    async fn fetch_https_public_document(
+        &self,
+        url: &Url,
+        _max_bytes: usize,
+    ) -> Result<Vec<u8>, RemoteFetchError> {
+        validate_https_public_url(url)?;
+        Err(RemoteFetchError::FetchFailed(RemoteTransportError(
+            "remote document fetcher is not configured".to_owned(),
+        )))
+    }
 }
 
+#[cfg(test)]
 #[must_use]
-pub fn conformance_allows_invalid_certs() -> bool {
-    conformance_mode_active()
+pub fn test_remote_fetcher() -> std::sync::Arc<dyn RemoteDocumentFetcher> {
+    std::sync::Arc::new(UnconfiguredRemoteDocumentFetcher)
 }
 
 pub fn validate_https_public_url(url: &Url) -> Result<(), RemoteUrlError> {
@@ -101,7 +114,8 @@ fn is_unsafe_host(url: &Url) -> bool {
     }
 }
 
-fn is_unsafe_ip(address: IpAddr) -> bool {
+#[must_use]
+pub fn is_unsafe_ip(address: IpAddr) -> bool {
     match address {
         IpAddr::V4(address) => is_unsafe_ipv4(address),
         IpAddr::V6(address) => is_unsafe_ipv6(address),
@@ -117,11 +131,15 @@ fn is_unsafe_ipv4(address: Ipv4Addr) -> bool {
         || address.is_broadcast()
         || address.is_documentation()
         || address.is_multicast()
+        || octets[0] == 0
         || (octets[0] == 100 && (64..=127).contains(&octets[1]))
         || (octets[0] == 198 && (18..=19).contains(&octets[1]))
 }
 
 fn is_unsafe_ipv6(address: Ipv6Addr) -> bool {
+    if let Some(v4) = address.to_ipv4_mapped() {
+        return is_unsafe_ipv4(v4);
+    }
     let segments = address.segments();
     address.is_loopback()
         || address.is_unspecified()
@@ -131,122 +149,9 @@ fn is_unsafe_ipv6(address: Ipv6Addr) -> bool {
         || (segments[0] == 0x2001 && segments[1] == 0x0db8)
 }
 
-pub async fn fetch_https_public_document(
-    client: &Client,
-    url: &Url,
-    max_bytes: usize,
-) -> Result<Vec<u8>, RemoteFetchError> {
-    validate_resolved_https_public_url(url).await?;
-
-    fetch_document_after_url_validation(client, url, max_bytes).await
-}
-
-pub async fn validate_resolved_https_public_url(url: &Url) -> Result<(), RemoteFetchError> {
-    validate_https_public_url(url).map_err(|error| match error {
-        RemoteUrlError::NotHttps => RemoteFetchError::NotHttps,
-        RemoteUrlError::UnsafeHost => RemoteFetchError::UnsafeHost,
-    })?;
-
-    let Some(Host::Domain(host)) = url.host() else {
-        return Ok(());
-    };
-
-    let port = url
-        .port_or_known_default()
-        .ok_or(RemoteFetchError::UnsafeHost)?;
-    let mut addresses = lookup_host((host, port))
-        .await
-        .map_err(RemoteFetchError::ResolveFailed)?;
-    let mut has_address = false;
-
-    for address in addresses.by_ref() {
-        has_address = true;
-        if !resolved_address_is_allowed(address.ip(), conformance_mode_active()) {
-            return Err(RemoteFetchError::UnsafeHost);
-        }
-    }
-
-    if !has_address {
-        return Err(RemoteFetchError::UnsafeHost);
-    }
-
-    Ok(())
-}
-
-fn resolved_address_is_allowed(address: IpAddr, allow_unsafe: bool) -> bool {
-    allow_unsafe || !is_unsafe_ip(address)
-}
-
-pub async fn fetch_document_after_url_validation(
-    client: &Client,
-    url: &Url,
-    max_bytes: usize,
-) -> Result<Vec<u8>, RemoteFetchError> {
-    let fetch_url = fetchable_url(url);
-    let trace = outbound_trace();
-    // JWKS and request_uri targets never receive internal trace context unless
-    // the deployment explicitly allow-lists their origin.
-    let mut headers = HeaderMap::new();
-    trace.inject(&fetch_url, &mut headers);
-    let span = trace.client_span("GET", &fetch_url);
-    let mut response = client
-        .get(fetch_url)
-        .headers(headers)
-        .send()
-        .instrument(span.clone())
-        .await
-        .map_err(RemoteFetchError::FetchFailed)?;
-    span.record("http.response.status_code", response.status().as_u16());
-
-    if response.status() != StatusCode::OK {
-        return Err(RemoteFetchError::NotOk);
-    }
-
-    if response
-        .content_length()
-        .is_some_and(|length| length > max_bytes as u64)
-    {
-        return Err(RemoteFetchError::TooLarge);
-    }
-
-    let mut body = Vec::new();
-    while let Some(chunk) = response
-        .chunk()
-        .await
-        .map_err(RemoteFetchError::ReadFailed)?
-    {
-        if body.len() + chunk.len() > max_bytes {
-            return Err(RemoteFetchError::TooLarge);
-        }
-
-        body.extend_from_slice(&chunk);
-    }
-
-    Ok(body)
-}
-
-pub fn remote_http_client(policy: RemoteFetchPolicy) -> Result<Client, Error> {
-    Client::builder()
-        .redirect(Policy::none())
-        .timeout(policy.timeout)
-        .danger_accept_invalid_certs(policy.allow_invalid_certs)
-        .build()
-}
-
-/// HTTP client for `request_uri` and other remote OIDC document fetches.
-pub fn request_uri_http_client() -> Result<Client, Error> {
-    remote_http_client(RemoteFetchPolicy::new(
-        DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
-        Duration::from_secs(5),
-        conformance_allows_invalid_certs(),
-    ))
-}
-
-/// Builds the shared HTTP client used by OIDC unit tests.
-#[cfg(test)]
 #[must_use]
-pub fn test_http_client() -> Client {
-    request_uri_http_client().expect("test HTTP client should build")
+pub fn resolved_address_is_allowed(address: IpAddr, allow_unsafe: bool) -> bool {
+    allow_unsafe || !is_unsafe_ip(address)
 }
 
 #[must_use]
@@ -263,8 +168,8 @@ mod tests {
     use url::Url;
 
     use super::{
-        RemoteUrlError, conformance_mode_active_for, fetchable_url, is_unsafe_ip,
-        resolved_address_is_allowed, validate_https_public_url,
+        RemoteUrlError, fetchable_url, is_unsafe_ip, resolved_address_is_allowed,
+        validate_https_public_url,
     };
 
     #[test]
@@ -294,6 +199,9 @@ mod tests {
             "https://[fc00::1]/jwks.json",
             "https://[fe80::1]/jwks.json",
             "https://[2001:db8::1]/jwks.json",
+            "https://[::ffff:127.0.0.1]/jwks.json",
+            "https://[::ffff:169.254.169.254]/jwks.json",
+            "https://[::ffff:10.0.0.1]/jwks.json",
             "https://localhost/jwks.json",
             "https://app.localhost/jwks.json",
         ] {
@@ -325,6 +233,9 @@ mod tests {
             IpAddr::V6("fc00::1".parse().unwrap()),
             IpAddr::V6("fe80::1".parse().unwrap()),
             IpAddr::V6("2001:db8::1".parse().unwrap()),
+            IpAddr::V6("::ffff:127.0.0.1".parse().unwrap()),
+            IpAddr::V6("::ffff:169.254.169.254".parse().unwrap()),
+            IpAddr::V6("::ffff:10.0.0.1".parse().unwrap()),
         ] {
             assert!(is_unsafe_ip(address), "{address} should be rejected");
         }
@@ -346,14 +257,5 @@ mod tests {
             fetchable_url(&url).as_str(),
             "https://rp.example.com/request.jwt"
         );
-    }
-
-    #[test]
-    fn conformance_mode_requires_feature_and_environment() {
-        assert!(!conformance_mode_active_for(false, None));
-        assert!(!conformance_mode_active_for(false, Some("conformance")));
-        assert!(!conformance_mode_active_for(true, None));
-        assert!(!conformance_mode_active_for(true, Some("production")));
-        assert!(conformance_mode_active_for(true, Some(" conformance ")));
     }
 }

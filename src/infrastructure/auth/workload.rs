@@ -12,8 +12,8 @@ use identity_domain::{
     openid_connect::{AuthenticatedWorkload, BuiltInWorkload, WorkloadAuthenticator},
 };
 use josekit::{jwt, jwt::JwtPayload};
-use reqwest::{Certificate, Client, RequestBuilder, Url};
-use serde::Deserialize;
+use reqwest::{Certificate, Client, RequestBuilder, Response, Url, redirect::Policy};
+use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::{Value, from_value, to_value};
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
@@ -22,6 +22,9 @@ use tokio::sync::Mutex;
 use crate::config::{KubernetesServiceAccountConfig, WorkloadConfig, WorkloadsConfig};
 
 const JWKS_CACHE_TTL: Duration = Duration::from_secs(5 * 60);
+const KUBERNETES_HTTP_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+const KUBERNETES_HTTP_TIMEOUT: Duration = Duration::from_secs(10);
+const MAX_KUBERNETES_DOCUMENT_BYTES: usize = 1024 * 1024;
 
 fn token_digest(token: &str) -> Vec<u8> {
     Sha256::digest(token.trim().as_bytes()).to_vec()
@@ -88,7 +91,10 @@ fn build_named_workload_authenticator(
 }
 
 fn kubernetes_http_client(config: &KubernetesServiceAccountConfig) -> Result<Client, String> {
-    let mut builder = Client::builder();
+    let mut builder = Client::builder()
+        .redirect(Policy::none())
+        .connect_timeout(KUBERNETES_HTTP_CONNECT_TIMEOUT)
+        .timeout(KUBERNETES_HTTP_TIMEOUT);
     if let Some(path) = config.ca_file.as_deref() {
         let pem = fs::read(path).map_err(|error| {
             format!("failed to read Kubernetes issuer CA bundle {path}: {error}")
@@ -159,13 +165,20 @@ impl StaticTokenWorkloadAuthenticator {
         })
     }
 
-    fn read_digests(&self) -> Vec<Vec<u8>> {
-        let mut digests: Vec<Vec<u8>> = self
-            .files
-            .iter()
-            .filter_map(|file| fs::read_to_string(file).ok())
-            .map(|token| token_digest(token.trim()))
-            .collect();
+    async fn read_digests(&self) -> Vec<Vec<u8>> {
+        let mut digests = Vec::new();
+        for file in &self.files {
+            match tokio::fs::read_to_string(file).await {
+                Ok(token) => digests.push(token_digest(token.trim())),
+                Err(error) => {
+                    tracing::warn!(
+                        path = %file.display(),
+                        error = %error,
+                        "failed to read workload static token file"
+                    );
+                }
+            }
+        }
         digests.extend(self.inline_digests.iter().cloned());
         digests
     }
@@ -177,6 +190,7 @@ impl WorkloadAuthenticator for StaticTokenWorkloadAuthenticator {
         let presented = token_digest(token);
         let valid = self
             .read_digests()
+            .await
             .iter()
             .any(|expected| bool::from(presented.ct_eq(expected)));
         valid.then_some(AuthenticatedWorkload(self.identity))
@@ -209,7 +223,7 @@ impl KubernetesServiceAccountWorkloadAuthenticator {
         }
     }
 
-    fn request(&self, url: &str) -> Result<RequestBuilder, String> {
+    async fn request(&self, url: &str) -> Result<RequestBuilder, String> {
         let request = self.http.get(url);
         let Some(path) = self.config.token_file.as_deref() else {
             return Ok(request);
@@ -221,7 +235,7 @@ impl KubernetesServiceAccountWorkloadAuthenticator {
         if issuer.origin() != target.origin() {
             return Ok(request);
         }
-        let token = fs::read_to_string(path).map_err(|error| {
+        let token = tokio::fs::read_to_string(path).await.map_err(|error| {
             format!("failed to read Kubernetes issuer bearer token {path}: {error}")
         })?;
         let token = token.trim();
@@ -231,6 +245,30 @@ impl KubernetesServiceAccountWorkloadAuthenticator {
             ));
         }
         Ok(request.bearer_auth(token))
+    }
+
+    async fn read_bounded_json<T: DeserializeOwned>(
+        mut response: Response,
+        label: &str,
+    ) -> Result<T, String> {
+        if response
+            .content_length()
+            .is_some_and(|length| length > MAX_KUBERNETES_DOCUMENT_BYTES as u64)
+        {
+            return Err(format!("{label} exceeded maximum size"));
+        }
+        let mut body = Vec::new();
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|error| format!("failed to read {label}: {error}"))?
+        {
+            if body.len() + chunk.len() > MAX_KUBERNETES_DOCUMENT_BYTES {
+                return Err(format!("{label} exceeded maximum size"));
+            }
+            body.extend_from_slice(&chunk);
+        }
+        serde_json::from_slice(&body).map_err(|error| format!("invalid {label}: {error}"))
     }
 
     async fn jwks(&self) -> Result<Vec<PublicJwk>, String> {
@@ -243,26 +281,25 @@ impl KubernetesServiceAccountWorkloadAuthenticator {
             "{}/.well-known/openid-configuration",
             self.config.issuer.trim_end_matches('/')
         );
-        let discovery: OidcDiscovery = self
-            .request(&discovery_url)?
+        let discovery_response = self
+            .request(&discovery_url)
+            .await?
             .send()
             .await
             .map_err(|error| format!("failed to fetch cluster OIDC discovery: {error}"))?
             .error_for_status()
-            .map_err(|error| format!("cluster OIDC discovery failed: {error}"))?
-            .json()
-            .await
-            .map_err(|error| format!("invalid cluster OIDC discovery: {error}"))?;
-        let jwks: Jwks = self
-            .request(&discovery.jwks_uri)?
+            .map_err(|error| format!("cluster OIDC discovery failed: {error}"))?;
+        let discovery: OidcDiscovery =
+            Self::read_bounded_json(discovery_response, "cluster OIDC discovery").await?;
+        let jwks_response = self
+            .request(&discovery.jwks_uri)
+            .await?
             .send()
             .await
             .map_err(|error| format!("failed to fetch cluster JWKS: {error}"))?
             .error_for_status()
-            .map_err(|error| format!("cluster JWKS fetch failed: {error}"))?
-            .json()
-            .await
-            .map_err(|error| format!("invalid cluster JWKS: {error}"))?;
+            .map_err(|error| format!("cluster JWKS fetch failed: {error}"))?;
+        let jwks: Jwks = Self::read_bounded_json(jwks_response, "cluster JWKS").await?;
         let keys = jwks
             .keys
             .into_iter()
@@ -297,9 +334,14 @@ impl KubernetesServiceAccountWorkloadAuthenticator {
         if !audience_matches {
             return false;
         }
-        payload
-            .expires_at()
-            .is_some_and(|expires| expires > SystemTime::now())
+        let now = SystemTime::now();
+        if payload
+            .not_before()
+            .is_some_and(|not_before| not_before > now)
+        {
+            return false;
+        }
+        payload.expires_at().is_some_and(|expires| expires > now)
     }
 }
 
@@ -309,7 +351,13 @@ impl WorkloadAuthenticator for KubernetesServiceAccountWorkloadAuthenticator {
         if token.split('.').count() != 3 {
             return None;
         }
-        let keys = self.jwks().await.ok()?;
+        let keys = match self.jwks().await {
+            Ok(keys) => keys,
+            Err(error) => {
+                tracing::warn!(error = %error, "failed to load Kubernetes workload JWKS");
+                return None;
+            }
+        };
         for key in keys {
             let alg = key.algorithm().unwrap_or("RS256");
             let Ok(verifier) = asymmetric_verifier_from_public_jwk(alg, &key) else {
@@ -464,6 +512,12 @@ mod tests {
         assert!(!authenticator.valid_claims(&payload));
 
         payload.set_subject("system:serviceaccount:identity:identity-login");
+        payload.set_not_before(&(SystemTime::now() + Duration::from_secs(60)));
+        assert!(!authenticator.valid_claims(&payload));
+
+        payload.set_not_before(&(SystemTime::now() - Duration::from_secs(5)));
+        assert!(authenticator.valid_claims(&payload));
+
         payload.set_claim("exp", None).unwrap();
         assert!(!authenticator.valid_claims(&payload));
     }
@@ -485,8 +539,8 @@ mod tests {
         assert!(error.contains("failed to read Kubernetes issuer CA bundle"));
     }
 
-    #[test]
-    fn kubernetes_request_rejects_a_missing_same_origin_bearer_token() {
+    #[tokio::test]
+    async fn kubernetes_request_rejects_a_missing_same_origin_bearer_token() {
         let config = KubernetesServiceAccountConfig {
             enabled: true,
             audience: "identity-internal".to_owned(),
@@ -504,12 +558,14 @@ mod tests {
 
         let error = authenticator
             .request("https://kubernetes.default.svc.cluster.local/openid/v1/jwks")
+            .await
             .unwrap_err();
 
         assert!(error.contains("failed to read Kubernetes issuer bearer token"));
         assert!(
             authenticator
                 .request("https://external.example.com/openid/v1/jwks")
+                .await
                 .is_ok()
         );
     }

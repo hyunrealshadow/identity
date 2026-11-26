@@ -19,7 +19,7 @@ pub struct AuthorizeService {
     pub(super) key_jwk_repo: Arc<dyn KeyJwkRepository>,
     pub(super) provider_service: Arc<OpenIdProviderService>,
     pub(super) signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
-    pub(super) http_client: Client,
+    pub(super) remote_fetcher: Arc<dyn RemoteDocumentFetcher>,
     pub(super) data_protector: Arc<dyn DataProtector>,
     pub(super) events: Arc<dyn EventSink>,
     /// Live session validation for approval. Optional only for old unit
@@ -45,7 +45,7 @@ pub struct AuthorizeServiceDependencies {
     pub provider_service: Arc<OpenIdProviderService>,
     pub signing_algorithm_detector: Arc<dyn SigningAlgorithmDetector>,
     pub data_protector: Arc<dyn DataProtector>,
-    pub http_client: Client,
+    pub remote_fetcher: Arc<dyn RemoteDocumentFetcher>,
 }
 
 impl AuthorizeService {
@@ -65,7 +65,7 @@ impl AuthorizeService {
             key_jwk_repo: deps.key_jwk_repo,
             provider_service: deps.provider_service,
             signing_algorithm_detector: deps.signing_algorithm_detector,
-            http_client: deps.http_client,
+            remote_fetcher: deps.remote_fetcher,
             data_protector: deps.data_protector,
             events: Arc::new(NoopEventSink),
             session_repo: None,

@@ -47,7 +47,7 @@ async fn posts_logout_token_as_form_and_reports_response_status() {
         String::from_utf8(request).unwrap()
     });
 
-    let sender = HttpBackChannelLogoutSender::new(false).unwrap();
+    let sender = HttpBackChannelLogoutSender::for_test_local_http().unwrap();
     let notification = BackChannelLogoutNotification {
         client_id: Uuid::new_v4(),
         logout_uri: Url::parse(&format!("http://{address}/backchannel_logout")).unwrap(),
@@ -64,4 +64,26 @@ async fn posts_logout_token_as_form_and_reports_response_status() {
             .contains("content-type: application/x-www-form-urlencoded")
     );
     assert!(request.ends_with("logout_token=signed.token.value"));
+}
+
+#[tokio::test]
+async fn production_sender_rejects_non_https_and_loopback_targets() {
+    let sender = HttpBackChannelLogoutSender::new(false, false).unwrap();
+    for uri in [
+        "http://rp.example.com/backchannel_logout",
+        "https://127.0.0.1/backchannel_logout",
+        "https://[::ffff:127.0.0.1]/backchannel_logout",
+        "https://localhost/backchannel_logout",
+    ] {
+        let notification = BackChannelLogoutNotification {
+            client_id: Uuid::new_v4(),
+            logout_uri: Url::parse(uri).unwrap(),
+            logout_token: "signed.token.value".to_owned(),
+        };
+        assert_eq!(
+            sender.send(&notification).await,
+            BackChannelLogoutDelivery::TransportFailed,
+            "{uri} should be rejected"
+        );
+    }
 }

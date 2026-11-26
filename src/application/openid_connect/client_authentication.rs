@@ -7,7 +7,7 @@
 //! `none` authenticate with a `client_id` only. Keeping one implementation
 //! means a flow cannot accidentally accept a weaker method than the registration allows.
 
-use std::{sync::Arc, time::Duration};
+use std::sync::Arc;
 
 use chrono::Utc;
 use identity_domain::{
@@ -41,8 +41,8 @@ use crate::{
         },
         provider::OpenIdProviderService,
         remote::{
-            DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchError, RemoteFetchPolicy,
-            conformance_allows_invalid_certs, fetch_https_public_document, remote_http_client,
+            DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteDocumentFetcher, RemoteFetchError,
+            UnconfiguredRemoteDocumentFetcher,
         },
         token::helpers::{
             decode_assertion_with_alg, decode_assertion_with_hmac_alg, decode_assertion_with_jwk,
@@ -56,6 +56,7 @@ pub struct ClientAuthenticator {
     client_repo: Arc<dyn OpenIdConnectClientRepository>,
     credential_repo: Arc<dyn OpenIdConnectCredentialRepository>,
     provider_service: Arc<OpenIdProviderService>,
+    remote_fetcher: Arc<dyn RemoteDocumentFetcher>,
 }
 
 pub struct ClientAuthenticatorDependencies {
@@ -72,7 +73,14 @@ impl ClientAuthenticator {
             client_repo: deps.client_repo,
             credential_repo: deps.credential_repo,
             provider_service: deps.provider_service,
+            remote_fetcher: Arc::new(UnconfiguredRemoteDocumentFetcher),
         }
+    }
+
+    #[must_use]
+    pub fn with_remote_fetcher(mut self, remote_fetcher: Arc<dyn RemoteDocumentFetcher>) -> Self {
+        self.remote_fetcher = remote_fetcher;
+        self
     }
 
     pub async fn authenticate_client_for_par(
@@ -513,8 +521,13 @@ impl ClientAuthenticator {
                         return Ok(payload);
                     }
                 }
-                if let Some(payload) =
-                    fetch_and_verify_jwks_uri(&jwks_uri, algorithm, assertion).await?
+                if let Some(payload) = fetch_and_verify_jwks_uri(
+                    self.remote_fetcher.as_ref(),
+                    &jwks_uri,
+                    algorithm,
+                    assertion,
+                )
+                .await?
                 {
                     return Ok(payload);
                 }
@@ -575,26 +588,21 @@ struct RemoteJwks {
 }
 
 async fn fetch_and_verify_jwks_uri(
+    remote_fetcher: &dyn RemoteDocumentFetcher,
     jwks_uri: &Url,
     algorithm: JwsAlgorithm,
     assertion: &str,
 ) -> Result<Option<JwtPayload>, AppError> {
-    let client = remote_http_client(RemoteFetchPolicy::new(
-        DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
-        Duration::from_secs(5),
-        conformance_allows_invalid_certs(),
-    ))
-    .map_err(token::error::AssertionVerifyFailed::map_source())?;
-    let body =
-        match fetch_https_public_document(&client, jwks_uri, DEFAULT_REMOTE_DOCUMENT_MAX_BYTES)
-            .await
-        {
-            Ok(body) => body,
-            Err(RemoteFetchError::NotOk) => return Ok(None),
-            Err(error) => {
-                return Err(token::error::AssertionVerifyFailed.with_source(error));
-            }
-        };
+    let body = match remote_fetcher
+        .fetch_https_public_document(jwks_uri, DEFAULT_REMOTE_DOCUMENT_MAX_BYTES)
+        .await
+    {
+        Ok(body) => body,
+        Err(RemoteFetchError::NotOk) => return Ok(None),
+        Err(error) => {
+            return Err(token::error::AssertionVerifyFailed.with_source(error));
+        }
+    };
 
     let jwks = from_slice::<RemoteJwks>(&body)
         .map_err(token::error::AssertionVerifyFailed::map_source())?;

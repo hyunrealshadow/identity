@@ -24,7 +24,7 @@ use crate::openid_connect::{
             set_stored_request_redirect_uri_for_test,
         },
     },
-    remote::test_http_client,
+    remote::test_remote_fetcher,
     tests::fixtures::{
         client::{test_client, test_metadata, test_platforms, test_scopes},
         mocks::{MockKeyJwkRepository, MockKeyRepository, user_repo_with},
@@ -177,7 +177,7 @@ fn default_authorize_service_with_request_repo() -> AuthorizeServiceWithRequestR
         provider_service: provider_service(),
         signing_algorithm_detector: test_signing_algorithm_detector(),
         data_protector: test_data_protector(),
-        http_client: test_http_client(),
+        remote_fetcher: test_remote_fetcher(),
     });
 
     (service, state)
@@ -955,7 +955,7 @@ async fn approve_code_id_token_hybrid_returns_fragment_with_code_and_id_token_ha
             provider_service: provider_service(),
             signing_algorithm_detector: test_signing_algorithm_detector(),
             data_protector: test_data_protector(),
-            http_client: test_http_client(),
+            remote_fetcher: test_remote_fetcher(),
         })
     };
 
@@ -1024,7 +1024,7 @@ async fn approve_implicit_flow_returns_session_state() {
             provider_service: provider_service(),
             signing_algorithm_detector: test_signing_algorithm_detector(),
             data_protector: test_data_protector(),
-            http_client: test_http_client(),
+            remote_fetcher: test_remote_fetcher(),
         })
     };
 
@@ -1073,7 +1073,7 @@ async fn approve_code_id_token_token_hybrid_returns_code_tokens_and_hashes() {
             provider_service: provider_service(),
             signing_algorithm_detector: test_signing_algorithm_detector(),
             data_protector: test_data_protector(),
-            http_client: test_http_client(),
+            remote_fetcher: test_remote_fetcher(),
         })
     };
 
@@ -1145,7 +1145,7 @@ async fn approve_code_token_hybrid_returns_code_and_access_token_without_nonce()
             provider_service: provider_service(),
             signing_algorithm_detector: test_signing_algorithm_detector(),
             data_protector: test_data_protector(),
-            http_client: test_http_client(),
+            remote_fetcher: test_remote_fetcher(),
         })
     };
 

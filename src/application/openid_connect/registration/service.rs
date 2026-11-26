@@ -13,7 +13,7 @@ use super::{
     DynamicClientUpdateRequest,
     credential::{client_credentials_from_jwks, client_credentials_from_jwks_uri},
     response::{registration_client_uri, response_from_client},
-    token::{default_skip_consent, generate_client_secret, generate_registration_access_token},
+    token::{generate_client_secret, generate_registration_access_token},
     validation::{
         default_response_types, parse_application_type, parse_metadata_value,
         parse_metadata_values, reject_none_algorithm, split_scope,
@@ -41,6 +41,9 @@ use crate::{
         },
     },
     observability::{BusinessEvent, EventSink, EventValue, NoopEventSink},
+    openid_connect::remote::{
+        RemoteDocumentFetcher, UnconfiguredRemoteDocumentFetcher, validate_https_public_url,
+    },
 };
 
 const CLIENT_SECRET_LIFETIME_DAYS: i64 = 365;
@@ -105,6 +108,8 @@ pub struct DynamicClientRegistrationService {
     repo: Arc<dyn OpenIdConnectClientRegistrationRepository>,
     credential_repo: Option<Arc<dyn OpenIdConnectCredentialRepository>>,
     scope_catalog: Option<Arc<dyn ScopeCatalogRepository>>,
+    remote_fetcher: Arc<dyn RemoteDocumentFetcher>,
+    default_skip_consent: bool,
     events: Arc<dyn EventSink>,
 }
 
@@ -119,8 +124,22 @@ impl DynamicClientRegistrationService {
             repo,
             credential_repo: None,
             scope_catalog: None,
+            remote_fetcher: Arc::new(UnconfiguredRemoteDocumentFetcher),
+            default_skip_consent: false,
             events: Arc::new(NoopEventSink),
         }
+    }
+
+    #[must_use]
+    pub fn with_remote_fetcher(mut self, remote_fetcher: Arc<dyn RemoteDocumentFetcher>) -> Self {
+        self.remote_fetcher = remote_fetcher;
+        self
+    }
+
+    #[must_use]
+    pub fn with_default_skip_consent(mut self, default_skip_consent: bool) -> Self {
+        self.default_skip_consent = default_skip_consent;
+        self
     }
 
     /// Attach the credential reader used to preserve active secret material
@@ -250,11 +269,20 @@ impl DynamicClientRegistrationService {
                 .with_source(error)
             })?;
         validate_sector_identifier_uri(
+            self.remote_fetcher.as_ref(),
             request.sector_identifier_uri.as_ref(),
             &request.redirect_uris,
         )
         .await?;
         validate_initiate_login_uri(request.initiate_login_uri.as_ref())?;
+        if let Some(uri) = request.backchannel_logout_uri.as_ref()
+            && (!uri.username().is_empty()
+                || uri.password().is_some()
+                || uri.fragment().is_some()
+                || validate_https_public_url(uri).is_err())
+        {
+            return Err(registration::error::InvalidClientMetadata.into_error());
+        }
         if request.default_max_age.is_some_and(|value| value < 0) {
             return Err(registration::error::InvalidClientMetadata.into_error());
         }
@@ -437,8 +465,11 @@ impl DynamicClientRegistrationService {
             .clone()
             .unwrap_or_else(|| "Dynamic OpenID Connect Client".to_owned());
         let mut credentials = client_credentials_from_jwks(request.jwks.as_ref())?;
-        if let Some(credential) =
-            client_credentials_from_jwks_uri(request.jwks_uri.as_ref()).await?
+        if let Some(credential) = client_credentials_from_jwks_uri(
+            self.remote_fetcher.as_ref(),
+            request.jwks_uri.as_ref(),
+        )
+        .await?
         {
             credentials.push(credential);
         }
@@ -526,7 +557,7 @@ impl DynamicClientRegistrationService {
                 require_pushed_authorization_requests: request
                     .require_pushed_authorization_requests
                     .unwrap_or(false),
-                skip_consent: default_skip_consent(),
+                skip_consent: self.default_skip_consent,
                 allow_public_client_flow: public_client,
                 oauth_version: Default::default(),
                 cors_enabled: false,

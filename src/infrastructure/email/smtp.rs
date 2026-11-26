@@ -192,7 +192,7 @@ impl SmtpEmailSender {
         if let Some(scope) = &oauth.scope {
             form.push(("scope", scope.clone()));
         }
-        let response = self
+        let mut response = self
             .http
             .post(&oauth.token_endpoint)
             .header(reqwest::header::ACCEPT, "application/json")
@@ -205,13 +205,32 @@ impl SmtpEmailSender {
                     error.without_url()
                 )),
             })?;
+        const MAX_OAUTH_TOKEN_RESPONSE_BYTES: usize = 64 * 1024;
         let status = response.status();
-        let body = response
-            .bytes()
-            .await
-            .map_err(|error| EmailDeliveryError::Transport {
-                detail: truncate(&error.without_url().to_string()),
-            })?;
+        if response
+            .content_length()
+            .is_some_and(|length| length > MAX_OAUTH_TOKEN_RESPONSE_BYTES as u64)
+        {
+            return Err(EmailDeliveryError::Transport {
+                detail: "token endpoint response too large".to_owned(),
+            });
+        }
+        let mut body = Vec::new();
+        while let Some(chunk) =
+            response
+                .chunk()
+                .await
+                .map_err(|error| EmailDeliveryError::Transport {
+                    detail: truncate(&error.without_url().to_string()),
+                })?
+        {
+            if body.len() + chunk.len() > MAX_OAUTH_TOKEN_RESPONSE_BYTES {
+                return Err(EmailDeliveryError::Transport {
+                    detail: "token endpoint response too large".to_owned(),
+                });
+            }
+            body.extend_from_slice(&chunk);
+        }
         if !status.is_success() {
             let detail = serde_json::from_slice::<TokenErrorResponse>(&body).map_or_else(
                 |_| format!("token endpoint answered {status}"),

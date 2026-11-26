@@ -1,5 +1,3 @@
-use std::time::Duration as TimeDuration;
-
 use chrono::{Duration, Utc};
 use serde_json::{from_slice, to_string};
 use url::Url;
@@ -8,10 +6,7 @@ use super::request::DynamicClientJwks;
 use crate::{
     application::error::{AppError, codes::registration},
     domain::{key::PublicJwk, openid_connect::OpenIdConnectCredentialData},
-    openid_connect::remote::{
-        DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteFetchPolicy, conformance_allows_invalid_certs,
-        fetch_https_public_document, remote_http_client,
-    },
+    openid_connect::remote::{DEFAULT_REMOTE_DOCUMENT_MAX_BYTES, RemoteDocumentFetcher},
 };
 
 pub(super) fn client_credentials_from_jwks(
@@ -34,13 +29,14 @@ pub(super) fn client_credentials_from_jwks(
 }
 
 pub(super) async fn client_credentials_from_jwks_uri(
+    remote_fetcher: &dyn RemoteDocumentFetcher,
     jwks_uri: Option<&Url>,
 ) -> Result<Option<OpenIdConnectCredentialData>, AppError> {
     let Some(jwks_uri) = jwks_uri else {
         return Ok(None);
     };
 
-    let jwks = fetch_jwks(jwks_uri).await?;
+    let jwks = fetch_jwks(remote_fetcher, jwks_uri).await?;
     reject_none_jwk_alg(&jwks)?;
     let public_keys = jwks
         .keys
@@ -68,15 +64,12 @@ fn reject_none_jwk_alg(jwks: &DynamicClientJwks) -> Result<(), AppError> {
     Ok(())
 }
 
-async fn fetch_jwks(jwks_uri: &Url) -> Result<DynamicClientJwks, AppError> {
-    let client = remote_http_client(RemoteFetchPolicy::new(
-        DEFAULT_REMOTE_DOCUMENT_MAX_BYTES,
-        TimeDuration::from_secs(5),
-        conformance_allows_invalid_certs(),
-    ))
-    .map_err(registration::error::ClientCreateFailed::map_source())?;
-
-    let body = fetch_https_public_document(&client, jwks_uri, DEFAULT_REMOTE_DOCUMENT_MAX_BYTES)
+async fn fetch_jwks(
+    remote_fetcher: &dyn RemoteDocumentFetcher,
+    jwks_uri: &Url,
+) -> Result<DynamicClientJwks, AppError> {
+    let body = remote_fetcher
+        .fetch_https_public_document(jwks_uri, DEFAULT_REMOTE_DOCUMENT_MAX_BYTES)
         .await
         .map_err(registration::error::ClientCreateFailed::map_source())?;
 
