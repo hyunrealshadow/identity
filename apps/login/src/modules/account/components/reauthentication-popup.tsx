@@ -1,5 +1,7 @@
 import { Alert, AlertDescription } from '@identity/ui/components/alert'
 import { Button } from '@identity/ui/components/button'
+import { Dialog, DialogContent, DialogTitle } from '@identity/ui/components/dialog'
+import { useQueryClient } from '@tanstack/react-query'
 import { CircleAlert, TriangleAlert } from 'lucide-react'
 import { useRouter } from '@tanstack/react-router'
 import { useServerFn } from '@tanstack/react-start'
@@ -8,6 +10,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import type { AccountActionInput, AccountActionResult } from '#/modules/account/lib/account-action.server'
 import { preflightAccountAction, type AccountAccessContext } from '#/modules/account/lib/account-operations'
 import { runAccountAction } from '#/modules/account/lib/account-actions'
+import { ACCOUNT_QUERY_KEY } from '#/modules/account/lib/account-query'
 import { openAccountReauthPopup, safeAccountReauthReturnTo, verifyAccountReauthMessage, type AccountReauthRequest } from '#/lib/popup-reauth'
 import { translate, type Locale } from '#/lib/i18n'
 
@@ -31,6 +34,7 @@ export function useAccountReauth(): AccountReauthContextValue {
 /** Owns one browser window; no authentication page is nested in the account UI. */
 export function AccountReauthProvider({ locale, access, children }: { locale: Locale; access?: AccountAccessContext; children: ReactNode }) {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const execute = useServerFn(runAccountAction)
   const popup = useRef<Window | null>(null)
   const pending = useRef<AccountReauthRequest | undefined>(undefined)
@@ -98,12 +102,14 @@ export function AccountReauthProvider({ locale, access, children }: { locale: Lo
       handled.current = true
       popup.current?.close()
       popup.current = null
+      if (message.result === 'cancelled') { cancel(); return }
       if (message.result !== 'success') { setNotice('error'); return }
       const returnTo = safeAccountReauthReturnTo(message.returnTo) ?? '/account/security'
       pending.current = undefined
       setRequest(undefined)
       setNotice(undefined)
       void (async () => {
+        await queryClient.invalidateQueries({ queryKey: ACCOUNT_QUERY_KEY })
         await router.invalidate()
         // Resume the editor, never replay the mutation that requested verification.
         await router.navigate({ href: returnTo })
@@ -111,7 +117,7 @@ export function AccountReauthProvider({ locale, access, children }: { locale: Lo
     }
     window.addEventListener('message', onMessage)
     return () => window.removeEventListener('message', onMessage)
-  }, [router])
+  }, [cancel, queryClient, router])
   useEffect(() => {
     if (!request) return
     const timer = window.setInterval(() => {
@@ -143,18 +149,25 @@ export function AccountReauthProvider({ locale, access, children }: { locale: Lo
   }, [cancel, execute, requestReauth])
 
   const value = useMemo(() => ({ requestReauth, executeAction, prepareAction }), [requestReauth, executeAction, prepareAction])
+  const noticeMessage = notice === 'blocked' ? t('accountReauthPopupBlocked') : t('accountReauthFailed')
   return <AccountReauthContext.Provider value={value}>
     {children}
-    {notice && request ? <Alert variant={notice === 'blocked' ? 'default' : 'destructive'} className="mt-4">
-      {notice === 'blocked' ? <TriangleAlert className="text-warning" aria-hidden="true" /> : <CircleAlert aria-hidden="true" />}
-      <AlertDescription>
-        <p>{t(notice === 'blocked' ? 'accountReauthPopupBlocked' : 'accountReauthFailed')}</p>
-        <div className="mt-3 flex flex-wrap gap-2">
-          <Button size="sm" loading={isRetrying} onClick={() => void retry()}>{t('accountReauthPopupContinue')}</Button>
-          <Button size="sm" variant="ghost" onClick={() => window.location.assign(request.url)}>{t('accountReauthOpenWindow')}</Button>
-          <Button size="sm" variant="ghost" onClick={cancel}>{t('close')}</Button>
-        </div>
-      </AlertDescription>
-    </Alert> : null}
+    <Dialog open={Boolean(notice && request)} onOpenChange={(open) => { if (!open) cancel() }}>
+      {notice && request ? (
+        <DialogContent showCloseButton={false} className="sm:max-w-md">
+          <Alert variant={notice === 'blocked' ? 'default' : 'destructive'}>
+            {notice === 'blocked' ? <TriangleAlert className="text-warning" aria-hidden="true" /> : <CircleAlert aria-hidden="true" />}
+            <AlertDescription>
+              <DialogTitle className="text-sm font-medium text-current">{noticeMessage}</DialogTitle>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button size="sm" loading={isRetrying} onClick={() => void retry()}>{t('accountReauthPopupContinue')}</Button>
+                <Button size="sm" variant="ghost" onClick={() => window.location.assign(request.url)}>{t('accountReauthOpenWindow')}</Button>
+                <Button size="sm" variant="ghost" onClick={cancel}>{t('close')}</Button>
+              </div>
+            </AlertDescription>
+          </Alert>
+        </DialogContent>
+      ) : null}
+    </Dialog>
   </AccountReauthContext.Provider>
 }

@@ -9,7 +9,7 @@ export const Route = createFileRoute('/appearance')({
       POST: async ({ request }) => {
         const form = await request.formData()
         const theme = form.get('theme')
-        if (isThemePreference(theme)) storeAnonymousThemePreference(theme)
+        if (isThemePreference(theme)) storeAnonymousThemePreference(theme, request)
         throw redirect({
           href: safeAppearanceReturnTo(request.url, form.get('return_to')),
           statusCode: 303,

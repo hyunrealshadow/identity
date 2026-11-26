@@ -3,6 +3,7 @@ import { translate } from '#/lib/i18n'
 import { requestLocale } from '#/lib/i18n.server'
 import { restartAccountSignIn, storeMfaEnrollment } from '#/lib/oauth.server'
 import { storeAccountFlash } from '#/lib/oauth-session.server'
+import { loadApplicationUrl } from '#/lib/runtime-config.server'
 
 interface BeginTotpEnrollmentResult {
   beginTotpEnrollment: {
@@ -14,7 +15,25 @@ interface BeginTotpEnrollmentResult {
 }
 
 export async function handleAccountMfaSetupGet() {
+  return new Response(null, {
+    status: 303,
+    headers: { location: '/account/security?setup=mfa' },
+  })
+}
+
+export async function handleAccountMfaSetupPost(request: Request) {
   const locale = requestLocale()
+  const origin = request.headers.get('origin')
+  if (!origin || origin !== new URL(loadApplicationUrl()).origin) {
+    await storeAccountFlash({
+      error: translate(locale, 'accountInvalidRequestOrigin'),
+    })
+    return new Response(null, {
+      status: 303,
+      headers: { location: '/account/security?setup=mfa' },
+    })
+  }
+
   try {
     const result = await identityGraphql<BeginTotpEnrollmentResult>(
       `mutation BeginTotpEnrollment {

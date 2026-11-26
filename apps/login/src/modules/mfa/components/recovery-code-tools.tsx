@@ -47,7 +47,7 @@ export function RecoveryCodeList({ codes, copyLabel, copiedLabel }: RecoveryCode
               aria-label={`${copyLabel} ${index + 1}`}
               className="font-mono"
             />
-            <InputGroupAddon align="inline-end">
+            <InputGroupAddon align="inline-end" className="js-only">
               <InputGroupButton
                 size="icon-xs"
                 aria-label={copied ? copiedLabel : copyLabel}
@@ -96,15 +96,15 @@ export function RecoveryCodeTools({ codes, copyLabel, copiedLabel, printLabel, d
 
   return (
     <>
-      <Button type="button" size="sm" variant="outline" onClick={() => void copyAll()}>
+      <Button type="button" size="sm" variant="outline" className="js-only" onClick={() => void copyAll()}>
         {copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
         {copied ? copiedLabel : copyLabel}
       </Button>
-      <Button type="button" size="sm" variant="outline" onClick={() => window.print()}>
+      <Button type="button" size="sm" variant="outline" className="js-only" onClick={() => window.print()}>
         <Printer aria-hidden="true" />
         {printLabel}
       </Button>
-      <Button type="button" size="sm" variant="outline" onClick={download}>
+      <Button type="button" size="sm" variant="outline" className="js-only" onClick={download}>
         <Download aria-hidden="true" />
         {downloadLabel}
       </Button>

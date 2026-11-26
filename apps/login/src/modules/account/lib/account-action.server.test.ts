@@ -284,7 +284,7 @@ describe('executeAccountAction', () => {
       state: 'new',
     })
     expect(mocks.startPopupReauthorization).toHaveBeenCalledWith(
-      '/account/mfa/setup',
+      '/account/security?setup=mfa',
       'account',
       {
         loginHint: 'alice',

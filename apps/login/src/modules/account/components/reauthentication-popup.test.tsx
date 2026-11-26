@@ -13,11 +13,12 @@ vi.mock('@tanstack/react-router', () => ({ useRouter: () => router, useNavigate:
 import { AccountReauthProvider, useAccountReauth } from '#/modules/account/components/reauthentication-popup'
 import { AccountActionForm } from '#/modules/account/components/account-action-form'
 import { useSecurityModal } from '#/modules/account/components/use-security-modal'
+import { ACCOUNT_QUERY_KEY } from '#/modules/account/lib/account-query'
 import type { AccountAccessContext } from '#/modules/account/lib/account-operations'
-import { ACCOUNT_REAUTH_MESSAGE_TYPE } from '#/lib/popup-reauth'
+import { ACCOUNT_REAUTH_MESSAGE_TYPE, type AccountReauthResult } from '#/lib/popup-reauth'
 
 const request = { url: 'https://issuer.example/oauth2/authorize', state: 'pending-state' }
-const queryClient = new QueryClient()
+let queryClient: QueryClient
 
 function renderWithQuery(ui: ReactElement) {
   return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>)
@@ -35,15 +36,16 @@ function Controls({ action = 'prepare-change-password' }: { action?: string }) {
   </>
 }
 function setup(access?: AccountAccessContext, action?: string) { renderWithQuery(<AccountReauthProvider locale="zh-CN" access={access}><Controls action={action} /></AccountReauthProvider>) }
-function send(source: Window, state = request.state, origin = window.location.origin) {
+function send(source: Window, state = request.state, origin = window.location.origin, result: AccountReauthResult = 'success') {
   const event = new MessageEvent('message', { origin, data: {
-    type: ACCOUNT_REAUTH_MESSAGE_TYPE, state, result: 'success', returnTo: '/account/security?confirm=change-password',
+    type: ACCOUNT_REAUTH_MESSAGE_TYPE, state, result, returnTo: '/account/security?confirm=change-password',
   } })
   Object.defineProperty(event, 'source', { value: source })
   act(() => window.dispatchEvent(event))
 }
 beforeEach(() => {
   vi.clearAllMocks()
+  queryClient = new QueryClient()
   replace = vi.fn()
   close = vi.fn()
   child = { closed: false, close, focus: vi.fn(), location: { replace } } as unknown as Window
@@ -54,6 +56,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks() })
 
 it('opens a real window and accepts one callback only from that window and origin', async () => {
+  const invalidateQueries = vi.spyOn(queryClient, 'invalidateQueries')
   setup()
   fireEvent.click(screen.getByText('verify'))
   expect(replace).toHaveBeenCalledWith(request.url)
@@ -66,8 +69,19 @@ it('opens a real window and accepts one callback only from that window and origi
   send(child)
   send(child)
   await waitFor(() => expect(mocks.navigate).toHaveBeenCalledOnce())
+  expect(invalidateQueries).toHaveBeenCalledWith({ queryKey: ACCOUNT_QUERY_KEY })
   expect(close).toHaveBeenCalledOnce()
   expect(mocks.navigate).toHaveBeenCalledWith({ href: '/account/security?confirm=change-password' })
+})
+
+it('dismisses cleanly without an error dialog when popup authentication is cancelled', async () => {
+  setup()
+  fireEvent.click(screen.getByText('verify'))
+  send(child, request.state, window.location.origin, 'cancelled')
+  await waitFor(() => expect(close).toHaveBeenCalledOnce())
+  expect(document.querySelector('[role=dialog]')).toBeNull()
+  expect(screen.queryByText('验证失败，请重试')).toBeNull()
+  expect(mocks.navigate).not.toHaveBeenCalled()
 })
 
 it('shows a blocked notice and opens a retry window only after the server confirms elevation', async () => {

@@ -1,6 +1,6 @@
 import type { GraphqlRequestError } from '#/lib/graphql.server'
 
-export const MFA_SETUP_CONTINUATION = '/account/mfa/setup'
+export const MFA_SETUP_CONTINUATION = '/account/security?setup=mfa'
 export const MFA_VERIFICATION_CONTINUATION = '/account/security?setup=mfa&step=verify'
 export const MFA_DISABLE_CONTINUATION = '/account/security?confirm=disable-mfa'
 export const RECOVERY_CODES_CONTINUATION = '/account/security?confirm=recovery-codes'

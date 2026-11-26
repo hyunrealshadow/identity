@@ -39,6 +39,7 @@ export function TextField({
   reveal,
   type,
   onInput,
+  onChange,
   className,
   ...inputProps
 }: TextFieldProps) {
@@ -46,9 +47,15 @@ export function TextField({
   const errorId = `${id}-error`
   const descriptionId = `${id}-description`
   const contextError = useFieldValidationError(name)
-  const message = error ?? contextError
+  const [dismissedError, setDismissedError] = useState<string>()
+  const explicitError = error && error !== dismissedError ? error : undefined
+  const message = error !== undefined ? explicitError : contextError
   const inputRef = useRef<HTMLInputElement>(null)
   const [revealed, setRevealed] = useState(false)
+
+  useEffect(() => {
+    setDismissedError(undefined)
+  }, [error])
 
   useEffect(() => {
     inputRef.current?.setCustomValidity(message ?? '')
@@ -58,6 +65,10 @@ export function TextField({
     description ? descriptionId : undefined,
     message ? errorId : undefined,
   ].filter(Boolean).join(' ') || undefined
+  const clearEditedError = (currentTarget: HTMLInputElement) => {
+    currentTarget.setCustomValidity('')
+    if (error !== undefined) setDismissedError(error)
+  }
   const controlProps = {
     ...inputProps,
     // A field error colors its label and message, not the entered value.
@@ -69,8 +80,12 @@ export function TextField({
     'aria-invalid': message ? true : undefined,
     'aria-describedby': describedBy,
     onInput: (event: Parameters<NonNullable<NativeInputProps['onInput']>>[0]) => {
-      event.currentTarget.setCustomValidity('')
+      clearEditedError(event.currentTarget)
       onInput?.(event)
+    },
+    onChange: (event: Parameters<NonNullable<NativeInputProps['onChange']>>[0]) => {
+      clearEditedError(event.currentTarget)
+      onChange?.(event)
     },
   }
 

@@ -238,7 +238,7 @@ function MfaSetupAction({
 
   useEffect(() => {
     if (!openSetup) return
-    if (hasModalContent) modal.open()
+    modal.open()
     void navigate({ to: '/account/security', replace: true })
   }, [hasModalContent, openSetup])
 
@@ -259,29 +259,40 @@ function MfaSetupAction({
           {t('accountMfaEnable')}
         </Button>
       )}
-      {hasModalContent ? (
-        <AccountDialog
-          state={modal}
-          title={t('accountMfa')}
-          closeLabel={t('close')}
-        >
-          {mfa.enrollment ? (
-            <MfaEnrollmentWizard
-              enrollment={mfa.enrollment}
-              loginHint={loginHint}
-              initialStep={initialStep}
-              codeError={flash.fields?.code}
-              validationRevision={flash.fields}
-              close={modal.close}
-              t={t}
-            />
-          ) : (
+      <AccountDialog
+        state={modal}
+        title={t('accountMfa')}
+        closeLabel={t('close')}
+      >
+        {mfa.enrollment ? (
+          <MfaEnrollmentWizard
+            enrollment={mfa.enrollment}
+            loginHint={loginHint}
+            initialStep={initialStep}
+            codeError={flash.fields?.code}
+            validationRevision={flash.fields}
+            close={modal.close}
+            t={t}
+          />
+        ) : (
+          <div className="space-y-4">
             <p className="text-sm text-muted-foreground">
-              {t('accountMfaRecommendation')}
+              {t('accountMfaSetupDescription')}
             </p>
-          )}
-        </AccountDialog>
-      ) : null}
+            <AccountActionForm
+              action="begin-totp"
+              requestFailedMessage={t('accountRequestFailed')}
+              onSuccess={() => modal.open()}
+              className="flex justify-end gap-2"
+            >
+              <Button type="button" variant="outline" onClick={modal.close}>
+                {t('cancel')}
+              </Button>
+              <Button type="submit">{t('accountMfaEnable')}</Button>
+            </AccountActionForm>
+          </div>
+        )}
+      </AccountDialog>
     </>
   )
 }

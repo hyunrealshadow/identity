@@ -2,6 +2,7 @@ import { Button } from '@identity/ui/components/button'
 import { Field, FieldLabel } from '@identity/ui/components/field'
 import { Input } from '@identity/ui/components/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@identity/ui/components/tooltip'
+import { useQueryClient } from '@tanstack/react-query'
 import { useRouter } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 import { KeyRound, Trash2 } from 'lucide-react'
@@ -13,6 +14,7 @@ import { MfaRecoverySetup } from '#/modules/mfa/components/mfa-recovery-setup'
 import { MfaStepper } from '#/modules/mfa/components/mfa-stepper'
 import { useAccountReauth } from '#/modules/account/components/reauthentication-popup'
 import { useSecurityModal } from '#/modules/account/components/use-security-modal'
+import { ACCOUNT_QUERY_KEY } from '#/modules/account/lib/account-query'
 import { translate, type Locale } from '#/lib/i18n'
 import { startPopupPasskeyReauthFromRedirect } from '#/lib/popup-reauth.server'
 import { createPasskey, MAX_PASSKEYS_PER_ACCOUNT, passkeysSupported, type PasskeyOptions } from '#/modules/passkey/lib/passkey'
@@ -41,6 +43,7 @@ export function PasskeySettings({ locale, keys, loginHint, openRequested, totpEn
   totpEnabled?: boolean
 }) {
   const router = useRouter()
+  const queryClient = useQueryClient()
   const { requestReauth, prepareAction } = useAccountReauth()
   const [view, setView] = useState<'manage' | 'enroll'>('manage')
   const [name, setName] = useState('')
@@ -135,6 +138,7 @@ export function PasskeySettings({ locale, keys, loginHint, openRequested, totpEn
       if (result.redirect) { window.location.assign(result.redirect); return }
       if (result.error) { setRegistrationError(result.error); return }
       if (!result.ok) throw new Error('Passkey registration failed')
+      await queryClient.invalidateQueries({ queryKey: ACCOUNT_QUERY_KEY })
       await router.invalidate()
       if (!controller.signal.aborted) { setName(''); setView('manage') }
     } catch (error) {
@@ -162,6 +166,7 @@ export function PasskeySettings({ locale, keys, loginHint, openRequested, totpEn
       if (result.redirect) { window.location.assign(result.redirect); return }
       if (result.error) { setError(result.error); return }
       if (!result.ok) throw new Error('Passkey deletion failed')
+      await queryClient.invalidateQueries({ queryKey: ACCOUNT_QUERY_KEY })
       await router.invalidate()
       setDeleting(null)
     } catch {

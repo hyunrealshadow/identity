@@ -184,4 +184,20 @@ describe('ProgressiveForm', () => {
     expect(await screen.findByText('Try again later')).not.toBeNull()
     expect(assign).not.toHaveBeenCalled()
   })
+
+  it('clears an explicit error prop on TextField when the user edits the input', async () => {
+    const view = render(<TextField name="username" label="Username" error="Username taken" />)
+    const input = screen.getByRole('textbox', { name: 'Username' }) as HTMLInputElement
+    await waitFor(() => expect(input.validity.customError).toBe(true))
+    expect(screen.getByText('Username taken')).toBeTruthy()
+
+    fireEvent.change(input, { target: { value: 'alice-new' } })
+    await waitFor(() => expect(input.validity.customError).toBe(false))
+    expect(screen.queryByText('Username taken')).toBeNull()
+    expect(input.getAttribute('aria-invalid')).toBeNull()
+
+    view.rerender(<TextField name="username" label="Username" error="Username invalid" />)
+    await waitFor(() => expect(input.validity.customError).toBe(true))
+    expect(screen.getByText('Username invalid')).toBeTruthy()
+  })
 })
