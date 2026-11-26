@@ -219,7 +219,7 @@ impl ClientAuthorizationRepository for ClientAuthorizationRepositoryImpl {
             let user_state = transaction
                 .query_one_raw(Statement::from_sql_and_values(
                     DatabaseBackend::Postgres,
-                    r#"SELECT u.enabled AND NOT u.locked AS active
+                    r#"SELECT u.enabled AND (NOT u.locked OR (u.locked_until IS NOT NULL AND u.locked_until <= now())) AS active
                        FROM "user" u WHERE u.oid=$1 FOR SHARE OF u"#,
                     [user_oid.into()],
                 ))

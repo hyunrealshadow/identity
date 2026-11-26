@@ -487,7 +487,7 @@ impl UserInfoService {
                 .await
                 .map_err(openid_connect::error::InvalidToken::map_source())?
                 .ok_or_else(|| openid_connect::error::InvalidToken.into_error())?;
-            if !user.enabled || user.locked {
+            if !user.enabled || user.is_effectively_locked(Utc::now()) {
                 return Err(openid_connect::error::InvalidToken.into_error());
             }
 

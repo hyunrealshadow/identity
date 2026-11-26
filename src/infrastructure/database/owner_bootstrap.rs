@@ -82,7 +82,7 @@ pub async fn bootstrap_owner(
             "INSERT INTO group_membership(oid, group_id, user_id, granted_by_user_id, reason, \
                 enabled, version, created_at) \
              SELECT $1, $2, u.id, NULL, $3, true, gen_random_uuid(), now() FROM \"user\" u \
-             WHERE u.oid = $4 AND u.enabled AND NOT u.locked \
+             WHERE u.oid = $4 AND u.enabled AND (NOT u.locked OR (u.locked_until IS NOT NULL AND u.locked_until <= now())) \
                AND EXISTS(SELECT 1 FROM user_credential uc WHERE uc.user_id = u.id \
                           AND uc.type IN ('password','passkey') \
                           AND (uc.expires_at IS NULL OR uc.expires_at > now())) \

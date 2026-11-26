@@ -78,10 +78,15 @@ impl SessionRepositoryImpl {
             .await
             .map_err(fail)?
             .ok_or(SessionRepositoryError::UserNotFound)?;
+        let now = Utc::now();
+        let owner_effectively_locked = owner.locked
+            && owner
+                .locked_until
+                .is_none_or(|until| until.with_timezone(&Utc) > now);
         if login.user_id != Some(owner.id)
             || !owner.enabled
-            || owner.locked
-            || login.expires_at <= Utc::now().fixed_offset()
+            || owner_effectively_locked
+            || login.expires_at <= now.fixed_offset()
             || !matches!(
                 login.status.as_str(),
                 "identifier_verified"

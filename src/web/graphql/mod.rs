@@ -201,7 +201,9 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
     };
     let user = match claims.user_oid {
         Some(user_oid) => match state.services().account().find_user(user_oid).await {
-            Ok(Some(user)) if user.enabled && !user.locked => Some(user),
+            Ok(Some(user)) if user.enabled && !user.is_effectively_locked(chrono::Utc::now()) => {
+                Some(user)
+            }
             Ok(_) => {
                 write_unauthorized(res, TransportError::InvalidToken, &messages, &correlation);
                 return;

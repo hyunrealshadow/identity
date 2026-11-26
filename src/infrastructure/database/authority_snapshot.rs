@@ -15,6 +15,10 @@
 //! Credential material is never hashed. Only the stable credential OID, type
 //! and expiry participate, so password hashes, TOTP secrets, passkey material,
 //! recovery-code consumption and OTP replay counters stay out of the snapshot.
+//! Temporary brute-force lockouts (`locked_until IS NOT NULL`) are enforced live
+//! against `Utc::now()` and do not alter the permanent authority fingerprint, so
+//! previously issued credentials recover automatically once a finite lockout
+//! expires.
 //!
 //! The fingerprint is opaque: it is carried in JSON `_issuance_authority_fingerprint`
 //! markers and compared for equality. It is never exposed through errors or logs
@@ -73,7 +77,7 @@ WITH subject AS (
     SELECT role_id, role_oid FROM group_paths
 ), dependencies AS (
     SELECT 'subject' AS kind,
-           jsonb_build_array(oid, enabled, locked, locked_until) AS payload
+           jsonb_build_array(oid, enabled, locked AND locked_until IS NULL) AS payload
     FROM subject
     UNION ALL
     SELECT 'direct', jsonb_build_array(binding_oid, role_oid) FROM direct_paths

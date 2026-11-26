@@ -468,7 +468,8 @@ impl UserRepository for UserRepositoryImpl {
         lock_until: DateTime<Utc>,
     ) -> Result<i32, UserRepositoryError> {
         let oid = Uuid::from(user_oid);
-        let now = Utc::now().fixed_offset();
+        let now_utc = Utc::now();
+        let now = now_utc.fixed_offset();
         let transaction = self
             .db
             .begin()
@@ -488,10 +489,14 @@ impl UserRepository for UserRepositoryImpl {
             .next()
             .ok_or(UserRepositoryError::UserNotFound)?;
         let attempts = updated.failed_attempts;
-        let was_locked = updated.locked;
+        let was_permanently_locked = updated.locked && updated.locked_until.is_none();
+        let was_effectively_locked = updated.locked
+            && updated
+                .locked_until
+                .is_none_or(|until| until.with_timezone(&Utc) > now_utc);
 
-        if attempts >= lock_threshold {
-            let locked = UserEntity::update_many()
+        if attempts >= lock_threshold && !was_permanently_locked {
+            UserEntity::update_many()
                 .col_expr(UserColumn::Locked, Expr::value(true))
                 .col_expr(
                     UserColumn::LockedUntil,
@@ -499,30 +504,17 @@ impl UserRepository for UserRepositoryImpl {
                 )
                 .col_expr(UserColumn::UpdatedAt, Expr::value(Some(now)))
                 .filter(UserColumn::Oid.eq(oid))
-                .exec_with_returning(&transaction)
-                .await
-                .map_err(|error| UserRepositoryError::UpdateFailedAttempts(Box::new(error)))?
-                .into_iter()
-                .next()
-                .ok_or(UserRepositoryError::UserNotFound)?;
-            // Account authority changes invalidate old management authorization
-            // snapshots and bindings. A temporary finite lockout still counts as
-            // recoverable.
-            if !was_locked && locked.locked {
-                sync_user_authority_in_txn(&transaction, locked.id)
-                    .await
-                    .map_err(|error| UserRepositoryError::UpdateFailedAttempts(Box::new(error)))?;
-            } else {
-                renew_user_version_in_txn(&transaction, updated.id)
-                    .await
-                    .map_err(|error| UserRepositoryError::UpdateFailedAttempts(Box::new(error)))?;
-            }
-        } else {
-            renew_user_version_in_txn(&transaction, updated.id)
+                .exec(&transaction)
                 .await
                 .map_err(|error| UserRepositoryError::UpdateFailedAttempts(Box::new(error)))?;
         }
-        if !was_locked && attempts >= lock_threshold {
+        // Temporary brute-force lockouts must never permanently tombstone
+        // already-issued OAuth/OIDC credentials; only rotate the user CAS
+        // token here.
+        renew_user_version_in_txn(&transaction, updated.id)
+            .await
+            .map_err(|error| UserRepositoryError::UpdateFailedAttempts(Box::new(error)))?;
+        if !was_effectively_locked && attempts >= lock_threshold {
             audit::record(
                 &transaction,
                 AuditRecord::success(AuditAction::AccountLock, oid).actor(AuditActor::system()),
@@ -548,14 +540,14 @@ impl UserRepository for UserRepositoryImpl {
             .map_err(|error| UserRepositoryError::ResetFailedAttempts(Box::new(error)))?;
         let current = UserEntity::find()
             .select_only()
-            .columns([UserColumn::Id, UserColumn::Locked])
+            .columns([UserColumn::Id, UserColumn::Locked, UserColumn::LockedUntil])
             .filter(UserColumn::Oid.eq(oid))
             .lock_exclusive()
-            .into_tuple::<(i64, bool)>()
+            .into_tuple::<(i64, bool, Option<DateTime<FixedOffset>>)>()
             .one(&transaction)
             .await
             .map_err(|error| UserRepositoryError::ResetFailedAttempts(Box::new(error)))?;
-        let Some((user_id, was_locked)) = current else {
+        let Some((user_id, was_locked, was_locked_until)) = current else {
             transaction
                 .commit()
                 .await
@@ -574,7 +566,7 @@ impl UserRepository for UserRepositoryImpl {
             .exec(&transaction)
             .await
             .map_err(|e| UserRepositoryError::ResetFailedAttempts(Box::new(e)))?;
-        if was_locked {
+        if was_locked && was_locked_until.is_none() {
             sync_user_authority_in_txn(&transaction, user_id)
                 .await
                 .map_err(|error| UserRepositoryError::ResetFailedAttempts(Box::new(error)))?;

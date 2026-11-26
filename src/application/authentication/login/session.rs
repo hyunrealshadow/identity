@@ -140,16 +140,14 @@ impl LoginService {
         if !user.enabled {
             return Err(auth::error::UserLocked.into());
         }
-        if !user.locked {
-            return Ok(());
+        let now = Utc::now();
+        if user.is_effectively_locked(now) {
+            return Err(auth::error::UserLocked.into());
         }
-        match user.locked_until {
-            Some(until) if Utc::now() >= until => {
-                self.user_repo.reset_failed_attempts(user.oid).await?;
-                Ok(())
-            }
-            _ => Err(auth::error::UserLocked.into()),
+        if user.locked {
+            self.user_repo.reset_failed_attempts(user.oid).await?;
         }
+        Ok(())
     }
 }
 

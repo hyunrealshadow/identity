@@ -100,7 +100,7 @@ pub fn can_receive_password_reset(user: &User) -> bool {
     user.enabled
         && user.email_verified
         && !user.email.trim().is_empty()
-        && !(user.locked && user.locked_until.is_none())
+        && !user.is_permanently_locked()
 }
 
 /// Whether a login may ask for a reset: it waits for its first factor and

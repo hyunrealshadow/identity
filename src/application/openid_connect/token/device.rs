@@ -202,7 +202,7 @@ impl TokenService {
             .await
             .map_err(token::error::UserLookupFailed::map_source())?
             .ok_or_else(|| token::error::DeviceCodeUserNotFound.into_error())?;
-        if !user.enabled || user.locked {
+        if !user.enabled || user.is_effectively_locked(now) {
             return Err(token::error::DeviceCodeUserNotFound.into_error());
         }
 

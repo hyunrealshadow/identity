@@ -711,3 +711,69 @@ async fn refresh_token_stores_none_auth_time_when_code_has_none() {
     let data = refresh_token_data(stored);
     assert_eq!(data.auth_time, None);
 }
+
+#[tokio::test]
+async fn refresh_token_accepts_expired_temporary_lock_and_rejects_active_or_permanent_lock() {
+    let now = Utc::now();
+    for (locked_until, should_succeed) in [
+        (Some(now - Duration::seconds(5)), true),
+        (Some(now + Duration::minutes(10)), false),
+        (None, false),
+    ] {
+        let repo = Arc::new(mock_client_auth_repo());
+        let user_oid = Uuid::new_v4();
+        let mut user = crate::openid_connect::token::tests::test_user(user_oid);
+        user.locked = true;
+        user.locked_until = locked_until;
+        let service = build_token_service_with_user(repo.clone(), user);
+        let refresh_record = repo
+            .create(
+                Uuid::nil(),
+                ClientAuthorizationData::RefreshToken(RefreshTokenData {
+                    resources: Vec::new(),
+                    scope: "openid offline_access".to_owned(),
+                    user_oid: user_oid.to_string(),
+                    session_oid: Some(SessionOid::from(Uuid::new_v4())),
+                    protected_session_id: None,
+                    auth_time: None,
+                    acr: None,
+                    amr: vec![],
+                    acr_values: Vec::new(),
+                    rotated_from: None,
+                    authorization_code_oid: None,
+                    device_authorization_oid: None,
+                    client_authentication_mode: None,
+                    management: None,
+                }),
+                now + Duration::minutes(10),
+            )
+            .await
+            .unwrap();
+        let outcome = service
+            .exchange_refresh_token(RefreshTokenGrantParams {
+                resources: Vec::new(),
+                scope: None,
+                refresh_token: STANDARD.encode(refresh_record.oid.as_bytes()),
+                client_id: Some(identity_domain::openid_connect::identifier::client_id(
+                    Uuid::nil(),
+                )),
+                client_secret: Some("secret-123".to_owned()),
+                client_secret_basic: true,
+                client_assertion_type: None,
+                client_assertion: None,
+            })
+            .await;
+        if should_succeed {
+            assert!(
+                outcome.is_ok(),
+                "expired temporary lockout should allow token refresh"
+            );
+        } else {
+            use crate::error::code::AppErrorCode;
+            assert_eq!(
+                outcome.unwrap_err().code(),
+                crate::error::codes::token::TokenErrorCode::RefreshTokenUserNotFound.code()
+            );
+        }
+    }
+}

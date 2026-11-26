@@ -760,16 +760,24 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
             return Ok(UserManagementMutationOutcome::Success(Box::new(record)));
         }
 
+        let was_permanently_locked = model.locked && model.locked_until.is_none();
         let mut active: user::ActiveModel = model.clone().into();
         active.locked = Set(false);
         active.locked_until = Set(Option::<chrono::DateTime<chrono::FixedOffset>>::None);
         active.failed_attempts = Set(0);
         active.updated_at = Set(Some(Utc::now().into()));
         let mut updated = active.update(&txn).await.map_err(storage)?;
-        updated.version = sync_user_authority_in_txn(&txn, updated.id)
-            .await
-            .map_err(storage)?
-            .as_uuid();
+        updated.version = if was_permanently_locked {
+            sync_user_authority_in_txn(&txn, updated.id)
+                .await
+                .map_err(storage)?
+                .as_uuid()
+        } else {
+            renew_user_version_in_txn(&txn, updated.id)
+                .await
+                .map_err(storage)?
+                .as_uuid()
+        };
         append_semantic_audit(
             &txn,
             &command.authority,

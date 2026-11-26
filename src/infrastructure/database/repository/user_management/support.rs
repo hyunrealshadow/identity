@@ -354,7 +354,24 @@ pub(super) fn filtered_users(filter: &UserFilter) -> sea_orm::Select<UserEntity>
         select = select.filter(UserColumn::Enabled.eq(enabled));
     }
     if let Some(locked) = filter.locked {
-        select = select.filter(UserColumn::Locked.eq(locked));
+        let now = Utc::now().fixed_offset();
+        if locked {
+            select = select.filter(
+                Condition::all().add(UserColumn::Locked.eq(true)).add(
+                    Condition::any()
+                        .add(UserColumn::LockedUntil.is_null())
+                        .add(UserColumn::LockedUntil.gt(now)),
+                ),
+            );
+        } else {
+            select = select.filter(
+                Condition::any().add(UserColumn::Locked.eq(false)).add(
+                    Condition::all()
+                        .add(UserColumn::LockedUntil.is_not_null())
+                        .add(UserColumn::LockedUntil.lte(now)),
+                ),
+            );
+        }
     }
     if let Some(from) = filter.created_from {
         select = select.filter(UserColumn::CreatedAt.gte(from.fixed_offset()));

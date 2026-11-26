@@ -284,3 +284,46 @@ async fn introspection_requires_credentials_and_rejects_wrong_secret() {
         TokenErrorCode::ClientCredentialsInvalid.code()
     );
 }
+
+#[tokio::test]
+async fn introspection_allows_expired_temporary_lock_and_rejects_active_or_permanent_lock() {
+    let now = Utc::now();
+    for (locked_until, expected_active) in [
+        (Some(now - Duration::seconds(5)), true),
+        (Some(now + Duration::minutes(10)), false),
+        (None, false),
+    ] {
+        let repo = Arc::new(fixtures::mock_client_auth_repo());
+        let user_oid = Uuid::new_v4();
+        let service = fixtures::build_token_service_with_user(
+            repo.clone(),
+            fixtures::locked_test_user(user_oid, true, locked_until),
+        );
+        let record = repo
+            .create(
+                Uuid::nil(),
+                ClientAuthorizationData::RefreshToken(RefreshTokenData {
+                    resources: Vec::new(),
+                    scope: "openid offline_access".into(),
+                    user_oid: user_oid.to_string(),
+                    session_oid: Some(SessionOid::from(Uuid::new_v4())),
+                    protected_session_id: None,
+                    auth_time: None,
+                    acr: None,
+                    amr: vec![],
+                    acr_values: Vec::new(),
+                    rotated_from: None,
+                    authorization_code_oid: None,
+                    device_authorization_oid: None,
+                    client_authentication_mode: None,
+                    management: None,
+                }),
+                now + Duration::hours(1),
+            )
+            .await
+            .unwrap();
+        let token = STANDARD.encode(record.oid.as_bytes());
+        let result = service.introspect_token(request(token)).await.unwrap();
+        assert_eq!(result["active"], expected_active);
+    }
+}

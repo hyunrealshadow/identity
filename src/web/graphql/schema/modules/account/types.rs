@@ -317,13 +317,17 @@ impl UserNode {
     #[graphql(directive = access::apply(ManagementGuard::policy(ManagementScope::UsersRead)))]
     async fn locked(&self, ctx: &Context<'_>) -> GraphqlResult<Option<bool>> {
         self.ensure_management_metadata(ctx).await?;
-        Ok(Some(self.user.locked))
+        Ok(Some(self.user.is_effectively_locked(Utc::now())))
     }
 
     #[graphql(directive = access::apply(ManagementGuard::policy(ManagementScope::UsersRead)))]
     async fn locked_until(&self, ctx: &Context<'_>) -> GraphqlResult<Option<DateTime<Utc>>> {
         self.ensure_management_metadata(ctx).await?;
-        Ok(self.user.locked_until)
+        let now = Utc::now();
+        Ok(self
+            .user
+            .locked_until
+            .filter(|until| self.user.locked && *until > now))
     }
 
     #[graphql(directive = access::apply(ManagementGuard::policy(ManagementScope::UsersRead)))]

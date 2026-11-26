@@ -370,9 +370,9 @@ impl LoginService {
         };
 
         // Check if user is locked.
+        let now = Utc::now();
         if user.locked {
-            let still_locked = user.locked_until.is_none_or(|until| Utc::now() < until);
-            if still_locked {
+            if user.is_effectively_locked(now) {
                 self.login_repo
                     .record_identification_failure(
                         login_oid,
@@ -430,12 +430,11 @@ impl LoginService {
             Err(UserRepositoryError::UserNotFound) => None,
             Err(error) => return Err(error.into()),
         };
+        let now = Utc::now();
         let rejection = match &user {
             None => Some(AuditFailureReason::UnknownAccount),
             Some(user) if !user.enabled => Some(AuditFailureReason::AccountDisabled),
-            Some(user)
-                if user.locked && user.locked_until.is_none_or(|until| Utc::now() < until) =>
-            {
+            Some(user) if user.is_effectively_locked(now) => {
                 Some(AuditFailureReason::AccountLocked)
             }
             Some(_) => None,

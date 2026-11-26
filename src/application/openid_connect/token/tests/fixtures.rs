@@ -255,7 +255,62 @@ pub(super) fn build_token_service(
     repo: Arc<MockClientAuthorizationRepository>,
     user_oid: Uuid,
 ) -> TokenService {
-    build_token_service_with_client_repo(repo, user_oid, Arc::new(InMemoryClientRepository))
+    build_token_service_with_user(repo, locked_test_user(user_oid, false, None))
+}
+
+pub(super) fn locked_test_user(
+    user_oid: Uuid,
+    locked: bool,
+    locked_until: Option<DateTime<Utc>>,
+) -> User {
+    User {
+        oid: UserOid(user_oid),
+        version: Uuid::new_v4(),
+        email: "a@example.com".to_string(),
+        email_normalized: "a@example.com".to_string(),
+        name: "A".to_string(),
+        name_normalized: "a".to_string(),
+        given_name: None,
+        family_name: None,
+        middle_name: None,
+        nickname: None,
+        profile: None,
+        picture: None,
+        website: None,
+        gender: None,
+        birthdate: None,
+        zoneinfo: None,
+        locale: None,
+        theme: None,
+        preferred_mfa_method: Default::default(),
+        email_verified: true,
+        phone_number: None,
+        phone_number_verified: None,
+        address_formatted: None,
+        address_street_address: None,
+        address_locality: None,
+        address_region: None,
+        address_postal_code: None,
+        address_country: None,
+        failed_attempts: 0,
+        enabled: true,
+        locked,
+        locked_until,
+        required_actions: Default::default(),
+        created_at: Utc::now(),
+        updated_at: None,
+    }
+}
+
+pub(super) fn build_token_service_with_user(
+    repo: Arc<MockClientAuthorizationRepository>,
+    user: User,
+) -> TokenService {
+    let user_oid = user.oid.0;
+    let mut service =
+        build_token_service_with_client_repo(repo, user_oid, Arc::new(InMemoryClientRepository));
+    service.user_repo = Arc::new(InMemoryUserRepository { user });
+    service
 }
 
 pub(super) fn build_token_service_with_client_repo(

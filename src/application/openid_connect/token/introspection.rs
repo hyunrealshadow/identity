@@ -190,7 +190,7 @@ impl TokenService {
                 .find_by_oid(UserOid(user_oid))
                 .await
                 .map_err(token::error::RefreshTokenLookupFailed::map_source())?;
-            if !user.is_some_and(|user| user.enabled && !user.locked) {
+            if !user.is_some_and(|user| user.enabled && !user.is_effectively_locked(now)) {
                 return Ok(json!({"active": false}));
             }
         }

@@ -213,7 +213,7 @@ impl DeviceAuthorizationRepositoryImpl {
             .map_err(query_failed)?;
         let row = transaction.query_one_raw(Statement::from_sql_and_values(
             DbBackend::Postgres,
-            "SELECT u.enabled AND NOT u.locked AS active FROM \"user\" u WHERE u.oid=$1 FOR SHARE OF u",
+            "SELECT u.enabled AND (NOT u.locked OR (u.locked_until IS NOT NULL AND u.locked_until <= now())) AS active FROM \"user\" u WHERE u.oid=$1 FOR SHARE OF u",
             [user.into()])).await.map_err(query_failed)?
             .ok_or_else(|| query_failed(DbErr::RecordNotFound("user is inactive".into())))?;
         if !row.try_get::<bool>("", "active").map_err(query_failed)? {

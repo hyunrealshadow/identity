@@ -128,3 +128,94 @@ pub struct User {
     pub created_at: DateTime<Utc>,
     pub updated_at: Option<DateTime<Utc>>,
 }
+
+impl User {
+    /// Whether an administrator permanently locked this account (`locked = true`
+    /// with no automatic expiration timestamp).
+    #[must_use]
+    pub fn is_permanently_locked(&self) -> bool {
+        self.locked && self.locked_until.is_none()
+    }
+
+    /// Whether the account is currently blocked from authenticating or using
+    /// existing credentials at `now`: true for permanent locks and for active
+    /// temporary brute-force lockouts where `locked_until > now`.
+    #[must_use]
+    pub fn is_effectively_locked(&self, now: DateTime<Utc>) -> bool {
+        self.locked && self.locked_until.is_none_or(|until| until > now)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use chrono::{Duration, Utc};
+    use uuid::Uuid;
+
+    use super::{MfaMethod, RequiredActions, User, UserOid};
+
+    fn sample_user(locked: bool, locked_until: Option<chrono::DateTime<Utc>>) -> User {
+        let now = Utc::now();
+        User {
+            oid: UserOid(Uuid::new_v4()),
+            version: Uuid::new_v4(),
+            email: "user@example.com".to_owned(),
+            email_normalized: "user@example.com".to_owned(),
+            name: "user".to_owned(),
+            name_normalized: "user".to_owned(),
+            given_name: None,
+            family_name: None,
+            middle_name: None,
+            nickname: None,
+            profile: None,
+            picture: None,
+            website: None,
+            gender: None,
+            birthdate: None,
+            zoneinfo: None,
+            locale: None,
+            theme: None,
+            preferred_mfa_method: MfaMethod::default(),
+            email_verified: true,
+            phone_number: None,
+            phone_number_verified: None,
+            address_formatted: None,
+            address_street_address: None,
+            address_locality: None,
+            address_region: None,
+            address_postal_code: None,
+            address_country: None,
+            failed_attempts: 0,
+            enabled: true,
+            locked,
+            locked_until,
+            required_actions: RequiredActions::new(),
+            created_at: now,
+            updated_at: None,
+        }
+    }
+
+    #[test]
+    fn permanent_and_effective_lockout_distinguish_expired_temporary_locks() {
+        let now = Utc::now();
+
+        let unlocked = sample_user(false, None);
+        assert!(!unlocked.is_permanently_locked());
+        assert!(!unlocked.is_effectively_locked(now));
+
+        let permanent = sample_user(true, None);
+        assert!(permanent.is_permanently_locked());
+        assert!(permanent.is_effectively_locked(now));
+
+        let active_temporary = sample_user(true, Some(now + Duration::minutes(5)));
+        assert!(!active_temporary.is_permanently_locked());
+        assert!(active_temporary.is_effectively_locked(now));
+
+        let expired_temporary = sample_user(true, Some(now - Duration::seconds(1)));
+        assert!(!expired_temporary.is_permanently_locked());
+        assert!(!expired_temporary.is_effectively_locked(now));
+
+        let boundary = sample_user(true, Some(now));
+        assert!(!boundary.is_permanently_locked());
+        assert!(!boundary.is_effectively_locked(now));
+    }
+}

@@ -197,7 +197,7 @@ impl AuthorizeService {
             .await
             .map_err(authorize::error::ClientLookupFailed::map_source())?
             .ok_or_else(|| authorize::error::ImplicitUserNotFound.into_error())?;
-        if !user.enabled || user.locked {
+        if !user.enabled || user.is_effectively_locked(Utc::now()) {
             return Err(authorize::error::ImplicitUserNotFound.into_error());
         }
         Ok(())

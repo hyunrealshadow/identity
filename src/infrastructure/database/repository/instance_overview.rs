@@ -149,7 +149,7 @@ impl InstanceOverviewRepository for InstanceOverviewRepositoryImpl {
                        AND s.revoked_at IS NULL \
                        AND s.expires_at > $1 \
                        AND u.enabled = true \
-                       AND u.locked = false \
+                       AND (u.locked = false OR (u.locked_until IS NOT NULL AND u.locked_until <= $1)) \
                  )::bigint AS active, \
                  COUNT(*) FILTER ( \
                      WHERE s.created_at >= $2 AND s.created_at <= $1 \

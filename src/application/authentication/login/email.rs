@@ -117,7 +117,7 @@ pub fn can_receive_email_code(user: &User) -> bool {
     user.enabled
         && user.email_verified
         && !user.email.trim().is_empty()
-        && !(user.locked && user.locked_until.is_none_or(|until| Utc::now() < until))
+        && !user.is_effectively_locked(Utc::now())
 }
 
 impl LoginService {
