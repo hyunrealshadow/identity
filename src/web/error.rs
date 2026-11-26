@@ -16,7 +16,12 @@ use serde_json::{Value, json};
 use tracing::{Level, event};
 use unic_langid::LanguageIdentifier;
 
-use crate::infrastructure::i18n::{I18n, error_i18n, resolve_locale_from_headers};
+use salvo::Depot;
+
+use crate::infrastructure::{
+    AppState,
+    i18n::{I18n, resolve_locale_from_headers},
+};
 
 pub fn error_http_status(kind: ErrorKind) -> StatusCode {
     match kind {
@@ -70,23 +75,50 @@ pub fn error_message(i18n: &I18n, locale: &LanguageIdentifier, error: &AppError)
     code_message(i18n, locale, error.code(), error.params())
 }
 
-/// Run `render` with the process error catalog and the request's negotiated
-/// language. Without a catalog every message is the generic fallback, so
-/// callers need no separate unlocalized branch.
-pub fn with_request_catalog<R>(
-    headers: &HeaderMap,
-    render: impl FnOnce(&I18n, &LanguageIdentifier) -> R,
-) -> R {
-    let locale = resolve_locale_from_headers(headers);
-    match error_i18n() {
-        Some(i18n) => render(i18n, &locale),
-        None => render(&I18n::disabled(), &locale),
+/// The catalog and negotiated language for one request.
+#[derive(Clone)]
+pub struct RequestMessages {
+    pub i18n: I18n,
+    pub locale: LanguageIdentifier,
+}
+
+impl RequestMessages {
+    /// The application's catalog from the request state and the request's
+    /// language. Without application state every message is the generic
+    /// fallback, so callers need no separate unlocalized branch.
+    pub fn from_request(depot: &Depot, headers: &HeaderMap) -> Self {
+        let i18n = depot
+            .get_typed::<AppState>()
+            .map(|state| state.resources().i18n().clone())
+            .unwrap_or_else(|_| I18n::disabled());
+        Self {
+            i18n,
+            locale: resolve_locale_from_headers(headers),
+        }
+    }
+
+    pub fn error(&self, error: &AppError) -> String {
+        error_message(&self.i18n, &self.locale, error)
+    }
+
+    pub fn code(&self, code: impl AppErrorCode, params: &ErrorParams) -> String {
+        code_message(&self.i18n, &self.locale, code.code(), params)
     }
 }
 
-/// Localized message for `error` in the request's negotiated language.
-pub fn request_error_message(headers: &HeaderMap, error: &AppError) -> String {
-    with_request_catalog(headers, |i18n, locale| error_message(i18n, locale, error))
+/// Run `render` with the request's catalog and language.
+pub fn with_request_catalog<R>(
+    depot: &Depot,
+    headers: &HeaderMap,
+    render: impl FnOnce(&I18n, &LanguageIdentifier) -> R,
+) -> R {
+    let messages = RequestMessages::from_request(depot, headers);
+    render(&messages.i18n, &messages.locale)
+}
+
+/// Localized message for `error` in the request's language.
+pub fn request_error_message(depot: &Depot, headers: &HeaderMap, error: &AppError) -> String {
+    RequestMessages::from_request(depot, headers).error(error)
 }
 
 /// Catalog message for `code`, or the generic internal message when the

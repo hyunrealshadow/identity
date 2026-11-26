@@ -122,9 +122,9 @@ impl From<AppError> for DeviceAuthorizationWebError {
 
 #[async_trait]
 impl Writer for DeviceAuthorizationWebError {
-    async fn write(self, req: &mut Request, _depot: &mut Depot, res: &mut Response) {
+    async fn write(self, req: &mut Request, depot: &mut Depot, res: &mut Response) {
         log_app_error(&self.0, "device authorization request failed");
-        *res = with_request_catalog(req.headers(), |i18n, locale| {
+        *res = with_request_catalog(depot, req.headers(), |i18n, locale| {
             device_error_response(self.0, i18n, locale)
         });
     }

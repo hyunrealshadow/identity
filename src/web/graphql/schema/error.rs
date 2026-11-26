@@ -15,7 +15,7 @@ use unic_langid::{LanguageIdentifier, langid};
 use super::context::RequestContext;
 use crate::{
     error::{challenge, error_message, field_errors, log_app_error},
-    infrastructure::i18n::{I18n, error_i18n},
+    infrastructure::i18n::I18n,
 };
 
 /// Log and render an application error raised while resolving a GraphQL field.
@@ -25,7 +25,7 @@ pub(super) fn app_error(ctx: &Context<'_>, error: impl Into<AppError>) -> Error 
     match ctx.data::<RequestContext>() {
         Ok(request) => project(request.state.resources().i18n(), &request.locale, &error),
         Err(_) => {
-            let i18n = error_i18n().cloned().unwrap_or_else(I18n::disabled);
+            let i18n = I18n::disabled();
             project(&i18n, &langid!("en-US"), &error)
         }
     }

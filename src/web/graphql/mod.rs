@@ -21,8 +21,7 @@ use url::form_urlencoded::parse;
 use self::schema::{ApiSchema, RESOURCE_AUDIENCE, RequestContext, build_schema};
 use crate::{
     controllers::response::{accepts_html, app_state, insert_no_store_headers},
-    error::step_up_www_authenticate,
-    infrastructure::i18n::resolve_locale_from_headers,
+    error::{RequestMessages, step_up_www_authenticate},
     middleware::{RequestCorrelation, security_headers_middleware},
 };
 use chrono::DateTime;
@@ -33,14 +32,14 @@ use identity_application::{
         codes::{
             common::CommonErrorCode, graphql_transport::GraphqlTransportErrorCode as TransportError,
         },
+        params::ErrorParams,
     },
     setting::application_origins,
 };
 use identity_domain::auth::AuthenticationContextClass;
-use identity_infrastructure::{database::audit, i18n::error_i18n};
+use identity_infrastructure::database::audit;
 use observability::RequestObservation;
 use schema::authorization::EffectivePermissionsProvider;
-use unic_langid::LanguageIdentifier;
 
 pub(crate) mod cursor;
 mod observability;
@@ -94,7 +93,7 @@ async fn graphql_options(depot: &mut Depot, req: &mut Request, res: &mut Respons
 async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Response) {
     let mut observation = RequestObservation::new();
     set_graphql_response_headers(res);
-    let locale = resolve_locale_from_headers(req.headers());
+    let messages = RequestMessages::from_request(depot, req.headers());
     let correlation = depot
         .get_typed::<RequestCorrelation>()
         .cloned()
@@ -104,7 +103,7 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
             res,
             StatusCode::INTERNAL_SERVER_ERROR,
             CommonErrorCode::InternalError,
-            &locale,
+            &messages,
             &correlation,
         );
         return;
@@ -114,7 +113,7 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
             res,
             StatusCode::INTERNAL_SERVER_ERROR,
             CommonErrorCode::InternalError,
-            &locale,
+            &messages,
             &correlation,
         );
         return;
@@ -124,7 +123,7 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
             res,
             StatusCode::URI_TOO_LONG,
             TransportError::UriTooLong,
-            &locale,
+            &messages,
             &correlation,
         );
         return;
@@ -134,7 +133,7 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
             res,
             StatusCode::FORBIDDEN,
             TransportError::OriginDenied,
-            &locale,
+            &messages,
             &correlation,
         );
         return;
@@ -162,7 +161,7 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
     let graphql_request = match parse_graphql_request(req).await {
         Ok(request) => request,
         Err((status, message)) => {
-            write_protocol_error(res, status, message, &locale, &correlation);
+            write_protocol_error(res, status, message, &messages, &correlation);
             return;
         }
     };
@@ -173,14 +172,19 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
             res,
             StatusCode::METHOD_NOT_ALLOWED,
             TransportError::MethodNotAllowed,
-            &locale,
+            &messages,
             &correlation,
         );
         return;
     }
 
     let Some(token) = bearer_token(req) else {
-        write_unauthorized(res, TransportError::Unauthenticated, &locale, &correlation);
+        write_unauthorized(
+            res,
+            TransportError::Unauthenticated,
+            &messages,
+            &correlation,
+        );
         return;
     };
     let claims = match state
@@ -191,7 +195,7 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
     {
         Ok(claims) if claims.audience.iter().any(|aud| aud == RESOURCE_AUDIENCE) => claims,
         _ => {
-            write_unauthorized(res, TransportError::InvalidToken, &locale, &correlation);
+            write_unauthorized(res, TransportError::InvalidToken, &messages, &correlation);
             return;
         }
     };
@@ -199,7 +203,7 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
         Some(user_oid) => match state.services().account().find_user(user_oid).await {
             Ok(Some(user)) if user.enabled && !user.locked => Some(user),
             Ok(_) => {
-                write_unauthorized(res, TransportError::InvalidToken, &locale, &correlation);
+                write_unauthorized(res, TransportError::InvalidToken, &messages, &correlation);
                 return;
             }
             Err(error) => {
@@ -208,7 +212,7 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
                     res,
                     StatusCode::INTERNAL_SERVER_ERROR,
                     CommonErrorCode::InternalError,
-                    &locale,
+                    &messages,
                     &correlation,
                 );
                 return;
@@ -248,7 +252,7 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
             res,
             StatusCode::INTERNAL_SERVER_ERROR,
             CommonErrorCode::InternalError,
-            &locale,
+            &messages,
             &correlation,
         );
         return;
@@ -265,7 +269,7 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
             state,
             claims,
             user,
-            locale: locale.clone(),
+            locale: messages.locale.clone(),
             actor: actor.clone(),
         })
         .data(config.max_page_size)
@@ -289,13 +293,13 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
                 res,
                 StatusCode::GATEWAY_TIMEOUT,
                 TransportError::TimedOut,
-                &locale,
+                &messages,
                 &correlation,
             );
             return;
         }
     };
-    attach_correlation(&mut response, &locale, &correlation);
+    attach_correlation(&mut response, &messages, &correlation);
     observation.outcome = if response.errors.is_empty() {
         "success"
     } else {
@@ -425,18 +429,9 @@ fn set_graphql_response_headers(res: &mut Response) {
     insert_no_store_headers(res);
 }
 
-/// Render a transport code from the catalog. Every transport code is defined in
-/// both locales, so initialization always happened before the server accepts a
-/// request; a missing catalog is a bug, not something to mask with fallback copy.
-fn localized_transport_error(code: impl AppErrorCode, locale: &LanguageIdentifier) -> String {
-    error_i18n()
-        .expect("error i18n is initialized during startup")
-        .t_code(locale, code.code())
-}
-
 fn attach_correlation(
     response: &mut AsyncGraphqlResponse,
-    locale: &LanguageIdentifier,
+    messages: &RequestMessages,
     correlation: &RequestCorrelation,
 ) {
     response.extensions.insert(
@@ -454,7 +449,7 @@ fn attach_correlation(
             // Parser/type/validator errors may contain supplied literal values.
             // Preserve locations and path, expose a stable localized envelope.
             let code = TransportError::InvalidRequest;
-            error.message = localized_transport_error(code, locale);
+            error.message = messages.code(code, &ErrorParams::new());
             extensions.set("code", code.code());
             extensions.set("kind", code.kind().as_str());
         }
@@ -468,21 +463,21 @@ fn attach_correlation(
 fn write_unauthorized(
     res: &mut Response,
     code: TransportError,
-    locale: &LanguageIdentifier,
+    messages: &RequestMessages,
     correlation: &RequestCorrelation,
 ) {
     res.headers_mut().insert(
         header::WWW_AUTHENTICATE,
         HeaderValue::from_static("Bearer realm=\"graphql\", error=\"invalid_token\""),
     );
-    write_protocol_error(res, StatusCode::UNAUTHORIZED, code, locale, correlation);
+    write_protocol_error(res, StatusCode::UNAUTHORIZED, code, messages, correlation);
 }
 
 fn write_protocol_error(
     res: &mut Response,
     status: StatusCode,
     code: impl Into<ErrorCode>,
-    locale: &LanguageIdentifier,
+    messages: &RequestMessages,
     correlation: &RequestCorrelation,
 ) {
     let code = code.into();
@@ -497,7 +492,7 @@ fn write_protocol_error(
         "x-request-id",
         HeaderValue::from_str(&correlation.request_id).expect("generated or validated request ID"),
     );
-    res.render(Json(json!({ "errors": [{ "message": localized_transport_error(code, locale), "extensions": extensions }], "extensions": envelope })));
+    res.render(Json(json!({ "errors": [{ "message": messages.code(code, &ErrorParams::new()), "extensions": extensions }], "extensions": envelope })));
 }
 
 pub fn bind_address(graphql: &GraphqlConfig, server: &ServerConfig) -> String {

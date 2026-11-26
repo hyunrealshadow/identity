@@ -1,9 +1,4 @@
-use std::{
-    borrow::Cow,
-    collections::HashMap,
-    str::FromStr,
-    sync::{Arc, OnceLock},
-};
+use std::{borrow::Cow, collections::HashMap, str::FromStr, sync::Arc};
 
 use fluent_templates::{ArcLoader, Loader, fluent_bundle::FluentValue};
 use http::{HeaderMap, header::ACCEPT_LANGUAGE};
@@ -15,19 +10,6 @@ mod loader;
 
 pub use loader::build_i18n;
 pub(crate) use loader::register_list_function;
-
-// Global I18n instance used by `AppError` response rendering to translate error
-// codes without access to `AppState`. Initialised once during startup.
-static ERROR_I18N: OnceLock<I18n> = OnceLock::new();
-
-pub fn init_error_i18n(i18n: I18n) {
-    let _ = ERROR_I18N.set(i18n);
-}
-
-#[must_use]
-pub fn error_i18n() -> Option<&'static I18n> {
-    ERROR_I18N.get()
-}
 
 /// Negotiate the only two supported request locales.
 ///

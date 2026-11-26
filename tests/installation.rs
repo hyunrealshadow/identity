@@ -21,7 +21,6 @@ use identity_infrastructure::{
         seed,
         seed::{console, console::ConsoleClientSeedConfig},
     },
-    i18n,
     i18n::build_i18n,
     services::AppServices,
     settings::AppRuntimeSettings,
@@ -48,7 +47,6 @@ async fn installation_persists_same_origin_console_path_and_bootstraps_both_work
         let settings = Arc::new(AppRuntimeSettings::from_db(db.clone()).await.unwrap());
         let services = Arc::new(AppServices::from_db(db.clone(), settings.as_ref()).unwrap());
         let i18n = build_i18n().unwrap();
-        i18n::init_error_i18n(i18n.clone());
         let state = AppState::new(
             Arc::new(AppContext::new(AppEnvironment::Test, HealthChecksConfig::default())),
             Arc::new(AppResources::new(db.clone(), build_tera(i18n.loader()).unwrap(), i18n)),

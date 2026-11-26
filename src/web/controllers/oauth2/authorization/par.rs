@@ -70,10 +70,10 @@ impl Rfc6749Error for ParWebError {
 }
 #[async_trait]
 impl Writer for ParWebError {
-    async fn write(self, req: &mut Request, _: &mut Depot, res: &mut Response) {
+    async fn write(self, req: &mut Request, depot: &mut Depot, res: &mut Response) {
         let code = self.rfc6749_error_code();
         let status = self.rfc6749_status();
-        let description = request_error_message(req.headers(), &self.error);
+        let description = request_error_message(depot, req.headers(), &self.error);
         *res = json_response(
             status,
             json!({ "error": code, "error_description": description }),

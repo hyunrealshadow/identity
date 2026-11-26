@@ -44,7 +44,7 @@ async fn health_handler(req: &mut Request, depot: &mut Depot, res: &mut Response
     let state = match app_state(depot) {
         Ok(state) => state,
         Err(error) => {
-            write_error_response(res, req.headers(), error);
+            write_error_response(res, depot, req.headers(), error);
             return;
         }
     };

@@ -6,16 +6,15 @@ use salvo::{
 };
 use serde::{Serialize, de::DeserializeOwned};
 use tracing::error;
-use unic_langid::LanguageIdentifier;
 
 use crate::{
     application::error::{AppError, codes::common},
     infrastructure::AppState,
-    infrastructure::i18n::{I18n, resolve_locale_from_headers},
+    infrastructure::i18n::resolve_locale_from_headers,
     web::{
         error::{
-            challenge, error_http_status, error_message, field_errors, log_app_error,
-            step_up_www_authenticate, with_request_catalog,
+            RequestMessages, challenge, error_http_status, error_message, field_errors,
+            log_app_error, step_up_www_authenticate,
         },
         views::{
             auth::{BusinessErrorResponse, FieldErrorDetail},
@@ -142,15 +141,15 @@ impl Writer for WebError {
     async fn write(self, req: &mut Request, depot: &mut Depot, res: &mut Response) {
         match app_state(depot) {
             Ok(ctx) => render_app_error(res, req.headers(), &ctx, self.0),
-            Err(_) => write_error_response(res, req.headers(), self.0),
+            Err(_) => write_error_response(res, depot, req.headers(), self.0),
         }
     }
 }
 
 #[async_trait]
 impl Writer for JsonWebError {
-    async fn write(self, req: &mut Request, _depot: &mut Depot, res: &mut Response) {
-        write_error_response(res, req.headers(), self.0);
+    async fn write(self, req: &mut Request, depot: &mut Depot, res: &mut Response) {
+        write_error_response(res, depot, req.headers(), self.0);
     }
 }
 
@@ -201,19 +200,19 @@ pub fn parse_param<T: DeserializeOwned>(req: &Request, name: &str) -> Result<T, 
 }
 
 /// Write the standard JSON error body in the request's language.
-pub fn write_error_response(res: &mut Response, headers: &HeaderMap, error: AppError) {
-    log_app_error(&error, "application request failed");
-    with_request_catalog(headers, |i18n, locale| {
-        write_localized_error(res, i18n, locale, &error);
-    });
+pub fn write_error_response(
+    res: &mut Response,
+    depot: &Depot,
+    headers: &HeaderMap,
+    error: AppError,
+) {
+    write_error_body(res, &RequestMessages::from_request(depot, headers), error);
 }
 
-fn write_localized_error(
-    res: &mut Response,
-    i18n: &I18n,
-    locale: &LanguageIdentifier,
-    error: &AppError,
-) {
+/// Write the standard JSON error body with `messages`.
+pub fn write_error_body(res: &mut Response, messages: &RequestMessages, error: AppError) {
+    log_app_error(&error, "application request failed");
+    let (i18n, locale, error) = (&messages.i18n, &messages.locale, &error);
     let status = error_http_status(error.kind());
     if status == StatusCode::UNAUTHORIZED
         && let Some(step_up) = error.step_up()
@@ -241,7 +240,11 @@ pub fn render_app_error(res: &mut Response, headers: &HeaderMap, ctx: &AppState,
     if accepts_html(headers) {
         render_error_page(res, headers, ctx, error);
     } else {
-        write_error_response(res, headers, error);
+        let messages = RequestMessages {
+            i18n: ctx.resources().i18n().clone(),
+            locale: resolve_locale_from_headers(headers),
+        };
+        write_error_body(res, &messages, error);
     }
 }
 
@@ -282,7 +285,7 @@ pub fn render_not_found(req: &Request, depot: &Depot, res: &mut Response) {
     let status = StatusCode::NOT_FOUND;
     let error = common::error::NotFound.into_error();
     let Ok(ctx) = app_state(depot) else {
-        write_error_response(res, req.headers(), error);
+        write_error_response(res, depot, req.headers(), error);
         return;
     };
     let i18n = ctx.resources().i18n();
@@ -346,16 +349,16 @@ mod tests {
     use identity_application::error::{ErrorDiagnostics, StepUpChallenge};
     use identity_domain::auth::AuthenticationContextClass;
     use salvo::{
-        Router, Service, handler,
+        Depot, Router, Service,
+        affix_state::inject,
+        handler,
         test::{ResponseExt, TestClient},
     };
 
     use super::{JsonWebResult, WebResult, render_app_error, write_error_response};
     use crate::{
         application::error::codes::{authorize, common, install},
-        infrastructure::{
-            i18n::build_i18n, i18n::init_error_i18n, test_app_state_with_mock_settings,
-        },
+        infrastructure::test_app_state_with_mock_settings,
     };
 
     #[handler]
@@ -372,8 +375,12 @@ mod tests {
 
     #[tokio::test]
     async fn direct_app_error_writer_uses_localized_message() {
-        init_error_i18n(build_i18n().expect("i18n should load from assets/i18n"));
-        let service = Service::new(Router::with_path("error").get(direct_app_error));
+        let state = test_app_state_with_mock_settings().await;
+        let service = Service::new(
+            Router::with_path("error")
+                .hoop(inject(state))
+                .get(direct_app_error),
+        );
 
         let mut response = TestClient::get("http://127.0.0.1:5800/error")
             .send(&service)
@@ -389,8 +396,12 @@ mod tests {
 
     #[tokio::test]
     async fn validation_error_writer_includes_localized_field_errors() {
-        init_error_i18n(build_i18n().expect("i18n should load from assets/i18n"));
-        let service = Service::new(Router::with_path("validation").post(validation_app_error));
+        let state = test_app_state_with_mock_settings().await;
+        let service = Service::new(
+            Router::with_path("validation")
+                .hoop(inject(state))
+                .post(validation_app_error),
+        );
 
         let mut response = TestClient::post("http://127.0.0.1:5800/validation")
             .send(&service)
@@ -409,7 +420,6 @@ mod tests {
 
     #[tokio::test]
     async fn json_errors_follow_the_request_language() {
-        init_error_i18n(build_i18n().expect("i18n should load from assets/i18n"));
         let ctx = test_app_state_with_mock_settings().await;
         let mut headers = http::HeaderMap::new();
         headers.insert(
@@ -435,7 +445,6 @@ mod tests {
 
     #[tokio::test]
     async fn json_errors_carry_the_step_up_challenge_and_header() {
-        init_error_i18n(build_i18n().expect("i18n should load from assets/i18n"));
         let error = common::error::Unauthorized
             .into_error()
             .with_step_up(StepUpChallenge {
@@ -443,8 +452,10 @@ mod tests {
                 max_age_secs: Some(300),
             });
         let mut response = salvo::Response::new();
+        let mut depot = Depot::new();
+        depot.insert_typed(test_app_state_with_mock_settings().await);
 
-        write_error_response(&mut response, &http::HeaderMap::new(), error);
+        write_error_response(&mut response, &depot, &http::HeaderMap::new(), error);
 
         assert_eq!(response.status_code, Some(StatusCode::UNAUTHORIZED));
         let header = response

@@ -15,7 +15,7 @@ use identity_application::error::{AppError, codes::graphql_transport};
 use unic_langid::langid;
 
 use super::{context::RequestContext, error::project};
-use crate::infrastructure::i18n::{I18n, error_i18n};
+use crate::infrastructure::i18n::I18n;
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct QueryLimits {
@@ -110,7 +110,7 @@ fn rejection(ctx: &ExtensionContext<'_>, error: AppError) -> ServerError {
     let projected = match ctx.data_opt::<RequestContext>() {
         Some(request) => project(request.state.resources().i18n(), &request.locale, &error),
         None => {
-            let i18n = error_i18n().cloned().unwrap_or_else(I18n::disabled);
+            let i18n = I18n::disabled();
             project(&i18n, &langid!("en-US"), &error)
         }
     };

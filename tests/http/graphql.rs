@@ -30,7 +30,6 @@ use identity_infrastructure::{
         resource::Model as ResourceModel, session::Model as SessionModel, setting, user,
     },
     i18n::build_i18n,
-    i18n::init_error_i18n,
     services::AppServices,
     settings::AppRuntimeSettings,
     templates::build_tera,
@@ -980,7 +979,6 @@ async fn fixture(options: FixtureOptions) -> GraphqlFixture {
     let i18n = build_i18n().unwrap();
     // The server initializes the process-wide error catalog before serving;
     // mounting the router directly has to do the same for transport messages.
-    init_error_i18n(i18n.clone());
     let tera = build_tera(i18n.loader()).unwrap();
     let settings = Arc::new(AppRuntimeSettings::from_db(db.clone()).await.unwrap());
     let services = Arc::new(AppServices::from_db(db.clone(), settings.as_ref()).unwrap());

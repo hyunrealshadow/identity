@@ -270,8 +270,8 @@ impl From<AppError> for UserinfoWebError {
 
 #[async_trait]
 impl Writer for UserinfoWebError {
-    async fn write(self, req: &mut Request, _depot: &mut Depot, res: &mut Response) {
-        *res = with_request_catalog(req.headers(), |i18n, locale| {
+    async fn write(self, req: &mut Request, depot: &mut Depot, res: &mut Response) {
+        *res = with_request_catalog(depot, req.headers(), |i18n, locale| {
             userinfo_error_response(self.0, i18n, locale)
         });
     }

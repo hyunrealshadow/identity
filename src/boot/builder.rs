@@ -27,7 +27,7 @@ use identity_infrastructure::{
         seed,
         seed::{console, console::ConsoleClientSeedConfig, login},
     },
-    i18n::{I18n, init_error_i18n},
+    i18n::I18n,
     observability,
     services::AppServices,
     settings::AppRuntimeSettings,
@@ -100,7 +100,6 @@ impl AppBuilder {
                 Error::other("console management requires both backend error locales").into(),
             );
         }
-        init_error_i18n(i18n.clone());
         let tera = identity_infrastructure::templates::build_tera(i18n.loader())?;
         self.i18n = Some(i18n);
         self.tera = Some(tera);

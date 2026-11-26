@@ -74,9 +74,9 @@ impl Rfc6749Error for TokenWebError {
 
 #[async_trait]
 impl Writer for TokenWebError {
-    async fn write(self, req: &mut Request, _depot: &mut Depot, res: &mut Response) {
+    async fn write(self, req: &mut Request, depot: &mut Depot, res: &mut Response) {
         log_app_error(&self.0, "token endpoint request failed");
-        *res = with_request_catalog(req.headers(), |i18n, locale| {
+        *res = with_request_catalog(depot, req.headers(), |i18n, locale| {
             token_error_response(self, i18n, locale)
         });
     }
@@ -268,6 +268,7 @@ fn inspection_error_code(error: &AppError) -> &'static str {
 
 fn inspection_error_response(
     error: AppError,
+    depot: &Depot,
     headers: &HeaderMap,
     challenge: &'static str,
 ) -> Response {
@@ -277,7 +278,7 @@ fn inspection_error_response(
         "server_error" => StatusCode::INTERNAL_SERVER_ERROR,
         _ => StatusCode::BAD_REQUEST,
     };
-    let description = request_error_message(headers, &error);
+    let description = request_error_message(depot, headers, &error);
     let mut response = json_response(
         status,
         TokenErrorResponse {
@@ -305,9 +306,13 @@ impl From<AppError> for IntrospectionWebError {
 
 #[async_trait]
 impl Writer for IntrospectionWebError {
-    async fn write(self, req: &mut Request, _depot: &mut Depot, res: &mut Response) {
-        *res =
-            inspection_error_response(self.0, req.headers(), "Basic realm=\"oauth2/introspect\"");
+    async fn write(self, req: &mut Request, depot: &mut Depot, res: &mut Response) {
+        *res = inspection_error_response(
+            self.0,
+            depot,
+            req.headers(),
+            "Basic realm=\"oauth2/introspect\"",
+        );
     }
 }
 
@@ -321,7 +326,12 @@ impl From<AppError> for RevocationWebError {
 
 #[async_trait]
 impl Writer for RevocationWebError {
-    async fn write(self, req: &mut Request, _depot: &mut Depot, res: &mut Response) {
-        *res = inspection_error_response(self.0, req.headers(), "Basic realm=\"oauth2/revoke\"");
+    async fn write(self, req: &mut Request, depot: &mut Depot, res: &mut Response) {
+        *res = inspection_error_response(
+            self.0,
+            depot,
+            req.headers(),
+            "Basic realm=\"oauth2/revoke\"",
+        );
     }
 }
