@@ -51,7 +51,7 @@ impl From<ManagementAuthorizationError> for AppError {
                     AuthzError::MissingHumanAuthentication::new(required.as_str()).into();
                 if required.requires_aal2() {
                     err.with_step_up(StepUpChallenge {
-                        acr: AuthenticationContextClass::MultiFactor,
+                        acr: Some(AuthenticationContextClass::MultiFactor),
                         max_age_secs: required
                             .requires_recent_aal2()
                             .then_some(DEFAULT_RECENT_AAL2_TTL.as_secs()),
@@ -66,7 +66,7 @@ impl From<ManagementAuthorizationError> for AppError {
                 )
                 .into();
                 err.with_step_up(StepUpChallenge {
-                    acr: AuthenticationContextClass::MultiFactor,
+                    acr: Some(AuthenticationContextClass::MultiFactor),
                     max_age_secs: Some(DEFAULT_RECENT_AAL2_TTL.as_secs()),
                 })
             }

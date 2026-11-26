@@ -1,7 +1,11 @@
 use super::*;
-use crate::graphql::schema::limits::ResponseAliasLimit;
+use crate::graphql::schema::limits::QueryLimits;
+use async_graphql::Value;
 use async_graphql::{EmptyMutation, EmptySubscription, Object, Schema};
 use chrono::Utc;
+use identity_application::error::{
+    code::AppErrorCode, codes::graphql_transport::GraphqlTransportErrorCode,
+};
 use identity_application::rbac::{ScopeDescription, ScopeOid, ScopeRecord};
 use std::sync::{
     Arc,
@@ -55,8 +59,11 @@ async fn a_full_localized_page_fits_without_relaxing_nested_query_costs() {
         EmptyMutation,
         EmptySubscription,
     )
-    .limit_complexity(300)
-    .extension(ResponseAliasLimit(300))
+    .extension(QueryLimits {
+        max_depth: 32,
+        max_complexity: 300,
+        max_aliases: 300,
+    })
     .finish();
     let response = schema.execute("{ scopes(first: 100) { totalCount pageInfo { hasNextPage hasPreviousPage startCursor endCursor } edges { cursor node { id code name names { locale value } description descriptions { locale value } builtIn enabled version createdAt updatedAt } } } }").await;
     assert!(response.errors.is_empty(), "{:?}", response.errors);
@@ -68,12 +75,12 @@ async fn a_full_localized_page_fits_without_relaxing_nested_query_costs() {
     let response = schema
         .execute("{ scopes(first: 100) { nodes { roles(first: 100) { nodes { id } } } } }")
         .await;
-    assert!(
-        response
-            .errors
-            .iter()
-            .any(|error| error.message.contains("complex"))
-    );
+    assert!(response.errors.iter().any(
+        |error| error.extensions.as_ref().and_then(|e| e.get("code"))
+            == Some(&Value::from(
+                GraphqlTransportErrorCode::QueryTooComplex.code()
+            ))
+    ));
     assert_eq!(
         reads.load(Ordering::SeqCst),
         1,
@@ -88,12 +95,12 @@ async fn a_full_localized_page_fits_without_relaxing_nested_query_costs() {
             "{{ scopes(first: 100) {{ nodes {{ {fields} }} }} }}"
         ))
         .await;
-    assert!(
-        response
-            .errors
-            .iter()
-            .any(|error| error.message.contains("complex"))
-    );
+    assert!(response.errors.iter().any(
+        |error| error.extensions.as_ref().and_then(|e| e.get("code"))
+            == Some(&Value::from(
+                GraphqlTransportErrorCode::QueryTooComplex.code()
+            ))
+    ));
     assert_eq!(
         reads.load(Ordering::SeqCst),
         1,

@@ -4015,7 +4015,7 @@
   },
   {
     "code": 28006,
-    "kind": "unauthorized",
+    "kind": "forbidden",
     "fluentKey": "E28006",
     "requiredParams": [],
     "optionalParams": [],

@@ -27,9 +27,8 @@ use crate::{
 use chrono::DateTime;
 use identity_application::{
     error::{
-        AppError,
-        code::AppErrorCode,
-        codes::graphql_transport::{self, GraphqlTransportErrorCode as TransportError},
+        StepUpChallenge, code::AppErrorCode,
+        codes::graphql_transport::GraphqlTransportErrorCode as TransportError,
     },
     setting::application_origins,
 };
@@ -262,7 +261,6 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
             claims,
             user,
             locale: locale.clone(),
-            correlation: correlation.clone(),
             actor: actor.clone(),
         })
         .data(config.max_page_size)
@@ -292,7 +290,7 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
             return;
         }
     };
-    attach_correlation(&mut response, &locale, &correlation, config);
+    attach_correlation(&mut response, &locale, &correlation);
     observation.outcome = if response.errors.is_empty() {
         "success"
     } else {
@@ -310,24 +308,19 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
 }
 
 fn step_up_challenge(response: &AsyncGraphqlResponse) -> Option<String> {
-    let extensions = response.errors.iter().find_map(|error| {
-        error.extensions.as_ref().filter(|extensions| {
-            matches!(
-                extensions.get("code"),
-                Some(Value::String(code))
-                    if code == "insufficient_user_authentication"
-            )
-        })
-    })?;
+    let challenge = response
+        .errors
+        .iter()
+        .find_map(|error| error.source::<StepUpChallenge>())?;
     let mut parameters = vec![
         "Bearer realm=\"graphql\"".to_owned(),
         "error=\"insufficient_user_authentication\"".to_owned(),
         "error_description=\"A different authentication level or more recent authentication is required\"".to_owned(),
     ];
-    if let Some(Value::String(acr_values)) = extensions.get("acr_values") {
-        parameters.push(format!("acr_values=\"{acr_values}\""));
+    if let Some(acr) = challenge.acr {
+        parameters.push(format!("acr_values=\"{}\"", acr.as_str()));
     }
-    if let Some(Value::Number(max_age)) = extensions.get("max_age") {
+    if let Some(max_age) = challenge.max_age_secs {
         parameters.push(format!("max_age=\"{max_age}\""));
     }
     Some(parameters.join(", "))
@@ -451,7 +444,6 @@ fn attach_correlation(
     response: &mut AsyncGraphqlResponse,
     locale: &LanguageIdentifier,
     correlation: &RequestCorrelation,
-    config: &GraphqlConfig,
 ) {
     response.extensions.insert(
         "requestId".to_owned(),
@@ -467,8 +459,8 @@ fn attach_correlation(
         if extensions.get("code").is_none() {
             // Parser/type/validator errors may contain supplied literal values.
             // Preserve locations and path, expose a stable localized envelope.
-            let code = limit_error(&error.message).unwrap_or(TransportError::InvalidRequest);
-            error.message = localized_transport_error_with_limit(code, locale, config);
+            let code = TransportError::InvalidRequest;
+            error.message = localized_transport_error(code, locale);
             extensions.set("code", code.code());
             extensions.set("kind", code.kind().as_str());
         }
@@ -477,36 +469,6 @@ fn attach_correlation(
             extensions.set("traceId", trace_id.clone());
         }
     }
-}
-
-/// async-graphql rejects an over-deep or over-complex document with a plain
-/// server error that carries no extension `code`, so a caller cannot tell a
-/// limit rejection from a malformed request. These are its stable messages.
-fn limit_error(message: &str) -> Option<TransportError> {
-    match message {
-        "Query is nested too deep." => Some(TransportError::QueryTooDeep),
-        "Query is too complex." => Some(TransportError::QueryTooComplex),
-        _ => None,
-    }
-}
-
-fn localized_transport_error_with_limit(
-    code: TransportError,
-    locale: &LanguageIdentifier,
-    config: &GraphqlConfig,
-) -> String {
-    let err: AppError = match code {
-        TransportError::QueryTooDeep => {
-            graphql_transport::error::QueryTooDeep::new(config.max_depth).into()
-        }
-        TransportError::QueryTooComplex => {
-            graphql_transport::error::QueryTooComplex::new(config.max_complexity).into()
-        }
-        _ => return localized_transport_error(code, locale),
-    };
-    error_i18n()
-        .expect("error i18n is initialized during startup")
-        .t_code_with_params(locale, code.code(), err.params())
 }
 
 fn write_unauthorized(
@@ -559,19 +521,22 @@ pub fn shares_listener(graphql: &GraphqlConfig, server: &ServerConfig) -> bool {
 
 #[cfg(test)]
 mod unit_tests {
-    use async_graphql::{ErrorExtensionValues, Request as GraphqlRequest, Response, ServerError};
+    use std::sync::Arc;
+
+    use async_graphql::{Request as GraphqlRequest, Response, ServerError};
+    use identity_application::error::StepUpChallenge;
+    use identity_domain::auth::AuthenticationContextClass;
     use identity_infrastructure::config::{GraphqlConfig, GraphqlServerConfig, ServerConfig};
 
     use super::{bind_address, is_mutation, shares_listener, step_up_challenge};
 
     #[test]
-    fn formats_rfc9470_step_up_challenge_from_graphql_error() {
-        let mut extensions = ErrorExtensionValues::default();
-        extensions.set("code", "insufficient_user_authentication");
-        extensions.set("acr_values", "aal2");
-        extensions.set("max_age", 3600_u64);
+    fn formats_rfc9470_step_up_challenge_from_the_typed_error_source() {
         let mut error = ServerError::new("recent authentication is required", None);
-        error.extensions = Some(extensions);
+        error.source = Some(Arc::new(StepUpChallenge {
+            acr: Some(AuthenticationContextClass::MultiFactor),
+            max_age_secs: Some(3600),
+        }));
         let response = Response::from_errors(vec![error]);
 
         let challenge = step_up_challenge(&response).expect("step-up challenge");
@@ -579,6 +544,8 @@ mod unit_tests {
         assert!(challenge.contains("error=\"insufficient_user_authentication\""));
         assert!(challenge.contains("acr_values=\"aal2\""));
         assert!(challenge.contains("max_age=\"3600\""));
+        let untyped = Response::from_errors(vec![ServerError::new("forbidden", None)]);
+        assert!(step_up_challenge(&untyped).is_none());
     }
 
     #[test]

@@ -46,7 +46,7 @@ use super::{
 };
 use crate::graphql::schema::{
     authorization::{ScopeGuard, UserPrincipalGuard, request_context},
-    error::{app_error, coded_error},
+    error::app_error,
     management_guard::ManagementGuard,
 };
 
@@ -91,11 +91,11 @@ enum Node {
 async fn load_node(ctx: &Context<'_>, id: &ID) -> Result<Option<Node>> {
     let request = request_context(ctx)?;
     let decoded = DecodedGlobalId::decode(id.as_str())
-        .map_err(|_| coded_error(ctx, graphql::error::InvalidGlobalId))?;
+        .map_err(|_| app_error(ctx, graphql::error::InvalidGlobalId))?;
     if decoded.is::<UserGlobalId>() {
         let oid = decoded
             .into_typed::<UserGlobalId>()
-            .map_err(|_| coded_error(ctx, graphql::error::InvalidGlobalId))?
+            .map_err(|_| app_error(ctx, graphql::error::InvalidGlobalId))?
             .oid();
         let target = UserOid(oid);
         match node_user_read_access(ctx, target).await? {
@@ -119,7 +119,7 @@ async fn load_node(ctx: &Context<'_>, id: &ID) -> Result<Option<Node>> {
     } else if decoded.is::<SessionGlobalId>() {
         let oid = decoded
             .into_typed::<SessionGlobalId>()
-            .map_err(|_| coded_error(ctx, graphql::error::InvalidGlobalId))?
+            .map_err(|_| app_error(ctx, graphql::error::InvalidGlobalId))?
             .oid();
         UserPrincipalGuard.check(ctx).await?;
         ScopeGuard::new(ApiScope::SessionRead).check(ctx).await?;
@@ -137,7 +137,7 @@ async fn load_node(ctx: &Context<'_>, id: &ID) -> Result<Option<Node>> {
     } else if decoded.is::<ResourceGlobalId>() {
         let oid = decoded
             .into_typed::<ResourceGlobalId>()
-            .map_err(|_| coded_error(ctx, graphql::error::InvalidGlobalId))?
+            .map_err(|_| app_error(ctx, graphql::error::InvalidGlobalId))?
             .oid();
         ManagementGuard::new(ManagementScope::ResourcesRead, ManagementTarget::instance())
             .check(ctx)
@@ -149,7 +149,7 @@ async fn load_node(ctx: &Context<'_>, id: &ID) -> Result<Option<Node>> {
     } else if decoded.is::<ScopeGlobalId>() {
         let oid = decoded
             .into_typed::<ScopeGlobalId>()
-            .map_err(|_| coded_error(ctx, graphql::error::InvalidGlobalId))?
+            .map_err(|_| app_error(ctx, graphql::error::InvalidGlobalId))?
             .oid();
         ManagementGuard::new(ManagementScope::ScopesRead, ManagementTarget::instance())
             .check(ctx)
@@ -161,7 +161,7 @@ async fn load_node(ctx: &Context<'_>, id: &ID) -> Result<Option<Node>> {
     } else if decoded.is::<RoleGlobalId>() {
         let oid = decoded
             .into_typed::<RoleGlobalId>()
-            .map_err(|_| coded_error(ctx, graphql::error::InvalidGlobalId))?
+            .map_err(|_| app_error(ctx, graphql::error::InvalidGlobalId))?
             .oid();
         ManagementGuard::new(ManagementScope::RolesRead, ManagementTarget::instance())
             .check(ctx)
@@ -173,7 +173,7 @@ async fn load_node(ctx: &Context<'_>, id: &ID) -> Result<Option<Node>> {
     } else if decoded.is::<ClientGlobalId>() {
         let oid = decoded
             .into_typed::<ClientGlobalId>()
-            .map_err(|_| coded_error(ctx, graphql::error::InvalidGlobalId))?
+            .map_err(|_| app_error(ctx, graphql::error::InvalidGlobalId))?
             .oid();
         ManagementGuard::new(ManagementScope::ClientsRead, ManagementTarget::instance())
             .check(ctx)
@@ -185,7 +185,7 @@ async fn load_node(ctx: &Context<'_>, id: &ID) -> Result<Option<Node>> {
     } else if decoded.is::<GroupGlobalId>() {
         let oid = decoded
             .into_typed::<GroupGlobalId>()
-            .map_err(|_| coded_error(ctx, graphql::error::InvalidGlobalId))?
+            .map_err(|_| app_error(ctx, graphql::error::InvalidGlobalId))?
             .oid();
         ManagementGuard::new(ManagementScope::GroupsRead, ManagementTarget::instance())
             .check(ctx)
@@ -197,7 +197,7 @@ async fn load_node(ctx: &Context<'_>, id: &ID) -> Result<Option<Node>> {
     } else if decoded.is::<PasskeyGlobalId>() {
         let oid = decoded
             .into_typed::<PasskeyGlobalId>()
-            .map_err(|_| coded_error(ctx, graphql::error::InvalidGlobalId))?
+            .map_err(|_| app_error(ctx, graphql::error::InvalidGlobalId))?
             .oid();
         UserPrincipalGuard.check(ctx).await?;
         ScopeGuard::new(ApiScope::UserRead).check(ctx).await?;
@@ -214,7 +214,7 @@ async fn load_node(ctx: &Context<'_>, id: &ID) -> Result<Option<Node>> {
     } else if decoded.is::<AuditEventGlobalId>() {
         let oid = decoded
             .into_typed::<AuditEventGlobalId>()
-            .map_err(|_| coded_error(ctx, graphql::error::InvalidGlobalId))?
+            .map_err(|_| app_error(ctx, graphql::error::InvalidGlobalId))?
             .oid();
         ManagementGuard::new(ManagementScope::AuditRead, ManagementTarget::instance())
             .check(ctx)
@@ -224,6 +224,6 @@ async fn load_node(ctx: &Context<'_>, id: &ID) -> Result<Option<Node>> {
             .map_err(|error| app_error(ctx, error))?;
         Ok(event.map(AuditEventNode::new).map(Box::new).map(Node::from))
     } else {
-        Err(coded_error(ctx, graphql::error::UnsupportedNodeType))
+        Err(app_error(ctx, graphql::error::UnsupportedNodeType))
     }
 }

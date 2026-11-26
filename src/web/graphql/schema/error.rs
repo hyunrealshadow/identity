@@ -1,72 +1,133 @@
-use std::{backtrace::Backtrace, error::Error as StdError};
+//! The single projection from [`AppError`] to a GraphQL error.
+//!
+//! Resolvers, guards, input adapters and schema extensions all build an
+//! `AppError` and render it here, so every GraphQL error carries the same
+//! localized message, `kind`, numeric `code`, field errors and authorization
+//! challenge. Request correlation is attached afterwards by the transport.
 
-use async_graphql::{Context, Error, ErrorExtensionValues, ErrorExtensions, Value};
+use std::{error::Error as StdError, sync::Arc};
+
+use async_graphql::{Context, Error, ErrorExtensionValues, Value};
 use identity_application::error::{
-    AppError, ErrorDiagnostics, code::AppErrorCode, codes::graphql::GraphqlErrorCode,
-    kind::ErrorKind, params::ErrorParams,
+    AppError, code::AppErrorCode, codes::graphql::GraphqlErrorCode, params::ErrorParams,
 };
 use serde_json::{Value as SerdeJsonValue, json};
-use tracing::error;
 use unic_langid::{LanguageIdentifier, langid};
 
-use super::{authorization::request_context, context::RequestContext};
+use super::context::RequestContext;
 use crate::{
-    controllers::response::{error_message, log_app_error},
+    controllers::response::log_app_error,
     infrastructure::i18n::{I18n, error_i18n},
 };
 
-/// Request/trace correlation copied from [`crate::middleware::RequestCorrelation`].
-pub(super) struct Correlation {
-    request_id: String,
-    trace_id: Option<String>,
-}
-
-impl Correlation {
-    pub(super) fn apply(&self, extensions: &mut ErrorExtensionValues) {
-        if !self.request_id.is_empty() {
-            extensions.set("requestId", self.request_id.clone());
-        }
-        if let Some(trace_id) = &self.trace_id {
-            extensions.set("traceId", trace_id.clone());
+/// Log and render an application error raised while resolving a GraphQL field.
+pub(super) fn app_error(ctx: &Context<'_>, error: impl Into<AppError>) -> Error {
+    let error = error.into();
+    log_app_error(&error, "graphql request failed");
+    match ctx.data::<RequestContext>() {
+        Ok(request) => project(request.state.resources().i18n(), &request.locale, &error),
+        Err(_) => {
+            let i18n = error_i18n().cloned().unwrap_or_else(I18n::disabled);
+            project(&i18n, &langid!("en-US"), &error)
         }
     }
 }
 
-pub(super) fn correlation(ctx: &Context<'_>) -> Correlation {
-    match ctx.data::<RequestContext>() {
-        Ok(request) => Correlation {
-            request_id: request.correlation.request_id.clone(),
-            trace_id: request.correlation.trace_id.clone(),
-        },
-        Err(_) => Correlation {
-            request_id: String::new(),
-            trace_id: None,
-        },
+/// Internal adapter failure: the generic internal message to the client, full
+/// diagnostic context to the server log only.
+pub(super) fn internal_error(
+    ctx: &Context<'_>,
+    error: impl StdError + Send + Sync + 'static,
+) -> Error {
+    app_error(
+        ctx,
+        identity_application::error::codes::graphql::error::Internal.with_source(error),
+    )
+}
+
+/// Render `error` for `locale`. The error is also kept as the GraphQL error
+/// source so the transport can derive protocol headers from typed details.
+pub(crate) fn project(i18n: &I18n, locale: &LanguageIdentifier, error: &AppError) -> Error {
+    let text = message(i18n, locale, error.code(), error.params());
+    let fields = error
+        .validation()
+        .map(|validation| {
+            validation
+                .fields()
+                .iter()
+                .map(|field| {
+                    json!({
+                        "field": field.field(),
+                        "code": field.code(),
+                        "message": message(i18n, locale, field.code(), field.params()),
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let mut extensions = ErrorExtensionValues::default();
+    apply_extensions(&mut extensions, error, fields);
+    Error {
+        message: text,
+        source: error.step_up().map(|challenge| Arc::new(challenge) as _),
+        extensions: Some(extensions),
     }
 }
 
-fn context_i18n(ctx: &Context<'_>) -> (I18n, LanguageIdentifier) {
-    match ctx.data::<RequestContext>() {
-        Ok(request) => (
-            request.state.resources().i18n().clone(),
-            request.locale.clone(),
-        ),
-        Err(_) => (
-            error_i18n().cloned().unwrap_or_else(I18n::disabled),
-            langid!("en-US"),
-        ),
+fn apply_extensions(
+    extensions: &mut ErrorExtensionValues,
+    error: &AppError,
+    fields: Vec<SerdeJsonValue>,
+) {
+    extensions.set("kind", error.kind().as_str());
+    extensions.set("code", error.code());
+    if let Some(step_up) = error.step_up() {
+        extensions.set("applicationCode", error.code());
+        extensions.set("code", "insufficient_user_authentication");
+        if let Some(acr) = step_up.acr {
+            extensions.set("acr_values", acr.as_str());
+        }
+        if let Some(max_age) = step_up.max_age_secs {
+            extensions.set("max_age", max_age);
+        }
+    } else if let [first, ..] = error.required_scopes() {
+        extensions.set("applicationCode", error.code());
+        extensions.set("code", "insufficient_scope");
+        extensions.set("requiredScope", first.clone());
+        extensions.set("requiredScopes", error.required_scopes().to_vec());
     }
+    extensions.set(
+        "fields",
+        Value::from_json(SerdeJsonValue::Array(fields)).unwrap_or(Value::Null),
+    );
 }
 
-fn generic_message(i18n: &I18n, locale: &LanguageIdentifier) -> String {
-    let code = GraphqlErrorCode::Internal;
-    let key = format!("E{}", code.code());
-    let rendered = i18n.t_code(locale, code.code());
-    if rendered == key {
-        static_generic_message(locale)
+/// Catalog message for `code`, or the generic internal message when the
+/// catalog lacks it, so raw `E<code>` keys never reach clients.
+fn message(i18n: &I18n, locale: &LanguageIdentifier, code: u32, params: &ErrorParams) -> String {
+    render(i18n, locale, code, params).unwrap_or_else(|| {
+        render(
+            i18n,
+            locale,
+            GraphqlErrorCode::Internal.code(),
+            &ErrorParams::new(),
+        )
+        .unwrap_or_else(|| static_generic_message(locale))
+    })
+}
+
+fn render(
+    i18n: &I18n,
+    locale: &LanguageIdentifier,
+    code: u32,
+    params: &ErrorParams,
+) -> Option<String> {
+    let rendered = if params.is_empty() {
+        i18n.t_code(locale, code)
     } else {
-        rendered
-    }
+        i18n.t_code_with_params(locale, code, params)
+    };
+    (rendered != format!("E{code}")).then_some(rendered)
 }
 
 fn static_generic_message(locale: &LanguageIdentifier) -> String {
@@ -77,203 +138,27 @@ fn static_generic_message(locale: &LanguageIdentifier) -> String {
     }
 }
 
-/// Render a catalog message, substituting the localized generic internal
-/// message when the catalog is missing the requested key. This is the response
-/// safety net that keeps raw `E<code>` keys and Fluent source text away from
-/// clients.
-pub(super) fn localized_message(
-    ctx: &Context<'_>,
-    code: GraphqlErrorCode,
-    params: &ErrorParams,
-) -> String {
-    let (i18n, locale) = context_i18n(ctx);
-    catalog_message(&i18n, &locale, code, params)
-}
-
-fn catalog_message(
-    i18n: &I18n,
-    locale: &LanguageIdentifier,
-    code: GraphqlErrorCode,
-    params: &ErrorParams,
-) -> String {
-    let key = format!("E{}", code.code());
-    let rendered = if params.is_empty() {
-        i18n.t_code(locale, code.code())
-    } else {
-        i18n.t_code_with_params(locale, code.code(), params)
-    };
-    if rendered == key {
-        generic_message(i18n, locale)
-    } else {
-        rendered
-    }
-}
-
-fn kind_name(kind: ErrorKind) -> &'static str {
-    match kind {
-        ErrorKind::NotFound => "not_found",
-        ErrorKind::Unauthorized => "unauthorized",
-        ErrorKind::Forbidden => "forbidden",
-        ErrorKind::Conflict => "conflict",
-        ErrorKind::Validation => "validation",
-        ErrorKind::RateLimit => "rate_limit",
-        ErrorKind::Gone => "gone",
-        ErrorKind::Internal => "internal",
-    }
-}
-
-/// Build a localized GraphQL error from a typed `AppError` or variant builder.
-/// The extension `code` is the numeric application code.
-pub(super) fn coded_error(ctx: &Context<'_>, error: impl Into<AppError>) -> Error {
-    let error = error.into();
-    let code = error.code();
-    let (i18n, locale) = context_i18n(ctx);
-    let key = format!("E{code}");
-    let rendered = if error.params().is_empty() {
-        i18n.t_code(&locale, code)
-    } else {
-        i18n.t_code_with_params(&locale, code, error.params())
-    };
-    let message = if rendered == key {
-        generic_message(&i18n, &locale)
-    } else {
-        rendered
-    };
-    let kind = kind_name(error.kind());
-    let correlation = correlation(ctx);
-    Error::new(message).extend_with(|_, extensions| {
-        extensions.set("kind", kind);
-        extensions.set("code", code);
-        correlation.apply(extensions);
-    })
-}
-
-fn log_internal(error: &(impl StdError + 'static), operation: &'static str) {
-    let diagnostics = ErrorDiagnostics::from_error(error);
-    let fallback = diagnostics
-        .backtrace
-        .is_none()
-        .then(Backtrace::force_capture);
-    let backtrace = diagnostics.backtrace.or(fallback.as_ref());
-    error!(
-        error = %error,
-        has_source = error.source().is_some(),
-        error_cause = %diagnostics.cause,
-        error_operation = diagnostics.operation,
-        stacktrace = backtrace.map(ToString::to_string),
-        "{operation}"
-    );
-}
-
-/// Internal adapter failure: localized generic message to the client, full
-/// diagnostic context to the server log only.
-pub(super) fn internal_error(ctx: &Context<'_>, error: impl StdError + 'static) -> Error {
-    log_internal(&error, "graphql resolver failed");
-    let (i18n, locale) = context_i18n(ctx);
-    let message = generic_message(&i18n, &locale);
-    let correlation = correlation(ctx);
-    Error::new(message).extend_with(|_, extensions| {
-        extensions.set("kind", "internal");
-        extensions.set("code", GraphqlErrorCode::Internal.code());
-        correlation.apply(extensions);
-    })
-}
-
-pub(super) fn app_error(ctx: &Context<'_>, error: AppError) -> Error {
-    let request = match request_context(ctx) {
-        Ok(request) => request,
-        Err(error) => return error,
-    };
-    log_app_error(&error, "graphql application request failed");
-    let i18n = request.state.resources().i18n();
-    let mut message = error_message(i18n, &request.locale, &error);
-    let key = format!("E{}", error.code());
-    if message == key {
-        message = generic_message(i18n, &request.locale);
-    }
-    let kind = kind_name(error.kind());
-    let fields = error
-        .validation()
-        .map(|validation| {
-            validation
-                .fields()
-                .iter()
-                .map(|field| {
-                    let rendered =
-                        i18n.t_code_with_params(&request.locale, field.code(), field.params());
-                    let field_message = if rendered == format!("E{}", field.code()) {
-                        generic_message(i18n, &request.locale)
-                    } else {
-                        rendered
-                    };
-                    json!({
-                        "field": field.field(),
-                        "code": field.code(),
-                        "message": field_message,
-                    })
-                })
-                .collect::<Vec<_>>()
-        })
-        .unwrap_or_default();
-    let correlation = Correlation {
-        request_id: request.correlation.request_id.clone(),
-        trace_id: request.correlation.trace_id.clone(),
-    };
-    Error::new(message).extend_with(|_, extensions| {
-        apply_app_error_extensions(extensions, &error, kind, fields, &correlation);
-    })
-}
-
-fn apply_app_error_extensions(
-    extensions: &mut ErrorExtensionValues,
-    error: &AppError,
-    kind: &'static str,
-    fields: Vec<SerdeJsonValue>,
-    correlation: &Correlation,
-) {
-    extensions.set("kind", kind);
-    extensions.set("code", error.code());
-    if let Some(step_up) = error.step_up() {
-        extensions.set("applicationCode", error.code());
-        extensions.set("code", "insufficient_user_authentication");
-        extensions.set("acr_values", step_up.acr.as_str());
-        if let Some(max_age) = step_up.max_age_secs {
-            extensions.set("max_age", max_age);
-        }
-    }
-    extensions.set(
-        "fields",
-        Value::from_json(SerdeJsonValue::Array(fields)).unwrap_or(Value::Null),
-    );
-    correlation.apply(extensions);
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use identity_application::error::StepUpChallenge;
+    use identity_application::error::{
+        StepUpChallenge,
+        codes::{common, graphql},
+    };
     use identity_domain::auth::AuthenticationContextClass;
 
     #[test]
-    fn step_up_challenge_projects_graphql_extensions_without_code_inspection() {
-        let error = identity_application::error::codes::common::error::Unauthorized
-            .into_error()
-            .with_step_up(StepUpChallenge {
-                acr: AuthenticationContextClass::MultiFactor,
-                max_age_secs: Some(900),
-            });
-        let mut extensions = ErrorExtensionValues::default();
-        let correlation = Correlation {
-            request_id: "req-1".to_owned(),
-            trace_id: None,
+    fn step_up_challenge_projects_graphql_extensions_and_source() {
+        let challenge = StepUpChallenge {
+            acr: Some(AuthenticationContextClass::MultiFactor),
+            max_age_secs: Some(900),
         };
-        apply_app_error_extensions(
-            &mut extensions,
-            &error,
-            "unauthorized",
-            Vec::new(),
-            &correlation,
-        );
+        let error = common::error::Unauthorized
+            .into_error()
+            .with_step_up(challenge);
+
+        let projected = project(&I18n::disabled(), &langid!("en-US"), &error);
+        let extensions = projected.extensions.as_ref().unwrap();
 
         assert_eq!(
             extensions.get("applicationCode"),
@@ -285,5 +170,28 @@ mod tests {
         );
         assert_eq!(extensions.get("acr_values"), Some(&Value::from("aal2")));
         assert_eq!(extensions.get("max_age"), Some(&Value::from(900_u64)));
+        let source = projected.source.as_ref().unwrap();
+        assert_eq!(source.downcast_ref::<StepUpChallenge>(), Some(&challenge));
+    }
+
+    #[test]
+    fn missing_catalog_entries_never_expose_raw_keys() {
+        let error = graphql::error::InsufficientScope::new("user.read")
+            .into_error()
+            .with_required_scopes(["user.read"]);
+
+        let projected = project(&I18n::disabled(), &langid!("zh-CN"), &error);
+        let extensions = projected.extensions.as_ref().unwrap();
+
+        assert_eq!(projected.message, "发生意外错误，请重试");
+        assert_eq!(extensions.get("kind"), Some(&Value::from("forbidden")));
+        assert_eq!(
+            extensions.get("code"),
+            Some(&Value::from("insufficient_scope"))
+        );
+        assert_eq!(
+            extensions.get("requiredScope"),
+            Some(&Value::from("user.read"))
+        );
     }
 }

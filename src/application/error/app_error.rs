@@ -14,9 +14,12 @@ use super::{
     validation::ValidationError,
 };
 
+/// The current authentication is valid but too weak or too old for the
+/// requested operation (RFC 9470 `insufficient_user_authentication`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct StepUpChallenge {
-    pub acr: AuthenticationContextClass,
+    /// Required context class; `None` asks only for fresher authentication.
+    pub acr: Option<AuthenticationContextClass>,
     pub max_age_secs: Option<u64>,
 }
 
@@ -24,6 +27,8 @@ pub struct StepUpChallenge {
 struct AppErrorDetails {
     validation: Option<ValidationError>,
     step_up: Option<StepUpChallenge>,
+    /// Scopes the access token lacks (RFC 6750 `insufficient_scope`).
+    required_scopes: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -108,6 +113,23 @@ impl AppError {
 
     pub fn step_up(&self) -> Option<StepUpChallenge> {
         self.details.as_deref().and_then(|details| details.step_up)
+    }
+
+    pub fn with_required_scopes<S: Into<String>>(
+        mut self,
+        scopes: impl IntoIterator<Item = S>,
+    ) -> Self {
+        self.details_mut()
+            .required_scopes
+            .extend(scopes.into_iter().map(Into::into));
+        self
+    }
+
+    /// Scopes whose absence caused the rejection; empty when none apply.
+    pub fn required_scopes(&self) -> &[String] {
+        self.details
+            .as_deref()
+            .map_or(&[], |details| details.required_scopes.as_slice())
     }
 
     pub fn validation(&self) -> Option<&ValidationError> {

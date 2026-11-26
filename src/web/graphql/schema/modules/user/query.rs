@@ -16,7 +16,7 @@ use crate::graphql::schema::{
     authorization::request_context,
     connection,
     connection::ConnectionTotal,
-    error::{app_error, coded_error},
+    error::app_error,
     management_guard::ManagementGuard,
     modules::account::{UserGlobalId, UserNode},
 };
@@ -107,7 +107,7 @@ impl UserManagementQuery {
 
 pub(super) fn decode_user_oid(ctx: &Context<'_>, id: &ID) -> Result<UserOid> {
     let oid = GlobalId::<UserGlobalId>::decode(id.as_str())
-        .map_err(|_| coded_error(ctx, graphql::error::InvalidGlobalId))?
+        .map_err(|_| app_error(ctx, graphql::error::InvalidGlobalId))?
         .oid();
     Ok(UserOid(oid))
 }

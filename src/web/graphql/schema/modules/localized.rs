@@ -21,7 +21,7 @@ impl LocalizedMetadataInput {
             self.names.into_iter().map(Into::into).collect(),
             self.descriptions.into_iter().map(Into::into).collect(),
         )
-        .map_err(|_| app_error(ctx, rbac::error::InvalidLocalizedMetadata::new().into()))
+        .map_err(|_| app_error(ctx, rbac::error::InvalidLocalizedMetadata::new()))
     }
 }
 

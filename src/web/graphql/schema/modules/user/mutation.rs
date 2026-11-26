@@ -24,9 +24,7 @@ use super::{
     },
 };
 use crate::graphql::schema::{
-    authorization::request_context,
-    error::{app_error, coded_error},
-    management_guard::ManagementGuard,
+    authorization::request_context, error::app_error, management_guard::ManagementGuard,
 };
 
 #[derive(Default)]
@@ -371,7 +369,7 @@ impl UserManagementMutation {
                     .map(|id| {
                         GlobalId::<SessionGlobalId>::decode(id.as_str())
                             .map(|id| id.oid())
-                            .map_err(|_| coded_error(ctx, graphql::error::InvalidSessionId))
+                            .map_err(|_| app_error(ctx, graphql::error::InvalidSessionId))
                     })
                     .collect::<Result<Vec<_>>>()
             })
@@ -444,9 +442,9 @@ fn state_fields(
 }
 
 fn identifier(value: MaybeUndefined<String>, ctx: &Context<'_>) -> Result<Option<String>> {
-    optional_identifier(value).map_err(|_| coded_error(ctx, graphql::error::ValidationFailed))
+    optional_identifier(value).map_err(|_| app_error(ctx, graphql::error::ValidationFailed))
 }
 
 fn reason_or_error(ctx: &Context<'_>, reason: &str) -> Result<String> {
-    normalize_reason(reason).ok_or_else(|| coded_error(ctx, graphql::error::ValidationFailed))
+    normalize_reason(reason).ok_or_else(|| app_error(ctx, graphql::error::ValidationFailed))
 }

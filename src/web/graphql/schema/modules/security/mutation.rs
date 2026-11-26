@@ -17,7 +17,7 @@ use crate::graphql::schema::{
         MfaRecentAuthenticationGuard, RecentAuthenticationGuard, ScopeGuard, UserPrincipalGuard,
         request_context,
     },
-    error::{app_error, coded_error},
+    error::app_error,
 };
 
 #[derive(Default)]
@@ -99,7 +99,7 @@ impl SecurityMutation {
         let session = request
             .claims
             .session_oid
-            .ok_or_else(|| coded_error(ctx, graphql::error::BrowserSessionRequired))?;
+            .ok_or_else(|| app_error(ctx, graphql::error::BrowserSessionRequired))?;
         let recovery_codes = request
             .state
             .services()
@@ -120,7 +120,7 @@ impl SecurityMutation {
             .await
             .map_err(|error| app_error(ctx, error))?;
         Ok(async_graphql::Json(serde_json::to_value(options).map_err(
-            |_| coded_error(ctx, graphql::error::SerializationFailed),
+            |_| app_error(ctx, graphql::error::SerializationFailed),
         )?))
     }
 
@@ -140,9 +140,9 @@ impl SecurityMutation {
         let session = request
             .claims
             .session_oid
-            .ok_or_else(|| coded_error(ctx, graphql::error::BrowserSessionRequired))?;
+            .ok_or_else(|| app_error(ctx, graphql::error::BrowserSessionRequired))?;
         let challenge = GlobalId::<kind::PasskeyChallenge>::decode(challenge_id.as_str())
-            .map_err(|_| coded_error(ctx, graphql::error::InvalidPasskeyChallenge))?
+            .map_err(|_| app_error(ctx, graphql::error::InvalidPasskeyChallenge))?
             .oid();
         request
             .state
@@ -168,7 +168,7 @@ impl SecurityMutation {
     async fn delete_passkey(&self, ctx: &Context<'_>, id: ID) -> Result<bool> {
         let request = request_context(ctx)?;
         let id = GlobalId::<PasskeyGlobalId>::decode(id.as_str())
-            .map_err(|_| coded_error(ctx, graphql::error::InvalidPasskeyId))?
+            .map_err(|_| app_error(ctx, graphql::error::InvalidPasskeyId))?
             .oid();
         request
             .state
@@ -193,7 +193,7 @@ impl SecurityMutation {
         let session_oid = request
             .claims
             .session_oid
-            .ok_or_else(|| coded_error(ctx, graphql::error::BrowserSessionRequired))?;
+            .ok_or_else(|| app_error(ctx, graphql::error::BrowserSessionRequired))?;
         let outcome = request
             .state
             .services()

@@ -38,12 +38,12 @@ impl Guard for ManagementGuard {
         let current = if let Some(user) = request.claims.user_oid {
             repo.find_user_permission_authority(user)
                 .await
-                .map_err(|error| app_error(ctx, error.into()))?
+                .map_err(|error| app_error(ctx, error))?
                 .map(CurrentManagementAuthority::UserPermissions)
         } else {
             repo.find_client_scope_authority(request.claims.client_oid)
                 .await
-                .map_err(|error| app_error(ctx, error.into()))?
+                .map_err(|error| app_error(ctx, error))?
                 .map(CurrentManagementAuthority::ClientScopes)
         };
         let mut target = self.target;
@@ -52,7 +52,7 @@ impl Guard for ManagementGuard {
         target.is_instance_owner = if target.kind == ManagementTargetKind::User {
             repo.find_user_permission_authority(UserOid(target.oid))
                 .await
-                .map_err(|error| app_error(ctx, error.into()))?
+                .map_err(|error| app_error(ctx, error))?
                 .is_some_and(|authority| authority.has_full_management_permissions())
         } else {
             false
@@ -63,15 +63,10 @@ impl Guard for ManagementGuard {
             .as_ref()
             .map(|snapshot| snapshot.to_snapshot())
             .transpose()
-            .map_err(|_| {
-                app_error(
-                    ctx,
-                    authorization::error::AuthorizationSnapshotExpired.into(),
-                )
-            })?;
+            .map_err(|_| app_error(ctx, authorization::error::AuthorizationSnapshotExpired))?;
         let policy_version = ManagementAuthorityRepository::current_policy_version(repo.as_ref())
             .await
-            .map_err(|error| app_error(ctx, error.into()))?;
+            .map_err(|error| app_error(ctx, error))?;
         let scopes = request
             .claims
             .scope
@@ -90,7 +85,7 @@ impl Guard for ManagementGuard {
             now: Utc::now(),
             recent_aal2_ttl: DEFAULT_RECENT_AAL2_TTL,
         })
-        .map_err(|error| app_error(ctx, error.into()))?;
+        .map_err(|error| app_error(ctx, error))?;
         Ok(())
     }
 }

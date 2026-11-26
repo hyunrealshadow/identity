@@ -1,26 +1,18 @@
 use std::result::Result as StdResult;
 
-use async_graphql::{Context, Error, ErrorExtensions, Guard, Result};
+use async_graphql::{Context, Guard, Result};
 use chrono::Utc;
-use identity_application::error::{
-    AppError,
-    codes::graphql::{self, GraphqlErrorCode},
-    params::ErrorParams,
-};
+use identity_application::error::{AppError, StepUpChallenge, codes::graphql};
 use identity_domain::{
     auth::{AuthenticationContextClass, authentication_is_fresh},
     openid_connect::ApiScope,
 };
 
-use super::{
-    access::AccessPolicy,
-    context::RequestContext,
-    error::{self, app_error},
-};
+use super::{access::AccessPolicy, context::RequestContext, error::app_error};
 
 pub(super) fn request_context<'a>(ctx: &'a Context<'_>) -> Result<&'a RequestContext> {
     ctx.data::<RequestContext>()
-        .map_err(|_| error::coded_error(ctx, graphql::error::AuthenticationContextUnavailable))
+        .map_err(|_| app_error(ctx, graphql::error::AuthenticationContextUnavailable))
 }
 
 /// Result of the principal-specific effective-permission adapter. The default
@@ -77,20 +69,12 @@ impl Guard for ScopeGuard {
             return Ok(());
         }
         let scope = self.scope.name();
-        let insufficient = graphql::error::InsufficientScope::new(scope).into_error();
-        let message = error::localized_message(
+        Err(app_error(
             ctx,
-            GraphqlErrorCode::InsufficientScope,
-            insufficient.params(),
-        );
-        let correlation = error::correlation(ctx);
-        Err(Error::new(message).extend_with(|_, extensions| {
-            extensions.set("kind", "authorization_error");
-            extensions.set("code", "insufficient_scope");
-            extensions.set("requiredScope", scope);
-            extensions.set("requiredScopes", vec![scope.to_owned()]);
-            correlation.apply(extensions);
-        }))
+            graphql::error::InsufficientScope::new(scope)
+                .into_error()
+                .with_required_scopes([scope]),
+        ))
     }
 }
 
@@ -145,19 +129,15 @@ impl Guard for RecentAuthenticationGuard {
             return Ok(());
         }
 
-        let params = ErrorParams::new();
-        let message =
-            error::localized_message(ctx, GraphqlErrorCode::RecentAuthenticationRequired, &params);
-        let correlation = error::correlation(ctx);
-        Err(Error::new(message).extend_with(|_, extensions| {
-            extensions.set("kind", "authorization_error");
-            extensions.set("code", "insufficient_user_authentication");
-            extensions.set("max_age", max_age);
-            if let Some(required) = self.required_acr {
-                extensions.set("acr_values", required.as_str());
-            }
-            correlation.apply(extensions);
-        }))
+        Err(app_error(
+            ctx,
+            graphql::error::RecentAuthenticationRequired
+                .into_error()
+                .with_step_up(StepUpChallenge {
+                    acr: self.required_acr,
+                    max_age_secs: Some(max_age),
+                }),
+        ))
     }
 }
 

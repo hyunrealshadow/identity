@@ -22,10 +22,7 @@ use identity_domain::{
 use identity_infrastructure::graphql::cursor::InvalidCursor;
 use uuid::Uuid;
 
-use crate::graphql::schema::{
-    RequestContext,
-    error::{app_error, coded_error},
-};
+use crate::graphql::schema::{RequestContext, error::app_error};
 
 const MAX_CURSOR_LENGTH: usize = 512;
 
@@ -86,7 +83,7 @@ pub(crate) fn page_args(
         || first.is_some() && before.is_some()
         || last.is_some() && after.is_some();
     if conflict {
-        return Err(app_error(ctx, rbac::error::PageArgumentsConflict.into()));
+        return Err(app_error(ctx, rbac::error::PageArgumentsConflict));
     }
     Ok(PageArgs {
         first: first.map(|value| value as u32),
@@ -99,7 +96,7 @@ pub(crate) fn page_args(
 pub(crate) fn decode_oid<T: GlobalIdType>(ctx: &Context<'_>, id: &ID) -> Result<Uuid> {
     GlobalId::<T>::decode(id.as_str())
         .map(|id| id.oid())
-        .map_err(|_| coded_error(ctx, graphql::error::InvalidGlobalId))
+        .map_err(|_| app_error(ctx, graphql::error::InvalidGlobalId))
 }
 
 pub(crate) fn decode_oids<T: GlobalIdType>(ctx: &Context<'_>, ids: &[ID]) -> Result<Vec<Uuid>> {

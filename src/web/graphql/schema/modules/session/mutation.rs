@@ -12,7 +12,7 @@ use super::{
 };
 use crate::graphql::schema::{
     authorization::{ScopeGuard, UserPrincipalGuard, request_context},
-    error::{app_error, coded_error, internal_error},
+    error::{app_error, internal_error},
 };
 
 #[derive(Default)]
@@ -30,7 +30,7 @@ impl SessionMutation {
     ) -> Result<RevokeSessionPayload> {
         let request = request_context(ctx)?;
         let oid = GlobalId::<SessionGlobalId>::decode(id.as_str())
-            .map_err(|_| coded_error(ctx, graphql::error::InvalidSessionId))?
+            .map_err(|_| app_error(ctx, graphql::error::InvalidSessionId))?
             .oid();
         let session = request
             .state
@@ -56,7 +56,7 @@ impl SessionMutation {
         let session_oid = request
             .claims
             .session_oid
-            .ok_or_else(|| coded_error(ctx, graphql::error::BrowserSessionRequired))?;
+            .ok_or_else(|| app_error(ctx, graphql::error::BrowserSessionRequired))?;
         let outcome = request
             .state
             .services()

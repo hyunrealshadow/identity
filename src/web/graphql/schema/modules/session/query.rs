@@ -11,7 +11,7 @@ use uuid::Uuid;
 use super::{cursor::SessionCursor, types::SessionNode};
 use crate::graphql::schema::{
     authorization::{ScopeGuard, UserPrincipalGuard, request_context},
-    error::{coded_error, internal_error},
+    error::{app_error, internal_error},
 };
 
 #[derive(Default)]
@@ -60,13 +60,13 @@ pub(crate) async fn session_connection(
     let max_page_size = ctx.data_opt::<usize>().copied().unwrap_or(100);
     let requested = first.or(last).unwrap_or(20);
     if requested > 0 && requested as usize > max_page_size {
-        return Err(coded_error(
+        return Err(app_error(
             ctx,
             graphql::error::PageSizeInvalid::new(max_page_size),
         ));
     }
     if first.is_some() && last.is_some() {
-        return Err(coded_error(ctx, graphql::error::PageArgumentsConflict));
+        return Err(app_error(ctx, graphql::error::PageArgumentsConflict));
     }
     let state = request.state.clone();
     let data_protector = request.state.services().data_protector().clone();
@@ -90,7 +90,7 @@ pub(crate) async fn session_connection(
                 Some(cursor) => Some(
                     unprotect(data_protector.as_ref(), cursor)
                         .await
-                        .map_err(|_| coded_error(ctx, graphql::error::InvalidCursor))?
+                        .map_err(|_| app_error(ctx, graphql::error::InvalidCursor))?
                         .into_sort_key(),
                 ),
                 None => None,
@@ -99,7 +99,7 @@ pub(crate) async fn session_connection(
                 Some(cursor) => Some(
                     unprotect(data_protector.as_ref(), cursor)
                         .await
-                        .map_err(|_| coded_error(ctx, graphql::error::InvalidCursor))?
+                        .map_err(|_| app_error(ctx, graphql::error::InvalidCursor))?
                         .into_sort_key(),
                 ),
                 None => None,

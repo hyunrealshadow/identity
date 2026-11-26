@@ -12,7 +12,8 @@ define_error_codes! {
         InvalidGlobalId = 28003 { kind: Validation },
         UnsupportedNodeType = 28004 { kind: Validation },
         InsufficientScope = 28005 { kind: Forbidden, required: [scope] },
-        UserAuthenticationRequired = 28006 { kind: Unauthorized },
+        /// A machine principal reached a field that only a signed-in user may use.
+        UserAuthenticationRequired = 28006 { kind: Forbidden },
         Forbidden = 28007 { kind: Forbidden },
         RecentAuthenticationRequired = 28008 { kind: Forbidden },
         BrowserSessionRequired = 28009 { kind: Forbidden },

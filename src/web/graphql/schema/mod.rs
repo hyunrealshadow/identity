@@ -22,9 +22,10 @@ pub fn build_schema(max_depth: usize, max_complexity: usize) -> ApiSchema {
         MutationRoot::default(),
         EmptySubscription,
     )
-    .limit_depth(max_depth)
-    .limit_complexity(max_complexity)
-    // Bound response amplification from aliases of in-memory projections.
-    .extension(limits::ResponseAliasLimit(max_complexity))
+    .extension(limits::QueryLimits {
+        max_depth,
+        max_complexity,
+        max_aliases: max_complexity,
+    })
     .finish()
 }

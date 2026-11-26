@@ -14,7 +14,7 @@ use super::types::{
 };
 use crate::graphql::schema::{
     authorization::{RecentAuthenticationGuard, ScopeGuard, UserPrincipalGuard, request_context},
-    error::{app_error, coded_error},
+    error::app_error,
 };
 
 #[derive(Default)]
@@ -146,7 +146,7 @@ impl AccountMutation {
         let patch = input
             .clone()
             .into_patch()
-            .map_err(|()| coded_error(ctx, graphql::error::InvalidTheme))?;
+            .map_err(|()| app_error(ctx, graphql::error::InvalidTheme))?;
         let request = request_context(ctx)?;
         let user = request
             .state
