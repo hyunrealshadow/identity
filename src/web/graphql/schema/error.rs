@@ -37,10 +37,7 @@ pub(super) fn internal_error(
     ctx: &Context<'_>,
     error: impl StdError + Send + Sync + 'static,
 ) -> Error {
-    app_error(
-        ctx,
-        identity_application::error::codes::graphql::error::Internal.with_source(error),
-    )
+    app_error(ctx, AppError::internal_at("graphql.resolver", error))
 }
 
 /// Render `error` for `locale`. The error is also kept as the GraphQL error

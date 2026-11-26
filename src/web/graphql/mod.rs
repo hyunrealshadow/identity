@@ -28,8 +28,11 @@ use crate::{
 use chrono::DateTime;
 use identity_application::{
     error::{
-        StepUpChallenge, code::AppErrorCode,
-        codes::graphql_transport::GraphqlTransportErrorCode as TransportError,
+        ErrorCode, StepUpChallenge,
+        code::AppErrorCode,
+        codes::{
+            common::CommonErrorCode, graphql_transport::GraphqlTransportErrorCode as TransportError,
+        },
     },
     setting::application_origins,
 };
@@ -99,7 +102,7 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
         write_protocol_error(
             res,
             StatusCode::INTERNAL_SERVER_ERROR,
-            TransportError::Internal,
+            CommonErrorCode::InternalError,
             &locale,
             &correlation,
         );
@@ -109,7 +112,7 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
         write_protocol_error(
             res,
             StatusCode::INTERNAL_SERVER_ERROR,
-            TransportError::Internal,
+            CommonErrorCode::InternalError,
             &locale,
             &correlation,
         );
@@ -203,7 +206,7 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
                 write_protocol_error(
                     res,
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    TransportError::Internal,
+                    CommonErrorCode::InternalError,
                     &locale,
                     &correlation,
                 );
@@ -243,7 +246,7 @@ async fn graphql_handler(depot: &mut Depot, req: &mut Request, res: &mut Respons
         write_protocol_error(
             res,
             StatusCode::INTERNAL_SERVER_ERROR,
-            TransportError::Internal,
+            CommonErrorCode::InternalError,
             &locale,
             &correlation,
         );
@@ -424,7 +427,7 @@ fn set_graphql_response_headers(res: &mut Response) {
 /// Render a transport code from the catalog. Every transport code is defined in
 /// both locales, so initialization always happened before the server accepts a
 /// request; a missing catalog is a bug, not something to mask with fallback copy.
-fn localized_transport_error(code: TransportError, locale: &LanguageIdentifier) -> String {
+fn localized_transport_error(code: impl AppErrorCode, locale: &LanguageIdentifier) -> String {
     error_i18n()
         .expect("error i18n is initialized during startup")
         .t_code(locale, code.code())
@@ -477,12 +480,13 @@ fn write_unauthorized(
 fn write_protocol_error(
     res: &mut Response,
     status: StatusCode,
-    code: TransportError,
+    code: impl Into<ErrorCode>,
     locale: &LanguageIdentifier,
     correlation: &RequestCorrelation,
 ) {
+    let code = code.into();
     res.status_code(status);
-    let mut extensions = json!({"code": code.code(), "kind": format!("{:?}", code.kind()).to_lowercase(), "requestId": correlation.request_id});
+    let mut extensions = json!({"code": code.code(), "kind": code.kind().as_str(), "requestId": correlation.request_id});
     let mut envelope = json!({"requestId": correlation.request_id});
     if let Some(trace_id) = &correlation.trace_id {
         extensions["traceId"] = json!(trace_id);

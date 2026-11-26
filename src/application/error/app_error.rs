@@ -9,6 +9,7 @@ use identity_domain::auth::AuthenticationContextClass;
 use super::{
     code::AppErrorCode,
     codes::{ErrorCode, common},
+    diagnostics::ErrorContext,
     kind::ErrorKind,
     params::ErrorParams,
     validation::ValidationError,
@@ -43,6 +44,28 @@ pub struct AppError {
 impl AppError {
     pub fn internal(source: impl StdError + Send + Sync + 'static) -> Self {
         common::error::InternalError.with_source(source)
+    }
+
+    /// An unexpected failure at `operation`. Clients receive the generic
+    /// internal error; the log keeps the operation, the source and the stack.
+    pub fn internal_at(
+        operation: &'static str,
+        source: impl StdError + Send + Sync + 'static,
+    ) -> Self {
+        Self::internal(ErrorContext::new(operation, source))
+    }
+
+    /// `map_err` adapter for [`Self::internal_at`].
+    pub fn map_internal<E: StdError + Send + Sync + 'static>(
+        operation: &'static str,
+    ) -> impl FnOnce(E) -> Self {
+        move |source| Self::internal_at(operation, source)
+    }
+
+    /// An internal invariant failed at `operation` without an underlying
+    /// error, such as stored data that no longer parses.
+    pub fn invariant(operation: &'static str) -> Self {
+        Self::internal(ErrorContext::invariant(operation))
     }
 
     pub(crate) fn from_parts(code: impl Into<ErrorCode>, params: ErrorParams) -> Self {

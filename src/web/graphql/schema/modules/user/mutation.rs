@@ -2,7 +2,7 @@ use crate::graphql::schema::access::access;
 use async_graphql::{Context, Guard, MaybeUndefined, Object, Result};
 use identity_application::{
     authorization::ManagementTarget,
-    error::codes::graphql,
+    error::codes::{common, graphql},
     user::management::{CreateUserCommand, UpdateUserCommand, UserPassword},
 };
 use identity_domain::{
@@ -442,9 +442,9 @@ fn state_fields(
 }
 
 fn identifier(value: MaybeUndefined<String>, ctx: &Context<'_>) -> Result<Option<String>> {
-    optional_identifier(value).map_err(|_| app_error(ctx, graphql::error::ValidationFailed))
+    optional_identifier(value).map_err(|_| app_error(ctx, common::error::ValidationFailed))
 }
 
 fn reason_or_error(ctx: &Context<'_>, reason: &str) -> Result<String> {
-    normalize_reason(reason).ok_or_else(|| app_error(ctx, graphql::error::ValidationFailed))
+    normalize_reason(reason).ok_or_else(|| app_error(ctx, common::error::ValidationFailed))
 }

@@ -11,7 +11,7 @@ use super::AppError;
 pub struct ErrorContext {
     operation: &'static str,
     backtrace: Backtrace,
-    source: Box<dyn Error + Send + Sync>,
+    source: Option<Box<dyn Error + Send + Sync>>,
 }
 
 impl ErrorContext {
@@ -19,7 +19,17 @@ impl ErrorContext {
         Self {
             operation,
             backtrace: Backtrace::force_capture(),
-            source: Box::new(source),
+            source: Some(Box::new(source)),
+        }
+    }
+
+    /// An operation that failed an internal invariant without an underlying
+    /// error, such as stored data that no longer parses.
+    pub fn invariant(operation: &'static str) -> Self {
+        Self {
+            operation,
+            backtrace: Backtrace::force_capture(),
+            source: None,
         }
     }
 }
@@ -32,7 +42,9 @@ impl Display for ErrorContext {
 
 impl Error for ErrorContext {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
-        Some(self.source.as_ref())
+        self.source
+            .as_deref()
+            .map(|source| source as &(dyn Error + 'static))
     }
 }
 

@@ -4886,16 +4886,6 @@
     "module": "administrator.repository"
   },
   {
-    "code": 28000,
-    "group": "GraphqlErrorCode",
-    "name": "ValidationFailed",
-    "kind": "validation",
-    "fluentKey": "E28000",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql"
-  },
-  {
     "code": 28001,
     "group": "GraphqlErrorCode",
     "name": "InvalidCursor",
@@ -4960,16 +4950,6 @@
     "module": "graphql"
   },
   {
-    "code": 28007,
-    "group": "GraphqlErrorCode",
-    "name": "Forbidden",
-    "kind": "forbidden",
-    "fluentKey": "E28007",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql"
-  },
-  {
     "code": 28008,
     "group": "GraphqlErrorCode",
     "name": "RecentAuthenticationRequired",
@@ -4995,16 +4975,6 @@
     "name": "InvalidTheme",
     "kind": "validation",
     "fluentKey": "E28010",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql"
-  },
-  {
-    "code": 28011,
-    "group": "GraphqlErrorCode",
-    "name": "Internal",
-    "kind": "internal",
-    "fluentKey": "E28011",
     "requiredParams": [],
     "optionalParams": [],
     "module": "graphql"
@@ -5165,16 +5135,6 @@
     "name": "Unauthenticated",
     "kind": "unauthorized",
     "fluentKey": "E28107",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql.transport"
-  },
-  {
-    "code": 28108,
-    "group": "GraphqlTransportErrorCode",
-    "name": "Internal",
-    "kind": "internal",
-    "fluentKey": "E28108",
     "requiredParams": [],
     "optionalParams": [],
     "module": "graphql.transport"

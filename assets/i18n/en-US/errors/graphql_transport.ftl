@@ -6,7 +6,6 @@ E28104 = This operation requires a different HTTP method.
 E28105 = This origin is not allowed to access the API.
 E28106 = The request timed out. Please try again.
 E28107 = Sign in to continue.
-E28108 = The request could not be completed. Please try again later.
 E28109 = Your session is invalid or has expired. Please sign in again.
 E28110 = The query is nested more than { $max } levels deep.
 E28111 = The query exceeds the allowed complexity of { $max }.

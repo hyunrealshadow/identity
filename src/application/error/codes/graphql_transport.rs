@@ -9,7 +9,6 @@ define_error_codes! {
         OriginDenied = 28105 { kind: Forbidden },
         TimedOut = 28106 { kind: Internal },
         Unauthenticated = 28107 { kind: Unauthorized },
-        Internal = 28108 { kind: Internal },
         InvalidToken = 28109 { kind: Unauthorized },
         /// The document exceeds the configured selection depth.
         QueryTooDeep = 28110 { kind: Validation, required: [max] },

@@ -275,18 +275,15 @@ export const DeviceAuthorizationErrorCode = {
 } as const
 
 export const GraphqlErrorCode = {
-  ValidationFailed: 28000,
   InvalidCursor: 28001,
   PageSizeInvalid: 28002,
   InvalidGlobalId: 28003,
   UnsupportedNodeType: 28004,
   InsufficientScope: 28005,
   UserAuthenticationRequired: 28006,
-  Forbidden: 28007,
   RecentAuthenticationRequired: 28008,
   BrowserSessionRequired: 28009,
   InvalidTheme: 28010,
-  Internal: 28011,
   AuthenticationContextUnavailable: 28012,
   InvalidSessionId: 28013,
   PageArgumentsConflict: 28014,
@@ -306,7 +303,6 @@ export const GraphqlTransportErrorCode = {
   OriginDenied: 28105,
   TimedOut: 28106,
   Unauthenticated: 28107,
-  Internal: 28108,
   InvalidToken: 28109,
   QueryTooDeep: 28110,
   QueryTooComplex: 28111,

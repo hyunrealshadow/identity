@@ -6,7 +6,6 @@ define_error_codes! {
     /// checks and internal adapter failures. They are deliberately separate from
     /// the transport envelope codes (`GraphqlTransportErrorCode`, 28100-28199).
     pub enum GraphqlErrorCode(module = "graphql") {
-        ValidationFailed = 28000 { kind: Validation },
         InvalidCursor = 28001 { kind: Validation },
         PageSizeInvalid = 28002 { kind: Validation, required: [max] },
         InvalidGlobalId = 28003 { kind: Validation },
@@ -14,11 +13,9 @@ define_error_codes! {
         InsufficientScope = 28005 { kind: Forbidden, required: [scope] },
         /// A machine principal reached a field that only a signed-in user may use.
         UserAuthenticationRequired = 28006 { kind: Forbidden },
-        Forbidden = 28007 { kind: Forbidden },
         RecentAuthenticationRequired = 28008 { kind: Forbidden },
         BrowserSessionRequired = 28009 { kind: Forbidden },
         InvalidTheme = 28010 { kind: Validation },
-        Internal = 28011 { kind: Internal },
         AuthenticationContextUnavailable = 28012 { kind: Unauthorized },
         InvalidSessionId = 28013 { kind: Validation },
         PageArgumentsConflict = 28014 { kind: Validation },
