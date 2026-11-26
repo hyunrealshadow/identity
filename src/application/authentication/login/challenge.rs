@@ -1,8 +1,7 @@
 use super::{ChallengeOutcome, LoginService, SessionContext};
 use crate::{
     error::{
-        AppError,
-        code::AppErrorCode as _,
+        AppError, ErrorCode,
         codes::auth::{self, AuthErrorCode},
     },
     observability::{BusinessEvent, EventValue, error_outcome},
@@ -232,20 +231,18 @@ impl LoginService {
 /// rejections stay `rejected`; only unexpected internal failures are
 /// `failure`.
 fn authentication_outcome(error: &AppError) -> (&'static str, &'static str) {
-    match error.code() {
-        code if code == AuthErrorCode::InvalidCredential.code() => {
-            ("rejected", "invalid_credential")
-        }
-        code if code == AuthErrorCode::InvalidAccountOrPassword.code() => {
-            ("rejected", "invalid_credential")
-        }
-        code if code == AuthErrorCode::InvalidOtp.code() => ("rejected", "invalid_credential"),
-        code if code == AuthErrorCode::TooManyAttempts.code() => ("rejected", "too_many_attempts"),
-        code if code == AuthErrorCode::UserLocked.code() => ("rejected", "account_locked"),
-        code if code == AuthErrorCode::UserDisabled.code() => ("rejected", "account_disabled"),
-        code if code == AuthErrorCode::LoginExpired.code() => ("rejected", "login_expired"),
-        code if code == AuthErrorCode::InvalidLoginState.code() => ("rejected", "invalid_state"),
-        code if code == AuthErrorCode::UserNotFound.code() => ("rejected", "not_found"),
+    match error.error_code() {
+        ErrorCode::Auth(
+            AuthErrorCode::InvalidCredential
+            | AuthErrorCode::InvalidAccountOrPassword
+            | AuthErrorCode::InvalidOtp,
+        ) => ("rejected", "invalid_credential"),
+        ErrorCode::Auth(AuthErrorCode::TooManyAttempts) => ("rejected", "too_many_attempts"),
+        ErrorCode::Auth(AuthErrorCode::UserLocked) => ("rejected", "account_locked"),
+        ErrorCode::Auth(AuthErrorCode::UserDisabled) => ("rejected", "account_disabled"),
+        ErrorCode::Auth(AuthErrorCode::LoginExpired) => ("rejected", "login_expired"),
+        ErrorCode::Auth(AuthErrorCode::InvalidLoginState) => ("rejected", "invalid_state"),
+        ErrorCode::Auth(AuthErrorCode::UserNotFound) => ("rejected", "not_found"),
         _ => error_outcome(error),
     }
 }

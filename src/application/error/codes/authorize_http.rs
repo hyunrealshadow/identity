@@ -2,7 +2,7 @@ define_error_codes! {
     /// Error codes for the `/oauth2/authorize` HTTP layer:
     /// request extraction, method validation, and interaction routing.
     /// Range: 22000-22099
-    pub enum AuthorizeHttpErrorCode {
+    pub enum AuthorizeHttpErrorCode(module = "openid_connect.authorize_http") {
         /// POST request does not use `application/x-www-form-urlencoded` Content-Type.
         PostContentTypeInvalid = 22000 { kind: Validation },
         /// HTTP method is neither GET nor POST.

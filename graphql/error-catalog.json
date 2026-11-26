@@ -414,6 +414,202 @@
     "module": "auth"
   },
   {
+    "code": 12000,
+    "kind": "not_found",
+    "fluentKey": "E12000",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "key"
+  },
+  {
+    "code": 12001,
+    "kind": "unauthorized",
+    "fluentKey": "E12001",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "key"
+  },
+  {
+    "code": 12002,
+    "kind": "validation",
+    "fluentKey": "E12002",
+    "requiredParams": [
+      "algorithm"
+    ],
+    "optionalParams": [],
+    "module": "key"
+  },
+  {
+    "code": 12003,
+    "kind": "validation",
+    "fluentKey": "E12003",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "key"
+  },
+  {
+    "code": 12004,
+    "kind": "validation",
+    "fluentKey": "E12004",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "key"
+  },
+  {
+    "code": 12005,
+    "kind": "validation",
+    "fluentKey": "E12005",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "key"
+  },
+  {
+    "code": 12006,
+    "kind": "internal",
+    "fluentKey": "E12006",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "key"
+  },
+  {
+    "code": 12007,
+    "kind": "internal",
+    "fluentKey": "E12007",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "key"
+  },
+  {
+    "code": 13000,
+    "kind": "conflict",
+    "fluentKey": "E13000",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "install"
+  },
+  {
+    "code": 13001,
+    "kind": "validation",
+    "fluentKey": "E13001",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "install"
+  },
+  {
+    "code": 13002,
+    "kind": "validation",
+    "fluentKey": "E13002",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "install"
+  },
+  {
+    "code": 13003,
+    "kind": "validation",
+    "fluentKey": "E13003",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "install"
+  },
+  {
+    "code": 13004,
+    "kind": "validation",
+    "fluentKey": "E13004",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "install"
+  },
+  {
+    "code": 13005,
+    "kind": "validation",
+    "fluentKey": "E13005",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "install"
+  },
+  {
+    "code": 13006,
+    "kind": "validation",
+    "fluentKey": "E13006",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "install"
+  },
+  {
+    "code": 13007,
+    "kind": "conflict",
+    "fluentKey": "E13007",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "install"
+  },
+  {
+    "code": 13008,
+    "kind": "conflict",
+    "fluentKey": "E13008",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "install"
+  },
+  {
+    "code": 13009,
+    "kind": "validation",
+    "fluentKey": "E13009",
+    "requiredParams": [
+      "algorithm"
+    ],
+    "optionalParams": [],
+    "module": "install"
+  },
+  {
+    "code": 13010,
+    "kind": "validation",
+    "fluentKey": "E13010",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "install"
+  },
+  {
+    "code": 13011,
+    "kind": "validation",
+    "fluentKey": "E13011",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "install"
+  },
+  {
+    "code": 13012,
+    "kind": "validation",
+    "fluentKey": "E13012",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "install"
+  },
+  {
+    "code": 14000,
+    "kind": "validation",
+    "fluentKey": "E14000",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "data_protection"
+  },
+  {
+    "code": 14001,
+    "kind": "internal",
+    "fluentKey": "E14001",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "data_protection"
+  },
+  {
+    "code": 14002,
+    "kind": "internal",
+    "fluentKey": "E14002",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "data_protection"
+  },
+  {
     "code": 15000,
     "kind": "validation",
     "fluentKey": "E15000",
@@ -518,1958 +714,6 @@
     "requiredParams": [],
     "optionalParams": [],
     "module": "account"
-  },
-  {
-    "code": 23000,
-    "kind": "validation",
-    "fluentKey": "E23000",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23001,
-    "kind": "validation",
-    "fluentKey": "E23001",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23002,
-    "kind": "internal",
-    "fluentKey": "E23002",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23003,
-    "kind": "validation",
-    "fluentKey": "E23003",
-    "requiredParams": [
-      "response_type"
-    ],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23066,
-    "kind": "validation",
-    "fluentKey": "E23066",
-    "requiredParams": [
-      "response_mode"
-    ],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23004,
-    "kind": "validation",
-    "fluentKey": "E23004",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23005,
-    "kind": "validation",
-    "fluentKey": "E23005",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23006,
-    "kind": "validation",
-    "fluentKey": "E23006",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23007,
-    "kind": "validation",
-    "fluentKey": "E23007",
-    "requiredParams": [
-      "display"
-    ],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23008,
-    "kind": "validation",
-    "fluentKey": "E23008",
-    "requiredParams": [
-      "prompt"
-    ],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23057,
-    "kind": "validation",
-    "fluentKey": "E23057",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23009,
-    "kind": "validation",
-    "fluentKey": "E23009",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23010,
-    "kind": "validation",
-    "fluentKey": "E23010",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23011,
-    "kind": "validation",
-    "fluentKey": "E23011",
-    "requiredParams": [
-      "code_challenge_method"
-    ],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23012,
-    "kind": "validation",
-    "fluentKey": "E23012",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23013,
-    "kind": "validation",
-    "fluentKey": "E23013",
-    "requiredParams": [
-      "fields"
-    ],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23014,
-    "kind": "validation",
-    "fluentKey": "E23014",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23015,
-    "kind": "validation",
-    "fluentKey": "E23015",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23016,
-    "kind": "validation",
-    "fluentKey": "E23016",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23017,
-    "kind": "validation",
-    "fluentKey": "E23017",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23018,
-    "kind": "validation",
-    "fluentKey": "E23018",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23019,
-    "kind": "validation",
-    "fluentKey": "E23019",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23020,
-    "kind": "validation",
-    "fluentKey": "E23020",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23021,
-    "kind": "validation",
-    "fluentKey": "E23021",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23022,
-    "kind": "validation",
-    "fluentKey": "E23022",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23023,
-    "kind": "validation",
-    "fluentKey": "E23023",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23024,
-    "kind": "validation",
-    "fluentKey": "E23024",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23025,
-    "kind": "validation",
-    "fluentKey": "E23025",
-    "requiredParams": [
-      "alg"
-    ],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23026,
-    "kind": "internal",
-    "fluentKey": "E23026",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23027,
-    "kind": "validation",
-    "fluentKey": "E23027",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23028,
-    "kind": "validation",
-    "fluentKey": "E23028",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23029,
-    "kind": "validation",
-    "fluentKey": "E23029",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23030,
-    "kind": "validation",
-    "fluentKey": "E23030",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23031,
-    "kind": "validation",
-    "fluentKey": "E23031",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23032,
-    "kind": "validation",
-    "fluentKey": "E23032",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23033,
-    "kind": "validation",
-    "fluentKey": "E23033",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23034,
-    "kind": "validation",
-    "fluentKey": "E23034",
-    "requiredParams": [],
-    "optionalParams": [
-      "field"
-    ],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23035,
-    "kind": "validation",
-    "fluentKey": "E23035",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23036,
-    "kind": "validation",
-    "fluentKey": "E23036",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23037,
-    "kind": "validation",
-    "fluentKey": "E23037",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23038,
-    "kind": "validation",
-    "fluentKey": "E23038",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23039,
-    "kind": "validation",
-    "fluentKey": "E23039",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23040,
-    "kind": "validation",
-    "fluentKey": "E23040",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23041,
-    "kind": "validation",
-    "fluentKey": "E23041",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23042,
-    "kind": "internal",
-    "fluentKey": "E23042",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23043,
-    "kind": "internal",
-    "fluentKey": "E23043",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23044,
-    "kind": "internal",
-    "fluentKey": "E23044",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23045,
-    "kind": "internal",
-    "fluentKey": "E23045",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23046,
-    "kind": "validation",
-    "fluentKey": "E23046",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23047,
-    "kind": "validation",
-    "fluentKey": "E23047",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23048,
-    "kind": "internal",
-    "fluentKey": "E23048",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23049,
-    "kind": "internal",
-    "fluentKey": "E23049",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23050,
-    "kind": "internal",
-    "fluentKey": "E23050",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23051,
-    "kind": "validation",
-    "fluentKey": "E23051",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23052,
-    "kind": "internal",
-    "fluentKey": "E23052",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23053,
-    "kind": "internal",
-    "fluentKey": "E23053",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23054,
-    "kind": "internal",
-    "fluentKey": "E23054",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23055,
-    "kind": "validation",
-    "fluentKey": "E23055",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23056,
-    "kind": "validation",
-    "fluentKey": "E23056",
-    "requiredParams": [
-      "scopes"
-    ],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23058,
-    "kind": "validation",
-    "fluentKey": "E23058",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23059,
-    "kind": "validation",
-    "fluentKey": "E23059",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23060,
-    "kind": "validation",
-    "fluentKey": "E23060",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23061,
-    "kind": "validation",
-    "fluentKey": "E23061",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23062,
-    "kind": "validation",
-    "fluentKey": "E23062",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23063,
-    "kind": "internal",
-    "fluentKey": "E23063",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23064,
-    "kind": "internal",
-    "fluentKey": "E23064",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23065,
-    "kind": "internal",
-    "fluentKey": "E23065",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23067,
-    "kind": "validation",
-    "fluentKey": "E23067",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 23068,
-    "kind": "validation",
-    "fluentKey": "E23068",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.authorize"
-  },
-  {
-    "code": 26001,
-    "kind": "validation",
-    "fluentKey": "E26001",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.device"
-  },
-  {
-    "code": 26002,
-    "kind": "validation",
-    "fluentKey": "E26002",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.device"
-  },
-  {
-    "code": 26003,
-    "kind": "validation",
-    "fluentKey": "E26003",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.device"
-  },
-  {
-    "code": 26005,
-    "kind": "internal",
-    "fluentKey": "E26005",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.device"
-  },
-  {
-    "code": 26006,
-    "kind": "internal",
-    "fluentKey": "E26006",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.device"
-  },
-  {
-    "code": 26007,
-    "kind": "internal",
-    "fluentKey": "E26007",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.device"
-  },
-  {
-    "code": 26009,
-    "kind": "internal",
-    "fluentKey": "E26009",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.device"
-  },
-  {
-    "code": 26023,
-    "kind": "internal",
-    "fluentKey": "E26023",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.device"
-  },
-  {
-    "code": 26010,
-    "kind": "validation",
-    "fluentKey": "E26010",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.device"
-  },
-  {
-    "code": 26012,
-    "kind": "internal",
-    "fluentKey": "E26012",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.device"
-  },
-  {
-    "code": 26013,
-    "kind": "internal",
-    "fluentKey": "E26013",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.device"
-  },
-  {
-    "code": 26014,
-    "kind": "conflict",
-    "fluentKey": "E26014",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.device"
-  },
-  {
-    "code": 26015,
-    "kind": "internal",
-    "fluentKey": "E26015",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.device"
-  },
-  {
-    "code": 26016,
-    "kind": "internal",
-    "fluentKey": "E26016",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.device"
-  },
-  {
-    "code": 26017,
-    "kind": "internal",
-    "fluentKey": "E26017",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.device"
-  },
-  {
-    "code": 26020,
-    "kind": "internal",
-    "fluentKey": "E26020",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.device"
-  },
-  {
-    "code": 26021,
-    "kind": "validation",
-    "fluentKey": "E26021",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.device"
-  },
-  {
-    "code": 26018,
-    "kind": "validation",
-    "fluentKey": "E26018",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.device"
-  },
-  {
-    "code": 26019,
-    "kind": "gone",
-    "fluentKey": "E26019",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.device"
-  },
-  {
-    "code": 26022,
-    "kind": "unauthorized",
-    "fluentKey": "E26022",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.device"
-  },
-  {
-    "code": 24000,
-    "kind": "validation",
-    "fluentKey": "E24000",
-    "requiredParams": [
-      "grant_type"
-    ],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24001,
-    "kind": "validation",
-    "fluentKey": "E24001",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24002,
-    "kind": "internal",
-    "fluentKey": "E24002",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24003,
-    "kind": "validation",
-    "fluentKey": "E24003",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24004,
-    "kind": "validation",
-    "fluentKey": "E24004",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24005,
-    "kind": "validation",
-    "fluentKey": "E24005",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24052,
-    "kind": "validation",
-    "fluentKey": "E24052",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24053,
-    "kind": "validation",
-    "fluentKey": "E24053",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24054,
-    "kind": "validation",
-    "fluentKey": "E24054",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24055,
-    "kind": "validation",
-    "fluentKey": "E24055",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24056,
-    "kind": "validation",
-    "fluentKey": "E24056",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24057,
-    "kind": "validation",
-    "fluentKey": "E24057",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24058,
-    "kind": "validation",
-    "fluentKey": "E24058",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24059,
-    "kind": "validation",
-    "fluentKey": "E24059",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24060,
-    "kind": "internal",
-    "fluentKey": "E24060",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24006,
-    "kind": "internal",
-    "fluentKey": "E24006",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24007,
-    "kind": "validation",
-    "fluentKey": "E24007",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24008,
-    "kind": "validation",
-    "fluentKey": "E24008",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24009,
-    "kind": "internal",
-    "fluentKey": "E24009",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24010,
-    "kind": "internal",
-    "fluentKey": "E24010",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24011,
-    "kind": "validation",
-    "fluentKey": "E24011",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24012,
-    "kind": "internal",
-    "fluentKey": "E24012",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24013,
-    "kind": "internal",
-    "fluentKey": "E24013",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24014,
-    "kind": "validation",
-    "fluentKey": "E24014",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24015,
-    "kind": "validation",
-    "fluentKey": "E24015",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24016,
-    "kind": "internal",
-    "fluentKey": "E24016",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24017,
-    "kind": "validation",
-    "fluentKey": "E24017",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24018,
-    "kind": "validation",
-    "fluentKey": "E24018",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24019,
-    "kind": "validation",
-    "fluentKey": "E24019",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24020,
-    "kind": "validation",
-    "fluentKey": "E24020",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24021,
-    "kind": "validation",
-    "fluentKey": "E24021",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24022,
-    "kind": "validation",
-    "fluentKey": "E24022",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24023,
-    "kind": "internal",
-    "fluentKey": "E24023",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24024,
-    "kind": "internal",
-    "fluentKey": "E24024",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24025,
-    "kind": "internal",
-    "fluentKey": "E24025",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24026,
-    "kind": "validation",
-    "fluentKey": "E24026",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24027,
-    "kind": "validation",
-    "fluentKey": "E24027",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24028,
-    "kind": "internal",
-    "fluentKey": "E24028",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24029,
-    "kind": "internal",
-    "fluentKey": "E24029",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24030,
-    "kind": "validation",
-    "fluentKey": "E24030",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24031,
-    "kind": "validation",
-    "fluentKey": "E24031",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24032,
-    "kind": "validation",
-    "fluentKey": "E24032",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24033,
-    "kind": "validation",
-    "fluentKey": "E24033",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24034,
-    "kind": "validation",
-    "fluentKey": "E24034",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24035,
-    "kind": "validation",
-    "fluentKey": "E24035",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24036,
-    "kind": "validation",
-    "fluentKey": "E24036",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24037,
-    "kind": "validation",
-    "fluentKey": "E24037",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24038,
-    "kind": "validation",
-    "fluentKey": "E24038",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24039,
-    "kind": "validation",
-    "fluentKey": "E24039",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24040,
-    "kind": "validation",
-    "fluentKey": "E24040",
-    "requiredParams": [
-      "alg"
-    ],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24041,
-    "kind": "validation",
-    "fluentKey": "E24041",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24042,
-    "kind": "validation",
-    "fluentKey": "E24042",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24043,
-    "kind": "internal",
-    "fluentKey": "E24043",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24044,
-    "kind": "internal",
-    "fluentKey": "E24044",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24045,
-    "kind": "internal",
-    "fluentKey": "E24045",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24046,
-    "kind": "internal",
-    "fluentKey": "E24046",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24047,
-    "kind": "internal",
-    "fluentKey": "E24047",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24048,
-    "kind": "validation",
-    "fluentKey": "E24048",
-    "requiredParams": [
-      "code_challenge_method"
-    ],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24049,
-    "kind": "validation",
-    "fluentKey": "E24049",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24050,
-    "kind": "internal",
-    "fluentKey": "E24050",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24051,
-    "kind": "internal",
-    "fluentKey": "E24051",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24061,
-    "kind": "validation",
-    "fluentKey": "E24061",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24062,
-    "kind": "validation",
-    "fluentKey": "E24062",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24063,
-    "kind": "validation",
-    "fluentKey": "E24063",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24064,
-    "kind": "validation",
-    "fluentKey": "E24064",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24065,
-    "kind": "validation",
-    "fluentKey": "E24065",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24066,
-    "kind": "validation",
-    "fluentKey": "E24066",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24067,
-    "kind": "validation",
-    "fluentKey": "E24067",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24068,
-    "kind": "validation",
-    "fluentKey": "E24068",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24069,
-    "kind": "validation",
-    "fluentKey": "E24069",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24070,
-    "kind": "internal",
-    "fluentKey": "E24070",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24071,
-    "kind": "internal",
-    "fluentKey": "E24071",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24072,
-    "kind": "internal",
-    "fluentKey": "E24072",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24073,
-    "kind": "internal",
-    "fluentKey": "E24073",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24074,
-    "kind": "validation",
-    "fluentKey": "E24074",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 24075,
-    "kind": "validation",
-    "fluentKey": "E24075",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.token"
-  },
-  {
-    "code": 21000,
-    "kind": "unauthorized",
-    "fluentKey": "E21000",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.user_info"
-  },
-  {
-    "code": 21001,
-    "kind": "forbidden",
-    "fluentKey": "E21001",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.user_info"
-  },
-  {
-    "code": 21002,
-    "kind": "not_found",
-    "fluentKey": "E21002",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.user_info"
-  },
-  {
-    "code": 21003,
-    "kind": "validation",
-    "fluentKey": "E21003",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.user_info"
-  },
-  {
-    "code": 21004,
-    "kind": "validation",
-    "fluentKey": "E21004",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.user_info"
-  },
-  {
-    "code": 21005,
-    "kind": "validation",
-    "fluentKey": "E21005",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.user_info"
-  },
-  {
-    "code": 21006,
-    "kind": "validation",
-    "fluentKey": "E21006",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.user_info"
-  },
-  {
-    "code": 21007,
-    "kind": "validation",
-    "fluentKey": "E21007",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.user_info"
-  },
-  {
-    "code": 21008,
-    "kind": "internal",
-    "fluentKey": "E21008",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.user_info"
-  },
-  {
-    "code": 21009,
-    "kind": "validation",
-    "fluentKey": "E21009",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.user_info"
-  },
-  {
-    "code": 21010,
-    "kind": "validation",
-    "fluentKey": "E21010",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.user_info"
-  },
-  {
-    "code": 21011,
-    "kind": "validation",
-    "fluentKey": "E21011",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.user_info"
-  },
-  {
-    "code": 21012,
-    "kind": "validation",
-    "fluentKey": "E21012",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.user_info"
-  },
-  {
-    "code": 21013,
-    "kind": "validation",
-    "fluentKey": "E21013",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.user_info"
-  },
-  {
-    "code": 21014,
-    "kind": "validation",
-    "fluentKey": "E21014",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "openid_connect.user_info"
-  },
-  {
-    "code": 28000,
-    "kind": "validation",
-    "fluentKey": "E28000",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql"
-  },
-  {
-    "code": 28001,
-    "kind": "validation",
-    "fluentKey": "E28001",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql"
-  },
-  {
-    "code": 28002,
-    "kind": "validation",
-    "fluentKey": "E28002",
-    "requiredParams": [
-      "max"
-    ],
-    "optionalParams": [],
-    "module": "graphql"
-  },
-  {
-    "code": 28003,
-    "kind": "validation",
-    "fluentKey": "E28003",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql"
-  },
-  {
-    "code": 28004,
-    "kind": "validation",
-    "fluentKey": "E28004",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql"
-  },
-  {
-    "code": 28005,
-    "kind": "forbidden",
-    "fluentKey": "E28005",
-    "requiredParams": [
-      "scope"
-    ],
-    "optionalParams": [],
-    "module": "graphql"
-  },
-  {
-    "code": 28006,
-    "kind": "unauthorized",
-    "fluentKey": "E28006",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql"
-  },
-  {
-    "code": 28007,
-    "kind": "forbidden",
-    "fluentKey": "E28007",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql"
-  },
-  {
-    "code": 28008,
-    "kind": "forbidden",
-    "fluentKey": "E28008",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql"
-  },
-  {
-    "code": 28009,
-    "kind": "forbidden",
-    "fluentKey": "E28009",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql"
-  },
-  {
-    "code": 28010,
-    "kind": "validation",
-    "fluentKey": "E28010",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql"
-  },
-  {
-    "code": 28011,
-    "kind": "internal",
-    "fluentKey": "E28011",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql"
-  },
-  {
-    "code": 28012,
-    "kind": "unauthorized",
-    "fluentKey": "E28012",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql"
-  },
-  {
-    "code": 28013,
-    "kind": "validation",
-    "fluentKey": "E28013",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql"
-  },
-  {
-    "code": 28014,
-    "kind": "validation",
-    "fluentKey": "E28014",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql"
-  },
-  {
-    "code": 28015,
-    "kind": "internal",
-    "fluentKey": "E28015",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql"
-  },
-  {
-    "code": 28016,
-    "kind": "validation",
-    "fluentKey": "E28016",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql"
-  },
-  {
-    "code": 28017,
-    "kind": "validation",
-    "fluentKey": "E28017",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql"
-  },
-  {
-    "code": 28018,
-    "kind": "internal",
-    "fluentKey": "E28018",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql"
-  },
-  {
-    "code": 28019,
-    "kind": "not_found",
-    "fluentKey": "E28019",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql"
-  },
-  {
-    "code": 28100,
-    "kind": "validation",
-    "fluentKey": "E28100",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql.transport"
-  },
-  {
-    "code": 28101,
-    "kind": "validation",
-    "fluentKey": "E28101",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql.transport"
-  },
-  {
-    "code": 28102,
-    "kind": "validation",
-    "fluentKey": "E28102",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql.transport"
-  },
-  {
-    "code": 28103,
-    "kind": "validation",
-    "fluentKey": "E28103",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql.transport"
-  },
-  {
-    "code": 28104,
-    "kind": "validation",
-    "fluentKey": "E28104",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql.transport"
-  },
-  {
-    "code": 28105,
-    "kind": "forbidden",
-    "fluentKey": "E28105",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql.transport"
-  },
-  {
-    "code": 28106,
-    "kind": "internal",
-    "fluentKey": "E28106",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql.transport"
-  },
-  {
-    "code": 28107,
-    "kind": "unauthorized",
-    "fluentKey": "E28107",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql.transport"
-  },
-  {
-    "code": 28108,
-    "kind": "internal",
-    "fluentKey": "E28108",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql.transport"
-  },
-  {
-    "code": 28109,
-    "kind": "unauthorized",
-    "fluentKey": "E28109",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "graphql.transport"
-  },
-  {
-    "code": 28110,
-    "kind": "validation",
-    "fluentKey": "E28110",
-    "requiredParams": [
-      "max"
-    ],
-    "optionalParams": [],
-    "module": "graphql.transport"
-  },
-  {
-    "code": 28111,
-    "kind": "validation",
-    "fluentKey": "E28111",
-    "requiredParams": [
-      "max"
-    ],
-    "optionalParams": [],
-    "module": "graphql.transport"
-  },
-  {
-    "code": 27000,
-    "kind": "unauthorized",
-    "fluentKey": "E27000",
-    "requiredParams": [],
-    "optionalParams": [
-      "principal_kind"
-    ],
-    "module": "authorization.policy"
-  },
-  {
-    "code": 27001,
-    "kind": "unauthorized",
-    "fluentKey": "E27001",
-    "requiredParams": [],
-    "optionalParams": [
-      "principal_kind"
-    ],
-    "module": "authorization.guards"
-  },
-  {
-    "code": 27002,
-    "kind": "forbidden",
-    "fluentKey": "E27002",
-    "requiredParams": [
-      "required_scope"
-    ],
-    "optionalParams": [],
-    "module": "authorization.guards"
-  },
-  {
-    "code": 27003,
-    "kind": "forbidden",
-    "fluentKey": "E27003",
-    "requiredParams": [],
-    "optionalParams": [
-      "required_scope"
-    ],
-    "module": "authorization.policy"
-  },
-  {
-    "code": 27004,
-    "kind": "forbidden",
-    "fluentKey": "E27004",
-    "requiredParams": [],
-    "optionalParams": [
-      "target_type"
-    ],
-    "module": "authorization.policy"
-  },
-  {
-    "code": 27005,
-    "kind": "unauthorized",
-    "fluentKey": "E27005",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "authorization.snapshot"
-  },
-  {
-    "code": 27006,
-    "kind": "unauthorized",
-    "fluentKey": "E27006",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "authorization.snapshot"
-  },
-  {
-    "code": 27007,
-    "kind": "conflict",
-    "fluentKey": "E27007",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "authorization.owner"
-  },
-  {
-    "code": 27008,
-    "kind": "forbidden",
-    "fluentKey": "E27008",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "authorization.owner"
-  },
-  {
-    "code": 27011,
-    "kind": "not_found",
-    "fluentKey": "E27011",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "authorization.snapshot"
-  },
-  {
-    "code": 27014,
-    "kind": "conflict",
-    "fluentKey": "E27014",
-    "requiredParams": [],
-    "optionalParams": [
-      "permission"
-    ],
-    "module": "rbac.repository"
-  },
-  {
-    "code": 27015,
-    "kind": "validation",
-    "fluentKey": "E27015",
-    "requiredParams": [
-      "scope"
-    ],
-    "optionalParams": [],
-    "module": "authorization.catalog"
-  },
-  {
-    "code": 27016,
-    "kind": "validation",
-    "fluentKey": "E27016",
-    "requiredParams": [
-      "scope"
-    ],
-    "optionalParams": [],
-    "module": "authorization.catalog"
-  },
-  {
-    "code": 27017,
-    "kind": "validation",
-    "fluentKey": "E27017",
-    "requiredParams": [
-      "scope"
-    ],
-    "optionalParams": [
-      "reason_code"
-    ],
-    "module": "rbac.boundary"
-  },
-  {
-    "code": 27018,
-    "kind": "internal",
-    "fluentKey": "E27018",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "rbac.policy"
-  },
-  {
-    "code": 27019,
-    "kind": "internal",
-    "fluentKey": "E27019",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "authorization.audit"
-  },
-  {
-    "code": 27020,
-    "kind": "validation",
-    "fluentKey": "E27020",
-    "requiredParams": [],
-    "optionalParams": [
-      "target_type"
-    ],
-    "module": "authorization.policy"
-  },
-  {
-    "code": 27021,
-    "kind": "unauthorized",
-    "fluentKey": "E27021",
-    "requiredParams": [
-      "required_authentication"
-    ],
-    "optionalParams": [],
-    "module": "authorization.policy"
-  },
-  {
-    "code": 27022,
-    "kind": "forbidden",
-    "fluentKey": "E27022",
-    "requiredParams": [
-      "scope"
-    ],
-    "optionalParams": [],
-    "module": "authorization.policy"
-  },
-  {
-    "code": 27023,
-    "kind": "forbidden",
-    "fluentKey": "E27023",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "authorization.policy"
-  },
-  {
-    "code": 27024,
-    "kind": "unauthorized",
-    "fluentKey": "E27024",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "authorization.snapshot"
-  },
-  {
-    "code": 27026,
-    "kind": "validation",
-    "fluentKey": "E27026",
-    "requiredParams": [],
-    "optionalParams": [
-      "field"
-    ],
-    "module": "rbac.model"
-  },
-  {
-    "code": 27027,
-    "kind": "validation",
-    "fluentKey": "E27027",
-    "requiredParams": [],
-    "optionalParams": [
-      "field"
-    ],
-    "module": "rbac.model"
-  },
-  {
-    "code": 27028,
-    "kind": "conflict",
-    "fluentKey": "E27028",
-    "requiredParams": [
-      "current_version"
-    ],
-    "optionalParams": [],
-    "module": "administrator.repository"
   },
   {
     "code": 16000,
@@ -3566,169 +1810,6 @@
     "module": "client"
   },
   {
-    "code": 29000,
-    "kind": "conflict",
-    "fluentKey": "E29000",
-    "requiredParams": [],
-    "optionalParams": [
-      "current_version"
-    ],
-    "module": "instance"
-  },
-  {
-    "code": 29001,
-    "kind": "validation",
-    "fluentKey": "E29001",
-    "requiredParams": [
-      "min",
-      "max"
-    ],
-    "optionalParams": [],
-    "module": "instance"
-  },
-  {
-    "code": 29002,
-    "kind": "validation",
-    "fluentKey": "E29002",
-    "requiredParams": [
-      "max"
-    ],
-    "optionalParams": [],
-    "module": "instance"
-  },
-  {
-    "code": 29003,
-    "kind": "internal",
-    "fluentKey": "E29003",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "instance"
-  },
-  {
-    "code": 29004,
-    "kind": "not_found",
-    "fluentKey": "E29004",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "instance"
-  },
-  {
-    "code": 29005,
-    "kind": "conflict",
-    "fluentKey": "E29005",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "instance"
-  },
-  {
-    "code": 29006,
-    "kind": "conflict",
-    "fluentKey": "E29006",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "instance"
-  },
-  {
-    "code": 29007,
-    "kind": "conflict",
-    "fluentKey": "E29007",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "instance"
-  },
-  {
-    "code": 29008,
-    "kind": "validation",
-    "fluentKey": "E29008",
-    "requiredParams": [
-      "algorithm"
-    ],
-    "optionalParams": [],
-    "module": "instance"
-  },
-  {
-    "code": 29009,
-    "kind": "conflict",
-    "fluentKey": "E29009",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "instance"
-  },
-  {
-    "code": 29010,
-    "kind": "validation",
-    "fluentKey": "E29010",
-    "requiredParams": [
-      "detail"
-    ],
-    "optionalParams": [],
-    "module": "instance"
-  },
-  {
-    "code": 29011,
-    "kind": "internal",
-    "fluentKey": "E29011",
-    "requiredParams": [
-      "detail"
-    ],
-    "optionalParams": [],
-    "module": "instance"
-  },
-  {
-    "code": 29012,
-    "kind": "validation",
-    "fluentKey": "E29012",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "instance"
-  },
-  {
-    "code": 29013,
-    "kind": "validation",
-    "fluentKey": "E29013",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "instance"
-  },
-  {
-    "code": 29014,
-    "kind": "validation",
-    "fluentKey": "E29014",
-    "requiredParams": [],
-    "optionalParams": [],
-    "module": "instance"
-  },
-  {
-    "code": 29015,
-    "kind": "validation",
-    "fluentKey": "E29015",
-    "requiredParams": [
-      "locale"
-    ],
-    "optionalParams": [],
-    "module": "instance"
-  },
-  {
-    "code": 29016,
-    "kind": "validation",
-    "fluentKey": "E29016",
-    "requiredParams": [
-      "max"
-    ],
-    "optionalParams": [],
-    "module": "instance"
-  },
-  {
-    "code": 29017,
-    "kind": "validation",
-    "fluentKey": "E29017",
-    "requiredParams": [
-      "locale"
-    ],
-    "optionalParams": [],
-    "module": "instance"
-  },
-  {
     "code": 19000,
     "kind": "validation",
     "fluentKey": "E19000",
@@ -3963,6 +2044,2349 @@
     "requiredParams": [],
     "optionalParams": [],
     "module": "rbac.group"
+  },
+  {
+    "code": 20000,
+    "kind": "validation",
+    "fluentKey": "E20000",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.provider"
+  },
+  {
+    "code": 20001,
+    "kind": "validation",
+    "fluentKey": "E20001",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.provider"
+  },
+  {
+    "code": 20002,
+    "kind": "validation",
+    "fluentKey": "E20002",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.provider"
+  },
+  {
+    "code": 20003,
+    "kind": "validation",
+    "fluentKey": "E20003",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.provider"
+  },
+  {
+    "code": 20004,
+    "kind": "internal",
+    "fluentKey": "E20004",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.provider"
+  },
+  {
+    "code": 20005,
+    "kind": "internal",
+    "fluentKey": "E20005",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.provider"
+  },
+  {
+    "code": 21000,
+    "kind": "unauthorized",
+    "fluentKey": "E21000",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.user_info"
+  },
+  {
+    "code": 21001,
+    "kind": "forbidden",
+    "fluentKey": "E21001",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.user_info"
+  },
+  {
+    "code": 21002,
+    "kind": "not_found",
+    "fluentKey": "E21002",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.user_info"
+  },
+  {
+    "code": 21003,
+    "kind": "validation",
+    "fluentKey": "E21003",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.user_info"
+  },
+  {
+    "code": 21004,
+    "kind": "validation",
+    "fluentKey": "E21004",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.user_info"
+  },
+  {
+    "code": 21005,
+    "kind": "validation",
+    "fluentKey": "E21005",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.user_info"
+  },
+  {
+    "code": 21006,
+    "kind": "validation",
+    "fluentKey": "E21006",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.user_info"
+  },
+  {
+    "code": 21007,
+    "kind": "validation",
+    "fluentKey": "E21007",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.user_info"
+  },
+  {
+    "code": 21008,
+    "kind": "internal",
+    "fluentKey": "E21008",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.user_info"
+  },
+  {
+    "code": 21009,
+    "kind": "validation",
+    "fluentKey": "E21009",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.user_info"
+  },
+  {
+    "code": 21010,
+    "kind": "validation",
+    "fluentKey": "E21010",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.user_info"
+  },
+  {
+    "code": 21011,
+    "kind": "validation",
+    "fluentKey": "E21011",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.user_info"
+  },
+  {
+    "code": 21012,
+    "kind": "validation",
+    "fluentKey": "E21012",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.user_info"
+  },
+  {
+    "code": 21013,
+    "kind": "validation",
+    "fluentKey": "E21013",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.user_info"
+  },
+  {
+    "code": 21014,
+    "kind": "validation",
+    "fluentKey": "E21014",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.user_info"
+  },
+  {
+    "code": 22000,
+    "kind": "validation",
+    "fluentKey": "E22000",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize_http"
+  },
+  {
+    "code": 22001,
+    "kind": "validation",
+    "fluentKey": "E22001",
+    "requiredParams": [
+      "method"
+    ],
+    "optionalParams": [],
+    "module": "openid_connect.authorize_http"
+  },
+  {
+    "code": 22002,
+    "kind": "validation",
+    "fluentKey": "E22002",
+    "requiredParams": [
+      "fields"
+    ],
+    "optionalParams": [],
+    "module": "openid_connect.authorize_http"
+  },
+  {
+    "code": 22003,
+    "kind": "validation",
+    "fluentKey": "E22003",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize_http"
+  },
+  {
+    "code": 22004,
+    "kind": "validation",
+    "fluentKey": "E22004",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize_http"
+  },
+  {
+    "code": 22005,
+    "kind": "gone",
+    "fluentKey": "E22005",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize_http"
+  },
+  {
+    "code": 22006,
+    "kind": "internal",
+    "fluentKey": "E22006",
+    "requiredParams": [
+      "interaction"
+    ],
+    "optionalParams": [],
+    "module": "openid_connect.authorize_http"
+  },
+  {
+    "code": 23000,
+    "kind": "validation",
+    "fluentKey": "E23000",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23001,
+    "kind": "validation",
+    "fluentKey": "E23001",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23002,
+    "kind": "internal",
+    "fluentKey": "E23002",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23003,
+    "kind": "validation",
+    "fluentKey": "E23003",
+    "requiredParams": [
+      "response_type"
+    ],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23066,
+    "kind": "validation",
+    "fluentKey": "E23066",
+    "requiredParams": [
+      "response_mode"
+    ],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23004,
+    "kind": "validation",
+    "fluentKey": "E23004",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23005,
+    "kind": "validation",
+    "fluentKey": "E23005",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23006,
+    "kind": "validation",
+    "fluentKey": "E23006",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23007,
+    "kind": "validation",
+    "fluentKey": "E23007",
+    "requiredParams": [
+      "display"
+    ],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23008,
+    "kind": "validation",
+    "fluentKey": "E23008",
+    "requiredParams": [
+      "prompt"
+    ],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23057,
+    "kind": "validation",
+    "fluentKey": "E23057",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23009,
+    "kind": "validation",
+    "fluentKey": "E23009",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23010,
+    "kind": "validation",
+    "fluentKey": "E23010",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23011,
+    "kind": "validation",
+    "fluentKey": "E23011",
+    "requiredParams": [
+      "code_challenge_method"
+    ],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23012,
+    "kind": "validation",
+    "fluentKey": "E23012",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23013,
+    "kind": "validation",
+    "fluentKey": "E23013",
+    "requiredParams": [
+      "fields"
+    ],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23014,
+    "kind": "validation",
+    "fluentKey": "E23014",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23015,
+    "kind": "validation",
+    "fluentKey": "E23015",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23016,
+    "kind": "validation",
+    "fluentKey": "E23016",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23017,
+    "kind": "validation",
+    "fluentKey": "E23017",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23018,
+    "kind": "validation",
+    "fluentKey": "E23018",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23019,
+    "kind": "validation",
+    "fluentKey": "E23019",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23020,
+    "kind": "validation",
+    "fluentKey": "E23020",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23021,
+    "kind": "validation",
+    "fluentKey": "E23021",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23022,
+    "kind": "validation",
+    "fluentKey": "E23022",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23023,
+    "kind": "validation",
+    "fluentKey": "E23023",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23024,
+    "kind": "validation",
+    "fluentKey": "E23024",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23025,
+    "kind": "validation",
+    "fluentKey": "E23025",
+    "requiredParams": [
+      "alg"
+    ],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23026,
+    "kind": "internal",
+    "fluentKey": "E23026",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23027,
+    "kind": "validation",
+    "fluentKey": "E23027",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23028,
+    "kind": "validation",
+    "fluentKey": "E23028",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23029,
+    "kind": "validation",
+    "fluentKey": "E23029",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23030,
+    "kind": "validation",
+    "fluentKey": "E23030",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23031,
+    "kind": "validation",
+    "fluentKey": "E23031",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23032,
+    "kind": "validation",
+    "fluentKey": "E23032",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23033,
+    "kind": "validation",
+    "fluentKey": "E23033",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23034,
+    "kind": "validation",
+    "fluentKey": "E23034",
+    "requiredParams": [],
+    "optionalParams": [
+      "field"
+    ],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23035,
+    "kind": "validation",
+    "fluentKey": "E23035",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23036,
+    "kind": "validation",
+    "fluentKey": "E23036",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23037,
+    "kind": "validation",
+    "fluentKey": "E23037",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23038,
+    "kind": "validation",
+    "fluentKey": "E23038",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23039,
+    "kind": "validation",
+    "fluentKey": "E23039",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23040,
+    "kind": "validation",
+    "fluentKey": "E23040",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23041,
+    "kind": "validation",
+    "fluentKey": "E23041",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23042,
+    "kind": "internal",
+    "fluentKey": "E23042",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23043,
+    "kind": "internal",
+    "fluentKey": "E23043",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23044,
+    "kind": "internal",
+    "fluentKey": "E23044",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23045,
+    "kind": "internal",
+    "fluentKey": "E23045",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23046,
+    "kind": "validation",
+    "fluentKey": "E23046",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23047,
+    "kind": "validation",
+    "fluentKey": "E23047",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23048,
+    "kind": "internal",
+    "fluentKey": "E23048",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23049,
+    "kind": "internal",
+    "fluentKey": "E23049",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23050,
+    "kind": "internal",
+    "fluentKey": "E23050",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23051,
+    "kind": "validation",
+    "fluentKey": "E23051",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23052,
+    "kind": "internal",
+    "fluentKey": "E23052",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23053,
+    "kind": "internal",
+    "fluentKey": "E23053",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23054,
+    "kind": "internal",
+    "fluentKey": "E23054",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23055,
+    "kind": "validation",
+    "fluentKey": "E23055",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23056,
+    "kind": "validation",
+    "fluentKey": "E23056",
+    "requiredParams": [
+      "scopes"
+    ],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23058,
+    "kind": "validation",
+    "fluentKey": "E23058",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23059,
+    "kind": "validation",
+    "fluentKey": "E23059",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23060,
+    "kind": "validation",
+    "fluentKey": "E23060",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23061,
+    "kind": "validation",
+    "fluentKey": "E23061",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23062,
+    "kind": "validation",
+    "fluentKey": "E23062",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23063,
+    "kind": "internal",
+    "fluentKey": "E23063",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23064,
+    "kind": "internal",
+    "fluentKey": "E23064",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23065,
+    "kind": "internal",
+    "fluentKey": "E23065",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23067,
+    "kind": "validation",
+    "fluentKey": "E23067",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 23068,
+    "kind": "validation",
+    "fluentKey": "E23068",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.authorize"
+  },
+  {
+    "code": 24000,
+    "kind": "validation",
+    "fluentKey": "E24000",
+    "requiredParams": [
+      "grant_type"
+    ],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24001,
+    "kind": "validation",
+    "fluentKey": "E24001",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24002,
+    "kind": "internal",
+    "fluentKey": "E24002",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24003,
+    "kind": "validation",
+    "fluentKey": "E24003",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24004,
+    "kind": "validation",
+    "fluentKey": "E24004",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24005,
+    "kind": "validation",
+    "fluentKey": "E24005",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24052,
+    "kind": "validation",
+    "fluentKey": "E24052",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24053,
+    "kind": "validation",
+    "fluentKey": "E24053",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24054,
+    "kind": "validation",
+    "fluentKey": "E24054",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24055,
+    "kind": "validation",
+    "fluentKey": "E24055",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24056,
+    "kind": "validation",
+    "fluentKey": "E24056",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24057,
+    "kind": "validation",
+    "fluentKey": "E24057",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24058,
+    "kind": "validation",
+    "fluentKey": "E24058",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24059,
+    "kind": "validation",
+    "fluentKey": "E24059",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24060,
+    "kind": "internal",
+    "fluentKey": "E24060",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24006,
+    "kind": "internal",
+    "fluentKey": "E24006",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24007,
+    "kind": "validation",
+    "fluentKey": "E24007",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24008,
+    "kind": "validation",
+    "fluentKey": "E24008",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24009,
+    "kind": "internal",
+    "fluentKey": "E24009",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24010,
+    "kind": "internal",
+    "fluentKey": "E24010",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24011,
+    "kind": "validation",
+    "fluentKey": "E24011",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24012,
+    "kind": "internal",
+    "fluentKey": "E24012",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24013,
+    "kind": "internal",
+    "fluentKey": "E24013",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24014,
+    "kind": "validation",
+    "fluentKey": "E24014",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24015,
+    "kind": "validation",
+    "fluentKey": "E24015",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24016,
+    "kind": "internal",
+    "fluentKey": "E24016",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24017,
+    "kind": "validation",
+    "fluentKey": "E24017",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24018,
+    "kind": "validation",
+    "fluentKey": "E24018",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24019,
+    "kind": "validation",
+    "fluentKey": "E24019",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24020,
+    "kind": "validation",
+    "fluentKey": "E24020",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24021,
+    "kind": "validation",
+    "fluentKey": "E24021",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24022,
+    "kind": "validation",
+    "fluentKey": "E24022",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24023,
+    "kind": "internal",
+    "fluentKey": "E24023",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24024,
+    "kind": "internal",
+    "fluentKey": "E24024",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24025,
+    "kind": "internal",
+    "fluentKey": "E24025",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24026,
+    "kind": "validation",
+    "fluentKey": "E24026",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24027,
+    "kind": "validation",
+    "fluentKey": "E24027",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24028,
+    "kind": "internal",
+    "fluentKey": "E24028",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24029,
+    "kind": "internal",
+    "fluentKey": "E24029",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24030,
+    "kind": "validation",
+    "fluentKey": "E24030",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24031,
+    "kind": "validation",
+    "fluentKey": "E24031",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24032,
+    "kind": "validation",
+    "fluentKey": "E24032",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24033,
+    "kind": "validation",
+    "fluentKey": "E24033",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24034,
+    "kind": "validation",
+    "fluentKey": "E24034",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24035,
+    "kind": "validation",
+    "fluentKey": "E24035",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24036,
+    "kind": "validation",
+    "fluentKey": "E24036",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24037,
+    "kind": "validation",
+    "fluentKey": "E24037",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24038,
+    "kind": "validation",
+    "fluentKey": "E24038",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24039,
+    "kind": "validation",
+    "fluentKey": "E24039",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24040,
+    "kind": "validation",
+    "fluentKey": "E24040",
+    "requiredParams": [
+      "alg"
+    ],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24041,
+    "kind": "validation",
+    "fluentKey": "E24041",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24042,
+    "kind": "validation",
+    "fluentKey": "E24042",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24043,
+    "kind": "internal",
+    "fluentKey": "E24043",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24044,
+    "kind": "internal",
+    "fluentKey": "E24044",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24045,
+    "kind": "internal",
+    "fluentKey": "E24045",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24046,
+    "kind": "internal",
+    "fluentKey": "E24046",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24047,
+    "kind": "internal",
+    "fluentKey": "E24047",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24048,
+    "kind": "validation",
+    "fluentKey": "E24048",
+    "requiredParams": [
+      "code_challenge_method"
+    ],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24049,
+    "kind": "validation",
+    "fluentKey": "E24049",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24050,
+    "kind": "internal",
+    "fluentKey": "E24050",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24051,
+    "kind": "internal",
+    "fluentKey": "E24051",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24061,
+    "kind": "validation",
+    "fluentKey": "E24061",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24062,
+    "kind": "validation",
+    "fluentKey": "E24062",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24063,
+    "kind": "validation",
+    "fluentKey": "E24063",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24064,
+    "kind": "validation",
+    "fluentKey": "E24064",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24065,
+    "kind": "validation",
+    "fluentKey": "E24065",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24066,
+    "kind": "validation",
+    "fluentKey": "E24066",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24067,
+    "kind": "validation",
+    "fluentKey": "E24067",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24068,
+    "kind": "validation",
+    "fluentKey": "E24068",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24069,
+    "kind": "validation",
+    "fluentKey": "E24069",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24070,
+    "kind": "internal",
+    "fluentKey": "E24070",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24071,
+    "kind": "internal",
+    "fluentKey": "E24071",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24072,
+    "kind": "internal",
+    "fluentKey": "E24072",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24073,
+    "kind": "internal",
+    "fluentKey": "E24073",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24074,
+    "kind": "validation",
+    "fluentKey": "E24074",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 24075,
+    "kind": "validation",
+    "fluentKey": "E24075",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.token"
+  },
+  {
+    "code": 25000,
+    "kind": "validation",
+    "fluentKey": "E25000",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.registration"
+  },
+  {
+    "code": 25001,
+    "kind": "validation",
+    "fluentKey": "E25001",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.registration"
+  },
+  {
+    "code": 25002,
+    "kind": "validation",
+    "fluentKey": "E25002",
+    "requiredParams": [
+      "application_type"
+    ],
+    "optionalParams": [],
+    "module": "openid_connect.registration"
+  },
+  {
+    "code": 25003,
+    "kind": "validation",
+    "fluentKey": "E25003",
+    "requiredParams": [
+      "subject_type"
+    ],
+    "optionalParams": [],
+    "module": "openid_connect.registration"
+  },
+  {
+    "code": 25004,
+    "kind": "internal",
+    "fluentKey": "E25004",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.registration"
+  },
+  {
+    "code": 25005,
+    "kind": "unauthorized",
+    "fluentKey": "E25005",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.registration"
+  },
+  {
+    "code": 25006,
+    "kind": "internal",
+    "fluentKey": "E25006",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.registration"
+  },
+  {
+    "code": 25007,
+    "kind": "validation",
+    "fluentKey": "E25007",
+    "requiredParams": [
+      "field"
+    ],
+    "optionalParams": [],
+    "module": "openid_connect.registration"
+  },
+  {
+    "code": 25008,
+    "kind": "validation",
+    "fluentKey": "E25008",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.registration"
+  },
+  {
+    "code": 25009,
+    "kind": "validation",
+    "fluentKey": "E25009",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.registration"
+  },
+  {
+    "code": 25010,
+    "kind": "internal",
+    "fluentKey": "E25010",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.registration"
+  },
+  {
+    "code": 25011,
+    "kind": "validation",
+    "fluentKey": "E25011",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.registration"
+  },
+  {
+    "code": 25012,
+    "kind": "internal",
+    "fluentKey": "E25012",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.registration"
+  },
+  {
+    "code": 25013,
+    "kind": "forbidden",
+    "fluentKey": "E25013",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.registration"
+  },
+  {
+    "code": 26001,
+    "kind": "validation",
+    "fluentKey": "E26001",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.device"
+  },
+  {
+    "code": 26002,
+    "kind": "validation",
+    "fluentKey": "E26002",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.device"
+  },
+  {
+    "code": 26003,
+    "kind": "validation",
+    "fluentKey": "E26003",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.device"
+  },
+  {
+    "code": 26005,
+    "kind": "internal",
+    "fluentKey": "E26005",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.device"
+  },
+  {
+    "code": 26006,
+    "kind": "internal",
+    "fluentKey": "E26006",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.device"
+  },
+  {
+    "code": 26007,
+    "kind": "internal",
+    "fluentKey": "E26007",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.device"
+  },
+  {
+    "code": 26009,
+    "kind": "internal",
+    "fluentKey": "E26009",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.device"
+  },
+  {
+    "code": 26023,
+    "kind": "internal",
+    "fluentKey": "E26023",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.device"
+  },
+  {
+    "code": 26010,
+    "kind": "validation",
+    "fluentKey": "E26010",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.device"
+  },
+  {
+    "code": 26012,
+    "kind": "internal",
+    "fluentKey": "E26012",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.device"
+  },
+  {
+    "code": 26013,
+    "kind": "internal",
+    "fluentKey": "E26013",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.device"
+  },
+  {
+    "code": 26014,
+    "kind": "conflict",
+    "fluentKey": "E26014",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.device"
+  },
+  {
+    "code": 26015,
+    "kind": "internal",
+    "fluentKey": "E26015",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.device"
+  },
+  {
+    "code": 26016,
+    "kind": "internal",
+    "fluentKey": "E26016",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.device"
+  },
+  {
+    "code": 26017,
+    "kind": "internal",
+    "fluentKey": "E26017",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.device"
+  },
+  {
+    "code": 26020,
+    "kind": "internal",
+    "fluentKey": "E26020",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.device"
+  },
+  {
+    "code": 26021,
+    "kind": "validation",
+    "fluentKey": "E26021",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.device"
+  },
+  {
+    "code": 26018,
+    "kind": "validation",
+    "fluentKey": "E26018",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.device"
+  },
+  {
+    "code": 26019,
+    "kind": "gone",
+    "fluentKey": "E26019",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.device"
+  },
+  {
+    "code": 26022,
+    "kind": "unauthorized",
+    "fluentKey": "E26022",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "openid_connect.device"
+  },
+  {
+    "code": 27000,
+    "kind": "unauthorized",
+    "fluentKey": "E27000",
+    "requiredParams": [],
+    "optionalParams": [
+      "principal_kind"
+    ],
+    "module": "authorization.policy"
+  },
+  {
+    "code": 27001,
+    "kind": "unauthorized",
+    "fluentKey": "E27001",
+    "requiredParams": [],
+    "optionalParams": [
+      "principal_kind"
+    ],
+    "module": "authorization.guards"
+  },
+  {
+    "code": 27002,
+    "kind": "forbidden",
+    "fluentKey": "E27002",
+    "requiredParams": [
+      "required_scope"
+    ],
+    "optionalParams": [],
+    "module": "authorization.guards"
+  },
+  {
+    "code": 27003,
+    "kind": "forbidden",
+    "fluentKey": "E27003",
+    "requiredParams": [],
+    "optionalParams": [
+      "required_scope"
+    ],
+    "module": "authorization.policy"
+  },
+  {
+    "code": 27004,
+    "kind": "forbidden",
+    "fluentKey": "E27004",
+    "requiredParams": [],
+    "optionalParams": [
+      "target_type"
+    ],
+    "module": "authorization.policy"
+  },
+  {
+    "code": 27005,
+    "kind": "unauthorized",
+    "fluentKey": "E27005",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "authorization.snapshot"
+  },
+  {
+    "code": 27006,
+    "kind": "unauthorized",
+    "fluentKey": "E27006",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "authorization.snapshot"
+  },
+  {
+    "code": 27007,
+    "kind": "conflict",
+    "fluentKey": "E27007",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "authorization.owner"
+  },
+  {
+    "code": 27008,
+    "kind": "forbidden",
+    "fluentKey": "E27008",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "authorization.owner"
+  },
+  {
+    "code": 27011,
+    "kind": "not_found",
+    "fluentKey": "E27011",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "authorization.snapshot"
+  },
+  {
+    "code": 27014,
+    "kind": "conflict",
+    "fluentKey": "E27014",
+    "requiredParams": [],
+    "optionalParams": [
+      "permission"
+    ],
+    "module": "rbac.repository"
+  },
+  {
+    "code": 27015,
+    "kind": "validation",
+    "fluentKey": "E27015",
+    "requiredParams": [
+      "scope"
+    ],
+    "optionalParams": [],
+    "module": "authorization.catalog"
+  },
+  {
+    "code": 27016,
+    "kind": "validation",
+    "fluentKey": "E27016",
+    "requiredParams": [
+      "scope"
+    ],
+    "optionalParams": [],
+    "module": "authorization.catalog"
+  },
+  {
+    "code": 27017,
+    "kind": "validation",
+    "fluentKey": "E27017",
+    "requiredParams": [
+      "scope"
+    ],
+    "optionalParams": [
+      "reason_code"
+    ],
+    "module": "rbac.boundary"
+  },
+  {
+    "code": 27018,
+    "kind": "internal",
+    "fluentKey": "E27018",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "rbac.policy"
+  },
+  {
+    "code": 27019,
+    "kind": "internal",
+    "fluentKey": "E27019",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "authorization.audit"
+  },
+  {
+    "code": 27020,
+    "kind": "validation",
+    "fluentKey": "E27020",
+    "requiredParams": [],
+    "optionalParams": [
+      "target_type"
+    ],
+    "module": "authorization.policy"
+  },
+  {
+    "code": 27021,
+    "kind": "unauthorized",
+    "fluentKey": "E27021",
+    "requiredParams": [
+      "required_authentication"
+    ],
+    "optionalParams": [],
+    "module": "authorization.policy"
+  },
+  {
+    "code": 27022,
+    "kind": "forbidden",
+    "fluentKey": "E27022",
+    "requiredParams": [
+      "scope"
+    ],
+    "optionalParams": [],
+    "module": "authorization.policy"
+  },
+  {
+    "code": 27023,
+    "kind": "forbidden",
+    "fluentKey": "E27023",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "authorization.policy"
+  },
+  {
+    "code": 27024,
+    "kind": "unauthorized",
+    "fluentKey": "E27024",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "authorization.snapshot"
+  },
+  {
+    "code": 27026,
+    "kind": "validation",
+    "fluentKey": "E27026",
+    "requiredParams": [],
+    "optionalParams": [
+      "field"
+    ],
+    "module": "rbac.model"
+  },
+  {
+    "code": 27027,
+    "kind": "validation",
+    "fluentKey": "E27027",
+    "requiredParams": [],
+    "optionalParams": [
+      "field"
+    ],
+    "module": "rbac.model"
+  },
+  {
+    "code": 27028,
+    "kind": "conflict",
+    "fluentKey": "E27028",
+    "requiredParams": [
+      "current_version"
+    ],
+    "optionalParams": [],
+    "module": "administrator.repository"
+  },
+  {
+    "code": 28000,
+    "kind": "validation",
+    "fluentKey": "E28000",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "graphql"
+  },
+  {
+    "code": 28001,
+    "kind": "validation",
+    "fluentKey": "E28001",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "graphql"
+  },
+  {
+    "code": 28002,
+    "kind": "validation",
+    "fluentKey": "E28002",
+    "requiredParams": [
+      "max"
+    ],
+    "optionalParams": [],
+    "module": "graphql"
+  },
+  {
+    "code": 28003,
+    "kind": "validation",
+    "fluentKey": "E28003",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "graphql"
+  },
+  {
+    "code": 28004,
+    "kind": "validation",
+    "fluentKey": "E28004",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "graphql"
+  },
+  {
+    "code": 28005,
+    "kind": "forbidden",
+    "fluentKey": "E28005",
+    "requiredParams": [
+      "scope"
+    ],
+    "optionalParams": [],
+    "module": "graphql"
+  },
+  {
+    "code": 28006,
+    "kind": "unauthorized",
+    "fluentKey": "E28006",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "graphql"
+  },
+  {
+    "code": 28007,
+    "kind": "forbidden",
+    "fluentKey": "E28007",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "graphql"
+  },
+  {
+    "code": 28008,
+    "kind": "forbidden",
+    "fluentKey": "E28008",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "graphql"
+  },
+  {
+    "code": 28009,
+    "kind": "forbidden",
+    "fluentKey": "E28009",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "graphql"
+  },
+  {
+    "code": 28010,
+    "kind": "validation",
+    "fluentKey": "E28010",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "graphql"
+  },
+  {
+    "code": 28011,
+    "kind": "internal",
+    "fluentKey": "E28011",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "graphql"
+  },
+  {
+    "code": 28012,
+    "kind": "unauthorized",
+    "fluentKey": "E28012",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "graphql"
+  },
+  {
+    "code": 28013,
+    "kind": "validation",
+    "fluentKey": "E28013",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "graphql"
+  },
+  {
+    "code": 28014,
+    "kind": "validation",
+    "fluentKey": "E28014",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "graphql"
+  },
+  {
+    "code": 28015,
+    "kind": "internal",
+    "fluentKey": "E28015",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "graphql"
+  },
+  {
+    "code": 28016,
+    "kind": "validation",
+    "fluentKey": "E28016",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "graphql"
+  },
+  {
+    "code": 28017,
+    "kind": "validation",
+    "fluentKey": "E28017",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "graphql"
+  },
+  {
+    "code": 28018,
+    "kind": "internal",
+    "fluentKey": "E28018",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "graphql"
+  },
+  {
+    "code": 28019,
+    "kind": "not_found",
+    "fluentKey": "E28019",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "graphql"
+  },
+  {
+    "code": 28100,
+    "kind": "validation",
+    "fluentKey": "E28100",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "graphql.transport"
+  },
+  {
+    "code": 28101,
+    "kind": "validation",
+    "fluentKey": "E28101",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "graphql.transport"
+  },
+  {
+    "code": 28102,
+    "kind": "validation",
+    "fluentKey": "E28102",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "graphql.transport"
+  },
+  {
+    "code": 28103,
+    "kind": "validation",
+    "fluentKey": "E28103",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "graphql.transport"
+  },
+  {
+    "code": 28104,
+    "kind": "validation",
+    "fluentKey": "E28104",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "graphql.transport"
+  },
+  {
+    "code": 28105,
+    "kind": "forbidden",
+    "fluentKey": "E28105",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "graphql.transport"
+  },
+  {
+    "code": 28106,
+    "kind": "internal",
+    "fluentKey": "E28106",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "graphql.transport"
+  },
+  {
+    "code": 28107,
+    "kind": "unauthorized",
+    "fluentKey": "E28107",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "graphql.transport"
+  },
+  {
+    "code": 28108,
+    "kind": "internal",
+    "fluentKey": "E28108",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "graphql.transport"
+  },
+  {
+    "code": 28109,
+    "kind": "unauthorized",
+    "fluentKey": "E28109",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "graphql.transport"
+  },
+  {
+    "code": 28110,
+    "kind": "validation",
+    "fluentKey": "E28110",
+    "requiredParams": [
+      "max"
+    ],
+    "optionalParams": [],
+    "module": "graphql.transport"
+  },
+  {
+    "code": 28111,
+    "kind": "validation",
+    "fluentKey": "E28111",
+    "requiredParams": [
+      "max"
+    ],
+    "optionalParams": [],
+    "module": "graphql.transport"
+  },
+  {
+    "code": 29000,
+    "kind": "conflict",
+    "fluentKey": "E29000",
+    "requiredParams": [],
+    "optionalParams": [
+      "current_version"
+    ],
+    "module": "instance"
+  },
+  {
+    "code": 29001,
+    "kind": "validation",
+    "fluentKey": "E29001",
+    "requiredParams": [
+      "min",
+      "max"
+    ],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29002,
+    "kind": "validation",
+    "fluentKey": "E29002",
+    "requiredParams": [
+      "max"
+    ],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29003,
+    "kind": "internal",
+    "fluentKey": "E29003",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29004,
+    "kind": "not_found",
+    "fluentKey": "E29004",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29005,
+    "kind": "conflict",
+    "fluentKey": "E29005",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29006,
+    "kind": "conflict",
+    "fluentKey": "E29006",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29007,
+    "kind": "conflict",
+    "fluentKey": "E29007",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29008,
+    "kind": "validation",
+    "fluentKey": "E29008",
+    "requiredParams": [
+      "algorithm"
+    ],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29009,
+    "kind": "conflict",
+    "fluentKey": "E29009",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29010,
+    "kind": "validation",
+    "fluentKey": "E29010",
+    "requiredParams": [
+      "detail"
+    ],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29011,
+    "kind": "internal",
+    "fluentKey": "E29011",
+    "requiredParams": [
+      "detail"
+    ],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29012,
+    "kind": "validation",
+    "fluentKey": "E29012",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29013,
+    "kind": "validation",
+    "fluentKey": "E29013",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29014,
+    "kind": "validation",
+    "fluentKey": "E29014",
+    "requiredParams": [],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29015,
+    "kind": "validation",
+    "fluentKey": "E29015",
+    "requiredParams": [
+      "locale"
+    ],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29016,
+    "kind": "validation",
+    "fluentKey": "E29016",
+    "requiredParams": [
+      "max"
+    ],
+    "optionalParams": [],
+    "module": "instance"
+  },
+  {
+    "code": 29017,
+    "kind": "validation",
+    "fluentKey": "E29017",
+    "requiredParams": [
+      "locale"
+    ],
+    "optionalParams": [],
+    "module": "instance"
   },
   {
     "code": 30000,

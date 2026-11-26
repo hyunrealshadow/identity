@@ -25,7 +25,6 @@ use uuid::Uuid;
 use crate::{
     application::error::{
         AppError,
-        code::AppErrorCode,
         codes::token::{self, TokenErrorCode},
     },
     domain::{
@@ -627,5 +626,5 @@ fn rejects_presented_credential(error: &AppError) -> bool {
         TokenErrorCode::AssertionVerifyFailed,
     ]
     .into_iter()
-    .any(|code| error.code() == code.code())
+    .any(|code| error.is(code))
 }

@@ -1,4 +1,4 @@
-use super::{AppError, params::ErrorParams};
+use super::{AppError, ErrorCode, code::AppErrorCode as _, params::ErrorParams};
 
 #[derive(Debug, Default)]
 pub struct ValidationError {
@@ -7,13 +7,18 @@ pub struct ValidationError {
 
 impl ValidationError {
     pub fn push(&mut self, field: impl Into<String>, error: AppError) {
-        self.push_parts(field, error.code(), error.params().clone());
+        self.push_parts(field, error.error_code(), error.params().clone());
     }
 
-    pub fn push_parts(&mut self, field: impl Into<String>, code: u32, params: ErrorParams) {
+    pub fn push_parts(
+        &mut self,
+        field: impl Into<String>,
+        code: impl Into<ErrorCode>,
+        params: ErrorParams,
+    ) {
         self.fields.push(FieldValidationError {
             field: field.into(),
-            code,
+            code: code.into(),
             params,
         });
     }
@@ -30,7 +35,7 @@ impl ValidationError {
 #[derive(Debug)]
 pub struct FieldValidationError {
     field: String,
-    code: u32,
+    code: ErrorCode,
     params: ErrorParams,
 }
 
@@ -40,6 +45,10 @@ impl FieldValidationError {
     }
 
     pub fn code(&self) -> u32 {
+        self.code.code()
+    }
+
+    pub fn error_code(&self) -> ErrorCode {
         self.code
     }
 

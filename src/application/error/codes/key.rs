@@ -1,6 +1,6 @@
 define_error_codes! {
     /// Range: 12000-12099
-    pub enum KeyErrorCode {
+    pub enum KeyErrorCode(module = "key") {
         NotFound = 12000 { kind: NotFound },
         Revoked = 12001 { kind: Unauthorized },
         UnsupportedAlgorithm = 12002 { kind: Validation, required: [algorithm] },

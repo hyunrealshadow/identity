@@ -1,6 +1,6 @@
 define_error_codes! {
     /// Range: 25000-25099
-    pub enum RegistrationErrorCode {
+    pub enum RegistrationErrorCode(module = "openid_connect.registration") {
         DynamicRegistrationDisabled = 25000 { kind: Validation },
         RedirectUrisRequired = 25001 { kind: Validation },
         UnsupportedApplicationType = 25002 { kind: Validation, required: [application_type] },

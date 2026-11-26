@@ -11,5 +11,6 @@ pub mod params;
 pub mod validation;
 
 pub use app_error::AppError;
+pub use codes::ErrorCode;
 pub use diagnostics::{ErrorContext, ErrorDiagnostics};
 pub use validation::{FieldValidationError, ValidationError};

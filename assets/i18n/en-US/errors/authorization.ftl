@@ -19,7 +19,6 @@ E27021 = This operation requires { $required_authentication } authentication. Pl
 E27022 = The { $scope } scope requires a human administrator.
 E27023 = Machine identities cannot use human authentication assurance.
 E27024 = This authorization was replaced. Please obtain a new token.
-E27025 = The authorization version could not be advanced. Please contact the instance operator.
 E27026 = The permission definition is invalid.
 E27027 = The role definition is invalid.
 E27028 = This resource has changed (current version { $current_version }). Refresh before trying again.

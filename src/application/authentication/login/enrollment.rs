@@ -20,7 +20,6 @@ use crate::{
     },
     error::{
         AppError,
-        code::AppErrorCode as _,
         codes::auth::{self, AuthErrorCode},
     },
     user::model::{CredentialType, OtpAlgorithm, User},
@@ -172,7 +171,7 @@ impl LoginService {
         {
             Ok(_) => {}
             Err(error) => {
-                if error.code() == AuthErrorCode::InvalidOtp.code() {
+                if error.is(AuthErrorCode::InvalidOtp) {
                     let attempts = self
                         .login_repo
                         .increment_failed_attempts(login.oid, Some(LoginFailureReason::InvalidOtp))

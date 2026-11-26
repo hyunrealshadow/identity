@@ -5,7 +5,10 @@ use std::{
 };
 
 use super::{
-    code::AppErrorCode, codes::common, kind::ErrorKind, params::ErrorParams,
+    code::AppErrorCode,
+    codes::{ErrorCode, common},
+    kind::ErrorKind,
+    params::ErrorParams,
     validation::ValidationError,
 };
 
@@ -16,8 +19,7 @@ enum AppErrorDetails {
 
 #[derive(Debug)]
 pub struct AppError {
-    kind: ErrorKind,
-    code: u32,
+    code: ErrorCode,
     params: ErrorParams,
     details: Option<AppErrorDetails>,
     source: Option<Box<dyn StdError + Send + Sync + 'static>>,
@@ -29,10 +31,10 @@ impl AppError {
         common::error::InternalError.with_source(source)
     }
 
-    pub(crate) fn from_parts(code: impl AppErrorCode, params: ErrorParams) -> Self {
+    pub(crate) fn from_parts(code: impl Into<ErrorCode>, params: ErrorParams) -> Self {
+        let code = code.into();
         Self {
-            kind: code.kind(),
-            code: code.code(),
+            code,
             params,
             details: None,
             source: None,
@@ -67,11 +69,19 @@ impl AppError {
     }
 
     pub fn kind(&self) -> ErrorKind {
-        self.kind
+        self.code.kind()
     }
 
     pub fn code(&self) -> u32 {
+        self.code.code()
+    }
+
+    pub fn error_code(&self) -> ErrorCode {
         self.code
+    }
+
+    pub fn is(&self, code: impl Into<ErrorCode>) -> bool {
+        self.code == code.into()
     }
 
     pub fn backtrace(&self) -> Option<&Backtrace> {
@@ -100,7 +110,7 @@ impl AppError {
 
 impl Display for AppError {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        write!(f, "[{:?}] error {}", self.kind, self.code)
+        write!(f, "[{:?}] error {}", self.kind(), self.code())
     }
 }
 

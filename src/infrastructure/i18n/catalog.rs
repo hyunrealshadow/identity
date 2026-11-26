@@ -14,18 +14,43 @@ fn validate_sources(
     sources: &[String],
     inventory: &[PublicErrorDefinition],
 ) -> Result<(), String> {
+    use std::collections::BTreeSet;
     let language = locale
         .parse::<LanguageIdentifier>()
         .map_err(|_| "invalid catalog locale".to_owned())?;
     let mut bundle = FluentBundle::new_concurrent(vec![language]);
     web_tera::register_list_function(&mut bundle);
     bundle.set_use_isolating(false);
+    let mut declared_error_keys = BTreeSet::new();
     for source in sources {
         let resource = FluentResource::try_new(source.clone())
             .map_err(|_| format!("{locale}: invalid Fluent syntax"))?;
+        for line in source.lines() {
+            if line.starts_with(char::is_whitespace) {
+                continue;
+            }
+            if let Some((raw_key, _)) = line.split_once('=') {
+                let key = raw_key.trim_end();
+                if let Some(digits) = key.strip_prefix('E')
+                    && !digits.is_empty()
+                    && digits.bytes().all(|byte| byte.is_ascii_digit())
+                {
+                    declared_error_keys.insert(key.to_owned());
+                }
+            }
+        }
         bundle
             .add_resource(resource)
             .map_err(|_| format!("{locale}: duplicate Fluent key"))?;
+    }
+    let registered_keys: BTreeSet<&str> = inventory
+        .iter()
+        .map(|definition| definition.fluent_key.as_str())
+        .collect();
+    for key in declared_error_keys {
+        if !registered_keys.contains(key.as_str()) {
+            return Err(format!("{locale}: orphan error message {key}"));
+        }
     }
     for definition in inventory {
         let key = &definition.fluent_key;
@@ -183,6 +208,7 @@ mod tests {
             "E1 = Hello",
             "E1 = Hello { $other }",
             "E1 = { invalid syntax",
+            "E1 = 你好，{ $name }\nE99999 = Orphan",
         ] {
             assert!(
                 validate_sources("zh-CN", &[source.to_owned()], &inventory).is_err(),

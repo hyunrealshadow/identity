@@ -21,60 +21,47 @@ pub mod registration;
 pub mod token;
 pub mod user_management;
 
+crate::define_error_code_registry! {
+    Common(common::CommonErrorCode) in 10000..=10099,
+    Auth(auth::AuthErrorCode) in 11000..=11099,
+    Key(key::KeyErrorCode) in 12000..=12099,
+    Install(install::InstallErrorCode) in 13000..=13099,
+    DataProtection(data_protection::DataProtectionErrorCode) in 14000..=14099,
+    Account(account::AccountErrorCode) in 15000..=15099,
+    UserManagement(user_management::UserManagementErrorCode) in 16000..=16099,
+    Rbac(rbac::RbacErrorCode) in 17000..=17099,
+    Client(client::ClientErrorCode) in 18000..=18099,
+    Group(group::GroupErrorCode) in 19000..=19099,
+    Provider(provider::ProviderErrorCode) in 20000..=20099,
+    OpenIdConnect(openid_connect::OpenIdConnectErrorCode) in 21000..=21099,
+    AuthorizeHttp(authorize_http::AuthorizeHttpErrorCode) in 22000..=22099,
+    Authorize(authorize::AuthorizeErrorCode) in 23000..=23099,
+    Token(token::TokenErrorCode) in 24000..=24099,
+    Registration(registration::RegistrationErrorCode) in 25000..=25099,
+    Device(device::DeviceAuthorizationErrorCode) in 26000..=26099,
+    Authorization(authorization::AuthorizationErrorCode) in 27000..=27099,
+    Graphql(graphql::GraphqlErrorCode) in 28000..=28099,
+    GraphqlTransport(graphql_transport::GraphqlTransportErrorCode) in 28100..=28199,
+    Instance(instance::InstanceErrorCode) in 29000..=29099,
+    Audit(audit::AuditErrorCode) in 30000..=30099,
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{
-        account::AccountErrorCode, audit::AuditErrorCode, auth::AuthErrorCode,
-        authorization::AuthorizationErrorCode, authorize::AuthorizeErrorCode,
-        authorize_http::AuthorizeHttpErrorCode, client::ClientErrorCode, common::CommonErrorCode,
-        data_protection::DataProtectionErrorCode, device::DeviceAuthorizationErrorCode,
-        graphql::GraphqlErrorCode, graphql_transport::GraphqlTransportErrorCode,
-        group::GroupErrorCode, install::InstallErrorCode, instance::InstanceErrorCode,
-        key::KeyErrorCode, openid_connect::OpenIdConnectErrorCode, provider::ProviderErrorCode,
-        rbac::RbacErrorCode, registration::RegistrationErrorCode, token::TokenErrorCode,
-        user_management::UserManagementErrorCode,
-    };
+    use super::ErrorCode;
     use crate::error::code::AppErrorCode;
-    use std::{collections::HashSet, ops::RangeInclusive};
-    use strum::IntoEnumIterator;
+    use std::collections::HashSet;
 
     #[test]
     fn error_codes_are_unique_and_module_scoped() {
-        fn check<E: AppErrorCode + IntoEnumIterator>(
-            seen: &mut HashSet<u32>,
-            range: RangeInclusive<u32>,
-        ) {
-            let mut nonempty = false;
-            for error in E::iter() {
-                nonempty = true;
-                let code = error.code();
-                assert!(range.contains(&code), "{code} outside {range:?}");
-                assert!(seen.insert(code), "duplicate error code {code}");
-            }
-            assert!(nonempty, "empty error registry");
-        }
+        let all = ErrorCode::all();
+        assert!(!all.is_empty(), "empty error registry");
         let mut seen = HashSet::new();
-        check::<CommonErrorCode>(&mut seen, 10000..=10099);
-        check::<AuthErrorCode>(&mut seen, 11000..=11099);
-        check::<KeyErrorCode>(&mut seen, 12000..=12099);
-        check::<InstallErrorCode>(&mut seen, 13000..=13099);
-        check::<DataProtectionErrorCode>(&mut seen, 14000..=14099);
-        check::<AccountErrorCode>(&mut seen, 15000..=15099);
-        check::<UserManagementErrorCode>(&mut seen, 16000..=16099);
-        check::<RbacErrorCode>(&mut seen, 17000..=17099);
-        check::<ClientErrorCode>(&mut seen, 18000..=18099);
-        check::<GroupErrorCode>(&mut seen, 19000..=19099);
-        check::<ProviderErrorCode>(&mut seen, 20000..=20099);
-        check::<OpenIdConnectErrorCode>(&mut seen, 21000..=21099);
-        check::<AuthorizeHttpErrorCode>(&mut seen, 22000..=22099);
-        check::<AuthorizeErrorCode>(&mut seen, 23000..=23099);
-        check::<TokenErrorCode>(&mut seen, 24000..=24099);
-        check::<RegistrationErrorCode>(&mut seen, 25000..=25099);
-        check::<DeviceAuthorizationErrorCode>(&mut seen, 26000..=26099);
-        check::<AuthorizationErrorCode>(&mut seen, 27000..=27099);
-        check::<GraphqlTransportErrorCode>(&mut seen, 28100..=28199);
-        check::<GraphqlErrorCode>(&mut seen, 28000..=28099);
-        check::<InstanceErrorCode>(&mut seen, 29000..=29099);
-        check::<AuditErrorCode>(&mut seen, 30000..=30099);
+        for error in all {
+            let code = error.code();
+            let range = error.range();
+            assert!(range.contains(&code), "{code} outside {range:?}");
+            assert!(seen.insert(code), "duplicate error code {code}");
+        }
     }
 }

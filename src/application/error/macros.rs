@@ -276,3 +276,78 @@ macro_rules! define_error_codes {
         }
     };
 }
+
+#[macro_export]
+macro_rules! define_error_code_registry {
+    (
+        $(
+            $Variant:ident($path:path) in $range:expr
+        ),* $(,)?
+    ) => {
+        #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+        pub enum ErrorCode {
+            $($Variant($path),)*
+        }
+
+        $(
+            impl From<$path> for ErrorCode {
+                fn from(value: $path) -> Self {
+                    Self::$Variant(value)
+                }
+            }
+        )*
+
+        impl crate::error::code::AppErrorCode for ErrorCode {
+            fn kind(self) -> crate::error::kind::ErrorKind {
+                match self {
+                    $(Self::$Variant(code) => code.kind(),)*
+                }
+            }
+
+            fn code(self) -> u32 {
+                match self {
+                    $(Self::$Variant(code) => code.code(),)*
+                }
+            }
+
+            fn required_params(self) -> &'static [&'static str] {
+                match self {
+                    $(Self::$Variant(code) => code.required_params(),)*
+                }
+            }
+
+            fn optional_params(self) -> &'static [&'static str] {
+                match self {
+                    $(Self::$Variant(code) => code.optional_params(),)*
+                }
+            }
+
+            fn usage_module(self) -> Option<&'static str> {
+                match self {
+                    $(Self::$Variant(code) => code.usage_module(),)*
+                }
+            }
+        }
+
+        impl ErrorCode {
+            /// Every error code registered across all domain/application modules.
+            #[must_use]
+            pub fn all() -> Vec<Self> {
+                use strum::IntoEnumIterator as _;
+                let mut all = Vec::new();
+                $(
+                    all.extend(<$path>::iter().map(Self::$Variant));
+                )*
+                all
+            }
+
+            /// Reserved numeric range for this error code's owning module.
+            #[must_use]
+            pub const fn range(self) -> std::ops::RangeInclusive<u32> {
+                match self {
+                    $(Self::$Variant(_) => $range,)*
+                }
+            }
+        }
+    };
+}

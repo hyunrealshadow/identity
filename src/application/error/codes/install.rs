@@ -1,6 +1,6 @@
 define_error_codes! {
     /// Range: 13000-13099
-    pub enum InstallErrorCode {
+    pub enum InstallErrorCode(module = "install") {
         AlreadyInitialized = 13000 { kind: Conflict },
         UsernameRequired = 13001 { kind: Validation },
         EmailRequired = 13002 { kind: Validation },
