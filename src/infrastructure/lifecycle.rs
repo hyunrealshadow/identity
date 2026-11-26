@@ -1,14 +1,17 @@
 use std::sync::{
-    Arc,
+    Arc, Mutex,
     atomic::{AtomicBool, Ordering},
 };
 
 use tokio::sync::watch;
 
+use crate::database::install_lock::InstallLockGuard;
+
 #[derive(Clone)]
 pub struct AppLifecycle {
     shutdown_requested: Arc<AtomicBool>,
     shutdown_tx: watch::Sender<bool>,
+    install_lock: Arc<Mutex<Option<InstallLockGuard>>>,
 }
 
 impl Default for AppLifecycle {
@@ -23,6 +26,13 @@ impl AppLifecycle {
         Self {
             shutdown_requested: Arc::new(AtomicBool::new(false)),
             shutdown_tx,
+            install_lock: Arc::new(Mutex::new(None)),
+        }
+    }
+
+    pub fn hold_install_lock(&self, guard: Option<InstallLockGuard>) {
+        if let Ok(mut slot) = self.install_lock.lock() {
+            *slot = guard;
         }
     }
 

@@ -20,6 +20,7 @@ pub mod key_rotation;
 pub(crate) mod localized;
 pub mod login;
 pub mod login_runtime;
+mod management_authority;
 pub mod oauth_resource;
 pub mod openid_connect;
 pub mod openid_connect_credential;

@@ -10,20 +10,6 @@ pub(super) fn corrupt() -> UserManagementRepositoryError {
     UserManagementRepositoryError::CorruptRecord
 }
 
-pub(super) async fn user_id_by_oid<C: ConnectionTrait>(
-    db: &C,
-    oid: UserOid,
-) -> Result<Option<i64>, UserManagementRepositoryError> {
-    UserEntity::find()
-        .select_only()
-        .column(UserColumn::Id)
-        .filter(UserColumn::Oid.eq(Uuid::from(oid)))
-        .into_tuple::<i64>()
-        .one(db)
-        .await
-        .map_err(storage)
-}
-
 pub(super) async fn stored_user_version<C: ConnectionTrait>(
     db: &C,
     user_id: i64,
@@ -83,18 +69,10 @@ pub(super) async fn current_authority(
 ) -> Result<Option<CurrentManagementAuthority>, UserManagementRepositoryError> {
     match &authority.actor.principal {
         ActorPrincipal::User { user_oid, .. } => {
-            let Some(user_id) = user_id_by_oid(txn, *user_oid).await? else {
-                return Ok(None);
-            };
-            let _ = txn
-                .query_one_raw(Statement::from_sql_and_values(
-                    DbBackend::Postgres,
-                    "SELECT id FROM \"user\" WHERE id = $1 FOR UPDATE",
-                    [user_id.into()],
-                ))
-                .await
-                .map_err(storage)?;
-            let authority = load_user_permission_authority(txn, *user_oid)
+            let authority =
+                crate::database::repository::management_authority::lock_and_load_user_authority(
+                    txn, *user_oid,
+                )
                 .await
                 .map_err(|error| UserManagementRepositoryError::Storage(Box::new(error)))?;
             Ok(authority.map(CurrentManagementAuthority::UserPermissions))
@@ -122,40 +100,24 @@ pub(super) async fn target_is_owner(
 
 /// Lock and re-verify the issuing client's live authority before any user/grant
 /// evaluation or business write.
-///
-/// The verified credential carries the original semantic client fingerprint.
-/// A missing client or changed scope boundary fails closed; the current value
-/// is never substituted into the request authority.
 pub(super) async fn recheck_issuing_client(
     txn: &DatabaseTransaction,
     authority: &UserManagementAuthority,
 ) -> Result<(), UserManagementRepositoryError> {
-    let client_row = txn
-        .query_one_raw(Statement::from_sql_and_values(
-            DbBackend::Postgres,
-            "SELECT id FROM client WHERE oid = $1 FOR UPDATE",
-            [authority.client_oid.into()],
-        ))
-        .await
-        .map_err(storage)?;
-    let Some(client_row) = client_row else {
-        return Err(map_authorization(
-            ManagementAuthorizationError::NoCurrentGrant,
-        ));
-    };
-    let client_id = client_row.try_get::<i64>("", "id").map_err(storage)?;
-    // Compare the exact live client scope boundary; there is no management
-    // enable switch or independent machine grant.
-    let (_, fingerprint) =
-        client_authorization_boundary::client_boundary_fingerprint(txn, client_id)
-            .await
-            .map_err(storage)?;
-    if fingerprint != authority.client_policy_version {
-        return Err(map_authorization(
-            ManagementAuthorizationError::SnapshotPolicyMismatch,
-        ));
-    }
-    Ok(())
+    crate::database::repository::management_authority::lock_and_recheck_issuing_client(
+        txn,
+        authority.client_oid,
+        authority.client_policy_version,
+    )
+    .await
+    .map_err(|error| match error {
+        crate::database::repository::management_authority::ManagementAuthorityCheckError::Storage(
+            error,
+        ) => storage(error),
+        crate::database::repository::management_authority::ManagementAuthorityCheckError::Authorization(
+            error,
+        ) => map_authorization(error),
+    })
 }
 
 /// Re-verify entry authority with authoritative rows in the write transaction.

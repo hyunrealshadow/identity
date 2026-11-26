@@ -9,6 +9,7 @@ pub mod audit;
 pub(crate) mod authority_snapshot;
 pub mod client_authorization_boundary;
 pub mod entity;
+pub mod install_lock;
 pub mod owner_bootstrap;
 pub mod query;
 pub mod repository;

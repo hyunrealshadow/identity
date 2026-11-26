@@ -1,19 +1,19 @@
-use std::{error::Error, io::Error as IoError};
+use std::io::Error as IoError;
 
 use identity_application::setting::{InstallationSettings, SettingsSource};
-use identity_infrastructure::settings::AppRuntimeSettings;
-use sea_orm::{
-    ConnectionTrait, DatabaseConnection,
-    sea_query::{Alias, Func, Query},
+use identity_infrastructure::{
+    config::DatabaseConfig,
+    database::install_lock::{InstallLockGuard, try_acquire_install_lock},
+    settings::AppRuntimeSettings,
 };
 use tracing::info;
 
 use super::AppResult;
 
 pub async fn ensure_install_startup_guard(
-    db: &DatabaseConnection,
+    database: &DatabaseConfig,
     settings: &AppRuntimeSettings,
-) -> AppResult<()> {
+) -> AppResult<Option<InstallLockGuard>> {
     let initialized = || {
         settings
             .store()
@@ -22,38 +22,20 @@ pub async fn ensure_install_startup_guard(
             .initialized
     };
     if initialized() {
-        return Ok(());
+        return Ok(None);
     }
 
-    if try_acquire_install_lock(db).await? {
+    if let Some(guard) = try_acquire_install_lock(database).await? {
         info!("installation lock acquired for this instance");
-        return Ok(());
+        return Ok(Some(guard));
     }
 
     settings.store().refresh().await?;
     if initialized() {
-        return Ok(());
+        return Ok(None);
     }
 
     Err(Box::new(IoError::other(
         "installation is in progress on another pod; refusing startup",
     )))
-}
-
-async fn try_acquire_install_lock(db: &DatabaseConnection) -> AppResult<bool> {
-    let statement = Query::select()
-        .expr_as(
-            Func::cust("pg_try_advisory_lock").arg(841463791178241511_i64),
-            Alias::new("acquired"),
-        )
-        .to_owned();
-
-    let row = db
-        .query_one(&statement)
-        .await?
-        .ok_or_else(|| IoError::other("failed to query installation lock state"))?;
-
-    row.try_get("", "acquired").map_err(|error| {
-        Box::new(IoError::other(error.to_string())) as Box<dyn Error + Send + Sync>
-    })
 }

@@ -61,7 +61,7 @@ use super::{
 };
 use crate::{
     database::{
-        audit, client_authorization_boundary,
+        audit,
         entity::{
             user,
             user::{Column as UserColumn, Entity as UserEntity},

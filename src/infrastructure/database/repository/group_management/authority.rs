@@ -1,8 +1,8 @@
 //! Transaction-scoped group authority and delegation-ceiling reads.
 //!
-//! The actor's current management permissions come from B's user-permission authority helper in the
-//! same transaction; the delegation ceiling uses exactly those PRE-change
-//! permissions.
+//! The actor's current management permissions come from the user-permission
+//! authority helper in the same transaction; the delegation ceiling uses
+//! exactly those PRE-change permissions.
 
 use std::collections::BTreeSet;
 
@@ -23,43 +23,17 @@ use uuid::Uuid;
 
 use super::support::{Binds, corrupt, not_found, storage};
 
-use crate::database::{
-    client_authorization_boundary, repository::authorization::load_user_permission_authority,
+use crate::database::repository::management_authority::{
+    ManagementAuthorityCheckError, lock_and_load_user_authority, lock_and_recheck_issuing_client,
 };
 
-/// Lock the issuing client row and re-derive its live authorization boundary.
-///
-/// The credential carries the original boundary fingerprint. A missing client,
-/// a changed live boundary, or a stale fingerprint fails closed. Display text,
-/// metadata and the client's UUID CAS version never participate.
-async fn recheck_issuing_client(
-    txn: &DatabaseTransaction,
-    authority: &RbacManagementAuthority,
-) -> Result<(), GroupManagementRepositoryError> {
-    let client_row = txn
-        .query_one_raw(Statement::from_sql_and_values(
-            DbBackend::Postgres,
-            "SELECT id FROM client WHERE oid = $1 FOR UPDATE",
-            [authority.client_oid.into()],
-        ))
-        .await
-        .map_err(storage)?;
-    let Some(client_row) = client_row else {
-        return Err(GroupManagementRepositoryError::Authorization(
-            ManagementAuthorizationError::NoCurrentGrant,
-        ));
-    };
-    let client_id = client_row.try_get::<i64>("", "id").map_err(storage)?;
-    let (_, fingerprint) =
-        client_authorization_boundary::client_boundary_fingerprint(txn, client_id)
-            .await
-            .map_err(storage)?;
-    if fingerprint != authority.client_policy_version {
-        return Err(GroupManagementRepositoryError::Authorization(
-            ManagementAuthorizationError::SnapshotPolicyMismatch,
-        ));
+fn map_authority_check(error: ManagementAuthorityCheckError) -> GroupManagementRepositoryError {
+    match error {
+        ManagementAuthorityCheckError::Storage(error) => storage(error),
+        ManagementAuthorityCheckError::Authorization(error) => {
+            GroupManagementRepositoryError::Authorization(error)
+        }
     }
-    Ok(())
 }
 
 /// Re-check one exact group permission and return the actor's PRE-change
@@ -69,13 +43,15 @@ pub(crate) async fn recheck_group_authority(
     authority: &RbacManagementAuthority,
     required: ManagementScope,
 ) -> Result<BTreeSet<ManagementScope>, GroupManagementRepositoryError> {
-    recheck_issuing_client(txn, authority).await?;
+    lock_and_recheck_issuing_client(txn, authority.client_oid, authority.client_policy_version)
+        .await
+        .map_err(map_authority_check)?;
     let ActorPrincipal::User { user_oid, .. } = &authority.actor.principal else {
         return Err(GroupManagementRepositoryError::Authorization(
             ManagementAuthorizationError::HumanOnlyCapability { scope: required },
         ));
     };
-    let Some(current) = load_user_permission_authority(txn, *user_oid)
+    let Some(current) = lock_and_load_user_authority(txn, *user_oid)
         .await
         .map_err(storage)?
     else {

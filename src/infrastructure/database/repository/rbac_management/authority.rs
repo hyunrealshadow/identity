@@ -16,10 +16,13 @@ use sea_orm::{ConnectionTrait, DatabaseTransaction, DbBackend, Statement};
 use uuid::Uuid;
 
 use super::support::storage;
-use crate::database::{
-    client_authorization_boundary,
-    repository::{
-        authorization, authorization::load_user_permission_authority, authorization_lifecycle,
+use crate::database::repository::{
+    authorization,
+    authorization::load_user_permission_authority,
+    authorization_lifecycle,
+    management_authority::{
+        ManagementAuthorityCheckError, lock_and_load_user_authority,
+        lock_and_recheck_issuing_client,
     },
 };
 
@@ -47,19 +50,7 @@ pub(crate) async fn load_current_authority(
 ) -> Result<Option<CurrentManagementAuthority>, RbacManagementRepositoryError> {
     match &authority.actor.principal {
         ActorPrincipal::User { user_oid, .. } => {
-            // Lock the authoritative user row before reading role/group paths.
-            let Some(user_id) = user_id_by_oid(txn, *user_oid).await? else {
-                return Ok(None);
-            };
-            let _ = txn
-                .query_one_raw(Statement::from_sql_and_values(
-                    DbBackend::Postgres,
-                    "SELECT id FROM \"user\" WHERE id = $1 FOR UPDATE",
-                    [user_id.into()],
-                ))
-                .await
-                .map_err(storage)?;
-            let authority = load_user_permission_authority(txn, *user_oid)
+            let authority = lock_and_load_user_authority(txn, *user_oid)
                 .await
                 .map_err(|error| RbacManagementRepositoryError::Storage(Box::new(error)))?;
             Ok(authority.map(CurrentManagementAuthority::UserPermissions))
@@ -87,40 +78,13 @@ pub(crate) async fn target_is_owner(
     Ok(authority.is_some_and(|authority| authority.has_full_management_permissions()))
 }
 
-/// Lock the issuing client row and re-derive its live authorization boundary.
-///
-/// The credential carries the original boundary fingerprint. A missing client,
-/// a changed live boundary, or a stale fingerprint fails closed. Display text,
-/// metadata and the client's UUID CAS version never participate; only real
-/// authorization inputs do.
-async fn recheck_issuing_client(
-    txn: &DatabaseTransaction,
-    authority: &RbacManagementAuthority,
-) -> Result<(), RbacManagementRepositoryError> {
-    let client_row = txn
-        .query_one_raw(Statement::from_sql_and_values(
-            DbBackend::Postgres,
-            "SELECT id FROM client WHERE oid = $1 FOR UPDATE",
-            [authority.client_oid.into()],
-        ))
-        .await
-        .map_err(storage)?;
-    let Some(client_row) = client_row else {
-        return Err(RbacManagementRepositoryError::Authorization(
-            ManagementAuthorizationError::NoCurrentGrant,
-        ));
-    };
-    let client_id = client_row.try_get::<i64>("", "id").map_err(storage)?;
-    let (_, fingerprint) =
-        client_authorization_boundary::client_boundary_fingerprint(txn, client_id)
-            .await
-            .map_err(storage)?;
-    if fingerprint != authority.client_policy_version {
-        return Err(RbacManagementRepositoryError::Authorization(
-            ManagementAuthorizationError::SnapshotPolicyMismatch,
-        ));
+fn map_authority_check(error: ManagementAuthorityCheckError) -> RbacManagementRepositoryError {
+    match error {
+        ManagementAuthorityCheckError::Storage(error) => storage(error),
+        ManagementAuthorityCheckError::Authorization(error) => {
+            RbacManagementRepositoryError::Authorization(error)
+        }
     }
-    Ok(())
 }
 
 /// Re-verify entry authority with authoritative rows in the write transaction.
@@ -133,7 +97,9 @@ pub(crate) async fn recheck_authority(
     authorization_lifecycle::lock_owner_lifecycle(txn)
         .await
         .map_err(storage)?;
-    recheck_issuing_client(txn, authority).await?;
+    lock_and_recheck_issuing_client(txn, authority.client_oid, authority.client_policy_version)
+        .await
+        .map_err(map_authority_check)?;
     let current = load_current_authority(txn, authority).await?;
     let policy_version = policy_fingerprint();
     let target = if let Some(user_oid) = target_user {

@@ -23,6 +23,7 @@ use identity_infrastructure::{
     crypto::{certificate_generator::CertificateGeneratorImpl, key::AsymmetricKeyGeneratorImpl},
     database,
     database::{
+        install_lock::InstallLockGuard,
         repository::{install::InstallRepositoryImpl, setting::read_section},
         seed,
         seed::{console, console::ConsoleClientSeedConfig, login},
@@ -51,6 +52,7 @@ pub struct AppBuilder {
     i18n: Option<I18n>,
     tera: Option<Arc<Tera>>,
     runtime_settings: Option<Arc<AppRuntimeSettings>>,
+    install_lock: Option<InstallLockGuard>,
     services: Option<Arc<AppServices>>,
 }
 
@@ -65,6 +67,7 @@ impl AppBuilder {
             i18n: None,
             tera: None,
             runtime_settings: None,
+            install_lock: None,
             services: None,
         })
     }
@@ -90,9 +93,6 @@ impl AppBuilder {
     }
 
     /// Build I18n translations and the Tera template engine.
-    ///
-    /// Side-effect: stores the I18n instance in a global `OnceLock` for
-    /// `AppError` -> HTTP response conversion.
     pub fn init_i18n_and_templates(mut self) -> AppResult<Self> {
         let i18n = identity_infrastructure::i18n::build_i18n()?;
         if self.config.console.enabled && i18n.loader().is_none() {
@@ -124,7 +124,8 @@ impl AppBuilder {
         if installed && let Some(config) = installed_console_seed_config(settings.as_ref())? {
             console::ensure_console_client(db, &config).await?;
         }
-        ensure_install_startup_guard(db, settings.as_ref()).await?;
+        self.install_lock =
+            ensure_install_startup_guard(&self.config.database, settings.as_ref()).await?;
 
         let refresh_interval =
             Duration::from_secs(self.config.settings.refresh_interval_secs.max(1));
@@ -134,7 +135,6 @@ impl AppBuilder {
         Ok(self)
     }
 
-    /// When `APP_ENV=conformance`: ensure the system is installed and seed the
     /// Attempt system installation from config.
     ///
     /// If the system is not yet installed AND the `install` config section
@@ -246,6 +246,7 @@ impl AppBuilder {
             self.i18n.expect("i18n must be initialized first"),
         ));
         let lifecycle = Arc::new(AppLifecycle::new());
+        lifecycle.hold_install_lock(self.install_lock);
         let settings = self
             .runtime_settings
             .expect("runtime settings must be loaded first");
@@ -347,6 +348,3 @@ fn install_domain(cfg: &InstallConfig, config: &AppConfig) -> String {
         .unwrap_or("https://localhost:5150")
         .to_owned()
 }
-
-#[cfg(test)]
-mod tests {}
