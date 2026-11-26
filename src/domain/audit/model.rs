@@ -47,7 +47,6 @@ impl From<AuditEventOid> for Uuid {
 /// An immutable audit record as persisted in `audit`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AuditEvent {
-    pub id: i64,
     pub oid: AuditEventOid,
     pub occurred_at: DateTime<Utc>,
     pub category: AuditCategory,
@@ -78,16 +77,6 @@ pub struct AuditTarget {
 pub struct AuditEventSortKey {
     pub occurred_at: DateTime<Utc>,
     pub id: i64,
-}
-
-impl AuditEventSortKey {
-    #[must_use]
-    pub const fn from_event(event: &AuditEvent) -> Self {
-        Self {
-            occurred_at: event.occurred_at,
-            id: event.id,
-        }
-    }
 }
 
 /// Supported sort fields for security audit event connections.

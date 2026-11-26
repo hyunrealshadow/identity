@@ -9,12 +9,9 @@
 //! subqueries in the same statement, so auditing adds no round trips.
 //! Credentials, tokens, and secret values are never recorded.
 
-use std::{future::Future, net::IpAddr};
-
-use identity_domain::{
-    audit::{AuditActor, AuditActorKind, AuditRecord, AuditTargetKind},
-    authorization::ActorContext,
-};
+use identity_application::audit as audit_context;
+pub use identity_application::audit::{AuditRequestContext, as_system, with_actor, with_request};
+use identity_domain::audit::{AuditActor, AuditActorKind, AuditRecord, AuditTargetKind};
 use sea_orm::{
     ColumnTrait, ConnectionTrait, DatabaseConnection, DbErr, EntityName, EntityTrait,
     TransactionTrait,
@@ -33,35 +30,6 @@ use crate::{
 /// Longest stored User-Agent; longer values are truncated on a char boundary.
 const MAX_USER_AGENT_LEN: usize = 512;
 
-/// Client facts of the inbound request.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-pub struct AuditRequestContext {
-    pub ip_address: Option<IpAddr>,
-    pub user_agent: Option<String>,
-}
-
-tokio::task_local! {
-    static ACTOR: ActorContext;
-    static REQUEST: AuditRequestContext;
-    static SYSTEM: ();
-}
-
-/// Attribute audit records written by `future` to an authenticated actor.
-pub async fn with_actor<F: Future>(actor: ActorContext, future: F) -> F::Output {
-    ACTOR.scope(actor, future).await
-}
-
-/// Attach the inbound request's client facts to audit records.
-pub async fn with_request<F: Future>(request: AuditRequestContext, future: F) -> F::Output {
-    REQUEST.scope(request, future).await
-}
-
-/// Attribute audit records written by `future` to Identity itself, for seed
-/// reconciliation and installation bootstrap.
-pub async fn as_system<F: Future>(future: F) -> F::Output {
-    SYSTEM.scope((), future).await
-}
-
 /// Append `record` on `conn`, normally the business change's transaction.
 #[tracing::instrument(
     skip_all,
@@ -76,7 +44,7 @@ pub async fn as_system<F: Future>(future: F) -> F::Output {
 pub async fn record<C: ConnectionTrait>(conn: &C, record: AuditRecord) -> Result<(), DbErr> {
     let actor = resolve_actor(record.actor.clone(), record.default_actor.clone());
     let (request_id, trace_id) = correlation(&record);
-    let request = REQUEST.try_with(Clone::clone).unwrap_or_default();
+    let request = audit_context::current_request();
     let target_kind = record.target_oid.map(|_| record.action.target_kind());
     let changes = (!record.changes.is_empty())
         .then(|| serde_json::to_value(&record.changes))
@@ -161,13 +129,13 @@ fn resolve_actor(explicit: Option<AuditActor>, fallback: Option<AuditActor>) -> 
     if let Some(actor) = explicit {
         return actor;
     }
-    if let Ok(actor) = ACTOR.try_with(|actor| AuditActor::from_principal(&actor.principal)) {
-        return actor;
+    if let Some(actor) = audit_context::current_actor() {
+        return AuditActor::from_principal(&actor.principal);
     }
     if let Some(actor) = fallback {
         return actor;
     }
-    if SYSTEM.try_with(|()| ()).is_ok() {
+    if audit_context::is_system() {
         return AuditActor::system();
     }
     AuditActor::anonymous()
@@ -175,14 +143,12 @@ fn resolve_actor(explicit: Option<AuditActor>, fallback: Option<AuditActor>) -> 
 
 fn correlation(record: &AuditRecord) -> (Option<String>, Option<String>) {
     let explicit = record.correlation.clone().unwrap_or_default();
-    let actor = ACTOR
-        .try_with(|actor| {
-            (
-                actor.request_id.as_str().to_owned(),
-                actor.trace_id.as_ref().map(|id| id.as_str().to_owned()),
-            )
-        })
-        .ok();
+    let actor = audit_context::current_actor().map(|actor| {
+        (
+            actor.request_id.as_str().to_owned(),
+            actor.trace_id.as_ref().map(|id| id.as_str().to_owned()),
+        )
+    });
     let request = context::current_request_correlation();
     let request_id = explicit
         .request_id

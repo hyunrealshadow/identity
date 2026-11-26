@@ -113,22 +113,7 @@ pub fn with_locale(
 
 #[cfg(test)]
 mod tests {
-    use super::{StaticAssetUrls, build_tera};
-
-    #[test]
-    fn build_tera_loads_runtime_templates_from_assets_views() {
-        let tera = build_tera(None).expect("tera should load templates from assets/views");
-        let template_names = tera.get_template_names().collect::<Vec<_>>();
-
-        for expected in [
-            "error.html",
-            "oauth2/form_post.html",
-            "openid/check_session.html",
-            "openid/logout.html",
-        ] {
-            assert!(template_names.contains(&expected), "missing {expected}");
-        }
-    }
+    use super::StaticAssetUrls;
 
     #[test]
     fn asset_urls_follow_the_manifest_and_keep_unknown_paths() {

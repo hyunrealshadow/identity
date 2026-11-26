@@ -263,25 +263,14 @@ async fn execute_logout(depot: &mut Depot) -> WebResult<()> {
         session_entries,
         session_to_revoke,
     } = take(depot)?;
-    let RpInitiatedLogout {
-        outcome,
-        client_oid,
-    } = ctx
+    let RpInitiatedLogout { outcome, .. } = ctx
         .services()
         .oidc_logout()
         .rp_initiated_logout(request)
         .await?;
 
-    let set_cookie = if let Some((session_oid, _)) = session_to_revoke {
-        let _ = ctx
-            .services()
-            .session()
-            .revoke_for_client(session_oid, client_oid)
-            .await;
-        Some(session_cookie_without(&session_entries, session_oid))
-    } else {
-        None
-    };
+    let set_cookie = session_to_revoke
+        .map(|(session_oid, _)| session_cookie_without(&session_entries, session_oid));
 
     depot.insert_typed(LogoutResponse {
         outcome,

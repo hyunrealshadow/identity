@@ -78,8 +78,7 @@ pub(super) async fn consent_get_displays_registered_custom_scope() {
 
 #[tokio::test]
 pub(super) async fn consent_post_accepts_json_and_returns_continue_uri() {
-    let (state, protected_login_id, _) = consent_test_state().await;
-    let db = state.resources().db().clone();
+    let (state, protected_login_id, _, db) = consent_test_state_with_db().await;
     let service = app_router(state, &consent_test_config());
 
     let mut context_response = TestClient::get(format!(
@@ -118,8 +117,7 @@ pub(super) async fn consent_post_accepts_json_and_returns_continue_uri() {
 
 #[tokio::test]
 pub(super) async fn consent_post_without_a_csrf_token_is_rejected() {
-    let (state, protected_login_id, _) = consent_test_state().await;
-    let db = state.resources().db().clone();
+    let (state, protected_login_id, _, db) = consent_test_state_with_db().await;
     let service = app_router(state, &consent_test_config());
 
     // The device approval rides on this same route, so an unprotected POST
@@ -196,11 +194,10 @@ pub(super) async fn device_code_check_does_not_choose_an_account() {
 
 #[tokio::test]
 pub(super) async fn device_decision_is_recorded_against_the_bound_login() {
-    let (state, protected_login_id, session_oid) = device_decision_test_state().await;
+    let (state, protected_login_id, session_oid, db) = device_decision_test_state_with_db().await;
     let protected_session_id = shared::protect_session_id(&state, SessionOid(session_oid))
         .await
         .unwrap();
-    let db = state.resources().db().clone();
     let service = app_router(state, &consent_test_config());
 
     // The page is addressed by the login the device request was claimed with,

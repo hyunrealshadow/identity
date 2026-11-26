@@ -24,10 +24,9 @@ use super::super::{
             load_user_roles,
         },
     },
-    session::{SessionCursor, SessionNode, session_connection},
+    session::{SessionNode, session_connection},
     user::access::ensure_user_management_read,
 };
-use crate::graphql::cursor::ProtectedCursor;
 use crate::graphql::schema::{
     authorization::request_context,
     connection::{self, ConnectionTotal, OpaqueCursor},
@@ -403,7 +402,7 @@ impl UserNode {
         before: Option<String>,
         #[graphql(validator(minimum = 1, maximum = 100))] first: Option<i32>,
         #[graphql(validator(minimum = 1, maximum = 100))] last: Option<i32>,
-    ) -> GraphqlResult<Connection<ProtectedCursor<SessionCursor>, SessionNode>> {
+    ) -> GraphqlResult<Connection<OpaqueCursor, SessionNode>> {
         self.ensure_management_metadata(ctx).await?;
         session_connection(
             ctx,

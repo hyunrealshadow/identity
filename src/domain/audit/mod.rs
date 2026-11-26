@@ -20,6 +20,6 @@ pub use query::{
     parse_audit_query,
 };
 pub use repository::{
-    AuditEventPage, AuditEventPageDirection, AuditEventQuery, AuditQueryRepository,
-    AuditQueryRepositoryError,
+    AuditEventPage, AuditEventPageDirection, AuditEventQuery, AuditEventRecord,
+    AuditQueryRepository, AuditQueryRepositoryError,
 };

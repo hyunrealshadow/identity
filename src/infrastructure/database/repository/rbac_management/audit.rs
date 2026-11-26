@@ -12,7 +12,7 @@ use uuid::Uuid;
 use crate::database::{
     audit,
     entity::{role, scope, user},
-    repository::authorization_lifecycle,
+    repository::authorization_lifecycle::{self, RecoverableAdminError},
 };
 
 /// Rejects the change if it removed the last recoverable authorization
@@ -24,13 +24,13 @@ pub(crate) async fn append_semantic_audit(
 ) -> Result<(), RbacManagementRepositoryError> {
     authorization_lifecycle::ensure_recoverable_authorization_administrator(txn)
         .await
-        .map_err(|error| match &error {
-            DbErr::Custom(message)
-                if message == "no recoverable authorization administrator remains" =>
-            {
+        .map_err(|error| match error {
+            RecoverableAdminError::LastRecoverableAdministrator => {
                 RbacManagementRepositoryError::LastRecoverableAdministrator
             }
-            _ => RbacManagementRepositoryError::Storage(Box::new(error)),
+            RecoverableAdminError::Storage(error) => {
+                RbacManagementRepositoryError::Storage(Box::new(error))
+            }
         })?;
     audit::record(txn, record.by(&authority.actor))
         .await

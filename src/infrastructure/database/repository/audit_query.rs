@@ -8,9 +8,10 @@ use identity_domain::{
     audit::{
         AuditAction, AuditActor, AuditActorKind, AuditAuthMethod, AuditCategory, AuditChange,
         AuditEvent, AuditEventOid, AuditEventOrderDirection, AuditEventPage,
-        AuditEventPageDirection, AuditEventQuery, AuditFailureReason, AuditIdentifierMatch,
-        AuditOutcome, AuditQueryExpr, AuditQueryField, AuditQueryRepository,
-        AuditQueryRepositoryError, AuditTarget, AuditTargetKind, AuditTextMatcher,
+        AuditEventPageDirection, AuditEventQuery, AuditEventRecord, AuditEventSortKey,
+        AuditFailureReason, AuditIdentifierMatch, AuditOutcome, AuditQueryExpr, AuditQueryField,
+        AuditQueryRepository, AuditQueryRepositoryError, AuditTarget, AuditTargetKind,
+        AuditTextMatcher,
     },
     global_id::DecodedGlobalId,
     pagination::finalize_keyset_page,
@@ -23,7 +24,7 @@ use sea_orm::{
 use serde_json::Value;
 use uuid::Uuid;
 
-use super::rbac_management::support::escape_like;
+use super::sql_support::escape_like;
 use crate::database::entity::audit::{
     Column as AuditColumn, Entity as AuditEntity, Model as AuditModel,
 };
@@ -124,7 +125,7 @@ async fn list(
     Ok(AuditEventPage {
         items: models
             .into_iter()
-            .map(to_domain)
+            .map(to_record)
             .collect::<Result<_, _>>()?,
         has_previous_page,
         has_next_page,
@@ -334,6 +335,15 @@ fn parse_uuid_or_global_id(raw: &str) -> Option<Uuid> {
         .map(|decoded| decoded.oid())
 }
 
+fn to_record(model: AuditModel) -> Result<AuditEventRecord, AuditQueryRepositoryError> {
+    let sort_key = AuditEventSortKey {
+        occurred_at: model.occurred_at.with_timezone(&Utc),
+        id: model.id,
+    };
+    let event = to_domain(model)?;
+    Ok(AuditEventRecord { event, sort_key })
+}
+
 fn to_domain(model: AuditModel) -> Result<AuditEvent, AuditQueryRepositoryError> {
     let target = match (model.target_kind, model.target_oid) {
         (Some(kind), Some(oid)) => Some(AuditTarget {
@@ -357,7 +367,6 @@ fn to_domain(model: AuditModel) -> Result<AuditEvent, AuditQueryRepositoryError>
         Some(value) => serde_json::from_value::<Vec<AuditChange>>(value).map_err(|_| corrupt())?,
     };
     Ok(AuditEvent {
-        id: model.id,
         oid: AuditEventOid::from_uuid(model.oid),
         occurred_at: model.occurred_at.with_timezone(&Utc),
         category: parse::<AuditCategory>(&model.category)?,

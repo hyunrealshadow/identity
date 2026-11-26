@@ -26,6 +26,7 @@ use crate::{
 };
 use chrono::DateTime;
 use identity_application::{
+    audit,
     error::{
         ErrorCode, StepUpChallenge,
         code::AppErrorCode,
@@ -37,7 +38,6 @@ use identity_application::{
     setting::application_origins,
 };
 use identity_domain::auth::AuthenticationContextClass;
-use identity_infrastructure::database::audit;
 use observability::RequestObservation;
 use schema::authorization::EffectivePermissionsProvider;
 
@@ -393,9 +393,13 @@ fn apply_cors(req: &Request, res: &mut Response, config: &GraphqlConfig, depot: 
         return true;
     };
     let installed_origin = app_state(depot).ok().is_some_and(|state| {
-        use identity_application::setting::{AppSettings, SettingsSource};
+        use identity_application::setting::AppSettings;
         application_origins::trusted_application_origins(
-            &state.settings().store().snapshot().section::<AppSettings>(),
+            &state
+                .services()
+                .settings()
+                .snapshot()
+                .section::<AppSettings>(),
         )
         .iter()
         .any(|allowed| allowed == origin)

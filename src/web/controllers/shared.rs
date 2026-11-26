@@ -25,7 +25,7 @@ use crate::{
             AppError,
             codes::{authorize_http, common},
         },
-        setting::{AppSettings, SettingsSource},
+        setting::AppSettings,
     },
     controllers::response::redirect_to_response,
     domain::auth::{
@@ -516,8 +516,8 @@ fn interaction_redirect(
     ui_locales: Option<&str>,
 ) -> Result<Response, AppError> {
     let login_domain = ctx
+        .services()
         .settings()
-        .store()
         .snapshot()
         .section::<AppSettings>()
         .login_domain;

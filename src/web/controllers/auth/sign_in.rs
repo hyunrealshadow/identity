@@ -272,19 +272,10 @@ pub(super) async fn select_account(
     // A forced login or AAL elevation is bound to the original subject. It
     // must never become an account-selection flow.
     if !is_device {
-        let continue_context = ctx
-            .services()
+        ctx.services()
             .oidc_authorize()
-            .load_continue_context_by_login(&body.login_id)
+            .ensure_account_selection_allowed(&body.login_id)
             .await?;
-        if stored_request_has_prompt(
-            continue_context.stored.request.prompt.as_ref(),
-            PromptValue::Login,
-        ) || continue_context.stored.interaction.selection_source
-            == Some(SelectionSource::Reauthentication)
-        {
-            return Err(auth::error::InvalidLoginState.into_error().into());
-        }
     }
 
     let session_oid = unprotect_session_id(&ctx, &body.id).await?;
@@ -489,10 +480,9 @@ pub(super) fn login_link_prefix(
     login_id: &str,
     ui_locales: Option<&[String]>,
 ) -> Result<String, AppError> {
-    use crate::application::setting::SettingsSource as _;
     let login_domain = ctx
+        .services()
         .settings()
-        .store()
         .snapshot()
         .section::<crate::application::setting::AppSettings>()
         .login_domain

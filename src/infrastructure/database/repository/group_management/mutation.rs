@@ -21,7 +21,7 @@ use identity_domain::{
     user::UserOid,
 };
 use sea_orm::{
-    ConnectionTrait, DatabaseTransaction, DbBackend, DbErr, Statement, TransactionTrait, Value,
+    ConnectionTrait, DatabaseTransaction, DbBackend, Statement, TransactionTrait, Value,
 };
 use uuid::Uuid;
 
@@ -42,7 +42,7 @@ use super::{
 };
 
 use crate::database::repository::authorization_lifecycle::{
-    ensure_recoverable_authorization_administrator, lock_owner_lifecycle,
+    RecoverableAdminError, ensure_recoverable_authorization_administrator, lock_owner_lifecycle,
     withdraw_user_authority_in_txn,
 };
 use crate::database::repository::rbac_management::audit::{role_refs, user_ref};
@@ -96,8 +96,6 @@ async fn renew_group_version(
     row.try_get::<Uuid>("", "version").map_err(storage)
 }
 
-const RECOVERY_PROTECTED_MESSAGE: &str = "no recoverable authorization administrator remains";
-
 async fn ensure_recovery(txn: &DatabaseTransaction) -> Result<(), GroupManagementRepositoryError> {
     ensure_recoverable_authorization_administrator(txn)
         .await
@@ -107,11 +105,13 @@ async fn ensure_recovery(txn: &DatabaseTransaction) -> Result<(), GroupManagemen
 /// Only the explicit protection result is a business conflict. Any other
 /// database failure must remain a storage failure instead of claiming that the
 /// last administrator check failed.
-fn map_recovery_error(error: DbErr) -> GroupManagementRepositoryError {
-    if matches!(&error, DbErr::Custom(message) if message == RECOVERY_PROTECTED_MESSAGE) {
-        return GroupManagementRepositoryError::LastRecoveryProtected;
+fn map_recovery_error(error: RecoverableAdminError) -> GroupManagementRepositoryError {
+    match error {
+        RecoverableAdminError::LastRecoverableAdministrator => {
+            GroupManagementRepositoryError::LastRecoveryProtected
+        }
+        RecoverableAdminError::Storage(error) => storage(error),
     }
-    storage(error)
 }
 
 async fn active_member_ids(
@@ -772,7 +772,7 @@ mod tests {
     use identity_application::rbac::GroupManagementRepositoryError;
     use sea_orm::DbErr;
 
-    use super::{RECOVERY_PROTECTED_MESSAGE, map_recovery_error, role_binding_changes};
+    use super::{RecoverableAdminError, map_recovery_error, role_binding_changes};
 
     #[test]
     fn identical_role_sets_are_a_noop() {
@@ -791,11 +791,13 @@ mod tests {
     #[test]
     fn only_the_recovery_signal_maps_to_last_recovery_protection() {
         assert!(matches!(
-            map_recovery_error(DbErr::Custom(RECOVERY_PROTECTED_MESSAGE.to_owned())),
+            map_recovery_error(RecoverableAdminError::LastRecoverableAdministrator),
             GroupManagementRepositoryError::LastRecoveryProtected
         ));
         assert!(matches!(
-            map_recovery_error(DbErr::Custom("connection reset".to_owned())),
+            map_recovery_error(RecoverableAdminError::Storage(DbErr::Custom(
+                "connection reset".to_owned()
+            ))),
             GroupManagementRepositoryError::Storage(_)
         ));
     }

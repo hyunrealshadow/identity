@@ -47,8 +47,14 @@ impl AppState {
     }
 
     #[must_use]
-    pub fn settings(&self) -> &AppRuntimeSettings {
+    pub(crate) fn settings(&self) -> &AppRuntimeSettings {
         self.settings.as_ref()
+    }
+
+    /// Whether `origin` is permitted by the cached application/CORS allowlist.
+    #[must_use]
+    pub fn allows_cors_origin(&self, origin: &str) -> bool {
+        self.settings.cors_origins().allows(origin)
     }
 
     #[must_use]

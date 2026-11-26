@@ -133,6 +133,26 @@ impl AuthorizeService {
         self.encrypt_login_id(login.oid).await
     }
 
+    /// Ensure an authorization interaction permits interactive account
+    /// selection rather than forcing reauthentication of a bound subject.
+    pub async fn ensure_account_selection_allowed(
+        &self,
+        protected_login_oid: &str,
+    ) -> Result<(), AppError> {
+        let continue_context = self
+            .load_continue_context_by_login(protected_login_oid)
+            .await?;
+        if super::stored_request_has_prompt(
+            continue_context.stored.request.prompt.as_ref(),
+            identity_domain::openid_connect::PromptValue::Login,
+        ) || continue_context.stored.interaction.selection_source
+            == Some(SelectionSource::Reauthentication)
+        {
+            return Err(auth::error::InvalidLoginState.into());
+        }
+        Ok(())
+    }
+
     pub async fn load_continue_context_by_login(
         &self,
         protected_login_oid: &str,

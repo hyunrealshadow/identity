@@ -278,6 +278,26 @@ impl Injector for HeaderInjector<'_> {
     }
 }
 
+pub struct HttpHeaderInjector<'a>(pub &'a mut HeaderMap);
+
+impl identity_application::observability::HeaderInjector for HttpHeaderInjector<'_> {
+    fn set(&mut self, name: &str, value: String) {
+        if let Ok(name) = HeaderName::from_bytes(name.as_bytes())
+            && let Ok(value) = HeaderValue::from_str(&value)
+        {
+            self.0.insert(name, value);
+        }
+    }
+}
+
+struct DynHeaderInjector<'a>(&'a mut dyn identity_application::observability::HeaderInjector);
+
+impl Injector for DynHeaderInjector<'_> {
+    fn set(&mut self, key: &str, value: String) {
+        self.0.set(key, value);
+    }
+}
+
 /// Inject an explicit span context using the global propagator.
 pub fn inject_span_context(span_context: &SpanContext, headers: &mut HeaderMap) {
     let context = Context::new().with_remote_span_context(span_context.clone());
@@ -293,9 +313,18 @@ pub fn inject_context(context: &Context, headers: &mut HeaderMap) {
 
 /// Inject the currently active span (if any) into outbound headers.
 pub fn inject_current_span(headers: &mut HeaderMap) {
+    inject_current_span_into(&mut HttpHeaderInjector(headers));
+}
+
+/// Inject the currently active span (if any) into a transport-neutral header sink.
+pub fn inject_current_span_into(
+    injector: &mut dyn identity_application::observability::HeaderInjector,
+) {
     let context = Span::current().context();
     if context.has_active_span() {
-        inject_context(&context, headers);
+        global::get_text_map_propagator(|propagator| {
+            propagator.inject_context(&context, &mut DynHeaderInjector(injector));
+        });
     }
 }
 

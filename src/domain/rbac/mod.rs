@@ -12,7 +12,6 @@ pub mod group;
 pub mod ids;
 pub mod metadata;
 pub mod model;
-pub mod repository;
 pub mod snapshot;
 
 pub use authorization::{
@@ -48,10 +47,6 @@ pub use model::{
     EffectivePermissionSources, GroupRolePath, PermissionCode, RbacLifecycleError,
     RbacValidationError, ResourcePermission, Role, RolePermission, UserRole,
     project_effective_permissions, project_scope_names,
-};
-pub use repository::{
-    AuthorizationVersionRepository, EffectivePermissionRepository, RbacRepositoryError,
-    RoleRepository, UserRoleRepository,
 };
 pub use snapshot::{
     BindingSnapshotError, UserAuthorizationSnapshot, UserRoleSnapshot, validate_binding_snapshot,

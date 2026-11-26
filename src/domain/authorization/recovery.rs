@@ -1,9 +1,5 @@
 //! Recoverability facts collected within the authorization-changing transaction.
 
-use std::error::Error;
-
-use crate::user::UserOid;
-
 /// Snapshot of owner recovery facts. Collection must happen inside the same
 /// transaction that changes bindings/credentials/account state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -22,21 +18,4 @@ impl OwnerAccessSnapshot {
             && self.target_user_enabled
             && self.target_has_recoverable_credential
     }
-}
-
-/// Port for owner recovery facts. The implementation must be invoked by the
-/// transaction-owning adapter while its transaction is open; it must not open a
-/// second connection or silently assume a user is recoverable.
-#[async_trait::async_trait]
-pub trait OwnerRecoverabilityPort: Send + Sync {
-    async fn owner_access_snapshot(
-        &self,
-        target: UserOid,
-    ) -> Result<OwnerAccessSnapshot, OwnerRecoverabilityError>;
-}
-
-#[derive(Debug, thiserror::Error)]
-pub enum OwnerRecoverabilityError {
-    #[error("failed to read owner recovery facts")]
-    Storage(#[source] Box<dyn Error + Send + Sync + 'static>),
 }

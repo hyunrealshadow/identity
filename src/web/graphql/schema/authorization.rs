@@ -152,21 +152,14 @@ impl Guard for MfaRecentAuthenticationGuard {
     async fn check(&self, ctx: &Context<'_>) -> Result<()> {
         let request = request_context(ctx)?;
         let user_oid = request.user_oid()?;
-        let state = request.state.clone();
-        let status = state
+        let has_mfa = request
+            .state
             .services()
-            .mfa()
-            .status(user_oid)
+            .login()
+            .has_second_factor(user_oid)
             .await
             .map_err(|error| app_error(ctx, error))?;
-        let has_passkeys = !state
-            .services()
-            .passkey()
-            .list(user_oid)
-            .await
-            .map_err(|error| app_error(ctx, error))?
-            .is_empty();
-        if status.totp_enabled || has_passkeys {
+        if has_mfa {
             RecentAuthenticationGuard::aal2().check(ctx).await
         } else {
             RecentAuthenticationGuard::new().check(ctx).await

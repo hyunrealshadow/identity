@@ -21,10 +21,17 @@ pub struct AuditEventQuery {
     pub limit: usize,
 }
 
+/// Internal repository page item bundling a domain audit event with its keyset sort key.
+#[derive(Debug, Clone, PartialEq)]
+pub struct AuditEventRecord {
+    pub event: AuditEvent,
+    pub sort_key: AuditEventSortKey,
+}
+
 /// Repository page result preserving bidirectional cursor edge flags.
 #[derive(Debug, Clone, PartialEq)]
 pub struct AuditEventPage {
-    pub items: Vec<AuditEvent>,
+    pub items: Vec<AuditEventRecord>,
     pub has_previous_page: bool,
     pub has_next_page: bool,
 }

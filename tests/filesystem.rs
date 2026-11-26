@@ -1,4 +1,6 @@
-//! Filesystem integration for TLS material and workload credentials.
+//! Filesystem integration for runtime assets, TLS material, and workload credentials.
+#[path = "filesystem/assets.rs"]
+mod assets;
 #[path = "filesystem/tls.rs"]
 mod tls;
 #[path = "filesystem/workload.rs"]

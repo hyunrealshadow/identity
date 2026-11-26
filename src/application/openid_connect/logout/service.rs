@@ -230,98 +230,111 @@ impl LogoutService {
         let hinted_client = audience_client_id(id_token_hint.as_ref())
             .and_then(|client_id| identifier::parse_client_id(&client_id).ok());
 
-        let Some(raw_redirect_uri) = request.post_logout_redirect_uri.as_deref() else {
-            let outcome = self
-                .outcome_with_frontchannel_notifications(
-                    request.session_oid,
-                    request.protected_session_id.as_deref(),
-                    None,
-                )
-                .await?;
-            return Ok(RpInitiatedLogout {
-                outcome,
-                client_oid: hinted_client,
-            });
+        let mut post_logout_redirect_uri = None;
+        let client_oid = if let Some(raw_redirect_uri) = request.post_logout_redirect_uri.as_deref()
+        {
+            let redirect_uri = Url::parse(raw_redirect_uri)
+                .map_err(openid_connect::error::PostLogoutRedirectUriInvalid::map_source())?;
+
+            let client_id = request
+                .client_id
+                .as_deref()
+                .map(str::to_owned)
+                .or_else(|| audience_client_id(id_token_hint.as_ref()))
+                .ok_or_else(|| openid_connect::error::IdTokenHintRequired.into_error())?;
+            let client_oid = identifier::parse_client_id(&client_id)
+                .map_err(openid_connect::error::LogoutClientInvalid::map_source())?;
+
+            if id_token_hint.as_ref().is_some_and(|claims| {
+                !claims
+                    .audience
+                    .iter()
+                    .any(|audience| audience == &client_id)
+                    || claims
+                        .authorized_party
+                        .as_ref()
+                        .is_some_and(|authorized_party| authorized_party != &client_id)
+            }) {
+                return Err(openid_connect::error::IdTokenHintInvalid.into_error());
+            }
+
+            let client = self
+                .client_repo
+                .find_by_oid(client_oid)
+                .await
+                .map_err(openid_connect::error::LogoutClientLookupFailed::map_source())?
+                .ok_or_else(|| openid_connect::error::LogoutClientNotFound.into_error())?;
+
+            validate_registered_post_logout_redirect_uri(&client, &redirect_uri)?;
+
+            let mut redirect_uri = redirect_uri;
+            if let Some(state) = request.state.as_deref() {
+                redirect_uri.query_pairs_mut().append_pair("state", state);
+            }
+            post_logout_redirect_uri = Some(redirect_uri);
+            Some(client_oid)
+        } else {
+            hinted_client
         };
 
-        let redirect_uri = Url::parse(raw_redirect_uri)
-            .map_err(openid_connect::error::PostLogoutRedirectUriInvalid::map_source())?;
-
-        let client_id = request
-            .client_id
-            .as_deref()
-            .map(str::to_owned)
-            .or_else(|| audience_client_id(id_token_hint.as_ref()));
-
-        let client_id =
-            client_id.ok_or_else(|| openid_connect::error::IdTokenHintRequired.into_error())?;
-        let client_oid = identifier::parse_client_id(&client_id)
-            .map_err(openid_connect::error::LogoutClientInvalid::map_source())?;
-
-        if id_token_hint.as_ref().is_some_and(|claims| {
-            !claims
-                .audience
-                .iter()
-                .any(|audience| audience == &client_id)
-                || claims
-                    .authorized_party
-                    .as_ref()
-                    .is_some_and(|authorized_party| authorized_party != &client_id)
-        }) {
-            return Err(openid_connect::error::IdTokenHintInvalid.into_error());
-        }
-
-        let client = self
-            .client_repo
-            .find_by_oid(client_oid)
-            .await
-            .map_err(openid_connect::error::LogoutClientLookupFailed::map_source())?
-            .ok_or_else(|| openid_connect::error::LogoutClientNotFound.into_error())?;
-
-        validate_registered_post_logout_redirect_uri(&client, &redirect_uri)?;
-
-        let mut redirect_uri = redirect_uri;
-        if let Some(state) = request.state.as_deref() {
-            redirect_uri.query_pairs_mut().append_pair("state", state);
-        }
-
-        let outcome = self
-            .outcome_with_frontchannel_notifications(
+        let backchannel_notifications = self
+            .backchannel_logout_notifications(
                 request.session_oid,
                 request.protected_session_id.as_deref(),
-                Some(redirect_uri),
             )
             .await?;
+        let frontchannel_notifications = self
+            .frontchannel_logout_notifications(
+                request.session_oid,
+                request.protected_session_id.as_deref(),
+            )
+            .await?;
+
+        if let (Some(session_oid), Some(session_repo)) = (request.session_oid, &self.session_repo)
+            && let Some(session) = session_repo
+                .revoke_by_oid(session_oid, chrono::Utc::now(), client_oid)
+                .await
+                .map_err(AppError::from)?
+        {
+            self.events.emit(
+                BusinessEvent::audit("session.revoked")
+                    .outcome("success")
+                    .attribute(
+                        "session_oid",
+                        EventValue::Pseudonymized {
+                            purpose: "session_oid",
+                            value: session.oid.0.to_string(),
+                        },
+                    )
+                    .attribute(
+                        "user_oid",
+                        EventValue::Pseudonymized {
+                            purpose: "user_oid",
+                            value: session.user_oid.to_string(),
+                        },
+                    ),
+            );
+        }
+
+        self.deliver_backchannel_notifications(backchannel_notifications)
+            .await?;
+
+        let outcome = if !frontchannel_notifications.is_empty() {
+            LogoutOutcome::FrontChannel {
+                notifications: frontchannel_notifications,
+                post_logout_redirect_uri,
+            }
+        } else {
+            match post_logout_redirect_uri {
+                Some(redirect_uri) => LogoutOutcome::Redirect { redirect_uri },
+                None => LogoutOutcome::LoggedOut,
+            }
+        };
+
         Ok(RpInitiatedLogout {
             outcome,
-            client_oid: Some(client_oid),
+            client_oid,
         })
-    }
-
-    async fn outcome_with_frontchannel_notifications(
-        &self,
-        session_oid: Option<SessionOid>,
-        protected_session_id: Option<&str>,
-        post_logout_redirect_uri: Option<Url>,
-    ) -> Result<LogoutOutcome, AppError> {
-        self.send_backchannel_logout_notifications(session_oid, protected_session_id)
-            .await?;
-
-        let notifications = self
-            .frontchannel_logout_notifications(session_oid, protected_session_id)
-            .await?;
-
-        if !notifications.is_empty() {
-            return Ok(LogoutOutcome::FrontChannel {
-                notifications,
-                post_logout_redirect_uri,
-            });
-        }
-
-        match post_logout_redirect_uri {
-            Some(redirect_uri) => Ok(LogoutOutcome::Redirect { redirect_uri }),
-            None => Ok(LogoutOutcome::LoggedOut),
-        }
     }
 
     async fn frontchannel_logout_notifications(
@@ -437,16 +450,12 @@ impl LogoutService {
             .collect()
     }
 
-    async fn send_backchannel_logout_notifications(
+    async fn deliver_backchannel_notifications(
         &self,
-        session_oid: Option<SessionOid>,
-        protected_session_id: Option<&str>,
+        notifications: Vec<BackChannelLogoutNotification>,
     ) -> Result<(), AppError> {
         const MAX_CONCURRENT_BACKCHANNEL_LOGOUTS: usize = 8;
 
-        let notifications = self
-            .backchannel_logout_notifications(session_oid, protected_session_id)
-            .await?;
         if notifications.is_empty() {
             return Ok(());
         }

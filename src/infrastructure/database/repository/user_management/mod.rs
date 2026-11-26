@@ -43,8 +43,8 @@ use super::{
     authorization,
     authorization::load_user_permission_authority,
     authorization_lifecycle::{
-        ensure_recoverable_authorization_administrator, lock_owner_lifecycle,
-        renew_user_version_in_txn, sync_user_authority_in_txn,
+        RecoverableAdminError, ensure_recoverable_authorization_administrator,
+        lock_owner_lifecycle, renew_user_version_in_txn, sync_user_authority_in_txn,
     },
     email_verification::discard_for_user_in_txn,
     session_security::lock_account_sessions,
@@ -686,11 +686,12 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
             // Capability-based last recoverable authorization administrator:
             // the proposed disablement is already visible in this transaction.
             if let Err(error) = ensure_recoverable_authorization_administrator(&txn).await {
-                if matches!(&error, DbErr::Custom(message) if message == "no recoverable authorization administrator remains")
-                {
-                    return Ok(UserManagementMutationOutcome::LastOwnerProtected);
-                }
-                return Err(storage(error));
+                return match error {
+                    RecoverableAdminError::LastRecoverableAdministrator => {
+                        Ok(UserManagementMutationOutcome::LastOwnerProtected)
+                    }
+                    RecoverableAdminError::Storage(error) => Err(storage(error)),
+                };
             }
             updated.version = stored_user_version(&txn, updated.id).await?;
         }
@@ -913,11 +914,12 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
             .collect::<Vec<_>>();
         invalidate_access_in_txn(&txn, command.user_oid, model.id).await?;
         if let Err(error) = ensure_recoverable_authorization_administrator(&txn).await {
-            if matches!(&error, DbErr::Custom(message) if message == "no recoverable authorization administrator remains")
-            {
-                return Ok(UserManagementMutationOutcome::LastOwnerProtected);
-            }
-            return Err(storage(error));
+            return match error {
+                RecoverableAdminError::LastRecoverableAdministrator => {
+                    Ok(UserManagementMutationOutcome::LastOwnerProtected)
+                }
+                RecoverableAdminError::Storage(error) => Err(storage(error)),
+            };
         }
         let mut updated = model.clone();
         updated.version = stored_user_version(&txn, updated.id).await?;
@@ -1160,11 +1162,12 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
             .await
             .map_err(storage)?;
         if let Err(error) = ensure_recoverable_authorization_administrator(&txn).await {
-            if matches!(&error, DbErr::Custom(message) if message == "no recoverable authorization administrator remains")
-            {
-                return Ok(UserManagementMutationOutcome::LastOwnerProtected);
-            }
-            return Err(storage(error));
+            return match error {
+                RecoverableAdminError::LastRecoverableAdministrator => {
+                    Ok(UserManagementMutationOutcome::LastOwnerProtected)
+                }
+                RecoverableAdminError::Storage(error) => Err(storage(error)),
+            };
         }
         let user = to_domain(model).map_err(map_domain_user)?;
         txn.commit().await.map_err(storage)?;
@@ -1176,5 +1179,3 @@ impl UserManagementRepository for UserManagementRepositoryImpl {
 
 mod support;
 use support::*;
-#[cfg(test)]
-mod tests;

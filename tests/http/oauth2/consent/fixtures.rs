@@ -30,7 +30,7 @@ use identity_infrastructure::{
     settings::AppRuntimeSettings,
     templates::build_tera,
 };
-use sea_orm::{DatabaseBackend, MockDatabase, MockExecResult, Value};
+use sea_orm::{DatabaseBackend, DatabaseConnection, MockDatabase, MockExecResult, Value};
 use serde_json::{json, to_value};
 use uuid::Uuid;
 
@@ -77,32 +77,44 @@ pub(super) fn consent_test_config() -> AppConfig {
 }
 
 pub(super) async fn consent_test_state() -> (AppState, String, Uuid) {
-    consent_test_state_with_scope("openid profile").await
+    let (state, login_id, session_oid, _db) = consent_test_state_with_db().await;
+    (state, login_id, session_oid)
+}
+
+pub(super) async fn consent_test_state_with_db() -> (AppState, String, Uuid, DatabaseConnection) {
+    consent_test_state_for(QueuedInteraction::Authorization, "openid profile").await
 }
 
 pub(super) async fn consent_test_state_with_scope(scope: &str) -> (AppState, String, Uuid) {
-    consent_test_state_for(QueuedInteraction::Authorization, scope).await
+    let (state, login_id, session_oid, _db) =
+        consent_test_state_for(QueuedInteraction::Authorization, scope).await;
+    (state, login_id, session_oid)
 }
 
 /// State whose queued rows answer the verification page of [`DEVICE_USER_CODE`].
 pub(super) async fn device_verification_test_state() -> (AppState, String, Uuid) {
-    consent_test_state_for(QueuedInteraction::DeviceRequest, "openid profile").await
+    let (state, login_id, session_oid, _db) =
+        consent_test_state_for(QueuedInteraction::DeviceRequest, "openid profile").await;
+    (state, login_id, session_oid)
 }
 
 /// State whose queued rows answer that page and then a decision on it.
-pub(super) async fn device_decision_test_state() -> (AppState, String, Uuid) {
+pub(super) async fn device_decision_test_state_with_db()
+-> (AppState, String, Uuid, DatabaseConnection) {
     consent_test_state_for(QueuedInteraction::DeviceDecision, "openid profile").await
 }
 
 /// State whose queued rows report that no request carries the entered code.
 pub(super) async fn unknown_user_code_test_state() -> (AppState, String, Uuid) {
-    consent_test_state_for(QueuedInteraction::UnknownUserCode, "openid profile").await
+    let (state, login_id, session_oid, _db) =
+        consent_test_state_for(QueuedInteraction::UnknownUserCode, "openid profile").await;
+    (state, login_id, session_oid)
 }
 
 async fn consent_test_state_for(
     interaction: QueuedInteraction,
     scope: &str,
-) -> (AppState, String, Uuid) {
+) -> (AppState, String, Uuid, DatabaseConnection) {
     let now = Utc::now();
     let client_oid = Uuid::new_v4();
     let authorization_oid = Uuid::new_v4();
@@ -567,7 +579,7 @@ async fn consent_test_state_for(
             AppEnvironment::Test,
             HealthChecksConfig::default(),
         )),
-        Arc::new(AppResources::new(db, tera, i18n)),
+        Arc::new(AppResources::new(db.clone(), tera, i18n)),
         Arc::new(AppLifecycle::new()),
         settings,
         services,
@@ -580,5 +592,5 @@ async fn consent_test_state_for(
         .await
         .unwrap();
 
-    (state, protected_login_id, session_oid)
+    (state, protected_login_id, session_oid, db)
 }

@@ -1,27 +1,28 @@
-use std::env;
+use std::collections::HashMap;
 
 use noyalib::compat::serde_yaml::from_str;
-use serial_test::serial;
 
-use super::{AppConfig, AppEnvironment, StaticTokenConfig, render_config_template};
+use super::{AppConfig, AppEnvironment, StaticTokenConfig, render_config_template_with};
 
-fn set_env(key: &str, value: &str) {
-    unsafe { env::set_var(key, value) };
-}
-
-fn remove_env(key: &str) {
-    unsafe { env::remove_var(key) };
+fn env_lookup<'a>(
+    vars: &'a [(&'a str, &'a str)],
+) -> impl Fn(&str) -> Result<String, String> + Send + Sync + 'static {
+    let map: HashMap<String, String> = vars
+        .iter()
+        .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+        .collect();
+    move |key| {
+        map.get(key)
+            .cloned()
+            .ok_or_else(|| format!("missing env var {key}"))
+    }
 }
 
 #[test]
-#[serial]
 #[cfg(feature = "oidc-conformance")]
 fn detect_conformance_environment() {
-    set_env("APP_ENV", "conformance");
-
-    let environment = AppEnvironment::detect();
-
-    remove_env("APP_ENV");
+    let get_env = env_lookup(&[("APP_ENV", "conformance")]);
+    let environment = AppEnvironment::detect_environment_with(|key| get_env(key).ok());
 
     assert!(matches!(environment, AppEnvironment::Conformance));
     assert!(environment.is_conformance());
@@ -30,70 +31,57 @@ fn detect_conformance_environment() {
 }
 
 #[test]
-#[serial]
 fn detect_prefers_app_env_over_rust_env() {
-    set_env("APP_ENV", "production");
-    set_env("RUST_ENV", "test");
-
-    let environment = AppEnvironment::detect();
-
-    remove_env("APP_ENV");
-    remove_env("RUST_ENV");
+    let get_env = env_lookup(&[("APP_ENV", "production"), ("RUST_ENV", "test")]);
+    let environment = AppEnvironment::detect_environment_with(|key| get_env(key).ok());
 
     assert!(matches!(environment, AppEnvironment::Production));
 }
 
 #[test]
-#[serial]
 fn detect_uses_rust_env_and_normalizes_custom_values() {
-    remove_env("APP_ENV");
-    set_env("RUST_ENV", "Staging");
-
-    let environment = AppEnvironment::detect();
-
-    remove_env("RUST_ENV");
+    let get_env = env_lookup(&[("RUST_ENV", "Staging")]);
+    let environment = AppEnvironment::detect_environment_with(|key| get_env(key).ok());
 
     assert!(matches!(environment, AppEnvironment::Custom(value) if value == "staging"));
 }
 
 #[test]
-#[serial]
 fn render_template_uses_default_when_env_is_missing() {
-    remove_env("TEST_RENDER_ENV");
-
-    let rendered = render_config_template(
+    let rendered = render_config_template_with(
         r#"value: {{ get_env(name="TEST_RENDER_ENV", default="fallback") }}"#,
+        env_lookup(&[]),
     )
     .unwrap();
 
     assert_eq!(rendered, "value: fallback");
-    let rendered =
-        render_config_template(r#"port: {{ get_env(name="TEST_RENDER_ENV", default=5150) }}"#)
-            .unwrap();
+    let rendered = render_config_template_with(
+        r#"port: {{ get_env(name="TEST_RENDER_ENV", default=5150) }}"#,
+        env_lookup(&[]),
+    )
+    .unwrap();
     assert_eq!(rendered, "port: 5150");
 }
 
 #[test]
-#[serial]
 fn render_template_errors_when_required_env_is_missing() {
-    remove_env("TEST_RENDER_ENV");
-
-    let result = render_config_template(r#"value: {{ get_env(name="TEST_RENDER_ENV") }}"#);
+    let result = render_config_template_with(
+        r#"value: {{ get_env(name="TEST_RENDER_ENV") }}"#,
+        env_lookup(&[]),
+    );
 
     assert!(result.is_err());
 }
 
 #[test]
-#[serial]
 fn render_template_reads_inline_workload_token() {
     const TOKEN: &str = "local-token-with-at-least-32-characters";
-    set_env("TEST_WORKLOAD_TOKEN", TOKEN);
-
-    let rendered =
-        render_config_template(r#"token: {{ get_env(name="TEST_WORKLOAD_TOKEN") }}"#).unwrap();
+    let rendered = render_config_template_with(
+        r#"token: {{ get_env(name="TEST_WORKLOAD_TOKEN") }}"#,
+        env_lookup(&[("TEST_WORKLOAD_TOKEN", TOKEN)]),
+    )
+    .unwrap();
     let config = from_str::<StaticTokenConfig>(&rendered).unwrap();
-
-    remove_env("TEST_WORKLOAD_TOKEN");
 
     assert_eq!(config.token.as_deref(), Some(TOKEN));
     assert!(config.has_exactly_one_source());

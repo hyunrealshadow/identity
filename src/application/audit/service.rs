@@ -4,8 +4,8 @@ use chrono::{DateTime, SubsecRound, Utc};
 use identity_domain::{
     audit::{
         AuditEvent, AuditEventOid, AuditEventOrder, AuditEventPageDirection, AuditEventQuery,
-        AuditEventSortKey, AuditQueryError, AuditQueryExpr, AuditQueryRepository,
-        AuditQueryRepositoryError, parse_audit_query,
+        AuditQueryError, AuditQueryExpr, AuditQueryRepository, AuditQueryRepositoryError,
+        parse_audit_query,
     },
     time_zone::TimeZone,
 };
@@ -109,7 +109,7 @@ impl AuditQueryService {
         let sort_keys = page
             .items
             .iter()
-            .map(AuditEventSortKey::from_event)
+            .map(|record| record.sort_key)
             .collect::<Vec<_>>();
         let cursors = encode_cursors(
             self.data_protector.as_ref(),
@@ -124,7 +124,10 @@ impl AuditQueryService {
             .items
             .into_iter()
             .zip(cursors)
-            .map(|(event, cursor)| AuditEventPageItem { event, cursor })
+            .map(|(record, cursor)| AuditEventPageItem {
+                event: record.event,
+                cursor,
+            })
             .collect();
 
         Ok(AuditEventPageResult {
@@ -263,8 +266,9 @@ mod tests {
     use chrono::Duration;
     use identity_domain::audit::{
         AuditAction, AuditActor, AuditCategory, AuditEvent, AuditEventOid, AuditEventOrder,
-        AuditEventPage, AuditEventQuery, AuditOutcome, AuditQueryExpr, AuditQueryRepository,
-        AuditQueryRepositoryError, AuditTarget, AuditTargetKind,
+        AuditEventPage, AuditEventQuery, AuditEventRecord, AuditEventSortKey, AuditOutcome,
+        AuditQueryExpr, AuditQueryRepository, AuditQueryRepositoryError, AuditTarget,
+        AuditTargetKind,
     };
     use uuid::Uuid;
 
@@ -301,7 +305,7 @@ mod tests {
 
     #[derive(Default)]
     struct RecordingRepository {
-        events: Vec<AuditEvent>,
+        events: Vec<AuditEventRecord>,
         last_expr: Mutex<Option<AuditQueryExpr>>,
         queries: Mutex<Vec<AuditEventQuery>>,
     }
@@ -334,32 +338,38 @@ mod tests {
             &self,
             oid: AuditEventOid,
         ) -> Result<Option<AuditEvent>, AuditQueryRepositoryError> {
-            Ok(self.events.iter().find(|e| e.oid == oid).cloned())
+            Ok(self
+                .events
+                .iter()
+                .find(|record| record.event.oid == oid)
+                .map(|record| record.event.clone()))
         }
     }
 
-    fn sample_event(id: i64, occurred_at: DateTime<Utc>) -> AuditEvent {
-        AuditEvent {
-            id,
-            oid: AuditEventOid::from_uuid(Uuid::new_v4()),
-            occurred_at,
-            category: AuditCategory::Management,
-            action: AuditAction::UserCreate,
-            outcome: AuditOutcome::Success,
-            failure_reason: None,
-            actor: AuditActor::user(Uuid::new_v4()),
-            target: Some(AuditTarget {
-                kind: AuditTargetKind::User,
-                oid: Uuid::new_v4(),
-                label: Some("alice".to_owned()),
-            }),
-            client_oid: None,
-            auth_methods: Vec::new(),
-            ip_address: None,
-            user_agent: None,
-            request_id: Some("req-1".to_owned()),
-            trace_id: Some("trace-1".to_owned()),
-            changes: Vec::new(),
+    fn sample_event(id: i64, occurred_at: DateTime<Utc>) -> AuditEventRecord {
+        AuditEventRecord {
+            event: AuditEvent {
+                oid: AuditEventOid::from_uuid(Uuid::new_v4()),
+                occurred_at,
+                category: AuditCategory::Management,
+                action: AuditAction::UserCreate,
+                outcome: AuditOutcome::Success,
+                failure_reason: None,
+                actor: AuditActor::user(Uuid::new_v4()),
+                target: Some(AuditTarget {
+                    kind: AuditTargetKind::User,
+                    oid: Uuid::new_v4(),
+                    label: Some("alice".to_owned()),
+                }),
+                client_oid: None,
+                auth_methods: Vec::new(),
+                ip_address: None,
+                user_agent: None,
+                request_id: Some("req-1".to_owned()),
+                trace_id: Some("trace-1".to_owned()),
+                changes: Vec::new(),
+            },
+            sort_key: AuditEventSortKey { occurred_at, id },
         }
     }
 

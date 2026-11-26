@@ -200,16 +200,28 @@ fn invalid_config(message: impl Into<String>) -> IoError {
 }
 
 fn render_config_template(raw: &str) -> ConfigResult<String> {
+    render_config_template_with(raw, |name| {
+        env::var(name).map_err(|error| error.to_string())
+    })
+}
+
+pub(crate) fn render_config_template_with(
+    raw: &str,
+    get_env: impl Fn(&str) -> Result<String, String> + Send + Sync + 'static,
+) -> ConfigResult<String> {
     let mut tera = Tera::default();
-    tera.register_function("get_env", |args: Kwargs, _: &State| -> TeraResult<Value> {
-        let name = args.must_get::<String>("name")?;
-        match env::var(&name) {
-            Ok(value) => Ok(Value::from(value)),
-            Err(error) => args
-                .get::<Value>("default")?
-                .ok_or_else(|| TeraError::message(format!("get_env({name}): {error}"))),
-        }
-    });
+    tera.register_function(
+        "get_env",
+        move |args: Kwargs, _: &State| -> TeraResult<Value> {
+            let name = args.must_get::<String>("name")?;
+            match get_env(&name) {
+                Ok(value) => Ok(Value::from(value)),
+                Err(error) => args
+                    .get::<Value>("default")?
+                    .ok_or_else(|| TeraError::message(format!("get_env({name}): {error}"))),
+            }
+        },
+    );
     tera.add_raw_template("config", raw)?;
     Ok(tera.render("config", &Context::new())?)
 }
@@ -227,9 +239,13 @@ pub enum AppEnvironment {
 impl AppEnvironment {
     #[must_use]
     pub fn detect() -> Self {
-        let raw = env::var("APP_ENV")
-            .or_else(|_| env::var("RUST_ENV"))
-            .unwrap_or_else(|_| "development".to_owned());
+        Self::detect_environment_with(|key| env::var(key).ok())
+    }
+
+    pub(crate) fn detect_environment_with(mut get_env: impl FnMut(&str) -> Option<String>) -> Self {
+        let raw = get_env("APP_ENV")
+            .or_else(|| get_env("RUST_ENV"))
+            .unwrap_or_else(|| "development".to_owned());
 
         match raw.to_lowercase().as_str() {
             "development" | "dev" => Self::Development,

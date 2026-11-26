@@ -19,7 +19,6 @@ use identity_domain::{
         catalog::ManagementScope,
         ids::PolicyVersion,
         policy_fingerprint,
-        recovery::{OwnerAccessSnapshot, OwnerRecoverabilityError, OwnerRecoverabilityPort},
         repository::{ManagementAuthorityRepository, ManagementRepositoryError},
         snapshot,
         snapshot::ManagementAuthorizationSnapshot,
@@ -34,7 +33,6 @@ use sea_orm::{
 use serde_json::Value as SerdeJsonValue;
 use uuid::Uuid;
 
-use super::authorization_lifecycle::recoverable_authorization_snapshot_in_txn;
 use crate::database::authority_snapshot::user_authority_fingerprint;
 
 pub struct AuthorizationRepositoryImpl {
@@ -279,21 +277,5 @@ impl ManagementAuthorityRepository for AuthorizationRepositoryImpl {
                 Err(error)
             }
         }
-    }
-}
-
-#[async_trait]
-impl OwnerRecoverabilityPort for AuthorizationRepositoryImpl {
-    async fn owner_access_snapshot(
-        &self,
-        target: UserOid,
-    ) -> Result<OwnerAccessSnapshot, OwnerRecoverabilityError> {
-        let fail = |error: DbErr| OwnerRecoverabilityError::Storage(Box::new(error));
-        let txn = self.db.begin().await.map_err(fail)?;
-        let snapshot = recoverable_authorization_snapshot_in_txn(&txn, target)
-            .await
-            .map_err(fail)?;
-        txn.commit().await.map_err(fail)?;
-        Ok(snapshot)
     }
 }

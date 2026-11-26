@@ -282,6 +282,18 @@ fn is_recoverable_full_authority(authority: &UserPermissionAuthority) -> bool {
 /// Ensure at least one recoverable authorization administrator remains.
 ///
 /// Call this AFTER the proposed authorization/account/credential mutation and
+#[derive(Debug)]
+pub(crate) enum RecoverableAdminError {
+    LastRecoverableAdministrator,
+    Storage(DbErr),
+}
+
+impl From<DbErr> for RecoverableAdminError {
+    fn from(error: DbErr) -> Self {
+        Self::Storage(error)
+    }
+}
+
 /// BEFORE audit/commit, while holding [`lock_owner_lifecycle`]. It sees the
 /// transaction's own updates. It returns an error when no enabled user with a
 /// usable credential holds the exact complete trusted management permission
@@ -290,7 +302,7 @@ fn is_recoverable_full_authority(authority: &UserPermissionAuthority) -> bool {
 #[tracing::instrument(skip_all, name = "db.query", fields(db.system = "postgresql", db.operation = "ensure_recoverable_authorization_administrator"))]
 pub(crate) async fn ensure_recoverable_authorization_administrator(
     txn: &DatabaseTransaction,
-) -> Result<(), DbErr> {
+) -> Result<(), RecoverableAdminError> {
     let full = target_permissions();
     let minimum = full.len() as i64;
     let rows = txn
@@ -310,9 +322,7 @@ pub(crate) async fn ensure_recoverable_authorization_administrator(
             return Ok(());
         }
     }
-    Err(DbErr::Custom(
-        "no recoverable authorization administrator remains".to_owned(),
-    ))
+    Err(RecoverableAdminError::LastRecoverableAdministrator)
 }
 
 /// Recovery facts for the `OwnerRecoverabilityPort` compatibility adapter.

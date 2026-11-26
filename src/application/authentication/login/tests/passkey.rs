@@ -52,3 +52,19 @@ async fn passkey_completes_mfa_without_password_and_protects_password_fallback()
         );
     }
 }
+
+#[tokio::test]
+async fn has_second_factor_reports_otp_and_passkey_enrollment() {
+    let user = test_user();
+    let user_oid = user.oid;
+
+    let password_only = sign_in_service(user.clone(), Vec::new(), false);
+    assert!(!password_only.has_second_factor(user_oid).await.unwrap());
+
+    let with_otp = sign_in_service(user.clone(), Vec::new(), true);
+    assert!(with_otp.has_second_factor(user_oid).await.unwrap());
+
+    let (passkeys, _) = tests::enrolled_passkey(user_oid).await;
+    let with_passkey = password_only.with_passkeys(passkeys);
+    assert!(with_passkey.has_second_factor(user_oid).await.unwrap());
+}

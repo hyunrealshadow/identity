@@ -7,12 +7,11 @@
 
 use std::sync::Arc;
 
-use http::HeaderMap;
-use identity_application::observability::OutboundTrace;
+use identity_application::observability::{HeaderInjector, OutboundTrace};
 use tracing::{Span, field::Empty, info_span};
 use url::Url;
 
-use super::context::{TraceTrustPolicy, inject_current_span};
+use super::context::{TraceTrustPolicy, inject_current_span_into};
 
 pub struct OutboundTraceImpl {
     policy: TraceTrustPolicy,
@@ -45,9 +44,9 @@ impl OutboundTrace for OutboundTraceImpl {
         )
     }
 
-    fn inject(&self, url: &Url, headers: &mut HeaderMap) {
+    fn inject(&self, url: &Url, headers: &mut dyn HeaderInjector) {
         if self.policy.allows_outbound(url) {
-            inject_current_span(headers);
+            inject_current_span_into(headers);
         }
     }
 }
@@ -57,7 +56,7 @@ mod tests {
     use super::OutboundTraceImpl;
     use crate::{
         config::TraceContextConfig,
-        observability::context::{TraceTrustPolicy, format_traceparent},
+        observability::context::{HttpHeaderInjector, TraceTrustPolicy, format_traceparent},
     };
     use http::HeaderMap;
     use identity_application::observability::OutboundTrace;
@@ -165,7 +164,7 @@ mod tests {
             let mut allowed = HeaderMap::new();
             trace.inject(
                 &"https://login.internal:8443/callback".parse().unwrap(),
-                &mut allowed,
+                &mut HttpHeaderInjector(&mut allowed),
             );
             assert_eq!(
                 allowed.get("traceparent").unwrap().to_str().unwrap(),
@@ -177,14 +176,17 @@ mod tests {
                 "http://login.internal:8443/callback",
             ] {
                 let mut denied = HeaderMap::new();
-                trace.inject(&target.parse().unwrap(), &mut denied);
+                trace.inject(
+                    &target.parse().unwrap(),
+                    &mut HttpHeaderInjector(&mut denied),
+                );
                 assert!(!denied.contains_key("traceparent"), "{target}");
             }
         });
         let mut inactive = HeaderMap::new();
         trace.inject(
             &"https://login.internal:8443/callback".parse().unwrap(),
-            &mut inactive,
+            &mut HttpHeaderInjector(&mut inactive),
         );
         assert!(!inactive.contains_key("traceparent"));
     }

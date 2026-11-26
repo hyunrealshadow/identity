@@ -99,26 +99,3 @@ pub(crate) fn register_list_function<R>(bundle: &mut FluentBundle<R>) {
         )
         .expect("registering LIST() Fluent function");
 }
-
-#[cfg(test)]
-mod tests {
-    use identity_application::error::params::ErrorParams;
-    use unic_langid::langid;
-
-    use super::build_i18n;
-
-    #[test]
-    fn build_i18n_loads_split_error_files_with_args() {
-        let i18n = build_i18n().expect("i18n should load from assets/i18n");
-        let params = ErrorParams::new()
-            .insert("identifier", "alice@example.com")
-            .insert("identifier_kind", "email");
-
-        let translated = i18n.t_code_with_params(&langid!("en-US"), 11000, &params);
-
-        assert_eq!(
-            translated,
-            "The account does not exist. Enter a different email or username."
-        );
-    }
-}

@@ -27,7 +27,7 @@ impl AppResources {
     }
 
     #[must_use]
-    pub fn db(&self) -> &DatabaseConnection {
+    pub(crate) fn db(&self) -> &DatabaseConnection {
         &self.db
     }
 

@@ -8,7 +8,6 @@
 
 use std::sync::{Arc, OnceLock};
 
-use http::HeaderMap;
 use tracing::Span;
 use url::Url;
 
@@ -122,6 +121,11 @@ pub trait EventSink: Send + Sync + 'static {
 /// whether a target origin may receive internal context; arbitrary request
 /// URIs, third-party JWKS endpoints and logout targets never inherit it by
 /// default.
+/// Transport-neutral outbound header sink for trace propagation.
+pub trait HeaderInjector {
+    fn set(&mut self, name: &str, value: String);
+}
+
 pub trait OutboundTrace: Send + Sync + 'static {
     /// Span describing one real outbound HTTP call. It records the method and
     /// target host, but not query strings or credentials.
@@ -129,7 +133,7 @@ pub trait OutboundTrace: Send + Sync + 'static {
 
     /// Inject the active client trace context into outbound headers when the
     /// target origin is allowed. A no-op otherwise.
-    fn inject(&self, url: &Url, headers: &mut HeaderMap);
+    fn inject(&self, url: &Url, headers: &mut dyn HeaderInjector);
 }
 
 /// Used when no outbound trace policy is installed. Spans are disabled and no
@@ -142,7 +146,7 @@ impl OutboundTrace for NoopOutboundTrace {
         Span::none()
     }
 
-    fn inject(&self, _url: &Url, _headers: &mut HeaderMap) {}
+    fn inject(&self, _url: &Url, _headers: &mut dyn HeaderInjector) {}
 }
 
 /// Sink used when observability is disabled, in tests and in composition

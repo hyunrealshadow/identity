@@ -1,14 +1,19 @@
 use std::{collections::HashMap, sync::Arc};
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use identity_domain::auth::{
     SessionOid,
     repository::{SessionPage, SessionPageDirection, SessionSortKey},
 };
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    application::error::AppError,
+    application::{
+        data_protection::DataProtector,
+        error::{AppError, codes::graphql},
+        pagination::{PageDirection, ValidatedPage, protect_json_cursors, unprotect_json_cursor},
+    },
     domain::auth::{
         SessionStatus,
         model::{ActiveSession, Session},
@@ -16,6 +21,32 @@ use crate::{
     },
     observability::{BusinessEvent, EventSeverity, EventSink, EventValue, NoopEventSink},
 };
+
+const SESSION_CURSOR_PURPOSE: &str = "cursor:session";
+const SESSION_CURSOR_VERSION: u8 = 1;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct SessionCursorPayload {
+    version: u8,
+    user_oid: Uuid,
+    last_active_at_micros: i64,
+    id: i64,
+}
+
+/// One edge in an active-session Relay connection page.
+#[derive(Debug, Clone)]
+pub struct SessionEdge {
+    pub cursor: String,
+    pub session: Session,
+}
+
+/// Protected Relay connection page of active sessions for one user.
+#[derive(Debug, Clone)]
+pub struct SessionConnectionPage {
+    pub edges: Vec<SessionEdge>,
+    pub has_previous_page: bool,
+    pub has_next_page: bool,
+}
 
 /// Outcome of revoking every session except one. Failures are reported per
 /// session instead of being collapsed into a single result so callers can
@@ -40,6 +71,7 @@ impl BatchRevocation {
 
 pub struct SessionService {
     session_repo: Arc<dyn SessionRepository>,
+    data_protector: Option<Arc<dyn DataProtector>>,
     events: Arc<dyn EventSink>,
 }
 
@@ -48,8 +80,16 @@ impl SessionService {
     pub fn new(session_repo: Arc<dyn SessionRepository>) -> Self {
         Self {
             session_repo,
+            data_protector: None,
             events: Arc::new(NoopEventSink),
         }
+    }
+
+    /// Attach the data protector used to seal session pagination cursors.
+    #[must_use]
+    pub fn with_data_protector(mut self, data_protector: Arc<dyn DataProtector>) -> Self {
+        self.data_protector = Some(data_protector);
+        self
     }
 
     /// Attach the key event and audit sink.
@@ -244,6 +284,87 @@ impl SessionService {
             .await
             .map_err(AppError::from)
     }
+
+    /// Protected Relay cursor connection over `user_oid`'s active sessions.
+    pub async fn list_active_sessions_connection(
+        &self,
+        user_oid: Uuid,
+        page: ValidatedPage<'_>,
+    ) -> Result<SessionConnectionPage, AppError> {
+        let protector = self
+            .data_protector
+            .as_deref()
+            .ok_or_else(|| crate::error::codes::common::error::InternalError.into_error())?;
+        let after = match page.after {
+            Some(token) => Some(decode_session_cursor(protector, user_oid, token).await?),
+            None => None,
+        };
+        let before = match page.before {
+            Some(token) => Some(decode_session_cursor(protector, user_oid, token).await?),
+            None => None,
+        };
+        let direction = match page.direction {
+            PageDirection::Forward => SessionPageDirection::Forward,
+            PageDirection::Backward => SessionPageDirection::Backward,
+        };
+
+        let result = self
+            .list_active_sessions_page(user_oid, after, before, page.limit, direction)
+            .await?;
+
+        let payloads = result
+            .items
+            .iter()
+            .map(|item| SessionCursorPayload {
+                version: SESSION_CURSOR_VERSION,
+                user_oid,
+                last_active_at_micros: item.sort_key.last_active_at.timestamp_micros(),
+                id: item.sort_key.id,
+            })
+            .collect::<Vec<_>>();
+        let tokens = protect_json_cursors(protector, SESSION_CURSOR_PURPOSE, &payloads)
+            .await
+            .map_err(AppError::internal)?;
+
+        let edges = result
+            .items
+            .into_iter()
+            .zip(tokens)
+            .map(|(item, cursor)| SessionEdge {
+                cursor,
+                session: item.session,
+            })
+            .collect();
+
+        Ok(SessionConnectionPage {
+            edges,
+            has_previous_page: result.has_previous_page,
+            has_next_page: result.has_next_page,
+        })
+    }
+}
+
+async fn decode_session_cursor(
+    protector: &dyn DataProtector,
+    expected_user_oid: Uuid,
+    token: &str,
+) -> Result<SessionSortKey, AppError> {
+    let payload: SessionCursorPayload =
+        unprotect_json_cursor(protector, SESSION_CURSOR_PURPOSE, token)
+            .await
+            .map_err(|_| graphql::error::InvalidCursor)?;
+    if payload.version != SESSION_CURSOR_VERSION
+        || payload.user_oid != expected_user_oid
+        || payload.id <= 0
+    {
+        return Err(graphql::error::InvalidCursor.into());
+    }
+    let last_active_at = DateTime::from_timestamp_micros(payload.last_active_at_micros)
+        .ok_or(graphql::error::InvalidCursor)?;
+    Ok(SessionSortKey {
+        last_active_at,
+        id: payload.id,
+    })
 }
 
 fn validate_selectable_session(session: &Session) -> Result<(), AppError> {
@@ -304,11 +425,50 @@ mod tests {
     };
     use uuid::Uuid;
 
-    use super::{BatchRevocation, revoke_other_sessions_with};
+    use super::{BatchRevocation, SessionService, revoke_other_sessions_with};
+    use crate::{
+        application::{
+            data_protection::DataProtector,
+            error::codes::graphql::GraphqlErrorCode,
+            pagination::{RawPageArgs, validate_page_arguments},
+        },
+        domain::{auth::repository::SessionPageItem, data_protection::DataProtectionError},
+    };
+    use std::sync::{Arc, Mutex};
+
+    struct TestProtector;
+
+    #[async_trait]
+    impl DataProtector for TestProtector {
+        async fn protect(
+            &self,
+            purpose: &str,
+            plaintext: &[u8],
+        ) -> Result<String, DataProtectionError> {
+            Ok(format!(
+                "{purpose}:{}",
+                String::from_utf8(plaintext.to_vec()).unwrap()
+            ))
+        }
+
+        async fn unprotect(
+            &self,
+            purpose: &str,
+            token: &str,
+        ) -> Result<Vec<u8>, DataProtectionError> {
+            let prefix = format!("{purpose}:");
+            token
+                .strip_prefix(&prefix)
+                .map(|rest| rest.as_bytes().to_vec())
+                .ok_or(DataProtectionError::InvalidProtectedPayload)
+        }
+    }
 
     struct StubSessionRepo {
         sessions: Vec<Session>,
         failing_oid: Option<SessionOid>,
+        page_items: Vec<SessionPageItem>,
+        last_after: Mutex<Option<SessionSortKey>>,
     }
 
     fn active_session(oid: SessionOid, user_oid: Uuid) -> Session {
@@ -425,15 +585,25 @@ mod tests {
         async fn list_active_page_by_user_oid(
             &self,
             _user_oid: Uuid,
-            _after: Option<SessionSortKey>,
+            after: Option<SessionSortKey>,
             _before: Option<SessionSortKey>,
             _limit: usize,
             _direction: SessionPageDirection,
         ) -> Result<SessionPage, SessionRepositoryError> {
+            *self.last_after.lock().unwrap() = after;
+            let items = self
+                .page_items
+                .iter()
+                .map(|item| SessionPageItem {
+                    session: item.session.clone(),
+                    sort_key: item.sort_key,
+                })
+                .collect::<Vec<_>>();
+            let has_next_page = !items.is_empty();
             Ok(SessionPage {
-                items: Vec::new(),
+                items,
                 has_previous_page: false,
-                has_next_page: false,
+                has_next_page,
             })
         }
     }
@@ -451,6 +621,8 @@ mod tests {
                 active_session(failing, user_oid),
             ],
             failing_oid: Some(failing),
+            page_items: Vec::new(),
+            last_after: Mutex::new(None),
         };
 
         let outcome: BatchRevocation = revoke_other_sessions_with(&repo, user_oid, current)
@@ -469,6 +641,8 @@ mod tests {
         let repo = StubSessionRepo {
             sessions: vec![active_session(current, user_oid)],
             failing_oid: None,
+            page_items: Vec::new(),
+            last_after: Mutex::new(None),
         };
 
         let outcome = revoke_other_sessions_with(&repo, user_oid, current)
@@ -477,5 +651,114 @@ mod tests {
 
         assert_eq!(outcome.revoked, 0);
         assert!(!outcome.has_failures());
+    }
+
+    #[tokio::test]
+    async fn session_connection_protects_sort_keys_and_binds_cursors_to_user() {
+        let alice = Uuid::new_v4();
+        let bob = Uuid::new_v4();
+        let session = active_session(SessionOid(Uuid::new_v4()), alice);
+        let sort_key = SessionSortKey {
+            last_active_at: chrono::TimeZone::timestamp_micros(&Utc, 1_800_000_000_123_456)
+                .unwrap(),
+            id: 42,
+        };
+        let repo = Arc::new(StubSessionRepo {
+            sessions: Vec::new(),
+            failing_oid: None,
+            page_items: vec![SessionPageItem { session, sort_key }],
+            last_after: Mutex::new(None),
+        });
+        let service =
+            SessionService::new(repo.clone()).with_data_protector(Arc::new(TestProtector));
+
+        let first_page = service
+            .list_active_sessions_connection(
+                alice,
+                validate_page_arguments(RawPageArgs::from_i32(Some(10), None, None, None), 20, 100)
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(first_page.edges.len(), 1);
+        let cursor = first_page.edges[0].cursor.clone();
+
+        service
+            .list_active_sessions_connection(
+                alice,
+                validate_page_arguments(
+                    RawPageArgs::from_i32(Some(10), Some(&cursor), None, None),
+                    20,
+                    100,
+                )
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            repo.last_after
+                .lock()
+                .unwrap()
+                .map(|key| (key.last_active_at, key.id)),
+            Some((sort_key.last_active_at, sort_key.id))
+        );
+
+        let cross_user_err = service
+            .list_active_sessions_connection(
+                bob,
+                validate_page_arguments(
+                    RawPageArgs::from_i32(Some(10), Some(&cursor), None, None),
+                    20,
+                    100,
+                )
+                .unwrap(),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(
+            cross_user_err.code(),
+            GraphqlErrorCode::InvalidCursor as u32
+        );
+    }
+
+    #[tokio::test]
+    async fn session_connection_rejects_non_positive_cursor_id() {
+        let user_oid = Uuid::new_v4();
+        let protector = Arc::new(TestProtector);
+        let repo = Arc::new(StubSessionRepo {
+            sessions: Vec::new(),
+            failing_oid: None,
+            page_items: Vec::new(),
+            last_after: Mutex::new(None),
+        });
+        let service = SessionService::new(repo).with_data_protector(protector.clone());
+        let forged = protector
+            .protect(
+                super::SESSION_CURSOR_PURPOSE,
+                serde_json::to_vec(&super::SessionCursorPayload {
+                    version: super::SESSION_CURSOR_VERSION,
+                    user_oid,
+                    last_active_at_micros: 1_800_000_000_000_000,
+                    id: 0,
+                })
+                .unwrap()
+                .as_slice(),
+            )
+            .await
+            .unwrap();
+
+        let err = service
+            .list_active_sessions_connection(
+                user_oid,
+                validate_page_arguments(
+                    RawPageArgs::from_i32(Some(10), Some(&forged), None, None),
+                    20,
+                    100,
+                )
+                .unwrap(),
+            )
+            .await
+            .unwrap_err();
+        assert_eq!(err.code(), GraphqlErrorCode::InvalidCursor as u32);
     }
 }

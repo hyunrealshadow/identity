@@ -70,5 +70,4 @@ test-support = []
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["test-util"] }
-serial_test = { workspace = true }
 migration = { workspace = true }

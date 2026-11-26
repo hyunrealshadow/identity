@@ -35,7 +35,7 @@ pub use owner::{
     ensure_usable_owner_survives, owner_target_context,
 };
 pub use reason::{GrantReason, GrantReasonError, MAX_GRANT_REASON_LENGTH};
-pub use recovery::{OwnerAccessSnapshot, OwnerRecoverabilityError, OwnerRecoverabilityPort};
+pub use recovery::OwnerAccessSnapshot;
 pub use repository::{
     AuthorizationVersionChange, ManagementAuthorityRepository, ManagementRepositoryError,
     snapshot_identity,

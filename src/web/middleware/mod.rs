@@ -2,10 +2,10 @@ use std::{net::IpAddr, sync::Arc};
 
 use async_trait::async_trait;
 use http::{HeaderValue, StatusCode, header, header::HeaderName};
+use identity_application::audit::{self, AuditRequestContext};
 use identity_domain::openid_connect::{
     AuthenticatedWorkload, BuiltInWorkload, WorkloadAuthenticator,
 };
-use identity_infrastructure::database::audit::{self, AuditRequestContext};
 use identity_infrastructure::observability::context::{
     self as trace_context, ParentDecision, TraceTrustPolicy,
 };

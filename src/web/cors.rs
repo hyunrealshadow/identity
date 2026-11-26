@@ -64,7 +64,7 @@ impl Handler for ClientCors {
             .and_then(canonical_origin)
             .map(str::to_owned);
         let allowed = origin.as_deref().is_some_and(|origin| {
-            app_state(depot).is_ok_and(|state| state.settings().cors_origins().allows(origin))
+            app_state(depot).is_ok_and(|state| state.allows_cors_origin(origin))
         });
 
         if req.method() == Method::OPTIONS {

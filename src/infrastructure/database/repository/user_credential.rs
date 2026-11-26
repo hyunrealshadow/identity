@@ -19,7 +19,7 @@ use identity_domain::audit::{AuditAction, AuditActor, AuditChanges, AuditField, 
 use identity_domain::authorization::owner::OwnerProtectionError;
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, Condition, ConnectionTrait, DatabaseConnection, DbBackend,
-    DbErr, EntityTrait, QueryFilter, QuerySelect, Set, Statement, TransactionTrait,
+    EntityTrait, QueryFilter, QuerySelect, Set, Statement, TransactionTrait,
     sea_query::{Expr, ExprTrait, Func},
 };
 use serde_json::{from_value, to_value};
@@ -27,8 +27,9 @@ use uuid::Uuid;
 
 use super::{
     authorization_lifecycle::{
-        ensure_recoverable_authorization_administrator, lock_owner_lifecycle,
-        withdraw_user_authority_for_enrollment_in_txn, withdraw_user_authority_in_txn,
+        RecoverableAdminError, ensure_recoverable_authorization_administrator,
+        lock_owner_lifecycle, withdraw_user_authority_for_enrollment_in_txn,
+        withdraw_user_authority_in_txn,
     },
     shared::lock_user_credentials,
 };
@@ -376,14 +377,12 @@ impl UserCredentialRepository for UserCredentialRepositoryImpl {
         if touches_login_credential {
             match ensure_recoverable_authorization_administrator(&txn).await {
                 Ok(()) => {}
-                Err(DbErr::Custom(message))
-                    if message == "no recoverable authorization administrator remains" =>
-                {
+                Err(RecoverableAdminError::LastRecoverableAdministrator) => {
                     return Err(UserCredentialRepositoryError::ReplaceFailed(Box::new(
                         OwnerProtectionError::LastOwnerProtected,
                     )));
                 }
-                Err(error) => {
+                Err(RecoverableAdminError::Storage(error)) => {
                     return Err(UserCredentialRepositoryError::ReplaceFailed(Box::new(
                         error,
                     )));
@@ -832,13 +831,11 @@ impl PasskeyCredentialRepository for UserCredentialRepositoryImpl {
             // administrator login path.
             ensure_recoverable_authorization_administrator(&txn)
                 .await
-                .map_err(|error| match &error {
-                    DbErr::Custom(message)
-                        if message == "no recoverable authorization administrator remains" =>
-                    {
+                .map_err(|error| match error {
+                    RecoverableAdminError::LastRecoverableAdministrator => {
                         authorization::error::LastOwnerProtected.into()
                     }
-                    _ => AppError::internal(error),
+                    RecoverableAdminError::Storage(error) => AppError::internal(error),
                 })?;
             mfa::clear_recovery_codes_without_mfa(&txn, user_id).await?;
             // Removing a passkey can remove the last MFA method; a later

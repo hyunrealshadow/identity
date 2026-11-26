@@ -210,3 +210,103 @@ fn continue_action_returns_consent_required_for_silent_pending_consent() {
         ContinueAction::OAuthError(OAuthErrorCode::ConsentRequired)
     );
 }
+
+#[tokio::test]
+async fn ensure_account_selection_allowed_rejects_forced_login_and_reauthentication() {
+    use std::sync::Arc;
+
+    use crate::{
+        error::{code::AppErrorCode, codes::auth::AuthErrorCode},
+        openid_connect::authorize::{
+            AuthorizeService, AuthorizeServiceDependencies,
+            tests::fixtures::{
+                FoundClientRepository, TEST_CLIENT_ID, empty_cred_repo, mock_login_repo,
+                provider_service,
+                repositories::{ClientAuthorizationState, mock_client_auth_repo_with_state},
+                stub_key_repo, stub_user_repo, test_data_protector,
+                test_signing_algorithm_detector,
+            },
+        },
+        openid_connect::{
+            remote::test_remote_fetcher, tests::fixtures::mocks::MockKeyJwkRepository,
+        },
+    };
+    use identity_domain::client_authorization::{
+        ClientAuthorization, ClientAuthorizationData, ClientAuthorizationType, SelectionSource,
+    };
+
+    let state = Arc::new(ClientAuthorizationState::default());
+    let login_repo = Arc::new(mock_login_repo());
+    let service = AuthorizeService::new(AuthorizeServiceDependencies {
+        client_repo: Arc::new(FoundClientRepository),
+        credential_repo: Arc::new(empty_cred_repo()),
+        client_authorization_repo: Arc::new(mock_client_auth_repo_with_state(Arc::clone(&state))),
+        login_repo: login_repo.clone(),
+        user_repo: Arc::new(stub_user_repo()),
+        key_repo: Arc::new(stub_key_repo()),
+        key_jwk_repo: Arc::new(MockKeyJwkRepository::new()),
+        provider_service: provider_service(),
+        signing_algorithm_detector: test_signing_algorithm_detector(),
+        data_protector: test_data_protector(),
+        remote_fetcher: test_remote_fetcher(),
+    });
+
+    for (prompt, selection_source, expected_allowed) in [
+        (
+            Some([PromptValue::Login].into_iter().collect()),
+            None,
+            false,
+        ),
+        (None, Some(SelectionSource::Reauthentication), false),
+        (
+            Some([PromptValue::SelectAccount].into_iter().collect()),
+            None,
+            true,
+        ),
+        (None, None, true),
+    ] {
+        let auth_oid = Uuid::new_v4();
+        let login_oid = Uuid::new_v4();
+        let mut stored_req = request();
+        stored_req.client_id = TEST_CLIENT_ID.to_string();
+        stored_req.prompt = prompt;
+        state.records.lock().unwrap().insert(
+            auth_oid,
+            ClientAuthorization {
+                oid: auth_oid,
+                client_oid: TEST_CLIENT_ID,
+                type_: ClientAuthorizationType::AuthorizationRequest,
+                data: ClientAuthorizationData::AuthorizationRequest(StoredAuthorizationRequest {
+                    request: stored_req,
+                    interaction: AuthorizationInteractionState {
+                        selection_source,
+                        ..AuthorizationInteractionState::default()
+                    },
+                }),
+                expires_at: Utc::now() + Duration::minutes(10),
+                completed_at: None,
+                revoked_at: None,
+                created_at: Utc::now(),
+                updated_at: None,
+            },
+        );
+        let mut login_record = login(LoginStatus::CREATED);
+        login_record.oid = login_oid;
+        login_record.client_oid = TEST_CLIENT_ID;
+        login_record.client_authorization_oid = auth_oid;
+        *login_repo.find_by_oid_result.lock().unwrap() = Some(Some(login_record));
+
+        let protected_login_id = service.encrypt_login_id(login_oid).await.unwrap();
+        let result = service
+            .ensure_account_selection_allowed(&protected_login_id)
+            .await;
+        if expected_allowed {
+            assert!(result.is_ok(), "unexpected rejection: {result:?}");
+        } else {
+            assert_eq!(
+                result.unwrap_err().code(),
+                AuthErrorCode::InvalidLoginState.code()
+            );
+        }
+    }
+}

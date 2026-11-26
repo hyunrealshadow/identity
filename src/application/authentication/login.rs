@@ -291,6 +291,25 @@ impl LoginService {
         Ok(credential_types)
     }
 
+    /// Whether the user has an enrolled multi-factor credential (TOTP or
+    /// passkey) capable of satisfying a multi-factor authentication requirement.
+    pub async fn has_second_factor(&self, user_oid: UserOid) -> Result<bool, AppError> {
+        if !self
+            .credential_repo
+            .find_by_user_oid_and_type(user_oid, CredentialType::Otp)
+            .await?
+            .is_empty()
+        {
+            return Ok(true);
+        }
+        if let Some(passkeys) = &self.passkeys
+            && !passkeys.list(user_oid).await?.is_empty()
+        {
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
     /// Fetch the user associated with a login by their OID.
     pub async fn get_user(&self, user_oid: UserOid) -> Result<User, AppError> {
         self.user_repo

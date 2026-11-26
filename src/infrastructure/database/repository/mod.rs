@@ -32,6 +32,7 @@ pub mod session;
 mod session_security;
 pub mod setting;
 pub mod shared;
+pub(crate) mod sql_support;
 pub mod user;
 pub mod user_credential;
 pub mod user_invitation;

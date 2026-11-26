@@ -12,6 +12,7 @@ use reqwest::{Client, Error};
 use tracing::{Instrument as _, warn};
 
 use super::remote::{build_pinned_client, resolve_and_validate_target};
+use crate::observability::context::HttpHeaderInjector;
 
 const BACKCHANNEL_LOGOUT_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -96,7 +97,10 @@ impl BackChannelLogoutSender for HttpBackChannelLogoutSender {
 
         let trace = outbound_trace();
         let mut headers = HeaderMap::new();
-        trace.inject(&notification.logout_uri, &mut headers);
+        trace.inject(
+            &notification.logout_uri,
+            &mut HttpHeaderInjector(&mut headers),
+        );
         let span = trace.client_span("POST", &notification.logout_uri);
         let result = client
             .post(notification.logout_uri.clone())

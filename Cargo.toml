@@ -145,6 +145,7 @@ base64 = { workspace = true }
 josekit = { workspace = true }
 urlencoding = "2.1.3"
 url = { workspace = true }
+unic-langid = { workspace = true }
 serial_test = { workspace = true }
 
 [profile.release]

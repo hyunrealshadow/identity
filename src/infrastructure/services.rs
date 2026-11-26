@@ -133,6 +133,7 @@ pub struct AppServices {
     client_key_coverage: ClientKeyCoverageService,
     workload_authenticator: Arc<dyn WorkloadAuthenticator>,
     data_protector: Arc<dyn DataProtector>,
+    settings: Arc<dyn identity_application::setting::SettingsSource>,
     email_sender: Arc<dyn identity_application::email::EmailSender>,
     email_queue: crate::email::EmailQueue,
     events: Arc<dyn EventSink>,
@@ -269,6 +270,7 @@ impl AppServices {
             .with_registration(Arc::new(RegistrationRepositoryImpl::new(db.clone())))
             .with_events(Arc::clone(&events)),
             session: SessionService::new(Arc::new(SessionRepositoryImpl::new(db.clone())))
+                .with_data_protector(data_protector.clone())
                 .with_events(Arc::clone(&events)),
             account: AccountService::new(Arc::new(UserRepositoryImpl::new(db.clone())))
                 .with_email_verification(EmailVerificationDependencies {
@@ -510,6 +512,7 @@ impl AppServices {
             client_key_coverage: ClientKeyCoverageService::new(oidc_credential_repo.clone()),
             workload_authenticator,
             data_protector,
+            settings: settings.store(),
             email_sender,
             email_queue,
             events,
@@ -680,6 +683,11 @@ impl AppServices {
 
     pub fn data_protector(&self) -> &Arc<dyn DataProtector> {
         &self.data_protector
+    }
+
+    #[must_use]
+    pub fn settings(&self) -> &dyn identity_application::setting::SettingsSource {
+        self.settings.as_ref()
     }
 
     #[must_use]

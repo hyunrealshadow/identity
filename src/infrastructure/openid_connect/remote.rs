@@ -15,6 +15,8 @@ use tokio::net::lookup_host;
 use tracing::Instrument as _;
 use url::{Host, Url};
 
+use crate::observability::context::HttpHeaderInjector;
+
 #[must_use]
 pub fn conformance_mode_active() -> bool {
     conformance_mode_active_for(
@@ -189,7 +191,7 @@ pub async fn fetch_document_with_client(
     // JWKS and request_uri targets never receive internal trace context unless
     // the deployment explicitly allow-lists their origin.
     let mut headers = HeaderMap::new();
-    trace.inject(&fetch_url, &mut headers);
+    trace.inject(&fetch_url, &mut HttpHeaderInjector(&mut headers));
     let span = trace.client_span("GET", &fetch_url);
     let mut response = client
         .get(fetch_url)

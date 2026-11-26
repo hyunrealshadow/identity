@@ -56,12 +56,7 @@ pub(super) async fn identifier_exists<C: ConnectionTrait>(
         .map_err(storage)
 }
 
-pub(super) fn escape_like(value: &str) -> String {
-    value
-        .replace('\\', "\\\\")
-        .replace('%', "\\%")
-        .replace('_', "\\_")
-}
+pub(super) use crate::database::repository::sql_support::escape_like;
 
 pub(super) async fn current_authority(
     txn: &DatabaseTransaction,

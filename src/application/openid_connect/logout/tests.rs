@@ -886,3 +886,54 @@ fn unsigned_id_token_hint_for_test(issuer: &str, audience: Uuid) -> String {
     let payload = URL_SAFE_NO_PAD.encode(payload.to_string());
     format!("{header}.{payload}.")
 }
+
+#[tokio::test]
+async fn rp_initiated_logout_aborts_before_backchannel_delivery_when_session_revocation_fails() {
+    use identity_domain::auth::repository::SessionRepositoryError;
+    use std::io::Error;
+
+    let client_oid = Uuid::new_v4();
+    let session_oid = SessionOid(Uuid::new_v4());
+    let sender = Arc::new(RecordingBackChannelLogoutSender {
+        delivery: BackChannelLogoutDelivery::Delivered,
+        notifications: Mutex::new(Vec::new()),
+    });
+    let mut session_repo = MockSessionRepository::new();
+    session_repo
+        .expect_revoke_by_oid()
+        .times(1)
+        .returning(|_, _, _| {
+            Err(SessionRepositoryError::RevokeFailed(Box::new(
+                Error::other("db unavailable"),
+            )))
+        });
+
+    let mut service = service_with_clients(vec![test_client(
+        client_oid,
+        None,
+        None,
+        Some("https://rp.example.com/backchannel_logout"),
+    )])
+    .with_session_repo(Arc::new(session_repo));
+    service.backchannel_sender = sender.clone();
+
+    let err = service
+        .rp_initiated_logout(RpInitiatedLogoutRequest {
+            id_token_hint: None,
+            client_id: None,
+            logout_hint: None,
+            post_logout_redirect_uri: None,
+            state: None,
+            ui_locales: None,
+            session_oid: Some(session_oid),
+            protected_session_id: Some("protected-session".to_owned()),
+        })
+        .await
+        .unwrap_err();
+
+    assert_eq!(err.code(), 10001);
+    assert!(
+        sender.notifications.lock().unwrap().is_empty(),
+        "backchannel notifications must not fire if local session revocation fails"
+    );
+}
