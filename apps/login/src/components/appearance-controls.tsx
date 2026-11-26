@@ -18,8 +18,7 @@ import {
   THEME_STORAGE_KEY,
   type ThemePreference,
 } from '#/lib/appearance'
-import { translate, type Locale } from '#/lib/i18n'
-import { BROWSER_LOCALE_VALUE } from '#/lib/account-locale'
+import { BROWSER_LOCALE_VALUE, translate, type Locale } from '#/lib/i18n'
 import { withUiLocales } from '#/lib/ui-locale'
 
 type LanguagePreference = Locale | typeof BROWSER_LOCALE_VALUE

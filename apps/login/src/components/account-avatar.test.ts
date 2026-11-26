@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { accountInitials } from './account-avatar'
+import { accountInitials } from '@identity/ui/components/account-avatar'
 
 describe('accountInitials', () => {
   it('uses two uppercase initials across account surfaces', () => {

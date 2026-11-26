@@ -4,7 +4,7 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { translate } from './i18n'
 import { requestLocale } from './i18n.server'
 import { forwardRequestContext } from './request-context.server'
-import { PASSWORD_CHANGE_CONTINUATION } from './account-reauth'
+import { PASSWORD_CHANGE_CONTINUATION } from '#/modules/account/lib/account-reauth'
 import {
   ACCOUNT_REAUTH_MESSAGE_TYPE,
   type AccountReauthMessage,

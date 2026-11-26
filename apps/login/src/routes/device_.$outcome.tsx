@@ -1,7 +1,7 @@
 import { createFileRoute, notFound } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
 
-import { decisionOutcome, DeviceOutcomePage } from '#/components/device-outcome'
+import { decisionOutcome, DeviceOutcomePage } from '#/modules/device/components/device-outcome'
 import { requestLocale } from '#/lib/i18n.server'
 
 interface DeviceOutcomeSearch {

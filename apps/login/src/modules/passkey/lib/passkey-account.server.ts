@@ -1,0 +1,89 @@
+import { AuthErrorCode } from '@identity/graphql-access'
+import { AuthenticationContextClass } from '@identity/graphql-access'
+import { accountOperations } from '#/modules/account/lib/account-operations'
+import { getRequestHeader } from '@tanstack/react-start/server'
+
+import { PASSKEY_MANAGEMENT_CONTINUATION, requiresAccountReauthentication } from '#/modules/account/lib/account-reauth'
+import { AccountSessionExpiredError, GraphqlRequestError, identityGraphql } from '#/lib/graphql.server'
+import { translate } from '#/lib/i18n'
+import { requestLocale } from '#/lib/i18n.server'
+import { restartAccountSignIn, startReauthorization } from '#/lib/oauth.server'
+import { loadApplicationUrl } from '#/lib/runtime-config.server'
+import { MAX_PASSKEYS_PER_ACCOUNT } from '#/modules/passkey/lib/passkey'
+import type { PasskeyOptions } from '#/modules/passkey/lib/passkey'
+
+export async function passkeyAccountAction(input: {
+  action: 'prepare' | 'begin' | 'finish' | 'delete'
+  id?: string
+  name?: string
+  credential?: string
+  recoveryEnrollmentToken?: string | null
+}): Promise<{ options?: PasskeyOptions; recoveryEnrollment?: { recoveryCodes: Array<string>; enrollmentToken?: string | null }; redirect?: string; error?: string; ok?: boolean }> {
+  const locale = requestLocale()
+  const origin = getRequestHeader('origin')
+  if (origin && origin !== new URL(loadApplicationUrl()).origin) {
+    return { error: translate(locale, 'accountInvalidRequestOrigin') }
+  }
+  const options = { authorization: 'elevated' as const }
+  try {
+    if (input.action === 'prepare') {
+      const result = await identityGraphql<{ prepareMfaRecoveryCodes: { recoveryCodes: Array<string>; enrollmentToken?: string | null } }>(
+        accountOperations['passkey-prepare'].document, undefined, options,
+      )
+      if (!result) throw new AccountSessionExpiredError()
+      return { recoveryEnrollment: result.prepareMfaRecoveryCodes }
+    }
+    if (input.action === 'begin') {
+      const result = await identityGraphql<{ beginPasskeyRegistration: PasskeyOptions }>(
+        accountOperations['passkey-begin'].document,
+        { recoveryEnrollmentToken: input.recoveryEnrollmentToken }, options,
+      )
+      if (!result) throw new AccountSessionExpiredError()
+      return { options: result.beginPasskeyRegistration }
+    }
+    if (input.action === 'finish') {
+      let credential: unknown
+      try {
+        credential = JSON.parse(input.credential ?? 'null')
+      } catch {
+        return { error: translate(locale, 'passkeyFailed') }
+      }
+      const result = await identityGraphql<{ finishPasskeyRegistration: boolean }>(
+        accountOperations['passkey-finish'].document,
+        { id: input.id, name: input.name, credential }, options,
+      )
+      if (!result) throw new AccountSessionExpiredError()
+      if (!result.finishPasskeyRegistration) return { error: translate(locale, 'passkeyFailed') }
+    } else {
+      const result = await identityGraphql<{ deletePasskey: boolean }>(
+        accountOperations['passkey-delete'].document, { id: input.id }, options,
+      )
+      if (!result) throw new AccountSessionExpiredError()
+      if (!result.deletePasskey) return { error: translate(locale, 'passkeyFailed') }
+    }
+    return { ok: true }
+  } catch (error) {
+    if (error instanceof AccountSessionExpiredError) {
+      return { redirect: (await restartAccountSignIn(PASSKEY_MANAGEMENT_CONTINUATION)).toString() }
+    }
+    if (error instanceof GraphqlRequestError && error.errors.some(({ extensions }) => extensions?.code === AuthErrorCode.PasskeyLimitReached)) {
+      return { error: translate(locale, 'passkeyLimitReached', { limit: MAX_PASSKEYS_PER_ACCOUNT }) }
+    }
+    if (error instanceof GraphqlRequestError && requiresAccountReauthentication(error)) {
+      const account = await identityGraphql<{ account: { username: string } }>('query { account { username } }')
+      if (!account) return { redirect: (await restartAccountSignIn(PASSKEY_MANAGEMENT_CONTINUATION)).toString() }
+      const response = await startReauthorization(PASSKEY_MANAGEMENT_CONTINUATION, 'account', {
+        loginHint: account.account.username,
+        acrValues: error.challenge?.acrValues ?? AuthenticationContextClass.SingleFactor,
+        maxAge: error.challenge?.maxAge,
+      })
+      return { redirect: response.headers.get('location') ?? '/account/security' }
+    }
+    return {
+      error:
+        error instanceof GraphqlRequestError
+          ? error.message
+          : translate(locale, 'passkeyFailed'),
+    }
+  }
+}

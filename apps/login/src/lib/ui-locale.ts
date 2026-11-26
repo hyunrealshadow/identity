@@ -1,4 +1,4 @@
-import { BROWSER_LOCALE_VALUE } from './account-locale'
+import { BROWSER_LOCALE_VALUE } from './i18n'
 
 /** The absence of a URL preference means browser language negotiation. */
 export function withUiLocales(href: string, preference?: string) {

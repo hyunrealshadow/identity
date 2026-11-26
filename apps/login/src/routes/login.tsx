@@ -5,49 +5,25 @@ import {
   useRouterState,
 } from '@tanstack/react-router'
 import { createServerFn } from '@tanstack/react-start'
-import { ChevronRight, Plus } from 'lucide-react'
-import { useState } from 'react'
 
-import { buttonVariants } from '@identity/ui/components/button'
-
-import { AccountAvatar } from '#/components/account-avatar'
-import { AuthShell } from '#/components/auth-shell'
-import { ErrorAlert } from '#/components/form-alert'
-import { LoginClient } from '#/components/login-client'
-import { ProgressiveForm } from '#/components/progressive-form'
-import { SubmitButton } from '#/components/submit-button'
-import { TextField } from '#/components/text-field'
 import { beginAuthorization } from '#/lib/authorization-flow'
 import {
   errorMessage,
-  IdentityApiError,
   identityJson,
-  LocalizedError,
 } from '#/lib/identity.server'
 import type {
   ActiveAccountsResponse,
-  IdentifierResponse,
   LoginStatusResponse,
-  SelectAccountResponse,
 } from '#/lib/identity-types'
-import {
-  consumeFormFlash,
-  formErrorResponse,
-  formValidationErrorResponse,
-  navigationResponse,
-} from '#/lib/responses.server'
 import { translate } from '#/lib/i18n'
+import { requestLocale } from '#/lib/i18n.server'
+import { consumeFormFlash } from '#/lib/responses.server'
 import { withUiLocales } from '#/lib/ui-locale'
-import { formLocale, requestLocale } from '#/lib/i18n.server'
-import { loginChallengeDestination, loginRegisterDestination } from '#/lib/login-navigation'
-
-interface LoginSearch {
-  login_id?: string
-  no_accounts?: string
-  identifier?: string
-  error?: string
-  ui_locales?: string
-}
+import { submitLoginPost } from '#/modules/auth/lib/login-route.server'
+import {
+  LoginPageView,
+  type LoginPageSearch,
+} from '#/modules/auth/pages/login-page'
 
 function optionalString(value: unknown) {
   return typeof value === 'string' ? value : undefined
@@ -127,7 +103,7 @@ const loadLoginPage = createServerFn({ method: 'GET' })
   })
 
 export const Route = createFileRoute('/login')({
-  validateSearch: (search): LoginSearch => ({
+  validateSearch: (search): LoginPageSearch => ({
     login_id: optionalString(search.login_id),
     // The router's JSON search parser turns the link's `no_accounts=1` into
     // a number. Preserve that flag so "Use another account" opens the form.
@@ -143,7 +119,10 @@ export const Route = createFileRoute('/login')({
   loader: async ({ deps, location }) => {
     if (!deps.loginId) {
       // The provider endpoint belongs to the server even when it shares our origin
-      throw redirect({ href: withUiLocales(await beginAuthorization(), deps.uiLocales), reloadDocument: true })
+      throw redirect({
+        href: withUiLocales(await beginAuthorization(), deps.uiLocales),
+        reloadDocument: true,
+      })
     }
     const page = await loadLoginPage({ data: deps })
     if (location.pathname === '/login' && page.challengeUri) {
@@ -153,86 +132,7 @@ export const Route = createFileRoute('/login')({
   },
   server: {
     handlers: {
-      POST: async ({ request }) => {
-        const form = await request.formData()
-        const intent = String(form.get('intent') ?? '')
-        const loginId = String(form.get('login_id') ?? '')
-        const csrfToken = String(form.get('csrf_token') ?? '')
-        const locale = formLocale(request, form.get('ui_locales'))
-        const uiLocales = optionalString(form.get('ui_locales'))
-
-        if (!loginId) {
-          return formErrorResponse(request, '/login', translate(locale, 'missingLoginShort'), {})
-        }
-
-        try {
-          if (intent === 'select') {
-            const result = await identityJson<SelectAccountResponse>('/api/auth/login/select', {
-              method: 'POST',
-              csrfToken,
-              body: {
-                id: String(form.get('session_id') ?? ''),
-                login_id: loginId,
-              },
-            })
-            return navigationResponse(request, withUiLocales(result.continue_uri, uiLocales))
-          }
-
-          const identifier = String(form.get('identifier') ?? '').trim()
-          if (!identifier) {
-            return formErrorResponse(
-              request,
-              '/login',
-              translate(locale, 'identifierRequired'),
-              { login_id: loginId, ui_locales: uiLocales },
-              'identifier',
-            )
-          }
-
-          const result = await identityJson<IdentifierResponse>(
-            '/api/auth/login/identifier',
-            {
-              method: 'POST',
-              csrfToken,
-              body: {
-                id: loginId,
-                identifier,
-              },
-            },
-          )
-          const credentialType = result.preferred_credential_type
-
-          if (!credentialType) throw new LocalizedError(translate(locale, 'noCredential'))
-
-          return navigationResponse(
-            request,
-            loginChallengeDestination(result.id, credentialType, uiLocales),
-          )
-        } catch (error) {
-          const values = {
-            login_id: loginId,
-            identifier: optionalString(form.get('identifier')),
-            ui_locales: uiLocales,
-          }
-          if (error instanceof IdentityApiError && error.fields.length > 0) {
-            return formValidationErrorResponse(
-              request,
-              '/login',
-              error.message,
-              values,
-              Object.fromEntries(
-                error.fields.map((fieldError) => [
-                  fieldError.field,
-                  fieldError.message,
-                ]),
-              ),
-            )
-          }
-          return formErrorResponse(request, '/login', errorMessage(error, locale), {
-            ...values,
-          })
-        }
-      },
+      POST: ({ request }) => submitLoginPost(request),
     },
   },
   component: LoginRoute,
@@ -242,125 +142,8 @@ function LoginRoute() {
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
   })
-
-  return pathname === '/login' ? <LoginPage /> : <Outlet />
-}
-
-function LoginPage() {
   const search = Route.useSearch()
   const data = Route.useLoaderData()
-  const [identifierError, setIdentifierError] = useState(data.fieldError)
-  const loginId = data.loginId
-  const showAccounts = data.accounts.length > 0 && search.no_accounts !== '1'
-  const visibleError = search.error ?? data.error
-  const t = (key: Parameters<typeof translate>[1]) => translate(data.locale, key)
 
-  return (
-    <AuthShell
-      lang={data.locale}
-      locale={data.locale}
-      showPreferences
-      title={showAccounts ? t('chooseAccount') : t('signIn')}
-      description={
-        showAccounts
-          ? t('chooseAccountDescription')
-          : t('signInDescription')
-      }
-    >
-      <LoginClient client={data.client} locale={data.locale} />
-      {visibleError ? <ErrorAlert className="mb-5" message={visibleError} title={t('unableToContinue')} /> : null}
-
-      {showAccounts ? (
-        <div className="auth-stagger-fast space-y-3">
-          {data.accounts.map((account) => (
-            <ProgressiveForm
-              action="/login"
-              key={account.id}
-              className="progressive-form"
-              enhancementErrorMessage={t('enhancedNavigationError')}
-            >
-              <input type="hidden" name="intent" value="select" />
-              <input type="hidden" name="login_id" value={loginId} />
-              <input type="hidden" name="session_id" value={account.id} />
-              <input type="hidden" name="ui_locales" value={data.uiLocales} />
-              <input
-                type="hidden"
-                name="csrf_token"
-                value={data.csrfToken}
-              />
-              <SubmitButton
-                variant="outline"
-                fullWidth
-                className="group h-auto justify-start gap-3 px-4 py-3 text-left whitespace-normal hover:-translate-y-0.5 hover:shadow-[0_14px_30px_-14px_rgba(0,0,0,0.3)]"
-              >
-                <AccountAvatar name={account.name} picture={account.picture} />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-semibold">
-                    {account.name}
-                  </span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {account.email}
-                  </span>
-                </span>
-                <ChevronRight
-                  className="size-4 text-muted-foreground transition-transform duration-200 group-hover:translate-x-0.5 group-hover:text-foreground"
-                  aria-hidden="true"
-                />
-              </SubmitButton>
-            </ProgressiveForm>
-          ))}
-          <a
-            href={`/login?login_id=${encodeURIComponent(loginId)}&no_accounts=1${data.uiLocales ? `&ui_locales=${encodeURIComponent(data.uiLocales)}` : ''}`}
-            className={buttonVariants({ variant: 'ghost', className: 'h-11 w-full font-semibold' })}
-          >
-            <Plus className="size-4" aria-hidden="true" />
-              {t('useAnotherAccount')}
-          </a>
-        </div>
-      ) : (
-        <ProgressiveForm action="/login" className="progressive-form space-y-6" enhancementErrorMessage={t('enhancedNavigationError')}>
-          <input type="hidden" name="intent" value="identifier" />
-          <input type="hidden" name="login_id" value={loginId} />
-          <input type="hidden" name="csrf_token" value={data.csrfToken} />
-          <input type="hidden" name="ui_locales" value={data.uiLocales} />
-          <TextField
-            required
-            name="identifier"
-            label={t('identifier')}
-            error={identifierError}
-            autoFocus
-            defaultValue={
-              data.formValues.identifier ?? search.identifier ?? data.loginHint
-            }
-            autoComplete="username"
-            placeholder="name@example.com"
-            onChange={() => setIdentifierError(undefined)}
-          />
-          <SubmitButton fullWidth>
-            {t('next')}
-          </SubmitButton>
-          {data.accounts.length > 0 ? (
-            <a
-              href={`/login?login_id=${encodeURIComponent(loginId)}${data.uiLocales ? `&ui_locales=${encodeURIComponent(data.uiLocales)}` : ''}`}
-              className="auth-link mx-auto flex w-fit justify-center text-sm font-semibold text-primary"
-            >
-              {t('backToAccounts')}
-            </a>
-          ) : null}
-        </ProgressiveForm>
-      )}
-      {!showAccounts && data.registrationAvailable ? (
-        <p className="mt-6 text-center text-sm text-muted-foreground">
-          {t('createAccountPrompt')}{' '}
-          <a
-            href={loginRegisterDestination(loginId, data.uiLocales || undefined)}
-            className="text-link font-semibold text-foreground"
-          >
-            {t('createAccount')}
-          </a>
-        </p>
-      ) : null}
-    </AuthShell>
-  )
+  return pathname === '/login' ? <LoginPageView data={data} search={search} /> : <Outlet />
 }
-

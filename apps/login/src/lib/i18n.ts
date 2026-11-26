@@ -9,6 +9,7 @@ export type Locale = (typeof supportedLocales)[number]
 export type MessageKey = keyof typeof enUS
 
 export const defaultLocale: Locale = 'en-US'
+export const BROWSER_LOCALE_VALUE = 'browser'
 
 const messages: Record<Locale, Record<MessageKey, string>> = {
   'en-US': enUS,

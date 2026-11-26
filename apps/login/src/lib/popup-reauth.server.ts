@@ -1,5 +1,5 @@
 import { AuthenticationContextClass } from '@identity/graphql-access'
-import { PASSKEY_MANAGEMENT_CONTINUATION } from './account-reauth'
+import { PASSKEY_MANAGEMENT_CONTINUATION } from '#/modules/account/lib/account-reauth'
 import type { AccountReauthRequest } from './popup-reauth'
 import { startPopupReauthorization } from './oauth.server'
 
