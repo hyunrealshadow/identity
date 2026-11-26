@@ -42,7 +42,15 @@ impl LoginService {
     ) -> Result<ChallengeOutcome, AppError> {
         let result = self
             .challenge_inner(login_oid, credential_type, credential, ctx)
-            .await;
+            .await
+            .map_err(|error| match error.error_code() {
+                ErrorCode::Auth(
+                    AuthErrorCode::InvalidCredential
+                    | AuthErrorCode::InvalidAccountOrPassword
+                    | AuthErrorCode::InvalidOtp,
+                ) => error.with_field("credential"),
+                _ => error,
+            });
         self.record_authentication_result(login_oid, credential_type, &result);
         result
     }

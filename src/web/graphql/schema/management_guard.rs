@@ -2,13 +2,12 @@
 use std::collections::BTreeSet;
 
 use super::{access::AccessPolicy, authorization::request_context, error::app_error};
-use async_graphql::{Context, ErrorExtensions, Guard, Result};
+use async_graphql::{Context, Guard, Result};
 use chrono::Utc;
 use identity_application::{
     authorization::{
-        CurrentManagementAuthority, DEFAULT_RECENT_AAL2_TTL, ManagementAuthorizationError,
-        ManagementAuthorizationRequest, ManagementTarget, ManagementTargetKind,
-        evaluate_management_authority,
+        CurrentManagementAuthority, DEFAULT_RECENT_AAL2_TTL, ManagementAuthorizationRequest,
+        ManagementTarget, ManagementTargetKind, evaluate_management_authority,
     },
     error::codes::authorization,
 };
@@ -91,33 +90,7 @@ impl Guard for ManagementGuard {
             now: Utc::now(),
             recent_aal2_ttl: DEFAULT_RECENT_AAL2_TTL,
         })
-        .map(|_| ())
-        .map_err(|error| {
-            let step_up = matches!(
-                error,
-                ManagementAuthorizationError::AuthenticationRequired { .. }
-                    | ManagementAuthorizationError::RecentAuthenticationRequired
-            );
-            let recent = matches!(
-                error,
-                ManagementAuthorizationError::RecentAuthenticationRequired
-            );
-            let error = app_error(ctx, error.into());
-            if step_up {
-                error.extend_with(|_, extensions| {
-                    extensions.set("applicationCode", 27021);
-                    extensions.set("code", "insufficient_user_authentication");
-                    extensions.set(
-                        "acr_values",
-                        identity_domain::auth::AuthenticationContextClass::MultiFactor.as_str(),
-                    );
-                    if recent {
-                        extensions.set("max_age", DEFAULT_RECENT_AAL2_TTL.as_secs());
-                    }
-                })
-            } else {
-                error
-            }
-        })
+        .map_err(|error| app_error(ctx, error.into()))?;
+        Ok(())
     }
 }

@@ -4,6 +4,8 @@ use std::{
     fmt::{Display, Formatter, Result as FmtResult},
 };
 
+use identity_domain::auth::AuthenticationContextClass;
+
 use super::{
     code::AppErrorCode,
     codes::{ErrorCode, common},
@@ -12,16 +14,23 @@ use super::{
     validation::ValidationError,
 };
 
-#[derive(Debug)]
-enum AppErrorDetails {
-    Validation(ValidationError),
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct StepUpChallenge {
+    pub acr: AuthenticationContextClass,
+    pub max_age_secs: Option<u64>,
+}
+
+#[derive(Debug, Default)]
+struct AppErrorDetails {
+    validation: Option<ValidationError>,
+    step_up: Option<StepUpChallenge>,
 }
 
 #[derive(Debug)]
 pub struct AppError {
     code: ErrorCode,
     params: ErrorParams,
-    details: Option<AppErrorDetails>,
+    details: Option<Box<AppErrorDetails>>,
     source: Option<Box<dyn StdError + Send + Sync + 'static>>,
     backtrace: Option<Box<Backtrace>>,
 }
@@ -92,19 +101,30 @@ impl AppError {
         &self.params
     }
 
+    pub fn with_step_up(mut self, challenge: StepUpChallenge) -> Self {
+        self.details_mut().step_up = Some(challenge);
+        self
+    }
+
+    pub fn step_up(&self) -> Option<StepUpChallenge> {
+        self.details.as_deref().and_then(|details| details.step_up)
+    }
+
     pub fn validation(&self) -> Option<&ValidationError> {
-        match self.details.as_ref()? {
-            AppErrorDetails::Validation(validation) => Some(validation),
-        }
+        self.details
+            .as_deref()
+            .and_then(|details| details.validation.as_ref())
+    }
+
+    fn details_mut(&mut self) -> &mut AppErrorDetails {
+        self.details
+            .get_or_insert_with(|| Box::new(AppErrorDetails::default()))
     }
 
     fn validation_mut(&mut self) -> &mut ValidationError {
-        let details = self
-            .details
-            .get_or_insert_with(|| AppErrorDetails::Validation(ValidationError::default()));
-        match details {
-            AppErrorDetails::Validation(validation) => validation,
-        }
+        self.details_mut()
+            .validation
+            .get_or_insert_with(ValidationError::default)
     }
 }
 

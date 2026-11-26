@@ -3,17 +3,20 @@
 //! Client-facing messages are rendered from Fluent assets in the infrastructure
 //! i18n layer. This module only selects the stable code and safe parameters.
 
-use identity_domain::authorization::{
-    catalog::{HumanAuthenticationRequirement, ManagementCatalogError, ManagementScopeError},
-    owner::OwnerProtectionError,
-    reason::GrantReasonError,
-    repository::ManagementRepositoryError,
-    snapshot::SnapshotValidationError,
+use identity_domain::{
+    auth::AuthenticationContextClass,
+    authorization::{
+        catalog::{HumanAuthenticationRequirement, ManagementCatalogError, ManagementScopeError},
+        owner::OwnerProtectionError,
+        reason::GrantReasonError,
+        repository::ManagementRepositoryError,
+        snapshot::SnapshotValidationError,
+    },
 };
 
 use crate::{
-    authorization::policy::ManagementAuthorizationError,
-    error::{AppError, codes::authorization::error as AuthzError},
+    authorization::policy::{DEFAULT_RECENT_AAL2_TTL, ManagementAuthorizationError},
+    error::{AppError, StepUpChallenge, codes::authorization::error as AuthzError},
 };
 
 impl From<ManagementAuthorizationError> for AppError {
@@ -44,12 +47,29 @@ impl From<ManagementAuthorizationError> for AppError {
                 AuthzError::AuthorizationSnapshotExpired.into()
             }
             Error::AuthenticationRequired { required } => {
-                AuthzError::MissingHumanAuthentication::new(required.as_str()).into()
+                let err: AppError =
+                    AuthzError::MissingHumanAuthentication::new(required.as_str()).into();
+                if required.requires_aal2() {
+                    err.with_step_up(StepUpChallenge {
+                        acr: AuthenticationContextClass::MultiFactor,
+                        max_age_secs: required
+                            .requires_recent_aal2()
+                            .then_some(DEFAULT_RECENT_AAL2_TTL.as_secs()),
+                    })
+                } else {
+                    err
+                }
             }
-            Error::RecentAuthenticationRequired => AuthzError::MissingHumanAuthentication::new(
-                HumanAuthenticationRequirement::RecentAal2.as_str(),
-            )
-            .into(),
+            Error::RecentAuthenticationRequired => {
+                let err: AppError = AuthzError::MissingHumanAuthentication::new(
+                    HumanAuthenticationRequirement::RecentAal2.as_str(),
+                )
+                .into();
+                err.with_step_up(StepUpChallenge {
+                    acr: AuthenticationContextClass::MultiFactor,
+                    max_age_secs: Some(DEFAULT_RECENT_AAL2_TTL.as_secs()),
+                })
+            }
             Error::TargetForbidden => AuthzError::TargetForbidden::new().into(),
             Error::InvalidTarget => AuthzError::InvalidTarget::new().into(),
             Error::InvalidTokenScope { scope } => {

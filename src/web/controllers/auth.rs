@@ -35,11 +35,7 @@ use crate::{
         authentication::{login, login::ChallengeOutcome},
         error::{
             AppError,
-            code::AppErrorCode,
-            codes::{
-                auth::{self, AuthErrorCode},
-                authorize_http,
-            },
+            codes::{auth, authorize_http},
         },
         openid_connect::authorize::stored_request_has_prompt,
         user::CredentialType,
@@ -440,8 +436,7 @@ async fn identifier(depot: &mut Depot, req: &mut Request, res: &mut Response) ->
         .services()
         .login()
         .identify(login_oid, &body.identifier)
-        .await
-        .map_err(identifier_form_error)?;
+        .await?;
     let protected_id = ctx
         .services()
         .oidc_authorize()
@@ -872,8 +867,7 @@ async fn challenge(depot: &mut Depot, req: &mut Request, res: &mut Response) -> 
             &body.credential,
             session_ctx,
         )
-        .await
-        .map_err(challenge_form_error)?;
+        .await?;
 
     match outcome {
         ChallengeOutcome::MfaRequired { login } => {
@@ -1240,36 +1234,9 @@ async fn confirm_passkey_enrollment(
     Ok(())
 }
 
-fn identifier_form_error(error: AppError) -> AppError {
-    let code = error.code();
-    if code == AuthErrorCode::UserNotFound.code()
-        || code == AuthErrorCode::IdentifierRequired.code()
-    {
-        error.with_field("identifier")
-    } else {
-        error
-    }
-}
-
-fn challenge_form_error(error: AppError) -> AppError {
-    let code = error.code();
-    if code == AuthErrorCode::InvalidCredential.code()
-        || code == AuthErrorCode::InvalidAccountOrPassword.code()
-        || code == AuthErrorCode::InvalidOtp.code()
-    {
-        error.with_field("credential")
-    } else {
-        error
-    }
-}
-
 #[cfg(test)]
 mod form_error_tests {
-    use super::{challenge_form_error, identifier_form_error, login_challenge_uri};
-    use crate::application::error::{
-        codes::{auth, common},
-        kind::ErrorKind,
-    };
+    use super::login_challenge_uri;
 
     #[test]
     fn challenge_destinations_use_method_paths_and_preserve_context() {
@@ -1285,34 +1252,5 @@ mod form_error_tests {
                 format!("/login/{method}?login_id=rp%2Blogin%2Fid&ui_locales=zh-CN+en-US"),
             );
         }
-    }
-
-    #[test]
-    fn identifier_errors_are_attached_to_identifier_field() {
-        let error = identifier_form_error(auth::error::IdentifierRequired.into());
-
-        assert_eq!(error.kind(), ErrorKind::Validation);
-        let fields = error.validation().expect("field details").fields();
-        assert_eq!(fields.len(), 1);
-        assert_eq!(fields[0].field(), "identifier");
-        assert_eq!(fields[0].code(), 11012);
-    }
-
-    #[test]
-    fn invalid_credentials_keep_unauthorized_status_and_attach_field() {
-        let error = challenge_form_error(auth::error::InvalidCredential.into());
-
-        assert_eq!(error.kind(), ErrorKind::Unauthorized);
-        let fields = error.validation().expect("field details").fields();
-        assert_eq!(fields.len(), 1);
-        assert_eq!(fields[0].field(), "credential");
-        assert_eq!(fields[0].code(), 11001);
-    }
-
-    #[test]
-    fn login_state_errors_remain_page_level() {
-        let error = identifier_form_error(common::error::InternalError.into());
-
-        assert!(error.validation().is_none());
     }
 }

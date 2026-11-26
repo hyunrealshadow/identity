@@ -1,15 +1,9 @@
 use std::{backtrace::Backtrace, error::Error as StdError};
 
 use async_graphql::{Context, Error, ErrorExtensionValues, ErrorExtensions, Value};
-use identity_application::{
-    authorization::DEFAULT_RECENT_AAL2_TTL,
-    error::{
-        AppError, ErrorDiagnostics,
-        code::AppErrorCode,
-        codes::{authorization::AuthorizationErrorCode, graphql::GraphqlErrorCode},
-        kind::ErrorKind,
-        params::ErrorParams,
-    },
+use identity_application::error::{
+    AppError, ErrorDiagnostics, code::AppErrorCode, codes::graphql::GraphqlErrorCode,
+    kind::ErrorKind, params::ErrorParams,
 };
 use serde_json::{Value as SerdeJsonValue, json};
 use tracing::error;
@@ -205,23 +199,13 @@ pub(super) fn app_error(ctx: &Context<'_>, error: AppError) -> Error {
                 .fields()
                 .iter()
                 .map(|field| {
-                    let field_message = field
-                        .params()
-                        .get("message")
-                        .filter(|message| !message.is_empty())
-                        .map(str::to_owned)
-                        .unwrap_or_else(|| {
-                            let rendered = i18n.t_code_with_params(
-                                &request.locale,
-                                field.code(),
-                                field.params(),
-                            );
-                            if rendered == format!("E{}", field.code()) {
-                                generic_message(i18n, &request.locale)
-                            } else {
-                                rendered
-                            }
-                        });
+                    let rendered =
+                        i18n.t_code_with_params(&request.locale, field.code(), field.params());
+                    let field_message = if rendered == format!("E{}", field.code()) {
+                        generic_message(i18n, &request.locale)
+                    } else {
+                        rendered
+                    };
                     json!({
                         "field": field.field(),
                         "code": field.code(),
@@ -236,23 +220,70 @@ pub(super) fn app_error(ctx: &Context<'_>, error: AppError) -> Error {
         trace_id: request.correlation.trace_id.clone(),
     };
     Error::new(message).extend_with(|_, extensions| {
-        extensions.set("kind", kind);
-        extensions.set("code", error.code());
-        if error.code() == AuthorizationErrorCode::MissingHumanAuthentication.code() {
-            extensions.set("applicationCode", error.code());
-            extensions.set("code", "insufficient_user_authentication");
-            extensions.set(
-                "acr_values",
-                identity_domain::auth::AuthenticationContextClass::MultiFactor.as_str(),
-            );
-            if error.params().get("required_authentication") == Some("recent_aal2") {
-                extensions.set("max_age", DEFAULT_RECENT_AAL2_TTL.as_secs());
-            }
-        }
-        extensions.set(
-            "fields",
-            Value::from_json(SerdeJsonValue::Array(fields)).unwrap_or(Value::Null),
-        );
-        correlation.apply(extensions);
+        apply_app_error_extensions(extensions, &error, kind, fields, &correlation);
     })
+}
+
+fn apply_app_error_extensions(
+    extensions: &mut ErrorExtensionValues,
+    error: &AppError,
+    kind: &'static str,
+    fields: Vec<SerdeJsonValue>,
+    correlation: &Correlation,
+) {
+    extensions.set("kind", kind);
+    extensions.set("code", error.code());
+    if let Some(step_up) = error.step_up() {
+        extensions.set("applicationCode", error.code());
+        extensions.set("code", "insufficient_user_authentication");
+        extensions.set("acr_values", step_up.acr.as_str());
+        if let Some(max_age) = step_up.max_age_secs {
+            extensions.set("max_age", max_age);
+        }
+    }
+    extensions.set(
+        "fields",
+        Value::from_json(SerdeJsonValue::Array(fields)).unwrap_or(Value::Null),
+    );
+    correlation.apply(extensions);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use identity_application::error::StepUpChallenge;
+    use identity_domain::auth::AuthenticationContextClass;
+
+    #[test]
+    fn step_up_challenge_projects_graphql_extensions_without_code_inspection() {
+        let error = identity_application::error::codes::common::error::Unauthorized
+            .into_error()
+            .with_step_up(StepUpChallenge {
+                acr: AuthenticationContextClass::MultiFactor,
+                max_age_secs: Some(900),
+            });
+        let mut extensions = ErrorExtensionValues::default();
+        let correlation = Correlation {
+            request_id: "req-1".to_owned(),
+            trace_id: None,
+        };
+        apply_app_error_extensions(
+            &mut extensions,
+            &error,
+            "unauthorized",
+            Vec::new(),
+            &correlation,
+        );
+
+        assert_eq!(
+            extensions.get("applicationCode"),
+            Some(&Value::from(error.code()))
+        );
+        assert_eq!(
+            extensions.get("code"),
+            Some(&Value::from("insufficient_user_authentication"))
+        );
+        assert_eq!(extensions.get("acr_values"), Some(&Value::from("aal2")));
+        assert_eq!(extensions.get("max_age"), Some(&Value::from(900_u64)));
+    }
 }

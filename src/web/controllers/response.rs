@@ -79,10 +79,6 @@ fn localized_error_message(
     code: u32,
     params: &ErrorParams,
 ) -> String {
-    if let Some(message) = params.get("message").filter(|message| !message.is_empty()) {
-        return message.to_owned();
-    }
-
     if params.is_empty() {
         i18n.t_code(locale, code)
     } else {
@@ -321,7 +317,7 @@ pub fn render_app_error(res: &mut Response, headers: &HeaderMap, ctx: &AppState,
     }
 
     if let Some(i18n) = error_i18n() {
-        let locale = i18n.fallback_locale().clone();
+        let locale = resolve_locale_from_headers(headers);
         write_error_response(res, i18n, &locale, error);
     } else {
         render_unlocalized_app_error(res, error);
@@ -358,12 +354,7 @@ pub fn render_error_page(res: &mut Response, headers: &HeaderMap, ctx: &AppState
 fn render_unlocalized_app_error(res: &mut Response, error: AppError) {
     log_app_error(&error, "application request failed without localization");
     let status = error_http_status(error.kind());
-    let message = error
-        .params()
-        .get("message")
-        .filter(|message| !message.is_empty())
-        .map(str::to_owned)
-        .unwrap_or_else(|| error.code().to_string());
+    let message = error.code().to_string();
     let fields = error
         .validation()
         .map(|validation| {
@@ -373,12 +364,7 @@ fn render_unlocalized_app_error(res: &mut Response, error: AppError) {
                 .map(|field_error| FieldErrorDetail {
                     field: field_error.field().to_owned(),
                     code: field_error.code(),
-                    message: field_error
-                        .params()
-                        .get("message")
-                        .filter(|message| !message.is_empty())
-                        .map(str::to_owned)
-                        .unwrap_or_else(|| field_error.code().to_string()),
+                    message: field_error.code().to_string(),
                 })
                 .collect()
         })
@@ -475,10 +461,12 @@ mod tests {
     use tracing::{Level, subscriber::with_default};
     use tracing_subscriber::fmt;
 
-    use super::{JsonWebResult, WebResult, log_app_error};
+    use super::{JsonWebResult, WebResult, log_app_error, render_app_error};
     use crate::{
         application::error::codes::{authorize_http, common, install},
-        infrastructure::{i18n::init_error_i18n, web::tera::build_i18n},
+        infrastructure::{
+            i18n::init_error_i18n, test_app_state_with_mock_settings, web::tera::build_i18n,
+        },
     };
 
     #[test]
@@ -588,6 +576,32 @@ mod tests {
             body.contains("\"message\":\"The email address is invalid.\""),
             "{body}"
         );
+    }
+
+    #[tokio::test]
+    async fn render_app_error_json_respects_accept_language() {
+        init_error_i18n(build_i18n().expect("i18n should load from assets/i18n"));
+        let ctx = test_app_state_with_mock_settings().await;
+        let mut headers = http::HeaderMap::new();
+        headers.insert(
+            http::header::ACCEPT,
+            http::HeaderValue::from_static("application/json"),
+        );
+        headers.insert(
+            http::header::ACCEPT_LANGUAGE,
+            http::HeaderValue::from_static("zh-CN"),
+        );
+        let mut response = salvo::Response::new();
+        render_app_error(
+            &mut response,
+            &headers,
+            &ctx,
+            install::error::EmailInvalid.into(),
+        );
+
+        assert_eq!(response.status_code, Some(StatusCode::UNPROCESSABLE_ENTITY));
+        let body = response.take_string().await.unwrap();
+        assert!(body.contains("\"message\":\"邮箱地址格式无效\""), "{body}");
     }
 
     #[test]

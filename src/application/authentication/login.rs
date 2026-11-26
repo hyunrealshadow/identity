@@ -309,7 +309,9 @@ impl LoginService {
     ) -> Result<IdentifierResult, AppError> {
         let identifier = identifier.trim();
         if identifier.is_empty() {
-            return Err(auth::error::IdentifierRequired.into());
+            return Err(auth::error::IdentifierRequired
+                .into_error()
+                .with_field("identifier"));
         }
 
         let login_state = self
@@ -341,7 +343,9 @@ impl LoginService {
                         AuditFailureReason::UnknownAccount,
                     )
                     .await?;
-                return Err(auth::error::UserNotFound.into());
+                return Err(auth::error::UserNotFound
+                    .into_error()
+                    .with_field("identifier"));
             }
             Err(error) => return Err(error.into()),
         };
