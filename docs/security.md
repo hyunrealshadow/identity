@@ -106,9 +106,8 @@ security, and either a username and password or OAuth 2.0 `XOAUTH2`. For
 XOAUTH2 the instance obtains access tokens from the configured token endpoint
 with a refresh token or client credentials and caches them until shortly before
 they expire. The SMTP password, OAuth client secret and refresh token are
-stored data-protected, are never returned by the API, and appear in the audit
-log only as a fingerprint; leaving one empty when saving keeps the stored
-value. An operator can send a test message with the saved settings; it is
+never returned by the API and are redacted in the audit log; leaving one empty
+when saving keeps the stored value. An operator can send a test message with the saved settings; it is
 sent at once and its result shown. Every other message goes through the
 outgoing queue described under
 [emailed codes and links](authentication-flows.md#emailed-codes-and-links),

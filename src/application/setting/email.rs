@@ -1,9 +1,9 @@
 //! Email delivery and email template management.
 //!
 //! Delivery is one versioned section; each template kind is another, holding
-//! every locale of that kind. Secrets are protected before the write and are
-//! never returned: a view only says whether one is stored. Leaving a secret
-//! out of an update keeps the stored one while the method stays the same.
+//! every locale of that kind. Secrets are never returned by management views
+//! and are redacted in the audit log; leaving a secret out of an update keeps
+//! the stored one while the method stays the same.
 
 use std::{collections::BTreeMap, sync::Arc};
 
@@ -15,19 +15,18 @@ use uuid::Uuid;
 use validator::ValidateEmail;
 
 use super::{
-    EmailDeliverySettings, EmailTemplatesSetting, ProtectedSecret, SettingChanges,
-    SmtpAuthentication, SmtpSecurity, Xoauth2Grant, Xoauth2Settings,
+    EmailDeliverySettings, EmailSecret, EmailTemplatesSetting, SettingChanges, SmtpAuthentication,
+    SmtpSecurity, Xoauth2Grant, Xoauth2Settings,
     management::{
         InstanceSettingSection, InstanceSettingService, InstanceSettingsState,
         InstanceSettingsView, SettingRange, map_repository_error, validate_client_mutation_id,
     },
 };
 use crate::{
-    data_protection::DataProtector,
     email::{
-        EMAIL_DELIVERY_SECRET_PURPOSE, EmailMessage, EmailSender, EmailTemplate,
-        EmailTemplateContent, EmailTemplateKind, EmailTemplateRenderError, EmailTemplateRenderer,
-        RenderedEmail, built_in_template, effective_template,
+        EmailMessage, EmailSender, EmailTemplate, EmailTemplateContent, EmailTemplateKind,
+        EmailTemplateRenderError, EmailTemplateRenderer, RenderedEmail, built_in_template,
+        effective_template,
         template::{MAX_BODY_LENGTH, MAX_SUBJECT_LENGTH, MAX_TEMPLATE_TRANSLATIONS},
     },
     error::{AppError, codes::instance},
@@ -46,7 +45,6 @@ const MAX_SECRET_LENGTH: usize = 8_192;
 /// What email management needs besides settings storage.
 #[derive(Clone)]
 pub struct EmailManagementDependencies {
-    pub protector: Arc<dyn DataProtector>,
     pub renderer: Arc<dyn EmailTemplateRenderer>,
     pub sender: Arc<dyn EmailSender>,
 }
@@ -174,37 +172,60 @@ impl From<&InstanceSettingsState> for EmailSettingsView {
     }
 }
 
-/// The delivery settings as audited: secrets become a fingerprint of their
-/// protected form, so a replacement is visible without exposing anything.
+/// The delivery settings as audited: secrets are redacted so values are never
+/// written to the audit journal.
 #[must_use]
 pub fn email_delivery_audit_values(settings: &EmailDeliverySettings) -> Value {
-    fn fingerprint(value: &mut Value) {
+    fn redact(value: &mut Value) {
         match value {
             Value::Object(fields) => {
                 for (name, field) in fields.iter_mut() {
                     if matches!(
                         name.as_str(),
                         "password" | "client_secret" | "refresh_token"
-                    ) && let Value::String(token) = field
+                    ) && matches!(field, Value::String(_))
                     {
-                        let digest = Sha256::digest(token.as_bytes());
-                        let hex = digest[..6]
-                            .iter()
-                            .map(|byte| format!("{byte:02x}"))
-                            .collect::<String>();
-                        *field = Value::String(format!("protected:{hex}"));
+                        *field = Value::String("[redacted]".to_owned());
                     } else {
-                        fingerprint(field);
+                        redact(field);
                     }
                 }
             }
-            Value::Array(items) => items.iter_mut().for_each(fingerprint),
+            Value::Array(items) => items.iter_mut().for_each(redact),
             _ => {}
         }
     }
     let mut value = serde_json::to_value(settings).unwrap_or(Value::Null);
-    fingerprint(&mut value);
+    redact(&mut value);
     value
+}
+
+fn has_secret(authentication: &SmtpAuthentication) -> bool {
+    match authentication {
+        SmtpAuthentication::None => false,
+        SmtpAuthentication::Password { .. } => true,
+        SmtpAuthentication::Xoauth2(oauth) => {
+            oauth.client_secret.is_some() || oauth.refresh_token.is_some()
+        }
+    }
+}
+
+/// Whether any SMTP authentication secret was added, replaced, or removed.
+#[must_use]
+pub fn email_delivery_secrets_changed(
+    before: &EmailDeliverySettings,
+    after: &EmailDeliverySettings,
+) -> bool {
+    match (&before.authentication, &after.authentication) {
+        (
+            SmtpAuthentication::Password { password: a, .. },
+            SmtpAuthentication::Password { password: b, .. },
+        ) => a != b,
+        (SmtpAuthentication::Xoauth2(a), SmtpAuthentication::Xoauth2(b)) => {
+            a.client_secret != b.client_secret || a.refresh_token != b.refresh_token
+        }
+        (a, b) => has_secret(a) || has_secret(b),
+    }
 }
 
 /// One template kind as audited: the subject of its default content and of
@@ -346,17 +367,17 @@ fn check_token_endpoint(value: &str) -> Result<(), AppError> {
     Ok(())
 }
 
-/// The authentication with each newly entered secret already protected.
+/// The authentication with each newly entered secret checked.
 enum PreparedAuthentication {
     None,
     Password {
         username: String,
-        password: Option<ProtectedSecret>,
+        password: Option<EmailSecret>,
     },
     Xoauth2 {
         settings: Xoauth2Settings,
-        client_secret: Option<ProtectedSecret>,
-        refresh_token: Option<ProtectedSecret>,
+        client_secret: Option<EmailSecret>,
+        refresh_token: Option<EmailSecret>,
     },
 }
 
@@ -409,94 +430,78 @@ impl PreparedAuthentication {
     }
 }
 
+fn check_secret(secret: Option<String>, field: &str) -> Result<Option<EmailSecret>, AppError> {
+    let Some(secret) = secret.filter(|secret| !secret.is_empty()) else {
+        return Ok(None);
+    };
+    if secret.len() > MAX_SECRET_LENGTH {
+        return Err(
+            instance::error::EmailTemplateTooLong::new(MAX_SECRET_LENGTH)
+                .with_field(field.to_owned()),
+        );
+    }
+    Ok(Some(EmailSecret::new(secret)))
+}
+
+fn prepare_authentication(
+    input: EmailAuthenticationInput,
+) -> Result<PreparedAuthentication, AppError> {
+    Ok(match input {
+        EmailAuthenticationInput::None => PreparedAuthentication::None,
+        EmailAuthenticationInput::Password { username, password } => {
+            let username = trimmed(&username);
+            required(&username, "authentication.username")?;
+            PreparedAuthentication::Password {
+                username,
+                password: check_secret(password, "authentication.password")?,
+            }
+        }
+        EmailAuthenticationInput::Xoauth2 {
+            username,
+            token_endpoint,
+            client_id,
+            client_secret,
+            grant,
+            refresh_token,
+            scope,
+        } => {
+            let username = trimmed(&username);
+            required(&username, "authentication.username")?;
+            let token_endpoint = trimmed(&token_endpoint);
+            check_token_endpoint(&token_endpoint)?;
+            let client_id = trimmed(&client_id);
+            required(&client_id, "authentication.clientId")?;
+            let scope = optional(scope);
+            if let Some(scope) = &scope {
+                check_length(scope, MAX_FIELD_LENGTH, "authentication.scope")?;
+            }
+            PreparedAuthentication::Xoauth2 {
+                settings: Xoauth2Settings {
+                    username,
+                    token_endpoint,
+                    client_id,
+                    client_secret: None,
+                    grant,
+                    refresh_token: None,
+                    scope,
+                },
+                client_secret: check_secret(client_secret, "authentication.clientSecret")?,
+                refresh_token: match grant {
+                    Xoauth2Grant::RefreshToken => {
+                        check_secret(refresh_token, "authentication.refreshToken")?
+                    }
+                    Xoauth2Grant::ClientCredentials => None,
+                },
+            }
+        }
+    })
+}
+
 impl InstanceSettingService {
     fn email_dependencies(&self) -> Result<&EmailManagementDependencies, AppError> {
         self.email
             .as_ref()
             .ok_or_else(|| instance::error::EmailDeliveryNotConfigured.into())
-    }
-
-    async fn protect_secret(
-        &self,
-        secret: Option<String>,
-        field: &str,
-    ) -> Result<Option<ProtectedSecret>, AppError> {
-        let Some(secret) = secret.filter(|secret| !secret.is_empty()) else {
-            return Ok(None);
-        };
-        if secret.len() > MAX_SECRET_LENGTH {
-            return Err(
-                instance::error::EmailTemplateTooLong::new(MAX_SECRET_LENGTH)
-                    .with_field(field.to_owned()),
-            );
-        }
-        let token = self
-            .email_dependencies()?
-            .protector
-            .protect(EMAIL_DELIVERY_SECRET_PURPOSE, secret.as_bytes())
-            .await
-            .map_err(AppError::from)?;
-        Ok(Some(ProtectedSecret::from_protected(token)))
-    }
-
-    async fn prepare_authentication(
-        &self,
-        input: EmailAuthenticationInput,
-    ) -> Result<PreparedAuthentication, AppError> {
-        Ok(match input {
-            EmailAuthenticationInput::None => PreparedAuthentication::None,
-            EmailAuthenticationInput::Password { username, password } => {
-                let username = trimmed(&username);
-                required(&username, "authentication.username")?;
-                PreparedAuthentication::Password {
-                    username,
-                    password: self
-                        .protect_secret(password, "authentication.password")
-                        .await?,
-                }
-            }
-            EmailAuthenticationInput::Xoauth2 {
-                username,
-                token_endpoint,
-                client_id,
-                client_secret,
-                grant,
-                refresh_token,
-                scope,
-            } => {
-                let username = trimmed(&username);
-                required(&username, "authentication.username")?;
-                let token_endpoint = trimmed(&token_endpoint);
-                check_token_endpoint(&token_endpoint)?;
-                let client_id = trimmed(&client_id);
-                required(&client_id, "authentication.clientId")?;
-                let scope = optional(scope);
-                if let Some(scope) = &scope {
-                    check_length(scope, MAX_FIELD_LENGTH, "authentication.scope")?;
-                }
-                PreparedAuthentication::Xoauth2 {
-                    settings: Xoauth2Settings {
-                        username,
-                        token_endpoint,
-                        client_id,
-                        client_secret: None,
-                        grant,
-                        refresh_token: None,
-                        scope,
-                    },
-                    client_secret: self
-                        .protect_secret(client_secret, "authentication.clientSecret")
-                        .await?,
-                    refresh_token: match grant {
-                        Xoauth2Grant::RefreshToken => {
-                            self.protect_secret(refresh_token, "authentication.refreshToken")
-                                .await?
-                        }
-                        Xoauth2Grant::ClientCredentials => None,
-                    },
-                }
-            }
-        })
     }
 
     #[tracing::instrument(skip_all, name = "setting.email.update")]
@@ -530,7 +535,7 @@ impl InstanceSettingService {
             if let Some(name) = &sender_name {
                 check_length(name, 255, "sender_name")?;
             }
-            let authentication = self.prepare_authentication(command.authentication).await?;
+            let authentication = prepare_authentication(command.authentication)?;
             let port = u16::try_from(command.port).unwrap_or(587);
             let build = move |state: &InstanceSettingsState| {
                 let next = EmailDeliverySettings {
@@ -805,8 +810,8 @@ fn test_message(recipient: String, locale: &str) -> EmailMessage {
 mod tests {
     use super::*;
 
-    fn secret(token: &str) -> ProtectedSecret {
-        ProtectedSecret::from_protected(token.to_owned())
+    fn secret(token: &str) -> EmailSecret {
+        EmailSecret::new(token.to_owned())
     }
 
     fn stored_oauth() -> SmtpAuthentication {
@@ -881,18 +886,31 @@ mod tests {
     }
 
     #[test]
-    fn audited_delivery_values_fingerprint_secrets() {
-        let settings = EmailDeliverySettings {
+    fn audited_delivery_values_redact_secrets_and_detect_secret_changes() {
+        let before = EmailDeliverySettings {
             authentication: SmtpAuthentication::Password {
                 username: "mailer".to_owned(),
-                password: secret("protected-token"),
+                password: secret("first-secret"),
             },
             ..EmailDeliverySettings::default()
         };
-        let audited = email_delivery_audit_values(&settings).to_string();
-        assert!(!audited.contains("protected-token"));
-        assert!(audited.contains("protected:"));
+        let same_secret = EmailDeliverySettings {
+            host: "smtp.example.com".to_owned(),
+            ..before.clone()
+        };
+        let replaced_secret = EmailDeliverySettings {
+            authentication: SmtpAuthentication::Password {
+                username: "mailer".to_owned(),
+                password: secret("second-secret"),
+            },
+            ..EmailDeliverySettings::default()
+        };
+        let audited = email_delivery_audit_values(&before).to_string();
+        assert!(!audited.contains("first-secret"));
+        assert!(audited.contains("[redacted]"));
         assert!(audited.contains("mailer"));
+        assert!(!email_delivery_secrets_changed(&before, &same_secret));
+        assert!(email_delivery_secrets_changed(&before, &replaced_secret));
     }
 
     #[test]

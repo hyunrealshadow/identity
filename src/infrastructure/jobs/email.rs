@@ -183,9 +183,6 @@ async fn deliver(job: EmailJob, state: Data<AppState>) -> Result<(), BoxDynError
             .send(&delivery, message.clone())
             .await;
         if matches!(outcome, Err(EmailDeliveryError::SecretUnavailable)) {
-            if let Err(error) = state.settings().key_ring().refresh_value().await {
-                warn!(email_kind = %job.kind, error = %error, "key ring refresh failed");
-            }
             if let Err(error) = state.settings().store().refresh().await {
                 warn!(email_kind = %job.kind, error = %error, "settings refresh failed");
             }

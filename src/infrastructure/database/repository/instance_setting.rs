@@ -17,7 +17,10 @@ use identity_application::{
         InstallationSettings, OpenIdConnectSettings, PasswordHashSetting,
         PasswordHistoryCountSetting, PasswordMaxAgeDaysSetting, PasswordResetEnabledSetting,
         RegistrationEnabledSetting,
-        email::{email_delivery_audit_values, email_template_audit_values},
+        email::{
+            email_delivery_audit_values, email_delivery_secrets_changed,
+            email_template_audit_values,
+        },
         management::{
             InstanceSettingRepository, InstanceSettingRepositoryError, InstanceSettingSection,
             InstanceSettingsState, UpdateInstanceSettingsTransaction,
@@ -128,27 +131,38 @@ impl InstanceSettingRepository for InstanceSettingRepositoryImpl {
 
         let mut audited = AuditChanges::new();
         match section {
-            InstanceSettingSection::Protocol => audited.diff(
-                AuditField::Settings,
-                &current.openid_connect,
-                &next.openid_connect,
-            ),
-            InstanceSettingSection::Authentication => audited.diff(
-                AuditField::Settings,
-                &current.authentication_values(),
-                &next.authentication_values(),
-            ),
-            InstanceSettingSection::Email => audited.diff(
-                AuditField::Settings,
-                &email_delivery_audit_values(&current.email_delivery),
-                &email_delivery_audit_values(&next.email_delivery),
-            ),
-            InstanceSettingSection::EmailTemplate(kind) => audited.diff(
-                AuditField::Settings,
-                &email_template_audit_values(current.email_templates.get(&kind)),
-                &email_template_audit_values(next.email_templates.get(&kind)),
-            ),
-        };
+            InstanceSettingSection::Protocol => {
+                audited.diff(
+                    AuditField::Settings,
+                    &current.openid_connect,
+                    &next.openid_connect,
+                );
+            }
+            InstanceSettingSection::Authentication => {
+                audited.diff(
+                    AuditField::Settings,
+                    &current.authentication_values(),
+                    &next.authentication_values(),
+                );
+            }
+            InstanceSettingSection::Email => {
+                audited.diff(
+                    AuditField::Settings,
+                    &email_delivery_audit_values(&current.email_delivery),
+                    &email_delivery_audit_values(&next.email_delivery),
+                );
+                if email_delivery_secrets_changed(&current.email_delivery, &next.email_delivery) {
+                    audited.secret(AuditField::Password);
+                }
+            }
+            InstanceSettingSection::EmailTemplate(kind) => {
+                audited.diff(
+                    AuditField::Settings,
+                    &email_template_audit_values(current.email_templates.get(&kind)),
+                    &email_template_audit_values(next.email_templates.get(&kind)),
+                );
+            }
+        }
         append_semantic_audit(
             &txn,
             &authority,

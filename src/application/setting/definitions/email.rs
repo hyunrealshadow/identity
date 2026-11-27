@@ -10,27 +10,27 @@ use crate::{
     setting::{SettingDefinition, SettingSection, SettingValidationError},
 };
 
-/// A secret kept in settings as a data-protection token (purpose
-/// [`crate::email::EMAIL_DELIVERY_SECRET_PURPOSE`]), never as plaintext.
+/// A secret kept in email delivery settings, redacted in `Debug` and never
+/// returned by management views.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct ProtectedSecret(String);
+pub struct EmailSecret(String);
 
-impl ProtectedSecret {
+impl EmailSecret {
     #[must_use]
-    pub fn from_protected(token: String) -> Self {
-        Self(token)
+    pub fn new(value: String) -> Self {
+        Self(value)
     }
 
     #[must_use]
-    pub fn protected(&self) -> &str {
+    pub fn expose(&self) -> &str {
         &self.0
     }
 }
 
-impl std::fmt::Debug for ProtectedSecret {
+impl std::fmt::Debug for EmailSecret {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("ProtectedSecret(..)")
+        f.write_str("EmailSecret(..)")
     }
 }
 
@@ -65,9 +65,9 @@ pub struct Xoauth2Settings {
     pub username: String,
     pub token_endpoint: String,
     pub client_id: String,
-    pub client_secret: Option<ProtectedSecret>,
+    pub client_secret: Option<EmailSecret>,
     pub grant: Xoauth2Grant,
-    pub refresh_token: Option<ProtectedSecret>,
+    pub refresh_token: Option<EmailSecret>,
     /// Space-separated scopes requested with the token, if the provider needs them.
     pub scope: Option<String>,
 }
@@ -81,7 +81,7 @@ pub enum SmtpAuthentication {
     /// `AUTH PLAIN` / `AUTH LOGIN` with a username and password.
     Password {
         username: String,
-        password: ProtectedSecret,
+        password: EmailSecret,
     },
     /// `AUTH XOAUTH2` with an OAuth 2.0 access token.
     Xoauth2(Xoauth2Settings),

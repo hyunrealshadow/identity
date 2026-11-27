@@ -326,7 +326,9 @@ function EmailDeliveryForm({ delivery }: { delivery: EmailDelivery }) {
 
             <SettingsGroup
               title={t('settingsEmailAuthenticationSection')}
-              description={t('settingsEmailAuthenticationSectionHint')}
+              description={
+                draft.method !== 'NONE' ? t('settingsEmailAuthenticationSectionHint') : undefined
+              }
             >
               <SettingsRow
                 label={t('settingsEmailAuthenticationMethod')}

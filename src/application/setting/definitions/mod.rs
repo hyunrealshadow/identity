@@ -10,8 +10,8 @@ pub use app::{
     LoginDomainSetting,
 };
 pub use email::{
-    EmailDeliverySettings, EmailTemplatesSetting, ProtectedSecret, SmtpAuthentication,
-    SmtpSecurity, Xoauth2Grant, Xoauth2Settings,
+    EmailDeliverySettings, EmailSecret, EmailTemplatesSetting, SmtpAuthentication, SmtpSecurity,
+    Xoauth2Grant, Xoauth2Settings,
 };
 pub use installation::InstallationSettings;
 pub use openid_connect::{

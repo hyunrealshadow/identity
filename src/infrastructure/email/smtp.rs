@@ -6,17 +6,14 @@
 
 use std::{
     collections::HashMap,
-    sync::Arc,
     time::{Duration, Instant},
 };
 
 use async_trait::async_trait;
 use identity_application::{
-    data_protection::DataProtector,
-    email::{EMAIL_DELIVERY_SECRET_PURPOSE, EmailDeliveryError, EmailMessage, EmailSender},
+    email::{EmailDeliveryError, EmailMessage, EmailSender},
     setting::{
-        EmailDeliverySettings, ProtectedSecret, SmtpAuthentication, SmtpSecurity, Xoauth2Grant,
-        Xoauth2Settings,
+        EmailDeliverySettings, SmtpAuthentication, SmtpSecurity, Xoauth2Grant, Xoauth2Settings,
     },
 };
 use lettre::{
@@ -40,7 +37,6 @@ const DEFAULT_TOKEN_LIFETIME: Duration = Duration::from_secs(300);
 const MAX_DETAIL_LENGTH: usize = 300;
 
 pub struct SmtpEmailSender {
-    protector: Arc<dyn DataProtector>,
     http: reqwest::Client,
     tokens: Mutex<HashMap<[u8; 32], CachedToken>>,
 }
@@ -85,24 +81,14 @@ fn truncate(text: &str) -> String {
 }
 
 impl SmtpEmailSender {
-    pub fn new(protector: Arc<dyn DataProtector>) -> Result<Self, reqwest::Error> {
+    pub fn new() -> Result<Self, reqwest::Error> {
         Ok(Self {
-            protector,
             http: reqwest::Client::builder()
                 .timeout(TOKEN_TIMEOUT)
                 .redirect(reqwest::redirect::Policy::none())
                 .build()?,
             tokens: Mutex::new(HashMap::new()),
         })
-    }
-
-    async fn reveal(&self, secret: &ProtectedSecret) -> Result<String, EmailDeliveryError> {
-        let bytes = self
-            .protector
-            .unprotect(EMAIL_DELIVERY_SECRET_PURPOSE, secret.protected())
-            .await
-            .map_err(|_| EmailDeliveryError::SecretUnavailable)?;
-        String::from_utf8(bytes).map_err(|_| EmailDeliveryError::SecretUnavailable)
     }
 
     async fn credentials(
@@ -112,7 +98,7 @@ impl SmtpEmailSender {
         match authentication {
             SmtpAuthentication::None => Ok(None),
             SmtpAuthentication::Password { username, password } => Ok(Some((
-                Credentials::new(username.clone(), self.reveal(password).await?),
+                Credentials::new(username.clone(), password.expose().to_owned()),
                 vec![Mechanism::Plain, Mechanism::Login],
                 None,
             ))),
@@ -135,7 +121,7 @@ impl SmtpEmailSender {
         oauth: &Xoauth2Settings,
     ) -> Result<(String, [u8; 32], bool), EmailDeliveryError> {
         // Keyed by everything that selects the token, including the
-        // protected secrets, so replacing one is never answered from the cache.
+        // secrets, so replacing one is never answered from the cache.
         let key: [u8; 32] = Sha256::digest(serde_json::to_vec(oauth).unwrap_or_default()).into();
         {
             let tokens = self.tokens.lock().await;
@@ -180,14 +166,14 @@ impl SmtpEmailSender {
                     .as_ref()
                     .ok_or(EmailDeliveryError::SecretUnavailable)?;
                 form.push(("grant_type", "refresh_token".to_owned()));
-                form.push(("refresh_token", self.reveal(refresh_token).await?));
+                form.push(("refresh_token", refresh_token.expose().to_owned()));
             }
             Xoauth2Grant::ClientCredentials => {
                 form.push(("grant_type", "client_credentials".to_owned()));
             }
         }
         if let Some(secret) = &oauth.client_secret {
-            form.push(("client_secret", self.reveal(secret).await?));
+            form.push(("client_secret", secret.expose().to_owned()));
         }
         if let Some(scope) = &oauth.scope {
             form.push(("scope", scope.clone()));

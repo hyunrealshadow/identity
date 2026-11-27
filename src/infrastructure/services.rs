@@ -174,7 +174,7 @@ impl AppServices {
         let user_credential_repo = Arc::new(UserCredentialRepositoryImpl::new(db.clone()));
         let totp = Arc::new(TotpVerifierImpl);
         let email_sender: Arc<dyn identity_application::email::EmailSender> =
-            Arc::new(crate::email::SmtpEmailSender::new(data_protector.clone())?);
+            Arc::new(crate::email::SmtpEmailSender::new()?);
         let email_renderer: Arc<dyn identity_application::email::EmailTemplateRenderer> =
             Arc::new(crate::email::TeraEmailTemplateRenderer);
         let email_queue = crate::email::EmailQueue::new(data_protector.clone());
@@ -311,7 +311,6 @@ impl AppServices {
                 settings.store(),
             )
             .with_email(EmailManagementDependencies {
-                protector: data_protector.clone(),
                 renderer: Arc::clone(&email_renderer),
                 sender: Arc::clone(&email_sender),
             })

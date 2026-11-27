@@ -125,7 +125,7 @@ const messages = {
   settingsEmailSenderName: '发件人名称',
   settingsEmailSenderNameHint: '在收件人处显示于地址旁',
   settingsEmailAuthenticationSection: '身份验证',
-  settingsEmailAuthenticationSectionHint: '保存的密钥会加密存储，且不会再次显示',
+  settingsEmailAuthenticationSectionHint: '已保存的凭据不会再次显示',
   settingsEmailAuthenticationMethod: '方式',
   settingsEmailMethodPassword: '用户名和密码',
   settingsEmailMethodXoauth2: 'OAuth 2.0（XOAUTH2）',

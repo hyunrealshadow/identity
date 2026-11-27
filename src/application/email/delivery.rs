@@ -5,10 +5,6 @@ use thiserror::Error;
 
 use crate::setting::EmailDeliverySettings;
 
-/// Data-protection purpose of the SMTP password and OAuth secrets kept in the
-/// email delivery settings.
-pub const EMAIL_DELIVERY_SECRET_PURPOSE: &str = "setting.email.delivery.secret";
-
 pub use identity_domain::email::EmailMessage;
 
 /// Why a message could not be delivered. `detail` is the mail server's or

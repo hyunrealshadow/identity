@@ -125,7 +125,7 @@ const messages = {
   settingsEmailSenderName: 'From name',
   settingsEmailSenderNameHint: 'Shown to recipients next to the address',
   settingsEmailAuthenticationSection: 'Authentication',
-  settingsEmailAuthenticationSectionHint: 'Stored secrets are encrypted and never shown again',
+  settingsEmailAuthenticationSectionHint: 'Saved credentials are never shown again',
   settingsEmailAuthenticationMethod: 'Method',
   settingsEmailMethodPassword: 'Username and password',
   settingsEmailMethodXoauth2: 'OAuth 2.0 (XOAUTH2)',

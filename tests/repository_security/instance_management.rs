@@ -15,8 +15,8 @@ use identity_application::{
     },
     rbac::{RbacManagementAuthority, cursor::RbacPageDirection},
     setting::{
-        EmailDeliverySettings, IdentifierEnumerationAllowedSetting, ProtectedSecret,
-        SettingChanges, SmtpAuthentication,
+        EmailDeliverySettings, EmailSecret, IdentifierEnumerationAllowedSetting, SettingChanges,
+        SmtpAuthentication,
         management::{
             InstanceSettingRepository, InstanceSettingRepositoryError, InstanceSettingSection,
             UpdateInstanceSettingsTransaction,
@@ -203,9 +203,7 @@ async fn postgres_email_delivery_is_versioned_and_audited_without_secrets() {
                             sender_address: "identity@example.test".to_owned(),
                             authentication: SmtpAuthentication::Password {
                                 username: "mailer".to_owned(),
-                                password: ProtectedSecret::from_protected(
-                                    "protected-secret-token".to_owned(),
-                                ),
+                                password: EmailSecret::new("protected-secret-token".to_owned()),
                             },
                             ..EmailDeliverySettings::default()
                         })?,

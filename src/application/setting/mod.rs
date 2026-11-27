@@ -18,7 +18,7 @@ pub use definitions::{
     PasswordResetEnabledSetting, RegistrationEnabledSetting,
 };
 pub use definitions::{
-    ProtectedSecret, PushedAuthorizationSettings, SmtpAuthentication, SmtpSecurity, Xoauth2Grant,
+    EmailSecret, PushedAuthorizationSettings, SmtpAuthentication, SmtpSecurity, Xoauth2Grant,
     Xoauth2Settings,
 };
 pub use error::SettingError;
