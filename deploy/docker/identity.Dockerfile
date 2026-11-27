@@ -1,12 +1,11 @@
+# syntax=docker/dockerfile:1
 FROM rust:1.100-bookworm AS builder
 WORKDIR /app
 
-COPY --from=node:22-bookworm-slim /usr/local/bin/node /usr/local/bin/node
-COPY --from=node:22-bookworm-slim /usr/local/lib/node_modules/corepack /usr/local/lib/node_modules/corepack
+COPY --from=node:22-bookworm-slim --parents /usr/local/bin/node /usr/local/lib/node_modules/corepack /
 RUN ln -s ../lib/node_modules/corepack/dist/corepack.js /usr/local/bin/corepack \
-    && corepack enable && corepack prepare pnpm@12.9.1 --activate
-
-RUN apt-get update \
+    && corepack enable && corepack prepare pnpm@12.9.1 --activate \
+    && apt-get update \
     && apt-get install -y --no-install-recommends pkg-config libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 

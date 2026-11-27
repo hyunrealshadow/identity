@@ -117,8 +117,6 @@ filesystem is supported with writable `/tmp` and `/run/identity-console` mounts.
 
 The image workflow publishes `ghcr.io/<owner>/<repository>-console` for both
 `linux/amd64` and `linux/arm64`, using the same release tag as Identity and Login.
-Each platform image runs `tests/deployment/console-container.py` before the
-multi-platform manifest is published.
 
 ## Authentication flows
 

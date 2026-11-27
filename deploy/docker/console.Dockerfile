@@ -1,24 +1,17 @@
+# syntax=docker/dockerfile:1
 FROM --platform=$BUILDPLATFORM node:22-bookworm-slim AS builder
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@12.9.1 --activate
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/console/package.json apps/console/package.json
-COPY packages/graphql-access/package.json packages/graphql-access/package.json
-COPY packages/lucene-input/package.json packages/lucene-input/package.json
-COPY packages/ui/package.json packages/ui/package.json
+COPY --parents package.json pnpm-lock.yaml pnpm-workspace.yaml apps/console/package.json packages/*/package.json ./
 RUN pnpm install --frozen-lockfile --filter console...
-COPY apps/console apps/console
-COPY packages/graphql-access packages/graphql-access
-COPY packages/lucene-input packages/lucene-input
-COPY packages/ui packages/ui
+COPY --parents apps/console packages ./
 RUN pnpm --filter console build && rm -f apps/console/dist/config.json
 
 FROM nginx:stable-alpine
 RUN apk add --no-cache ca-certificates curl jq \
     && mkdir -p /run/identity-console \
     && chown nginx:nginx /run/identity-console
-COPY deploy/docker/console/nginx.conf /etc/nginx/nginx.conf.template
-COPY deploy/docker/console/console-config.js /etc/nginx/console-config.js
+COPY deploy/docker/console/nginx.conf.template deploy/docker/console/console-config.js /etc/nginx/
 COPY --chmod=755 deploy/docker/console/entrypoint.sh /usr/local/bin/console-entrypoint
 COPY --from=builder /app/apps/console/dist/ /usr/share/nginx/html/console/
 USER nginx

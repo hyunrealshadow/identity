@@ -1,17 +1,13 @@
+# syntax=docker/dockerfile:1
 FROM node:22-bookworm-slim
 ENV COREPACK_HOME=/opt/corepack
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@12.9.1 --activate
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY apps/login/package.json apps/login/package.json
-COPY packages/graphql-access/package.json packages/graphql-access/package.json
-COPY packages/ui/package.json packages/ui/package.json
+COPY --parents package.json pnpm-lock.yaml pnpm-workspace.yaml apps/login/package.json packages/*/package.json ./
 RUN pnpm install --frozen-lockfile --filter login...
-COPY apps/login apps/login
-COPY packages/graphql-access packages/graphql-access
-COPY packages/ui packages/ui
-RUN pnpm --filter login build
-RUN mkdir -p /app/apps/login/node_modules/.vite-temp \
+COPY --parents apps/login packages ./
+RUN pnpm --filter login build \
+    && mkdir -p /app/apps/login/node_modules/.vite-temp \
     && chown node:node /app/apps/login/node_modules/.vite-temp
 USER 1000:1000
 EXPOSE 3000

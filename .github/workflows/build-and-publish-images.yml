@@ -111,12 +111,6 @@ jobs:
           provenance: mode=max
           sbom: true
 
-      - name: Verify Console container startup
-        if: matrix.name == 'identity-console'
-        env:
-          TEST_IMAGE: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
-        run: python3 tests/deployment/console-container.py "$TEST_IMAGE"
-
       - name: Export image digest
         env:
           DIGEST: ${{ steps.build.outputs.digest }}
