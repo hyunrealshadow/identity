@@ -32,6 +32,9 @@ internal:
     login:
       static_tokens:
         - file: /run/secrets/login_workload_token
+    console:
+      static_tokens:
+        - file: /run/secrets/console_workload_token
 
 database:
   uri: {{ get_env(name="DATABASE_URL") }}
@@ -54,7 +57,7 @@ health:
 graphql:
   server:
     binding: 0.0.0.0
-    port: 5152
+    port: 5150
   allowed_origins: []
 
 settings:

@@ -15,11 +15,14 @@ Nginx proxies every `/console/config.json` request to Identity and serves it wit
 `Cache-Control: no-store`, so a reload always sees the current client ID,
 addresses and scope.
 
-Before starting local development, fetch the public configuration using the
-Console workload credential. The development configuration reads it from
-`IDENTITY_CONSOLE_WORKLOAD_TOKEN`, which must be set when Identity starts and
-must differ from Login's `IDENTITY_WORKLOAD_TOKEN`. The internal address and
-credential stay in the local shell:
+When starting `pnpm dev:console` with `IDENTITY_CONSOLE_WORKLOAD_TOKEN` set,
+the Vite development server proxies `/console/config.json` directly from
+Identity's internal runtime-configuration endpoint. Alternatively, before
+starting local development without that variable, fetch the public configuration
+snapshot using the Console workload credential. The development configuration
+reads it from `IDENTITY_CONSOLE_WORKLOAD_TOKEN`, which must be set when Identity
+starts and must differ from Login's `IDENTITY_WORKLOAD_TOKEN`. The internal
+address and credential stay in the local shell:
 
 ```sh
 curl --fail --silent --show-error \
@@ -42,7 +45,8 @@ the system palette, and development logs
 
 ## Container
 
-Build from the repository root:
+See [Deployment — Docker Compose](../../deploy/README.md#docker-compose) for the
+single-host Compose stack, or build the image from the repository root:
 
 ```sh
 docker build -f deploy/docker/console.Dockerfile -t identity-console:local .

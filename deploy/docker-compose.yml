@@ -9,7 +9,7 @@ services:
       POSTGRES_USER: identity
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U identity -d identity"]
       interval: 5s
@@ -32,6 +32,8 @@ services:
     secrets:
       - source: login_workload_token
         target: login_workload_token
+      - source: console_workload_token
+        target: console_workload_token
       - source: identity_tls_cert
         target: identity_tls_cert
       - source: identity_tls_key
@@ -40,7 +42,6 @@ services:
       - "${IDENTITY_PORT:-5150}:5150"
     expose:
       - "5151"
-      - "5152"
       - "8081"
     depends_on:
       postgres:
@@ -65,7 +66,7 @@ services:
     restart: unless-stopped
     environment:
       IDENTITY_BACKCHANNEL_API_URL: https://server:5150
-      IDENTITY_BACKCHANNEL_GRAPHQL_URL: https://server:5152
+      IDENTITY_BACKCHANNEL_GRAPHQL_URL: https://server:5150
       IDENTITY_INTERNAL_API_URL: https://server:5151
       IDENTITY_LOGIN_SESSION_SECRET: ${IDENTITY_LOGIN_SESSION_SECRET:?set IDENTITY_LOGIN_SESSION_SECRET in deploy/.env}
       IDENTITY_WORKLOAD_TOKEN_FILE: /run/secrets/login_workload_token
@@ -104,6 +105,41 @@ services:
       start_period: 10s
     networks: [frontend]
 
+  console:
+    build:
+      context: ..
+      dockerfile: deploy/docker/console.Dockerfile
+    image: ${CONSOLE_IMAGE:-identity-console:local}
+    restart: unless-stopped
+    environment:
+      PORT: "8080"
+      IDENTITY_CONSOLE_TLS_ENABLED: "true"
+      IDENTITY_INTERNAL_API_URL: https://server:5151
+      IDENTITY_INTERNAL_API_ALLOW_HTTP: "false"
+      IDENTITY_WORKLOAD_TOKEN_FILE: /run/secrets/console_workload_token
+      IDENTITY_CA_FILE: /run/secrets/identity_ca
+    secrets:
+      - source: console_workload_token
+        target: console_workload_token
+      - source: identity_ca
+        target: identity_ca
+      - source: identity_tls_cert
+        target: /etc/identity/console-tls/tls.crt
+      - source: identity_tls_key
+        target: /etc/identity/console-tls/tls.key
+    ports:
+      - "${CONSOLE_PORT:-8080}:8080"
+    depends_on:
+      server:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8081/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 15s
+    networks: [frontend]
+
 configs:
   identity_config:
     file: ./config/identity.compose.yaml
@@ -111,6 +147,8 @@ configs:
 secrets:
   login_workload_token:
     file: ./secrets/login-workload-token
+  console_workload_token:
+    file: ./secrets/console-workload-token
   identity_tls_cert:
     file: ./secrets/identity.crt
   identity_tls_key:

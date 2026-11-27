@@ -6,11 +6,13 @@ services:
     secrets: !override
       - source: login_workload_token
         target: login_workload_token
+      - source: console_workload_token
+        target: console_workload_token
 
   login:
     environment: !override
       IDENTITY_BACKCHANNEL_API_URL: http://server:5150
-      IDENTITY_BACKCHANNEL_GRAPHQL_URL: http://server:5152
+      IDENTITY_BACKCHANNEL_GRAPHQL_URL: http://server:5150
       IDENTITY_BACKCHANNEL_ALLOW_HTTP: "true"
       IDENTITY_INTERNAL_API_URL: http://server:5151
       IDENTITY_INTERNAL_API_ALLOW_HTTP: "true"
@@ -31,6 +33,17 @@ services:
         - -e
         - >-
           require('http').get({host:'127.0.0.1',port:3000,path:'/health/ready'},r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))
+
+  console:
+    environment: !override
+      PORT: "8080"
+      IDENTITY_CONSOLE_TLS_ENABLED: "false"
+      IDENTITY_INTERNAL_API_URL: http://server:5151
+      IDENTITY_INTERNAL_API_ALLOW_HTTP: "true"
+      IDENTITY_WORKLOAD_TOKEN_FILE: /run/secrets/console_workload_token
+    secrets: !override
+      - source: console_workload_token
+        target: console_workload_token
 
 configs:
   identity_config:

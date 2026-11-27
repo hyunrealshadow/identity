@@ -14,16 +14,17 @@ variable, Compose secret, Kubernetes Secret, or per-replica volume.
 
 | Purpose | Docker Compose | Kubernetes |
 | --- | --- | --- |
-| Login authenticates to Identity | Shared static workload token file | Projected ServiceAccount JWT |
+| Login & Console authenticate to Identity | Separate static workload token files | Separate projected ServiceAccount JWTs |
 | Login cookie encryption | Shared `IDENTITY_LOGIN_SESSION_SECRET` | Shared Kubernetes Secret |
-| Built-in OAuth client secret | PostgreSQL; fetched and refreshed in memory | PostgreSQL; fetched and refreshed in memory |
+| Built-in Login OAuth client secret | PostgreSQL; fetched and refreshed in memory | PostgreSQL; fetched and refreshed in memory |
 | Identity TLS | Compose secret files | Existing TLS Secret |
-| Login TLS | Compose secret files | Optional existing TLS Secret or upstream proxy |
+| Login & Console TLS | Compose secret files | Optional existing TLS Secrets or upstream proxy |
 
 The workload credential and the OAuth client secret have separate lifecycles.
-Rotating the workload credential changes who may call the internal API;
-Identity's scheduled rotation changes the OAuth credential returned by that
-API. The latter does not require a rollout.
+Rotating a workload credential changes who may call the internal API;
+Identity's scheduled rotation changes the Login OAuth credential returned by
+that API. The latter does not require a rollout. Console uses a public OAuth
+client with no client secret.
 
 ## Password security checks
 
@@ -38,17 +39,20 @@ effect. The setting uses the existing runtime settings refresh mechanism.
 
 ## Docker Compose
 
-The Compose deployment runs PostgreSQL, Identity, and Login. Identity runs with
-`APP_ENV=production` and reads its configuration from the mounted
-`deploy/config/identity.compose.yaml`. It uses four separate listeners: public
-protocol API (`5150`), internal workload API (`5151`), GraphQL (`5152`), and
-health (`8081`). Only the public listener is published on the host. Login always
-reaches Identity through the private Compose service name rather than the public
-DNS name.
+The Compose deployment runs PostgreSQL, Identity, Login, and Console. Identity
+runs with `APP_ENV=production` and reads its configuration from the mounted
+`deploy/config/identity.compose.yaml`. It uses three listeners: public protocol
+and GraphQL API (`5150`), internal workload API (`5151`), and health (`8081`).
+Only the public listener (`5150`), Login (`3000`), and Console (`8080`) are
+published on the host. Login and Console reach Identity through the private
+Compose service name rather than the public DNS name.
 
 1. Copy `deploy/.env.example` to `deploy/.env` and replace both secrets.
-2. Create `deploy/secrets/login-workload-token` with at least 32 random
-   characters, for example `openssl rand -base64 32`.
+2. Create distinct workload tokens (at least 32 random characters each) at
+   `deploy/secrets/login-workload-token` and
+   `deploy/secrets/console-workload-token`, for example with
+   `openssl rand -base64 32`. Reusing the same token across workloads is
+   rejected.
 3. Place the Identity server certificate, private key, and issuing CA at
    `deploy/secrets/identity.crt`, `deploy/secrets/identity.key`, and
    `deploy/secrets/identity-ca.crt`.
@@ -58,13 +62,21 @@ DNS name.
    docker compose --env-file deploy/.env -f deploy/docker-compose.yml up --build -d
    ```
 
-The default Identity and Login URLs are `https://identity.localhost:5150` and
-`https://identity.localhost:3000`. Compose mounts the supplied certificate into
-both production servers, so it must contain `identity.localhost` and `server`
+The default Identity, Login, and Console origins are
+`https://identity.localhost:5150`, `https://identity.localhost:3000`, and
+`https://identity.localhost:8080`. Compose mounts the supplied certificate into
+all three web containers, so it must contain `identity.localhost` and `server`
 as DNS SANs. Modern browsers resolve the reserved `.localhost` suffix to
 loopback, while Compose resolves the same name through the service network
 alias. If a real DNS name is used, it must resolve from both the browser and the
-Login container.
+Login and Console containers.
+
+When completing `/install`, enter `https://identity.localhost:8080` as the
+Console URL without `/console`; Identity stores `https://identity.localhost:8080/console`
+and exposes `/graphql` on the public `5150` listener. Before installation
+completes, `console` waits for valid runtime configuration and remains
+unhealthy; once `/install` finishes, it starts Nginx automatically and serves
+Console at `https://identity.localhost:8080/console`.
 
 All Login replicas must receive the same session secret. Scaling Login does
 not create per-instance OAuth secrets:
@@ -80,7 +92,8 @@ through the deployment environment only when a dependency needs to branch on it.
 
 ### TLS terminated by an upstream proxy
 
-To run both application containers over HTTP, add the upstream override:
+To run the Identity, Login, and Console containers over HTTP behind a reverse
+proxy, add the upstream override:
 
 ```sh
 docker compose --env-file deploy/.env \
@@ -96,26 +109,32 @@ Set `IDENTITY_TRUSTED_PROXY` in `deploy/.env` to the CIDR from which the reverse
 proxy connects to the Identity container. Set `IDENTITY_DIRECT_HTTP_CLIENT` to
 the Login container IP or its private Docker network CIDR. The former may
 supply forwarded HTTPS metadata; the latter may call the public and GraphQL
-listeners directly over HTTP. Do not use a public client address range. The
-public issuer and Login addresses entered in `/install` must remain HTTPS URLs.
-These addresses are stored in database settings, not deployment environment variables.
+APIs directly over HTTP. Do not use a public client address range. The public
+issuer, Login, and Console addresses entered in `/install` must remain HTTPS
+URLs. These addresses are stored in database settings, not deployment
+environment variables.
 
 The override removes all application TLS certificate and CA mounts, switches
-every Login-to-Identity call to the private HTTP service ports, and changes its
-health check to HTTP.
-Public requests to either application are still rejected unless the proxy
-passes `X-Forwarded-Proto: https` or `Forwarded: proto=https`; Identity also
-rejects that header when the direct peer is outside `IDENTITY_TRUSTED_PROXY`.
-Do not expose ports 5150 or 3000 directly to untrusted networks in this mode.
+every Login-to-Identity and Console-to-Identity call to the private HTTP
+service ports (`IDENTITY_CONSOLE_TLS_ENABLED=false`,
+`IDENTITY_INTERNAL_API_ALLOW_HTTP=true`), and changes the health checks to HTTP.
+Route the public issuer's protocol paths and `/graphql` to `5150`, Login paths
+to `3000`, and `/console` (without stripping the prefix) to `8080`.
+Public requests to Identity and Login are still rejected unless the proxy passes
+`X-Forwarded-Proto: https` or `Forwarded: proto=https`; Identity also rejects
+that header when the direct peer is outside `IDENTITY_TRUSTED_PROXY`. Do not
+expose ports 5150, 3000, or 8080 directly to untrusted networks in this mode.
 
-### Rotating the Compose workload token
+### Rotating the Compose workload tokens
 
-The current Compose file mounts one workload-token file. For a no-downtime
-rotation, temporarily mount current and previous files into Identity and list
-both under `internal.workloads.login.static_tokens`; mount only the new file
-into Login. Recreate Login, verify `/health/ready`, then remove the previous
-file from Identity. Identity re-reads configured static token files for each
-authentication attempt.
+The current Compose file mounts one workload-token file per workload. For a
+no-downtime rotation, temporarily mount current and previous files into Identity
+and list both under `internal.workloads.login.static_tokens` or
+`internal.workloads.console.static_tokens`; mount only the new file into Login
+or Console. Recreate the updated workload, verify `/health/ready`, then remove
+the previous file from Identity. Identity re-reads configured static token files
+for each authentication attempt, and Console re-reads its token file on each
+`/console/config.json` request.
 
 ## Kubernetes with Helm
 

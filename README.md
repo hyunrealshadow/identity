@@ -5,9 +5,10 @@
 [Latest conformance summary](conformance/SUMMARY.md)
 
 Identity is a self-hosted OAuth 2.0 authorization server and OpenID Connect
-Provider built with Rust, Salvo, and PostgreSQL. Its companion Login application,
-built with React and TanStack Start, provides installation, sign-in, consent,
-device verification, and account management.
+Provider built with Rust, Salvo, and PostgreSQL. Its companion Login and
+Console applications, built with React, TanStack Start, and TanStack Router,
+provide installation, sign-in, consent, device verification, account management,
+and instance administration.
 
 [Features](#features) · [Quick start](#quick-start) ·
 [Configuration and deployment](#configuration-and-deployment) ·
@@ -128,7 +129,22 @@ Login runs at `https://localhost:3000`. Accept the local development certificate
 in your browser. The development Login server accepts Identity's self-signed
 certificate; production uses normal TLS certificate validation.
 
-### 3. Complete installation
+### 3. Start Console
+
+In a third terminal, set the **distinct Console workload token** used by
+Identity and start the Vite development server (which proxies
+`/console/config.json` automatically):
+
+```sh
+export IDENTITY_CONSOLE_WORKLOAD_TOKEN='paste-the-console-token-from-terminal-1'
+
+pnpm dev:console
+```
+
+Console runs at `https://localhost:3100/console`. Accept the local development
+certificate in your browser as well.
+
+### 4. Complete installation
 
 Open `https://localhost:3000` and enter the initial administrator's username,
 email, and password, then select the signing-key algorithm. For the default
@@ -138,10 +154,13 @@ setup, use:
 | --- | --- |
 | Identity URL / issuer | `https://localhost:5150` |
 | Login application URL | `https://localhost:3000` |
+| Console application URL | `https://localhost:3100` |
 
-Installation creates the administrator, signing material, built-in Login client,
-and runtime settings. A complete `install` section in the service configuration
-can also initialize an uninstalled database.
+Enter the Console origin without `/console`; Identity appends `/console` and
+saves `https://localhost:3100/console`. Installation creates the administrator,
+signing material, built-in Login and Console clients, and runtime settings. A
+complete `install` section in the service configuration can also initialize an
+uninstalled database.
 
 Initial passwords and password changes require 12–1024 characters and must pass
 local policy and breached-password checks. Allow HTTPS access to Pwned Passwords
@@ -231,11 +250,13 @@ logout, and terminal error pages.
 cargo build --locked --release --bin identity
 pnpm build:error-css
 pnpm build:login
+pnpm build:console
 
 cargo test --workspace --locked
 cargo check --workspace --all-targets --features oidc-conformance --locked
 cargo fmt --all -- --check
 pnpm --filter login test
+pnpm test:console
 ```
 
 Run `pnpm install --frozen-lockfile` before the frontend commands. Production

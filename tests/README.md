@@ -13,7 +13,7 @@ cargo test --workspace --lib
 Run integration tests that do not require a database:
 
 ```powershell
-cargo test -p identity --test http --test network --test filesystem --test observability
+cargo test -p identity --test http --test network --test filesystem --test observability --test compose_configuration
 cargo test -p identity --features oidc-conformance --test http
 ```
 
@@ -27,6 +27,7 @@ cargo test -p identity --test helm_configuration -- --ignored
 - `http/`: production HTTP/GraphQL routes, authorization interactions, protocol errors, CORS, and discovery metadata
 - `network/`: HTTP response limits and redirects, logout notifications, and HTTPS password checks with a local certificate
 - `filesystem/`: TLS files and workload credential loading
+- `compose_configuration.rs`: rendered Docker Compose Identity configs loaded through `AppConfig::load()`
 - `observability.rs`: initialization through the public entry point inside an async runtime, actual OTLP export, and shutdown
 - `repository_behavior.rs`: query isolation, lifecycle checks, cursor pagination, settings and profile updates, and concurrent single-use redemption
 - `repository_security.rs`: password revocation, login concurrency, audit persistence, and transaction rollback
