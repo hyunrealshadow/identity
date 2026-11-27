@@ -279,11 +279,28 @@ describe('OAuth callback errors', () => {
   it('does not clear tokens for an untrusted state', async () => {
     const response = await finishAuthorization(
       new Request(
-        'https://identity.example/callback?error=invalid_request&state=attacker-state',
+        'https://identity.example/callback?error=access_denied&error_description=spoofed&state=attacker-state',
       ),
     )
 
     expect(response.status).toBe(400)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    expect(response.headers.get('referrer-policy')).toBe('no-referrer')
+    await expect(response.text()).resolves.not.toContain('spoofed')
+    expect(mocks.flow.clear).not.toHaveBeenCalled()
+    expect(mocks.authorization.clear).not.toHaveBeenCalled()
+  })
+
+  it('rejects stale code callbacks with 400 without clearing tokens', async () => {
+    const response = await finishAuthorization(
+      new Request(
+        'https://identity.example/callback?code=stale-code&state=expired-state&iss=https://identity.example',
+      ),
+    )
+
+    expect(response.status).toBe(400)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    expect(response.headers.get('referrer-policy')).toBe('no-referrer')
     expect(mocks.flow.clear).not.toHaveBeenCalled()
     expect(mocks.authorization.clear).not.toHaveBeenCalled()
   })

@@ -265,27 +265,23 @@ async function startAuthorizationFlow(
   return authorizeUrl
 }
 
-export async function finishAuthorization(request: Request) {
-  const result = await finishAuthorizationInner(request)
-  const popupResult = result.headers.get('x-identity-reauth-result')
-  const succeeded =
-    (result.status >= 300 && result.status < 400) ||
-    popupResult === 'success'
-  emitEvent('login.callback.result', {
-    outcome: succeeded ? 'success' : 'rejected',
-    reason: succeeded
-      ? undefined
-      : result.status === 400
-        ? 'invalid_callback'
-        : popupResult === 'cancelled'
-          ? 'cancelled'
-          : 'provider_error',
-    category: 'audit',
-  })
-  return result
+type CallbackOutcome = {
+  response: Response
+  outcome: 'success' | 'rejected'
+  reason?: 'invalid_callback' | 'cancelled' | 'provider_error'
 }
 
-async function finishAuthorizationInner(request: Request): Promise<Response> {
+export async function finishAuthorization(request: Request) {
+  const result = await finishAuthorizationInner(request)
+  emitEvent('login.callback.result', {
+    outcome: result.outcome,
+    reason: result.reason,
+    category: 'audit',
+  })
+  return result.response
+}
+
+async function finishAuthorizationInner(request: Request): Promise<CallbackOutcome> {
   const url = new URL(request.url)
   const code = url.searchParams.get('code')
   const returnedState = url.searchParams.get('state')
@@ -302,26 +298,34 @@ async function finishAuthorizationInner(request: Request): Promise<Response> {
 
   if (url.searchParams.has('error')) {
     if (!stateMatches) {
-      return new Response(translate(requestLocale(), 'oauthCallbackInvalid'), {
-        status: 400,
-      })
+      return {
+        response: invalidCallbackResponse(),
+        outcome: 'rejected',
+        reason: 'invalid_callback',
+      }
     }
     await clearFailedAuthorization(flow)
+    const isCancelled = url.searchParams.get('error') === 'access_denied'
     if (popupReauth) {
-      return popupAuthorizationResponse({
-        state: flowState,
-        returnTo: flowReturnTo,
-        result:
-          url.searchParams.get('error') === 'access_denied'
-            ? 'cancelled'
-            : 'error',
-      })
+      return {
+        response: popupAuthorizationResponse({
+          state: flowState,
+          returnTo: flowReturnTo,
+          result: isCancelled ? 'cancelled' : 'error',
+        }),
+        outcome: 'rejected',
+        reason: isCancelled ? 'cancelled' : 'provider_error',
+      }
     }
-    return authorizationFailureResponse(
-      request,
-      url.searchParams.get('error'),
-      url.searchParams.get('error_description'),
-    )
+    return {
+      response: authorizationFailureResponse(
+        request,
+        url.searchParams.get('error'),
+        url.searchParams.get('error_description'),
+      ),
+      outcome: 'rejected',
+      reason: isCancelled ? 'cancelled' : 'provider_error',
+    }
   }
 
   if (
@@ -329,9 +333,11 @@ async function finishAuthorizationInner(request: Request): Promise<Response> {
     !stateMatches ||
     typeof flow.data.verifier !== 'string'
   ) {
-    return new Response(translate(requestLocale(), 'oauthCallbackInvalid'), {
-      status: 400,
-    })
+    return {
+      response: invalidCallbackResponse(),
+      outcome: 'rejected',
+      reason: 'invalid_callback',
+    }
   }
 
   const oauthClient = await loadOAuthClient()
@@ -350,14 +356,27 @@ async function finishAuthorizationInner(request: Request): Promise<Response> {
   } catch (error) {
     if (error instanceof OAuthTokenExchangeError) {
       await clearFailedAuthorization(flow)
+      const isCancelled = error.oauthError === 'access_denied'
       if (popupReauth) {
-        return popupAuthorizationResponse({
-          state: flowState,
-          returnTo: flowReturnTo,
-          result: error.oauthError === 'access_denied' ? 'cancelled' : 'error',
-        })
+        return {
+          response: popupAuthorizationResponse({
+            state: flowState,
+            returnTo: flowReturnTo,
+            result: isCancelled ? 'cancelled' : 'error',
+          }),
+          outcome: 'rejected',
+          reason: isCancelled ? 'cancelled' : 'provider_error',
+        }
       }
-      return authorizationFailureResponse(request, error.oauthError, error.message)
+      return {
+        response: authorizationFailureResponse(
+          request,
+          error.oauthError,
+          error.message,
+        ),
+        outcome: 'rejected',
+        reason: isCancelled ? 'cancelled' : 'provider_error',
+      }
     }
     throw error
   }
@@ -384,17 +403,25 @@ async function finishAuthorizationInner(request: Request): Promise<Response> {
     ) {
       await clearFailedAuthorization(flow)
       if (popupReauth) {
-        return popupAuthorizationResponse({
-          state: flowState,
-          returnTo: flowReturnTo,
-          result: 'error',
-        })
+        return {
+          response: popupAuthorizationResponse({
+            state: flowState,
+            returnTo: flowReturnTo,
+            result: 'error',
+          }),
+          outcome: 'rejected',
+          reason: 'provider_error',
+        }
       }
-      return authorizationFailureResponse(
-        request,
-        'invalid_request',
-        translate(requestLocale(), 'accountAuthenticationRequired'),
-      )
+      return {
+        response: authorizationFailureResponse(
+          request,
+          'invalid_request',
+          translate(requestLocale(), 'accountAuthenticationRequired'),
+        ),
+        outcome: 'rejected',
+        reason: 'provider_error',
+      }
     }
     await authorization.update({
       elevated_access_token: tokens.access_token,
@@ -424,11 +451,14 @@ async function finishAuthorizationInner(request: Request): Promise<Response> {
   await flow.clear()
 
   if (popupReauth) {
-    return popupAuthorizationResponse({
-      state: flowState,
-      returnTo: flowReturnTo,
-      result: 'success',
-    })
+    return {
+      response: popupAuthorizationResponse({
+        state: flowState,
+        returnTo: flowReturnTo,
+        result: 'success',
+      }),
+      outcome: 'success',
+    }
   }
 
   const response = redirect(new URL(returnTo, loadApplicationUrl()))
@@ -439,7 +469,7 @@ async function finishAuthorizationInner(request: Request): Promise<Response> {
   const sessionId = mode === 'reauth' ? undefined : providerSessionId(tokens)
   const sessionCookie = sessionId ? providerSessionCookie(sessionId) : undefined
   if (sessionCookie) response.headers.append('set-cookie', sessionCookie)
-  return response
+  return { response, outcome: 'success' }
 }
 
 /**
@@ -479,12 +509,28 @@ function tokenClaims(token: string | undefined) {
   }
 }
 
+function invalidCallbackResponse() {
+  return new Response(translate(requestLocale(), 'oauthCallbackInvalid'), {
+    status: 400,
+    headers: {
+      'cache-control': 'no-store',
+      'referrer-policy': 'no-referrer',
+    },
+  })
+}
+
 function authorizationFailureResponse(
   request: Request,
   error: string | undefined | null,
   description: string | undefined | null,
 ) {
-  const destination = new URL('/authorization-error', request.url)
+  let baseUrl = request.url
+  try {
+    baseUrl = loadApplicationUrl()
+  } catch {
+    // Fall back to the request origin when runtime config is unavailable.
+  }
+  const destination = new URL('/authorization-error', baseUrl)
   destination.searchParams.set('error', error || 'invalid_request')
   if (description?.trim()) {
     destination.searchParams.set('error_description', description.trim())
@@ -845,7 +891,10 @@ function popupAuthorizationResponse(input: {
 function redirect(location: URL) {
   return new Response(null, {
     status: 302,
-    headers: { location: location.toString() },
+    headers: {
+      location: location.toString(),
+      'cache-control': 'no-store',
+    },
   })
 }
 
