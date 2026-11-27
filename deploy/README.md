@@ -73,7 +73,7 @@ not create per-instance OAuth secrets:
 docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --scale login=3
 ```
 
-The Login image runs `pnpm start`, which is `node production-server.mjs`, and
+The Login image runs `node production-server.mjs` directly, and
 neither the image, Compose, nor the chart sets `NODE_ENV`. The bundle is already
 the production build produced by `pnpm build:login`; add `NODE_ENV=production`
 through the deployment environment only when a dependency needs to branch on it.
