@@ -1,1 +1,1 @@
-{{ code }} 是你{% if application %}登录 {{ application.name }} {% endif %}的验证码
+{% if application %}登录 {{ application.name }} 的验证码{% else %}你的登录验证码{% endif %}

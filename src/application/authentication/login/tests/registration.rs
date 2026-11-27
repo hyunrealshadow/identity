@@ -220,7 +220,6 @@ impl RegistrationFlow {
                 login_oid: self.login_oid,
                 email: email.to_owned(),
                 locales: vec!["en".to_owned()],
-                application_name: None,
                 link_prefix: LINK_PREFIX.to_owned(),
             })
             .await

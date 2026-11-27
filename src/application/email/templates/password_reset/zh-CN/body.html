@@ -12,7 +12,7 @@
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border:1px solid #e4e4e7;border-radius:12px;">
 <tr><td style="padding:32px 32px 8px;">
 <p style="margin:0 0 16px;font-size:15px;line-height:24px;">{{ user.name }}，你好：</p>
-<p style="margin:0 0 24px;font-size:15px;line-height:24px;">我们收到了重置你账号密码的请求{% if application %}（登录 <strong>{{ application.name }}</strong> 时发起）{% endif %}。请通过下面的链接设置新密码：</p>
+<p style="margin:0 0 24px;font-size:15px;line-height:24px;">我们收到了重置你账号密码的请求。请通过下面的链接设置新密码：</p>
 <p style="margin:0 0 24px;text-align:center;"><a href="{{ link }}" style="display:inline-block;padding:10px 20px;background:#18181b;color:#ffffff;border-radius:8px;font-size:14px;font-weight:600;text-decoration:none;">重置密码</a></p>
 <p style="margin:0 0 8px;font-size:13px;line-height:20px;color:#52525b;">链接将在 {{ expires_in_minutes }} 分钟后失效，且只能使用一次。重置后，你的账号会在所有设备上退出登录。</p>
 <p style="margin:0 0 24px;font-size:13px;line-height:20px;color:#52525b;">如果这不是你本人的操作，请忽略此邮件，你的密码不会改变。</p>

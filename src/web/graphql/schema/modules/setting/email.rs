@@ -5,7 +5,8 @@ use async_graphql::{Enum, InputObject, Object, SimpleObject};
 use identity_application::{
     email::{
         EmailTemplate as AppEmailTemplate, EmailTemplateContent as AppEmailTemplateContent,
-        EmailTemplateKind as AppEmailTemplateKind, RenderedEmail,
+        EmailTemplateKind as AppEmailTemplateKind,
+        EmailTemplatePreviewScenario as AppEmailTemplatePreviewScenario, RenderedEmail,
     },
     setting::{
         SmtpSecurity as AppSmtpSecurity, Xoauth2Grant as AppXoauth2Grant,
@@ -136,6 +137,70 @@ impl From<EmailTemplateKind> for AppEmailTemplateKind {
     }
 }
 
+/// Conditional sample scenario rendered when previewing or test-sending an
+/// email template.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Enum)]
+pub(crate) enum EmailTemplatePreviewScenario {
+    /// Sign-in code requested through an OAuth/OIDC client application.
+    SignInCodeWithApplication,
+    /// Sign-in code requested directly without an application name.
+    SignInCodeWithoutApplication,
+    /// Verifying a new email address before replacing the current one.
+    EmailVerificationChangeAddress,
+    /// Verifying the account's current email address.
+    EmailVerificationCurrentAddress,
+    /// Registration link when the email address is not yet registered.
+    RegistrationNewAccount,
+    /// Existing-account notice when the email address already has an account.
+    RegistrationExistingAccount,
+}
+
+impl From<AppEmailTemplatePreviewScenario> for EmailTemplatePreviewScenario {
+    fn from(value: AppEmailTemplatePreviewScenario) -> Self {
+        match value {
+            AppEmailTemplatePreviewScenario::SignInCodeWithApplication => {
+                Self::SignInCodeWithApplication
+            }
+            AppEmailTemplatePreviewScenario::SignInCodeWithoutApplication => {
+                Self::SignInCodeWithoutApplication
+            }
+            AppEmailTemplatePreviewScenario::EmailVerificationChangeAddress => {
+                Self::EmailVerificationChangeAddress
+            }
+            AppEmailTemplatePreviewScenario::EmailVerificationCurrentAddress => {
+                Self::EmailVerificationCurrentAddress
+            }
+            AppEmailTemplatePreviewScenario::RegistrationNewAccount => Self::RegistrationNewAccount,
+            AppEmailTemplatePreviewScenario::RegistrationExistingAccount => {
+                Self::RegistrationExistingAccount
+            }
+        }
+    }
+}
+
+impl From<EmailTemplatePreviewScenario> for AppEmailTemplatePreviewScenario {
+    fn from(value: EmailTemplatePreviewScenario) -> Self {
+        match value {
+            EmailTemplatePreviewScenario::SignInCodeWithApplication => {
+                Self::SignInCodeWithApplication
+            }
+            EmailTemplatePreviewScenario::SignInCodeWithoutApplication => {
+                Self::SignInCodeWithoutApplication
+            }
+            EmailTemplatePreviewScenario::EmailVerificationChangeAddress => {
+                Self::EmailVerificationChangeAddress
+            }
+            EmailTemplatePreviewScenario::EmailVerificationCurrentAddress => {
+                Self::EmailVerificationCurrentAddress
+            }
+            EmailTemplatePreviewScenario::RegistrationNewAccount => Self::RegistrationNewAccount,
+            EmailTemplatePreviewScenario::RegistrationExistingAccount => {
+                Self::RegistrationExistingAccount
+            }
+        }
+    }
+}
+
 pub(crate) struct EmailSettings {
     view: EmailSettingsView,
 }
@@ -259,6 +324,16 @@ impl EmailTemplate {
     /// Variables the template receives, as dotted paths.
     async fn variables(&self) -> Vec<&'static str> {
         self.view.variables.to_vec()
+    }
+
+    /// Sample scenarios available when previewing or test-sending this template.
+    async fn preview_scenarios(&self) -> Vec<EmailTemplatePreviewScenario> {
+        self.view
+            .preview_scenarios
+            .iter()
+            .copied()
+            .map(Into::into)
+            .collect()
     }
 
     /// Whether an operator replaced the built-in template.
@@ -473,6 +548,8 @@ pub(crate) struct EmailTemplatePreviewInput {
     /// The language previewed; omit it for the default content.
     #[graphql(validator(chars_max_length = 35))]
     pub locale: Option<String>,
+    /// Sample scenario to render; omit it for the template's default scenario.
+    pub scenario: Option<EmailTemplatePreviewScenario>,
     pub content: EmailTemplateContentInput,
 }
 

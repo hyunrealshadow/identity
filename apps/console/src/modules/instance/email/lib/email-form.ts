@@ -1,6 +1,7 @@
 import type {
   EmailAuthenticationMethod,
   EmailTemplateKind,
+  EmailTemplatePreviewScenario,
   SmtpSecurity,
   UpdateEmailDeliverySettingsInput,
   UpdateEmailTemplateInput,
@@ -232,6 +233,15 @@ export const emailTemplateLabels: Record<
     title: 'settingsEmailTemplateRegistration',
     description: 'settingsEmailTemplateRegistrationHint',
   },
+}
+
+export const emailTemplatePreviewScenarioLabels: Record<EmailTemplatePreviewScenario, MessageKey> = {
+  SIGN_IN_CODE_WITH_APPLICATION: 'settingsEmailScenarioSignInCodeWithApplication',
+  SIGN_IN_CODE_WITHOUT_APPLICATION: 'settingsEmailScenarioSignInCodeWithoutApplication',
+  EMAIL_VERIFICATION_CHANGE_ADDRESS: 'settingsEmailScenarioEmailVerificationChangeAddress',
+  EMAIL_VERIFICATION_CURRENT_ADDRESS: 'settingsEmailScenarioEmailVerificationCurrentAddress',
+  REGISTRATION_NEW_ACCOUNT: 'settingsEmailScenarioRegistrationNewAccount',
+  REGISTRATION_EXISTING_ACCOUNT: 'settingsEmailScenarioRegistrationExistingAccount',
 }
 
 export interface EmailTemplateContentDraft {

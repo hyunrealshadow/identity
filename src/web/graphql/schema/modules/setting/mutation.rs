@@ -220,6 +220,7 @@ impl SettingMutation {
                 template: input.template.map(|template| SendTestEmailTemplate {
                     kind: template.kind.into(),
                     locale: template.locale,
+                    scenario: template.scenario.map(Into::into),
                     content: template.content.into(),
                 }),
             })

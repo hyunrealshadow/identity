@@ -136,6 +136,7 @@ describe('email template form', () => {
   const template: EmailTemplate = {
     kind: 'SIGN_IN_CODE',
     variables: ['code'],
+    previewScenarios: ['SIGN_IN_CODE_WITH_APPLICATION', 'SIGN_IN_CODE_WITHOUT_APPLICATION'],
     customized: false,
     version: 't1',
     content: builtIn,

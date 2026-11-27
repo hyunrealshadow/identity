@@ -12,10 +12,10 @@
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border:1px solid #e4e4e7;border-radius:12px;">
 <tr><td style="padding:32px 32px 8px;">
 {% if account_exists %}
-<p style="margin:0 0 24px;font-size:15px;line-height:24px;">有人{% if application %}在登录 <strong>{{ application.name }}</strong> 时{% endif %}请求使用 {{ email }} 注册账号，但这个邮箱已经有账号了。请直接用它登录；如果忘记了密码，可以在登录时选择“忘记密码”。</p>
+<p style="margin:0 0 24px;font-size:15px;line-height:24px;">有人请求使用 {{ email }} 注册账号，但这个邮箱已经有账号了。请直接用它登录；如果忘记了密码，可以在登录时选择“忘记密码”。</p>
 <p style="margin:0 0 24px;font-size:13px;line-height:20px;color:#52525b;">如果这不是你本人的操作，请忽略此邮件。</p>
 {% else %}
-<p style="margin:0 0 24px;font-size:15px;line-height:24px;">请通过下面的链接继续注册{% if application %} <strong>{{ application.name }}</strong> 的{% endif %}账号，这同时会确认 {{ email }} 属于你：</p>
+<p style="margin:0 0 24px;font-size:15px;line-height:24px;">请通过下面的链接继续注册你的账号，这同时会确认 {{ email }} 属于你：</p>
 <p style="margin:0 0 24px;text-align:center;"><a href="{{ link }}" style="display:inline-block;padding:10px 20px;background:#18181b;color:#ffffff;border-radius:8px;font-size:14px;font-weight:600;text-decoration:none;">继续注册</a></p>
 <p style="margin:0 0 8px;font-size:13px;line-height:20px;color:#52525b;">链接将在 {{ expires_in_minutes }} 分钟后失效，且只能使用一次。</p>
 <p style="margin:0 0 24px;font-size:13px;line-height:20px;color:#52525b;">如果这不是你本人的操作，请忽略此邮件。</p>

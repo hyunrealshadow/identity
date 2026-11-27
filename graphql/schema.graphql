@@ -1408,6 +1408,10 @@ type EmailTemplate {
 	"""
 	variables: [String!]!
 	"""
+	Sample scenarios available when previewing or test-sending this template.
+	"""
+	previewScenarios: [EmailTemplatePreviewScenario!]!
+	"""
 	Whether an operator replaced the built-in template.
 	"""
 	customized: Boolean!
@@ -1475,7 +1479,42 @@ input EmailTemplatePreviewInput {
 	The language previewed; omit it for the default content.
 	"""
 	locale: String
+	"""
+	Sample scenario to render; omit it for the template's default scenario.
+	"""
+	scenario: EmailTemplatePreviewScenario
 	content: EmailTemplateContentInput!
+}
+
+"""
+Conditional sample scenario rendered when previewing or test-sending an
+email template.
+"""
+enum EmailTemplatePreviewScenario {
+	"""
+	Sign-in code requested through an OAuth/OIDC client application.
+	"""
+	SIGN_IN_CODE_WITH_APPLICATION
+	"""
+	Sign-in code requested directly without an application name.
+	"""
+	SIGN_IN_CODE_WITHOUT_APPLICATION
+	"""
+	Verifying a new email address before replacing the current one.
+	"""
+	EMAIL_VERIFICATION_CHANGE_ADDRESS
+	"""
+	Verifying the account's current email address.
+	"""
+	EMAIL_VERIFICATION_CURRENT_ADDRESS
+	"""
+	Registration link when the email address is not yet registered.
+	"""
+	REGISTRATION_NEW_ACCOUNT
+	"""
+	Existing-account notice when the email address already has an account.
+	"""
+	REGISTRATION_EXISTING_ACCOUNT
 }
 
 type EmailTemplateTranslation {

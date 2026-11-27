@@ -13,7 +13,7 @@ import type { OverlayState } from '@identity/ui/hooks/use-overlay-state'
 import { Send } from 'lucide-react'
 import { useEffect, useId, useState } from 'react'
 
-import type { EmailTemplateKind } from '#/generated/graphql'
+import type { EmailTemplateKind, EmailTemplatePreviewScenario } from '#/generated/graphql'
 import { useAuth } from '#/lib/auth/context'
 import { fieldErrorMap } from '#/lib/graphql/transport'
 import { useLocale, useTranslator } from '#/lib/i18n'
@@ -27,6 +27,7 @@ import type { EmailTemplateContentDraft } from '../lib/email-form'
 export interface SendTestEmailTemplatePayload {
   kind: EmailTemplateKind
   locale: string | null
+  scenario?: EmailTemplatePreviewScenario | null
   content: EmailTemplateContentDraft
 }
 
@@ -78,7 +79,14 @@ export function SendTestEmailDialog({
       const result = await mutations.sendTestEmail({
         recipient: trimmed,
         locale,
-        template: template ?? null,
+        template: template
+          ? {
+              kind: template.kind,
+              locale: template.locale,
+              scenario: template.scenario ?? null,
+              content: template.content,
+            }
+          : null,
       })
       if (!result.data?.sendTestEmail?.sent) {
         const fields = fieldErrorMap(result.errors)

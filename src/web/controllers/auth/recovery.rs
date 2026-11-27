@@ -20,18 +20,13 @@ pub(super) async fn password_reset(
         .oidc_authorize()
         .decrypt_login_id(&body.id)
         .await?;
-    let (application_name, ui_locales) = match ctx
+    let ui_locales = ctx
         .services()
         .oidc_authorize()
         .load_continue_context_by_login(&body.id)
         .await
-    {
-        Ok(context) => (
-            Some(context.client.client().name.clone()),
-            context.stored.request.ui_locales,
-        ),
-        Err(_) => (None, None),
-    };
+        .ok()
+        .and_then(|context| context.stored.request.ui_locales);
     let link_prefix = login_link_prefix(
         &ctx,
         "login/reset-password",
@@ -46,7 +41,6 @@ pub(super) async fn password_reset(
         .send_password_reset(login::PasswordResetRequest {
             login_oid,
             locales,
-            application_name,
             link_prefix,
         })
         .await?;
@@ -80,18 +74,13 @@ pub(super) async fn registration(
         .oidc_authorize()
         .decrypt_login_id(&body.id)
         .await?;
-    let (application_name, ui_locales) = match ctx
+    let ui_locales = ctx
         .services()
         .oidc_authorize()
         .load_continue_context_by_login(&body.id)
         .await
-    {
-        Ok(context) => (
-            Some(context.client.client().name.clone()),
-            context.stored.request.ui_locales,
-        ),
-        Err(_) => (None, None),
-    };
+        .ok()
+        .and_then(|context| context.stored.request.ui_locales);
     let link_prefix = login_link_prefix(&ctx, "login/register", &body.id, ui_locales.as_deref())?;
     let mut locales = ui_locales.unwrap_or_default();
     locales.extend(body.locales);
@@ -102,7 +91,6 @@ pub(super) async fn registration(
             login_oid,
             email: body.email,
             locales,
-            application_name,
             link_prefix,
         })
         .await?;

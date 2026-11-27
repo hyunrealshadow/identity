@@ -2032,6 +2032,11 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "EmailTemplateKind",
           "policies": []
         },
+        "previewScenarios": {
+          "name": "previewScenarios",
+          "returnType": "EmailTemplatePreviewScenario",
+          "policies": []
+        },
         "variables": {
           "name": "variables",
           "returnType": "String",

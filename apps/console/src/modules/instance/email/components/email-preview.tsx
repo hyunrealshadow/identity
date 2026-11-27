@@ -8,11 +8,15 @@ import {
   type ConsoleEmailTemplatePreviewQuery,
   type ConsoleEmailTemplatePreviewQueryVariables,
   type EmailTemplateKind,
+  type EmailTemplatePreviewScenario,
 } from '#/generated/graphql'
 import { fieldErrorMap } from '#/lib/graphql/transport'
 import { useGraphQL } from '#/lib/graphql/use-graphql'
 import { useTranslator } from '#/lib/i18n'
-import type { EmailTemplateContentDraft } from '../lib/email-form'
+import {
+  emailTemplatePreviewScenarioLabels,
+  type EmailTemplateContentDraft,
+} from '../lib/email-form'
 
 type Rendered = NonNullable<ConsoleEmailTemplatePreviewQuery['emailTemplatePreview']>
 
@@ -31,6 +35,9 @@ type PreviewState =
 export function EmailPreview({
   kind,
   locale,
+  scenarios,
+  scenario = null,
+  onScenarioChange,
   content,
   enabled,
   action,
@@ -38,6 +45,10 @@ export function EmailPreview({
   kind: EmailTemplateKind
   /** The language previewed; `null` previews the default content. */
   locale: string | null
+  /** Conditional sample branches available for this template kind. */
+  scenarios?: readonly EmailTemplatePreviewScenario[]
+  scenario?: EmailTemplatePreviewScenario | null
+  onScenarioChange?: (scenario: EmailTemplatePreviewScenario) => void
   content: EmailTemplateContentDraft
   enabled: boolean
   action?: ReactNode
@@ -54,7 +65,7 @@ export function EmailPreview({
     const timer = window.setTimeout(() => {
       void request<ConsoleEmailTemplatePreviewQuery, ConsoleEmailTemplatePreviewQueryVariables>(
         ConsoleEmailTemplatePreviewDocument,
-        { input: { kind, locale, content: { subject, html } } },
+        { input: { kind, locale, scenario, content: { subject, html } } },
         'ConsoleEmailTemplatePreview',
         { signal: controller.signal },
       )
@@ -86,7 +97,7 @@ export function EmailPreview({
       window.clearTimeout(timer)
       controller.abort()
     }
-  }, [enabled, kind, locale, subject, html, request, t])
+  }, [enabled, kind, locale, scenario, subject, html, request, t])
 
   const rendered = state.rendered
   const partLabel =
@@ -113,6 +124,38 @@ export function EmailPreview({
           <p className="px-5 py-4 text-sm text-muted-foreground">{t('settingsEmailPreviewUnavailable')}</p>
         ) : (
           <>
+            {scenarios && scenarios.length > 1 ? (
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border px-5 py-2.5">
+                <span className="text-xs text-muted-foreground">
+                  {t('settingsEmailPreviewScenario')}
+                </span>
+                <div
+                  role="radiogroup"
+                  aria-label={t('settingsEmailPreviewScenario')}
+                  className="inline-flex flex-wrap rounded-lg bg-muted p-0.5"
+                >
+                  {scenarios.map((entry) => {
+                    const selected = entry === (scenario ?? scenarios[0])
+                    return (
+                      <button
+                        key={entry}
+                        type="button"
+                        role="radio"
+                        aria-checked={selected}
+                        onClick={() => onScenarioChange?.(entry)}
+                        className={`cursor-pointer rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                          selected
+                            ? 'bg-background text-foreground shadow-xs'
+                            : 'text-muted-foreground hover:text-foreground'
+                        }`}
+                      >
+                        {t(emailTemplatePreviewScenarioLabels[entry])}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ) : null}
             {state.status === 'error' ? (
               <div role="alert" className="flex gap-2 border-b border-border bg-destructive/5 px-5 py-3 text-xs leading-5 text-destructive">
                 <CircleAlert className="mt-0.5 size-4 shrink-0" aria-hidden="true" />

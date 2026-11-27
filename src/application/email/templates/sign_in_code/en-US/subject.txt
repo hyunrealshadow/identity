@@ -1,1 +1,1 @@
-{{ code }} is your sign-in code{% if application %} for {{ application.name }}{% endif %}
+Your sign-in code{% if application %} for {{ application.name }}{% endif %}

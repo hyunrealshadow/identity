@@ -124,7 +124,6 @@ impl ResetFlow {
             .send_password_reset(PasswordResetRequest {
                 login_oid: self.login_oid,
                 locales: vec!["en-US".to_owned()],
-                application_name: Some("Example".to_owned()),
                 link_prefix: LINK_PREFIX.to_owned(),
             })
             .await

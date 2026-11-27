@@ -90,6 +90,7 @@ fragment ConsoleInstanceSettingsFields on InstanceSettings {
     templates {
       kind
       variables
+      previewScenarios
       customized
       version
       content {

@@ -12,7 +12,7 @@
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#ffffff;border:1px solid #e4e4e7;border-radius:12px;">
 <tr><td style="padding:32px 32px 8px;">
 <p style="margin:0 0 16px;font-size:15px;line-height:24px;">Hi {{ user.name }},</p>
-<p style="margin:0 0 24px;font-size:15px;line-height:24px;">We received a request to reset the password of your account{% if application %} while signing in to <strong>{{ application.name }}</strong>{% endif %}. Choose a new password with this link:</p>
+<p style="margin:0 0 24px;font-size:15px;line-height:24px;">We received a request to reset the password of your account. Choose a new password with this link:</p>
 <p style="margin:0 0 24px;text-align:center;"><a href="{{ link }}" style="display:inline-block;padding:10px 20px;background:#18181b;color:#ffffff;border-radius:8px;font-size:14px;font-weight:600;text-decoration:none;">Reset password</a></p>
 <p style="margin:0 0 8px;font-size:13px;line-height:20px;color:#52525b;">The link expires in {{ expires_in_minutes }} minutes and works only once. Resetting signs your account out everywhere.</p>
 <p style="margin:0 0 24px;font-size:13px;line-height:20px;color:#52525b;">If you didn't ask to reset your password, you can ignore this email. Your password stays the same.</p>

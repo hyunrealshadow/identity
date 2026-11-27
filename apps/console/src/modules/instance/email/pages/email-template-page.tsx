@@ -14,6 +14,7 @@ import { useNavigate } from '@tanstack/react-router'
 import { ArrowLeft, Plus, Send, Undo2, X } from 'lucide-react'
 import { useId, useRef, useState } from 'react'
 
+import type { EmailTemplatePreviewScenario } from '#/generated/graphql'
 import { AsyncState } from '#/components/async-state'
 import { useBreadcrumbLabel } from '#/components/app-breadcrumbs'
 import { SettingsGroup, SettingsGroupSkeleton, SettingsRow, SettingsSwitch } from '#/components/settings-section'
@@ -150,6 +151,13 @@ function EmailTemplateForm({ template }: { template: EmailTemplate }) {
     () => emailTemplateDraft(template),
   )
   const [language, setLanguage] = useState<EmailTemplateLanguage>(null)
+  const [scenario, setScenario] = useState<EmailTemplatePreviewScenario | null>(
+    () => template.previewScenarios[0] ?? null,
+  )
+  const activeScenario =
+    scenario && template.previewScenarios.includes(scenario)
+      ? scenario
+      : (template.previewScenarios[0] ?? null)
   const [addOpen, setAddOpen] = useState(false)
   const [removed, setRemoved] = useState<EmailTemplateTranslationDraft | null>(null)
   const [errors, setErrors] = useState<Record<string, PartErrors>>({})
@@ -476,6 +484,9 @@ function EmailTemplateForm({ template }: { template: EmailTemplate }) {
           <EmailPreview
             kind={template.kind}
             locale={activeLanguage}
+            scenarios={template.previewScenarios}
+            scenario={activeScenario}
+            onScenarioChange={setScenario}
             content={content}
             enabled={scope.preview}
             action={
@@ -514,7 +525,12 @@ function EmailTemplateForm({ template }: { template: EmailTemplate }) {
       {scope.testEmail ? (
         <SendTestEmailDialog
           state={testDialog}
-          template={{ kind: template.kind, locale: activeLanguage, content }}
+          template={{
+            kind: template.kind,
+            locale: activeLanguage,
+            scenario: activeScenario,
+            content,
+          }}
           title={t('settingsEmailTemplateTestTitle')}
           description={t('settingsEmailTemplateTestHint')}
         />

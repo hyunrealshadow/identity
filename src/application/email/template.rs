@@ -45,6 +45,37 @@ pub enum EmailTemplateKind {
     Registration,
 }
 
+/// Sample branch rendered when previewing or test-sending a template that has
+/// conditional variants.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum EmailTemplatePreviewScenario {
+    SignInCodeWithApplication,
+    SignInCodeWithoutApplication,
+    EmailVerificationChangeAddress,
+    EmailVerificationCurrentAddress,
+    RegistrationNewAccount,
+    RegistrationExistingAccount,
+}
+
+impl EmailTemplatePreviewScenario {
+    /// The template kind this scenario applies to.
+    #[must_use]
+    pub const fn kind(self) -> EmailTemplateKind {
+        match self {
+            Self::SignInCodeWithApplication | Self::SignInCodeWithoutApplication => {
+                EmailTemplateKind::SignInCode
+            }
+            Self::EmailVerificationChangeAddress | Self::EmailVerificationCurrentAddress => {
+                EmailTemplateKind::EmailVerification
+            }
+            Self::RegistrationNewAccount | Self::RegistrationExistingAccount => {
+                EmailTemplateKind::Registration
+            }
+        }
+    }
+}
+
 impl EmailTemplateKind {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
@@ -84,7 +115,6 @@ impl EmailTemplateKind {
                 "expires_in_minutes",
                 "user.name",
                 "user.email",
-                "application.name",
                 "locale",
             ],
             Self::UserInvitation => &[
@@ -99,9 +129,29 @@ impl EmailTemplateKind {
                 "email",
                 "account_exists",
                 "expires_in_minutes",
-                "application.name",
                 "locale",
             ],
+        }
+    }
+
+    /// Sample scenarios available when previewing or test-sending this
+    /// template. Kinds without conditional variants return an empty slice.
+    #[must_use]
+    pub const fn preview_scenarios(self) -> &'static [EmailTemplatePreviewScenario] {
+        match self {
+            Self::SignInCode => &[
+                EmailTemplatePreviewScenario::SignInCodeWithApplication,
+                EmailTemplatePreviewScenario::SignInCodeWithoutApplication,
+            ],
+            Self::EmailVerification => &[
+                EmailTemplatePreviewScenario::EmailVerificationChangeAddress,
+                EmailTemplatePreviewScenario::EmailVerificationCurrentAddress,
+            ],
+            Self::Registration => &[
+                EmailTemplatePreviewScenario::RegistrationNewAccount,
+                EmailTemplatePreviewScenario::RegistrationExistingAccount,
+            ],
+            Self::PasswordReset | Self::UserInvitation => &[],
         }
     }
 
@@ -140,7 +190,6 @@ impl EmailTemplateKind {
                     "name": if chinese { "张三" } else { "Alex Doe" },
                     "email": "alex@example.com",
                 },
-                "application": { "name": "Example App" },
                 "locale": locale,
             }),
             Self::UserInvitation => json!({
@@ -157,10 +206,52 @@ impl EmailTemplateKind {
                 "email": "alex@example.com",
                 "account_exists": false,
                 "expires_in_minutes": 15,
-                "application": { "name": "Example App" },
                 "locale": locale,
             }),
         }
+    }
+
+    /// Sample context for `scenario`, or `sample_context` when `scenario` is
+    /// omitted. Returns `None` if `scenario` belongs to a different kind.
+    #[must_use]
+    pub fn preview_context(
+        self,
+        locale: &str,
+        scenario: Option<EmailTemplatePreviewScenario>,
+    ) -> Option<Value> {
+        let Some(scenario) = scenario else {
+            return Some(self.sample_context(locale));
+        };
+        if scenario.kind() != self {
+            return None;
+        }
+        let mut context = self.sample_context(locale);
+        match scenario {
+            EmailTemplatePreviewScenario::SignInCodeWithApplication
+            | EmailTemplatePreviewScenario::EmailVerificationChangeAddress
+            | EmailTemplatePreviewScenario::RegistrationNewAccount => {}
+            EmailTemplatePreviewScenario::SignInCodeWithoutApplication => {
+                if let Some(obj) = context.as_object_mut() {
+                    obj.insert("application".to_owned(), Value::Null);
+                }
+            }
+            EmailTemplatePreviewScenario::EmailVerificationCurrentAddress => {
+                if let Some(obj) = context.as_object_mut() {
+                    obj.insert("changes_email".to_owned(), Value::Bool(false));
+                    obj.insert(
+                        "email".to_owned(),
+                        Value::String("alex@example.com".to_owned()),
+                    );
+                }
+            }
+            EmailTemplatePreviewScenario::RegistrationExistingAccount => {
+                if let Some(obj) = context.as_object_mut() {
+                    obj.insert("account_exists".to_owned(), Value::Bool(true));
+                    obj.insert("link".to_owned(), Value::Null);
+                }
+            }
+        }
+        Some(context)
     }
 
     /// Contexts that saved templates must survive, including runtime cases
@@ -168,28 +259,14 @@ impl EmailTemplateKind {
     /// are null.
     #[must_use]
     pub fn validation_contexts(self, locale: &str) -> Vec<Value> {
-        let sample = self.sample_context(locale);
-        let mut contexts = vec![sample.clone()];
-        if matches!(
-            self,
-            Self::SignInCode | Self::PasswordReset | Self::Registration
-        ) {
-            let mut no_app = sample.clone();
-            if let Some(obj) = no_app.as_object_mut() {
-                obj.insert("application".to_owned(), Value::Null);
-            }
-            contexts.push(no_app);
+        let scenarios = self.preview_scenarios();
+        if scenarios.is_empty() {
+            return vec![self.sample_context(locale)];
         }
-        if matches!(self, Self::Registration) {
-            let mut existing = sample;
-            if let Some(obj) = existing.as_object_mut() {
-                obj.insert("account_exists".to_owned(), Value::Bool(true));
-                obj.insert("link".to_owned(), Value::Null);
-                obj.insert("application".to_owned(), Value::Null);
-            }
-            contexts.push(existing);
-        }
-        contexts
+        scenarios
+            .iter()
+            .filter_map(|scenario| self.preview_context(locale, Some(*scenario)))
+            .collect()
     }
 }
 

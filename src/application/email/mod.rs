@@ -12,6 +12,6 @@ pub use identity_domain::email::OutboundEmail;
 pub use link::{LinkToken, link_digest, link_matches, login_link_prefix, plausible_link_token};
 pub use template::{
     EmailTemplate, EmailTemplateContent, EmailTemplateKind, EmailTemplatePart,
-    EmailTemplateRenderError, EmailTemplateRenderer, EmailTemplates, RenderedEmail,
-    built_in_template, effective_template,
+    EmailTemplatePreviewScenario, EmailTemplateRenderError, EmailTemplateRenderer, EmailTemplates,
+    RenderedEmail, built_in_template, effective_template,
 };

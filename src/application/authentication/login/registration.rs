@@ -98,8 +98,6 @@ pub struct RegistrationRequest {
     pub email: String,
     /// Locales the browser asked for, most preferred first.
     pub locales: Vec<String>,
-    /// The application being signed in to, for the message.
-    pub application_name: Option<String>,
     /// The registration page up to its token: the token is appended as is.
     pub link_prefix: String,
 }
@@ -277,7 +275,6 @@ impl LoginService {
                     "email": value,
                     "account_exists": link.is_none(),
                     "expires_in_minutes": ttl().num_minutes(),
-                    "application": request.application_name.as_ref().map(|name| json!({ "name": name })),
                     "locale": locale,
                 })
             },

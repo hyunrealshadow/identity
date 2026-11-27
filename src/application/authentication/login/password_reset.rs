@@ -48,8 +48,6 @@ pub struct PasswordResetRequest {
     /// Locales the browser asked for, most preferred first. The account's
     /// own locale preference comes before them.
     pub locales: Vec<String>,
-    /// The application being signed in to, for the message.
-    pub application_name: Option<String>,
     /// The reset page up to its token: the token is appended as is.
     pub link_prefix: String,
 }
@@ -245,7 +243,6 @@ impl LoginService {
                             "link": format!("{}{}", request.link_prefix, token),
                             "expires_in_minutes": ttl().num_minutes(),
                             "user": { "name": user.name, "email": user.email },
-                            "application": request.application_name.as_ref().map(|name| json!({ "name": name })),
                             "locale": locale,
                         })
                     },

@@ -25,11 +25,14 @@ use super::{
 use crate::{
     email::{
         EmailMessage, EmailSender, EmailTemplate, EmailTemplateContent, EmailTemplateKind,
-        EmailTemplateRenderError, EmailTemplateRenderer, RenderedEmail, built_in_template,
-        effective_template,
+        EmailTemplatePreviewScenario, EmailTemplateRenderError, EmailTemplateRenderer,
+        RenderedEmail, built_in_template, effective_template,
         template::{MAX_BODY_LENGTH, MAX_SUBJECT_LENGTH, MAX_TEMPLATE_TRANSLATIONS},
     },
-    error::{AppError, codes::instance},
+    error::{
+        AppError,
+        codes::{common, instance},
+    },
     observability::{BusinessEvent, EventValue},
     rbac::RbacManagementAuthority,
 };
@@ -126,6 +129,7 @@ pub struct EmailDeliveryView {
 pub struct EmailTemplateView {
     pub kind: EmailTemplateKind,
     pub variables: &'static [&'static str],
+    pub preview_scenarios: &'static [EmailTemplatePreviewScenario],
     /// Whether an operator replaced the built-in template.
     pub customized: bool,
     /// The template that is sent.
@@ -161,6 +165,7 @@ impl From<&InstanceSettingsState> for EmailSettingsView {
                     EmailTemplateView {
                         kind,
                         variables: kind.variables(),
+                        preview_scenarios: kind.preview_scenarios(),
                         customized,
                         template,
                         built_in: built_in_template(kind),
@@ -313,6 +318,7 @@ pub struct EmailTemplateDraft {
 pub struct SendTestEmailTemplate {
     pub kind: EmailTemplateKind,
     pub locale: Option<String>,
+    pub scenario: Option<EmailTemplatePreviewScenario>,
     pub content: EmailTemplateContent,
 }
 
@@ -606,15 +612,25 @@ impl InstanceSettingService {
         &self,
         kind: EmailTemplateKind,
         locale: Option<&str>,
+        scenario: Option<EmailTemplatePreviewScenario>,
         content: &EmailTemplateContent,
     ) -> Result<RenderedEmail, AppError> {
         let locale = match locale {
             Some(locale) => Some(canonical_locale(locale, "locale")?),
             None => None,
         };
+        let target = kind
+            .preview_context(locale.as_deref().unwrap_or("en"), scenario)
+            .ok_or_else(|| common::error::InvalidRequest.with_field("scenario"))?;
         let renderer = &self.email_dependencies()?.renderer;
-        check_template(renderer.as_ref(), kind, locale.as_deref(), content)
-            .map_err(|check| check.into_error("content."))
+        check_template(
+            renderer.as_ref(),
+            kind,
+            locale.as_deref(),
+            Some(&target),
+            content,
+        )
+        .map_err(|check| check.into_error("content."))
     }
 
     /// Send a short message, or a rendered template draft, with the stored
@@ -681,10 +697,18 @@ fn prepare_test_message(
         Some(locale) => Some(canonical_locale(&locale, "template.locale")?),
         None => None,
     };
+    let target = template
+        .kind
+        .preview_context(
+            template_locale.as_deref().unwrap_or("en"),
+            template.scenario,
+        )
+        .ok_or_else(|| common::error::InvalidRequest.with_field("template.scenario"))?;
     let rendered = check_template(
         renderer,
         template.kind,
         template_locale.as_deref(),
+        Some(&target),
         &template.content,
     )
     .map_err(|check| check.into_error("template.content."))?;
@@ -697,6 +721,7 @@ fn prepare_test_message(
 }
 
 /// Why a template cannot be saved, tied to the part it concerns.
+#[derive(Debug)]
 struct TemplateCheck {
     error: AppError,
     part: &'static str,
@@ -722,7 +747,7 @@ fn check_draft(
     kind: EmailTemplateKind,
     draft: EmailTemplateDraft,
 ) -> Result<EmailTemplate, AppError> {
-    check_template(renderer, kind, None, &draft.default)
+    check_template(renderer, kind, None, None, &draft.default)
         .map_err(|check| check.into_error("default."))?;
     if draft.translations.len() > MAX_TEMPLATE_TRANSLATIONS {
         return Err(
@@ -733,7 +758,7 @@ fn check_draft(
     let mut translations = BTreeMap::new();
     for (index, (locale, content)) in draft.translations.into_iter().enumerate() {
         let locale = canonical_locale(&locale, &format!("translations.{index}.locale"))?;
-        check_template(renderer, kind, Some(&locale), &content)
+        check_template(renderer, kind, Some(&locale), None, &content)
             .map_err(|check| check.into_error(&format!("translations.{index}.content.")))?;
         if translations.insert(locale.clone(), content).is_some() {
             return Err(instance::error::DuplicateEmailLocale::new(locale)
@@ -750,6 +775,7 @@ fn check_template(
     renderer: &dyn EmailTemplateRenderer,
     kind: EmailTemplateKind,
     locale: Option<&str>,
+    target: Option<&Value>,
     content: &EmailTemplateContent,
 ) -> Result<RenderedEmail, TemplateCheck> {
     for (value, max, part) in [
@@ -769,16 +795,20 @@ fn check_template(
             });
         }
     }
-    let mut contexts = kind.validation_contexts(locale.unwrap_or("en"));
-    let first = contexts.remove(0);
-    let rendered =
-        renderer
-            .render(content, &first)
-            .map_err(|EmailTemplateRenderError { part, detail }| TemplateCheck {
-                error: instance::error::InvalidEmailTemplate::new(detail).into(),
-                part: part.as_str(),
-            })?;
-    for context in contexts {
+    let locale = locale.unwrap_or("en");
+    let primary = target
+        .cloned()
+        .unwrap_or_else(|| kind.sample_context(locale));
+    let rendered = renderer.render(content, &primary).map_err(
+        |EmailTemplateRenderError { part, detail }| TemplateCheck {
+            error: instance::error::InvalidEmailTemplate::new(detail).into(),
+            part: part.as_str(),
+        },
+    )?;
+    for context in kind.validation_contexts(locale) {
+        if context == primary {
+            continue;
+        }
         renderer.render(content, &context).map_err(
             |EmailTemplateRenderError { part, detail }| TemplateCheck {
                 error: instance::error::InvalidEmailTemplate::new(detail).into(),
@@ -1040,6 +1070,7 @@ mod tests {
             Some(SendTestEmailTemplate {
                 kind: EmailTemplateKind::SignInCode,
                 locale: Some("zh_cn".to_owned()),
+                scenario: None,
                 content: EmailTemplateContent {
                     subject: "Code".to_owned(),
                     html: "<p>Hi</p>".to_owned(),
@@ -1057,6 +1088,7 @@ mod tests {
             Some(SendTestEmailTemplate {
                 kind: EmailTemplateKind::SignInCode,
                 locale: None,
+                scenario: None,
                 content: page("{% broken %}"),
             }),
         )
@@ -1070,10 +1102,143 @@ mod tests {
             Some(SendTestEmailTemplate {
                 kind: EmailTemplateKind::SignInCode,
                 locale: Some("not a locale".to_owned()),
+                scenario: None,
                 content: page("<p>Hi</p>"),
             }),
         )
         .unwrap_err();
         assert_eq!(field(&invalid_locale), "template.locale");
+
+        let mismatched_scenario = prepare_test_message(
+            &EchoRenderer,
+            "to@example.com".to_owned(),
+            "en-US",
+            Some(SendTestEmailTemplate {
+                kind: EmailTemplateKind::PasswordReset,
+                locale: None,
+                scenario: Some(EmailTemplatePreviewScenario::RegistrationExistingAccount),
+                content: page("<p>Hi</p>"),
+            }),
+        )
+        .unwrap_err();
+        assert_eq!(field(&mismatched_scenario), "template.scenario");
+    }
+
+    struct BranchRenderer;
+
+    impl EmailTemplateRenderer for BranchRenderer {
+        fn render(
+            &self,
+            content: &EmailTemplateContent,
+            context: &Value,
+        ) -> Result<RenderedEmail, EmailTemplateRenderError> {
+            let exists = context
+                .get("account_exists")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            if exists && content.html.contains("broken_existing") {
+                return Err(EmailTemplateRenderError {
+                    part: crate::email::EmailTemplatePart::Html,
+                    detail: "broken in existing branch".to_owned(),
+                });
+            }
+            let summary = if exists {
+                "existing".to_owned()
+            } else if context.get("application").is_some_and(Value::is_null) {
+                "no_app".to_owned()
+            } else {
+                context
+                    .get("changes_email")
+                    .and_then(Value::as_bool)
+                    .map_or_else(
+                        || "default".to_owned(),
+                        |changes| if changes { "change" } else { "current" }.to_owned(),
+                    )
+            };
+            Ok(RenderedEmail {
+                subject: content.subject.clone(),
+                html: format!("{}:{}", content.html, summary),
+            })
+        }
+    }
+
+    #[test]
+    fn check_template_renders_requested_scenario_and_validates_all_branches() {
+        let new_account = check_template(
+            &BranchRenderer,
+            EmailTemplateKind::Registration,
+            Some("en-US"),
+            EmailTemplateKind::Registration
+                .preview_context(
+                    "en-US",
+                    Some(EmailTemplatePreviewScenario::RegistrationNewAccount),
+                )
+                .as_ref(),
+            &page("<p>reg</p>"),
+        )
+        .unwrap();
+        assert_eq!(new_account.html, "<p>reg</p>:default");
+
+        let existing = check_template(
+            &BranchRenderer,
+            EmailTemplateKind::Registration,
+            Some("en-US"),
+            EmailTemplateKind::Registration
+                .preview_context(
+                    "en-US",
+                    Some(EmailTemplatePreviewScenario::RegistrationExistingAccount),
+                )
+                .as_ref(),
+            &page("<p>reg</p>"),
+        )
+        .unwrap();
+        assert_eq!(existing.html, "<p>reg</p>:existing");
+
+        let change_email = check_template(
+            &BranchRenderer,
+            EmailTemplateKind::EmailVerification,
+            Some("en-US"),
+            EmailTemplateKind::EmailVerification
+                .preview_context(
+                    "en-US",
+                    Some(EmailTemplatePreviewScenario::EmailVerificationChangeAddress),
+                )
+                .as_ref(),
+            &page("<p>verify</p>"),
+        )
+        .unwrap();
+        assert_eq!(change_email.html, "<p>verify</p>:change");
+
+        let current_email = check_template(
+            &BranchRenderer,
+            EmailTemplateKind::EmailVerification,
+            Some("en-US"),
+            EmailTemplateKind::EmailVerification
+                .preview_context(
+                    "en-US",
+                    Some(EmailTemplatePreviewScenario::EmailVerificationCurrentAddress),
+                )
+                .as_ref(),
+            &page("<p>verify</p>"),
+        )
+        .unwrap();
+        assert_eq!(current_email.html, "<p>verify</p>:current");
+
+        // Even while previewing the new-account branch, errors in the existing-account branch fail validation.
+        let broken_other_branch = check_template(
+            &BranchRenderer,
+            EmailTemplateKind::Registration,
+            Some("en-US"),
+            EmailTemplateKind::Registration
+                .preview_context(
+                    "en-US",
+                    Some(EmailTemplatePreviewScenario::RegistrationNewAccount),
+                )
+                .as_ref(),
+            &page("<p>broken_existing</p>"),
+        )
+        .err()
+        .expect("secondary branch should fail validation");
+        assert_eq!(broken_other_branch.part, "html");
     }
 }
