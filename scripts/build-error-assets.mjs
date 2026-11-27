@@ -40,11 +40,17 @@ for (const file of fontFiles) {
   manifest[`fonts/${file}`] = `fonts/${name}`
 }
 
+const tailwindPkgPath = require.resolve('@tailwindcss/cli/package.json')
+const tailwindPkg = JSON.parse(readFileSync(tailwindPkgPath, 'utf8'))
+const tailwindBin =
+  typeof tailwindPkg.bin === 'string' ? tailwindPkg.bin : tailwindPkg.bin.tailwindcss
+const tailwindCli = join(dirname(tailwindPkgPath), tailwindBin)
+
 const compiled = join(tmpdir(), `identity-error-${process.pid}.css`)
 try {
   execFileSync(
-    'tailwindcss',
-    ['-i', 'assets/styles/error.css', '-o', compiled, '--minify'],
+    process.execPath,
+    [tailwindCli, '-i', 'assets/styles/error.css', '-o', compiled, '--minify'],
     { cwd: root, stdio: 'inherit' },
   )
   let css = readFileSync(compiled, 'utf8')
