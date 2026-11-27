@@ -11,6 +11,7 @@ export function settingsScope(permissions: EffectivePermissions | null | undefin
       'mutation',
       'updateAuthenticationSettings',
     ),
+    sessionWrite: fieldAffordance(permissions, 'mutation', 'updateSessionSettings'),
   }
 }
 

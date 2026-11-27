@@ -13,8 +13,7 @@ use std::sync::Arc;
 use chrono::{DateTime, Duration, Utc};
 use identity_domain::{
     auth::{
-        AMR_EMAIL, EMAIL_CODE_RESEND_INTERVAL, EMAIL_CODE_TTL, LOGIN_EMAIL_DELIVERY,
-        LoginFailureReason, LoginStatus, MAX_FAILED_ATTEMPTS, MAX_OTP_ATTEMPTS,
+        AMR_EMAIL, LoginFailureReason, LoginStatus, MAX_OTP_ATTEMPTS,
         challenge::{
             AuthenticationChallenge, ChallengeBinding, ChallengeContext, ChallengeMethod,
             ChallengePurpose, DeliveryChallengeAdmission, DeliveryChallengeContext,
@@ -31,7 +30,7 @@ use subtle::ConstantTimeEq;
 use tracing::warn;
 use uuid::Uuid;
 
-use super::{ChallengeOutcome, LoginService, SessionContext, failed_attempt_lock_until};
+use super::{ChallengeOutcome, LoginService, SessionContext};
 use crate::{
     authentication::challenge::ChallengeRepository,
     data_protection::DataProtector,
@@ -42,7 +41,8 @@ use crate::{
     error::{AppError, codes::auth},
     observability::{BusinessEvent, EventValue},
     setting::{
-        EmailDeliverySettings, EmailSignInEnabledSetting, EmailTemplatesSetting, SettingsSnapshot,
+        EmailDeliverySettings, EmailPolicySettings, EmailSignInEnabledSetting,
+        EmailTemplatesSetting, SettingsSnapshot,
     },
 };
 
@@ -87,12 +87,8 @@ struct EmailChallengeVerifier {
     link: String,
 }
 
-fn interval() -> Duration {
-    Duration::from_std(EMAIL_CODE_RESEND_INTERVAL).unwrap_or_else(|_| Duration::seconds(60))
-}
-
-fn ttl() -> Duration {
-    Duration::from_std(EMAIL_CODE_TTL).unwrap_or_else(|_| Duration::minutes(10))
+fn email_duration(value: std::time::Duration, fallback: Duration) -> Duration {
+    Duration::from_std(value).unwrap_or(fallback)
 }
 
 fn challenge_context(user_oid: Uuid, login_oid: Uuid) -> ChallengeContext {
@@ -147,7 +143,14 @@ impl LoginService {
                 ChallengePurpose::Authentication,
             )
             .await?;
-        Ok(status.map(|status| status.sent_at + interval()))
+        let resend_interval = email_duration(
+            self.settings
+                .snapshot()
+                .section::<EmailPolicySettings>()
+                .resend_interval(),
+            Duration::seconds(60),
+        );
+        Ok(status.map(|status| status.sent_at + resend_interval))
     }
 
     /// Email a sign-in code and link for a login waiting for its first factor.
@@ -220,10 +223,12 @@ impl LoginService {
             (None, None)
         };
 
-        let expires_at = now + ttl();
+        let snapshot = self.settings.snapshot();
+        let email_policy = snapshot.section::<EmailPolicySettings>();
+        let lifetime = email_duration(email_policy.sign_in_code_lifetime(), Duration::minutes(10));
+        let expires_at = now + lifetime;
         let (email, render_failed) = match recipient.as_ref().zip(generated.as_ref()) {
             Some((user, (code, token))) => {
-                let snapshot = self.settings.snapshot();
                 let locales: Vec<&str> = user
                     .locale
                     .as_deref()
@@ -244,7 +249,7 @@ impl LoginService {
                         json!({
                             "code": code,
                             "link": format!("{}{}", request.link_prefix, token),
-                            "expires_in_minutes": ttl().num_minutes(),
+                            "expires_in_minutes": lifetime.num_minutes(),
                             "user": { "name": user.name, "email": user.email },
                             "application": request.application_name.as_ref().map(|name| json!({ "name": name })),
                             "locale": locale,
@@ -278,7 +283,7 @@ impl LoginService {
                 },
                 DeliveryChallengeRequest {
                     now,
-                    policy: LOGIN_EMAIL_DELIVERY,
+                    policy: email_policy.login_delivery_policy(),
                     code_expires_at: expires_at,
                     required_login_status: Some(LoginStatus::IDENTIFIER_VERIFIED),
                     verifier: if render_failed { None } else { verifier },
@@ -383,14 +388,15 @@ impl LoginService {
             Ok(attempts) => attempts,
             Err(error) => return error.into(),
         };
+        let max_failed_attempts = self.max_failed_attempts();
         let mut user_attempts = 0;
         if let Some(user_oid) = login.user_oid {
             match self
                 .user_repo
                 .increment_failed_attempts(
                     user_oid.into(),
-                    MAX_FAILED_ATTEMPTS,
-                    failed_attempt_lock_until(),
+                    max_failed_attempts,
+                    self.failed_attempt_lock_until(),
                 )
                 .await
             {
@@ -401,7 +407,7 @@ impl LoginService {
         // Reaching the account's lockout is not disclosed while the login
         // conceals the account.
         let account_locked =
-            login.concealed_identifier().is_none() && user_attempts >= MAX_FAILED_ATTEMPTS;
+            login.concealed_identifier().is_none() && user_attempts >= max_failed_attempts;
         if attempts >= MAX_OTP_ATTEMPTS || account_locked {
             self.fail_login_for_too_many_otp_attempts(login.oid).await;
             return auth::error::TooManyAttempts.into();

@@ -6,12 +6,15 @@ import {
   emailDeliveryDirty,
   emailDeliveryDraft,
   emailDeliveryInput,
+  emailPolicyDraft,
+  emailPolicyInput,
   emailTemplateInput,
   removeTemplateTranslation,
   templateContent,
   templateFieldErrors,
   updateTemplateContent,
   type EmailDelivery,
+  type EmailPolicy,
   type EmailTemplate,
 } from './email-form'
 
@@ -181,6 +184,64 @@ describe('email template form', () => {
       '': { subject: 'missing' },
       fr: { html: 'broken' },
       'zh-CN': { locale: 'duplicate' },
+    })
+  })
+})
+
+const emailPolicy: EmailPolicy = {
+  signInCodeLifetimeMinutes: 10,
+  signInCodeLifetimeMinutesRange: { min: 1, max: 60 },
+  passwordResetLifetimeMinutes: 15,
+  passwordResetLifetimeMinutesRange: { min: 5, max: 120 },
+  registrationLifetimeMinutes: 15,
+  registrationLifetimeMinutesRange: { min: 5, max: 120 },
+  emailVerificationLifetimeHours: 24,
+  emailVerificationLifetimeHoursRange: { min: 1, max: 168 },
+  userInvitationLifetimeDays: 7,
+  userInvitationLifetimeDaysRange: { min: 1, max: 30 },
+  resendIntervalSeconds: 60,
+  resendIntervalSecondsRange: { min: 15, max: 600 },
+  loginMaxSends: 5,
+  loginMaxSendsRange: { min: 1, max: 20 },
+  verificationMaxSends: 5,
+  verificationMaxSendsRange: { min: 1, max: 20 },
+  verificationSendWindowHours: 24,
+  verificationSendWindowHoursRange: { min: 1, max: 168 },
+  version: 'p1',
+}
+
+describe('email policy form', () => {
+  it('validates ranges and builds policy inputs', () => {
+    const valid = emailPolicyInput(emailPolicy, {
+      ...emailPolicyDraft(emailPolicy),
+      resendIntervalSeconds: '90',
+      loginMaxSends: '8',
+    })
+    expect(valid).toEqual({
+      input: {
+        signInCodeLifetimeMinutes: 10,
+        passwordResetLifetimeMinutes: 15,
+        registrationLifetimeMinutes: 15,
+        emailVerificationLifetimeHours: 24,
+        userInvitationLifetimeDays: 7,
+        resendIntervalSeconds: 90,
+        loginMaxSends: 8,
+        verificationMaxSends: 5,
+        verificationSendWindowHours: 24,
+        expectedVersion: 'p1',
+      },
+    })
+
+    const invalid = emailPolicyInput(emailPolicy, {
+      ...emailPolicyDraft(emailPolicy),
+      signInCodeLifetimeMinutes: '0',
+      resendIntervalSeconds: '10',
+    })
+    expect(invalid).toEqual({
+      errors: {
+        signInCodeLifetimeMinutes: { key: 'settingsOutOfRange', values: { min: 1, max: 60 } },
+        resendIntervalSeconds: { key: 'settingsOutOfRange', values: { min: 15, max: 600 } },
+      },
     })
   })
 })

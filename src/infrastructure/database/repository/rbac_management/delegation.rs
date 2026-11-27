@@ -10,7 +10,7 @@ use std::collections::BTreeSet;
 
 use chrono::Utc;
 use identity_application::{
-    authorization::{DEFAULT_RECENT_AAL2_TTL, ManagementAuthorizationError},
+    authorization::ManagementAuthorizationError,
     rbac::{RbacManagementAuthority, RbacManagementRepositoryError, ScopeOid},
 };
 use identity_domain::{
@@ -22,7 +22,7 @@ use sea_orm::{ConnectionTrait, DatabaseTransaction, DbBackend, Statement};
 use uuid::Uuid;
 
 use super::support::{Binds, corrupt, storage};
-use crate::database::repository::authorization;
+use crate::database::repository::{authorization, management_authority::recent_authentication_ttl};
 
 /// Effective permission row IDs currently held by the actor through active
 /// direct bindings or active group paths.
@@ -109,12 +109,13 @@ pub(crate) async fn ensure_delegable_permissions(
                 .permissions
                 .contains(&ManagementScope::PermissionDelegate)
         }) {
+            let recent_aal2_ttl = recent_authentication_ttl(txn).await;
             if !authority
                 .actor
                 .principal
                 .human_authentication()
                 .is_some_and(|authentication| {
-                    authentication.is_recent_aal2(Utc::now(), DEFAULT_RECENT_AAL2_TTL)
+                    authentication.is_recent_aal2(Utc::now(), recent_aal2_ttl)
                 })
             {
                 return Err(RbacManagementRepositoryError::Authorization(

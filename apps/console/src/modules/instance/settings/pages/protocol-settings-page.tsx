@@ -41,6 +41,7 @@ export function ProtocolSettingsPage() {
         <SettingsGroupSkeleton rows={['control']} description />
         <SettingsGroupSkeleton rows={['switch', 'control']} />
         <SettingsGroupSkeleton rows={['control', 'control']} />
+        <SettingsGroupSkeleton rows={['control', 'control', 'control', 'control']} description />
         <SettingsGroupSkeleton rows={['switch']} />
       </div>
     )
@@ -107,6 +108,7 @@ function ProtocolSettingsForm({ settings }: { settings: ProtocolSettings }) {
     field: ProtocolNumberField,
     label: MessageKey,
     description: MessageKey,
+    unit: MessageKey = 'settingsUnitSeconds',
   ) => {
     const range = protocolRange(settings, field)
     const message = errorFor(field)
@@ -123,7 +125,7 @@ function ProtocolSettingsForm({ settings }: { settings: ProtocolSettings }) {
             onChange={(value) => change(field, value)}
             min={range.min}
             max={range.max}
-            unit={t('settingsUnitSeconds')}
+            unit={t(unit)}
             invalid={Boolean(message)}
             errorId={errorId}
             isDisabled={disabled}
@@ -207,6 +209,33 @@ function ProtocolSettingsForm({ settings }: { settings: ProtocolSettings }) {
             'deviceAuthorizationPollingIntervalSeconds',
             'settingsDeviceInterval',
             'settingsDeviceIntervalHint',
+          )}
+        </SettingsGroup>
+
+        <SettingsGroup
+          title={t('settingsTokensSection')}
+          description={t('settingsTokensSectionHint')}
+        >
+          {numberRow(
+            'accessTokenLifetimeSeconds',
+            'settingsAccessTokenLifetime',
+            'settingsAccessTokenLifetimeHint',
+          )}
+          {numberRow(
+            'idTokenLifetimeSeconds',
+            'settingsIdTokenLifetime',
+            'settingsIdTokenLifetimeHint',
+          )}
+          {numberRow(
+            'refreshTokenLifetimeDays',
+            'settingsRefreshTokenLifetime',
+            'settingsRefreshTokenLifetimeHint',
+            'settingsUnitDays',
+          )}
+          {numberRow(
+            'authorizationCodeLifetimeSeconds',
+            'settingsAuthorizationCodeLifetime',
+            'settingsAuthorizationCodeLifetimeHint',
           )}
         </SettingsGroup>
 

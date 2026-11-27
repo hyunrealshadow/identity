@@ -183,7 +183,8 @@ impl TokenService {
                     claims: None,
                     management: authorization_snapshot.clone(),
                 }),
-                Utc::now() + Duration::hours(1),
+                Utc::now()
+                    + Duration::seconds(self.token_lifetimes().access_token_lifetime_seconds),
             )
             .await
             .map_err(token::error::SignAccessTokenFailed::map_source())?;
@@ -216,7 +217,8 @@ impl TokenService {
             id_token: None,
             refresh_token: None,
             token_type: TokenType::Bearer,
-            expires_in: 3600,
+            expires_in: i32::try_from(self.token_lifetimes().access_token_lifetime_seconds.max(1))
+                .unwrap_or(3_600),
             scope,
         })
     }

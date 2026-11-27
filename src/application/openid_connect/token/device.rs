@@ -390,7 +390,8 @@ impl TokenService {
                 claims: None,
                 management: None,
             }),
-            expires_at: now + Duration::hours(1),
+            expires_at: now
+                + Duration::seconds(self.token_lifetimes().access_token_lifetime_seconds),
         }];
         if refresh_token.is_some() {
             records.push(PreparedAuthorizationRecord {
@@ -411,7 +412,8 @@ impl TokenService {
                     client_authentication_mode: Some(client_authentication_mode),
                     management: None,
                 }),
-                expires_at: now + Duration::days(30),
+                expires_at: now
+                    + Duration::days(self.token_lifetimes().refresh_token_lifetime_days),
             });
         }
 
@@ -462,7 +464,8 @@ impl TokenService {
             id_token,
             refresh_token,
             token_type: TokenType::Bearer,
-            expires_in: 3600,
+            expires_in: i32::try_from(self.token_lifetimes().access_token_lifetime_seconds.max(1))
+                .unwrap_or(3_600),
             scope: scope_string,
         })
     }

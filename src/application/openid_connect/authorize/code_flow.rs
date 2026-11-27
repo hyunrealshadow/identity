@@ -105,7 +105,13 @@ impl AuthorizeService {
                         .transpose()?,
                     management: authorization_snapshot,
                 }),
-                Utc::now() + Duration::minutes(10),
+                Utc::now()
+                    + Duration::seconds(
+                        self.provider_service
+                            .openid_connect_settings()
+                            .tokens
+                            .authorization_code_lifetime_seconds,
+                    ),
             )
             .await
             .map_err(authorize::error::StoreCodeFailed::map_source())?;

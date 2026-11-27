@@ -26,6 +26,27 @@ pub struct DynamicRegistrationSettings {
     pub enabled: bool,
 }
 
+/// Default lifetimes for tokens and authorization codes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct TokenLifetimeSettings {
+    pub access_token_lifetime_seconds: i64,
+    pub id_token_lifetime_seconds: i64,
+    pub refresh_token_lifetime_days: i64,
+    pub authorization_code_lifetime_seconds: i64,
+}
+
+impl Default for TokenLifetimeSettings {
+    fn default() -> Self {
+        Self {
+            access_token_lifetime_seconds: 3_600,
+            id_token_lifetime_seconds: 3_600,
+            refresh_token_lifetime_days: 30,
+            authorization_code_lifetime_seconds: 600,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct PushedAuthorizationSettings {
@@ -50,12 +71,13 @@ pub struct OpenIdConnectSettings {
     pub oauth_version: OAuthProtocolVersion,
     pub dynamic_registration: DynamicRegistrationSettings,
     pub device_authorization: DeviceAuthorizationSettings,
+    pub tokens: TokenLifetimeSettings,
 }
 
 impl SettingSection for OpenIdConnectSettings {
     const PREFIX: &'static str = "openid_connect";
     const OBJECT_FIELDS: &'static [&'static str] =
-        &["device_authorization", "pushed_authorization"];
+        &["device_authorization", "pushed_authorization", "tokens"];
 
     fn validate(&self) -> Result<(), SettingValidationError> {
         if !(1..=600).contains(&self.pushed_authorization.request_ttl_seconds) {
@@ -73,6 +95,26 @@ impl SettingSection for OpenIdConnectSettings {
                 "device authorization polling interval must be positive",
             ));
         }
+        if self.tokens.access_token_lifetime_seconds < 1 {
+            return Err(SettingValidationError::new(
+                "access token lifetime must be positive",
+            ));
+        }
+        if self.tokens.id_token_lifetime_seconds < 1 {
+            return Err(SettingValidationError::new(
+                "ID token lifetime must be positive",
+            ));
+        }
+        if self.tokens.refresh_token_lifetime_days < 1 {
+            return Err(SettingValidationError::new(
+                "refresh token lifetime must be positive",
+            ));
+        }
+        if !(1..=600).contains(&self.tokens.authorization_code_lifetime_seconds) {
+            return Err(SettingValidationError::new(
+                "authorization code lifetime must be between 1 and 600 seconds",
+            ));
+        }
         Ok(())
     }
 }
@@ -84,7 +126,7 @@ mod tests {
 
     use super::{
         DeviceAuthorizationSettings, DynamicRegistrationSettings, OpenIdConnectSettings,
-        PushedAuthorizationSettings,
+        PushedAuthorizationSettings, TokenLifetimeSettings,
     };
     use crate::setting::{SettingChanges, SettingSection, SettingsSnapshot};
 
@@ -101,6 +143,12 @@ mod tests {
                 request_ttl_seconds: 30,
                 polling_interval_seconds: 2,
             },
+            tokens: TokenLifetimeSettings {
+                access_token_lifetime_seconds: 1_800,
+                id_token_lifetime_seconds: 900,
+                refresh_token_lifetime_days: 14,
+                authorization_code_lifetime_seconds: 300,
+            },
         };
 
         let snapshot = SettingsSnapshot::default().with_section(&settings);
@@ -111,7 +159,7 @@ mod tests {
             .unwrap()
             .into_iter()
             .collect::<Vec<_>>();
-        assert_eq!(changes.len(), 4);
+        assert_eq!(changes.len(), 5);
         assert!(changes.iter().any(|(key, value)| {
             key == "openid_connect.oauth_version" && value == &json!("2.1")
         }));
@@ -151,6 +199,20 @@ mod tests {
         invalid.device_authorization.request_ttl_seconds = 600;
         for ttl in [0, 601] {
             invalid.pushed_authorization.request_ttl_seconds = ttl;
+            assert!(invalid.validate().is_err());
+        }
+        invalid.pushed_authorization.request_ttl_seconds = 90;
+        invalid.tokens.access_token_lifetime_seconds = 0;
+        assert!(invalid.validate().is_err());
+        invalid.tokens.access_token_lifetime_seconds = 3_600;
+        invalid.tokens.id_token_lifetime_seconds = 0;
+        assert!(invalid.validate().is_err());
+        invalid.tokens.id_token_lifetime_seconds = 3_600;
+        invalid.tokens.refresh_token_lifetime_days = 0;
+        assert!(invalid.validate().is_err());
+        invalid.tokens.refresh_token_lifetime_days = 30;
+        for ttl in [0, 601] {
+            invalid.tokens.authorization_code_lifetime_seconds = ttl;
             assert!(invalid.validate().is_err());
         }
     }

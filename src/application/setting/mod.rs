@@ -12,10 +12,12 @@ pub use definition::{SettingDefinition, SettingSection, SettingValidationError, 
 pub use definitions::{
     AppSettings, BreachedPasswordCheckEnabledSetting, ConsoleClientIdSetting, ConsoleDomainSetting,
     DeviceAuthorizationSettings, DomainSetting, DynamicRegistrationSettings, EmailDeliverySettings,
-    EmailSignInEnabledSetting, EmailTemplatesSetting, IdentifierEnumerationAllowedSetting,
-    InstallationSettings, LoginClientIdSetting, LoginDomainSetting, OpenIdConnectSettings,
+    EmailPolicySettings, EmailSignInEnabledSetting, EmailTemplatesSetting,
+    IdentifierEnumerationAllowedSetting, InstallationSettings, LockoutDurationMinutesSetting,
+    LoginClientIdSetting, LoginDomainSetting, MaxFailedAttemptsSetting, OpenIdConnectSettings,
     PasswordHashSetting, PasswordHistoryCountSetting, PasswordMaxAgeDaysSetting,
-    PasswordResetEnabledSetting, RegistrationEnabledSetting,
+    PasswordMinLengthSetting, PasswordResetEnabledSetting, RegistrationEnabledSetting,
+    SessionSettings, TokenLifetimeSettings,
 };
 pub use definitions::{
     EmailSecret, PushedAuthorizationSettings, SmtpAuthentication, SmtpSecurity, Xoauth2Grant,

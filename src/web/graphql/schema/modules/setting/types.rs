@@ -3,11 +3,16 @@ use chrono::{DateTime, Utc};
 use identity_application::{
     authorization::ManagementTarget,
     setting::management::{
-        ARGON2_MEMORY_COST_RANGE, ARGON2_PARALLELISM_RANGE, ARGON2_TIME_COST_RANGE,
-        AuthenticationSettingsView, DEVICE_AUTHORIZATION_LIFETIME_RANGE,
-        DEVICE_POLLING_INTERVAL_RANGE, GeneralSettingsView, InstanceSettingsView,
-        PASSWORD_HISTORY_COUNT_RANGE, PASSWORD_MAX_AGE_DAYS_RANGE,
-        PUSHED_AUTHORIZATION_LIFETIME_RANGE, ProtocolSettingsView, SettingRange,
+        ACCESS_TOKEN_LIFETIME_RANGE, ARGON2_MEMORY_COST_RANGE, ARGON2_PARALLELISM_RANGE,
+        ARGON2_TIME_COST_RANGE, AUTHORIZATION_CODE_LIFETIME_RANGE, AuthenticationSettingsView,
+        DEVICE_AUTHORIZATION_LIFETIME_RANGE, DEVICE_POLLING_INTERVAL_RANGE,
+        ELEVATED_AUTHENTICATION_LIFETIME_MINUTES_RANGE, GeneralSettingsView,
+        ID_TOKEN_LIFETIME_RANGE, InstanceSettingsView, LOCKOUT_DURATION_MINUTES_RANGE,
+        LOGIN_LIFETIME_MINUTES_RANGE, MAX_FAILED_ATTEMPTS_RANGE, PASSWORD_HISTORY_COUNT_RANGE,
+        PASSWORD_MAX_AGE_DAYS_RANGE, PASSWORD_MIN_LENGTH_RANGE,
+        PUSHED_AUTHORIZATION_LIFETIME_RANGE, ProtocolSettingsView,
+        RECENT_AUTHENTICATION_LIFETIME_MINUTES_RANGE, REFRESH_TOKEN_LIFETIME_DAYS_RANGE,
+        SESSION_LIFETIME_HOURS_RANGE, SessionSettingsView, SettingRange,
     },
 };
 use identity_domain::authorization::ManagementScope;
@@ -40,6 +45,10 @@ impl InstanceSettings {
 
     async fn authentication(&self) -> AuthenticationSettings {
         AuthenticationSettings::from(&self.view.authentication)
+    }
+
+    async fn session(&self) -> SessionSettings {
+        SessionSettings::from(&self.view.session)
     }
 
     /// Email delivery and the templates of the email this instance sends.
@@ -137,6 +146,38 @@ impl ProtocolSettings {
         self.view.dynamic_registration_enabled
     }
 
+    async fn access_token_lifetime_seconds(&self) -> i32 {
+        int(self.view.access_token_lifetime_seconds)
+    }
+
+    async fn access_token_lifetime_range(&self) -> IntRange {
+        ACCESS_TOKEN_LIFETIME_RANGE.into()
+    }
+
+    async fn id_token_lifetime_seconds(&self) -> i32 {
+        int(self.view.id_token_lifetime_seconds)
+    }
+
+    async fn id_token_lifetime_range(&self) -> IntRange {
+        ID_TOKEN_LIFETIME_RANGE.into()
+    }
+
+    async fn refresh_token_lifetime_days(&self) -> i32 {
+        int(self.view.refresh_token_lifetime_days)
+    }
+
+    async fn refresh_token_lifetime_days_range(&self) -> IntRange {
+        REFRESH_TOKEN_LIFETIME_DAYS_RANGE.into()
+    }
+
+    async fn authorization_code_lifetime_seconds(&self) -> i32 {
+        int(self.view.authorization_code_lifetime_seconds)
+    }
+
+    async fn authorization_code_lifetime_range(&self) -> IntRange {
+        AUTHORIZATION_CODE_LIFETIME_RANGE.into()
+    }
+
     /// UUID optimistic-lock version of this section.
     async fn version(&self) -> Uuid {
         self.view.version
@@ -209,6 +250,30 @@ impl AuthenticationSettings {
         PASSWORD_HISTORY_COUNT_RANGE.into()
     }
 
+    async fn password_min_length(&self) -> u32 {
+        self.view.password_min_length
+    }
+
+    async fn password_min_length_range(&self) -> IntRange {
+        PASSWORD_MIN_LENGTH_RANGE.into()
+    }
+
+    async fn max_failed_attempts(&self) -> u32 {
+        self.view.max_failed_attempts
+    }
+
+    async fn max_failed_attempts_range(&self) -> IntRange {
+        MAX_FAILED_ATTEMPTS_RANGE.into()
+    }
+
+    async fn lockout_duration_minutes(&self) -> u32 {
+        self.view.lockout_duration_minutes
+    }
+
+    async fn lockout_duration_minutes_range(&self) -> IntRange {
+        LOCKOUT_DURATION_MINUTES_RANGE.into()
+    }
+
     /// Argon2id cost for newly stored password hashes.
     async fn password_hashing(&self) -> PasswordHashing {
         let hashing = &self.view.password_hashing;
@@ -258,6 +323,56 @@ impl PasswordHashing {
     }
 }
 
+pub(crate) struct SessionSettings {
+    view: SessionSettingsView,
+}
+
+impl From<&SessionSettingsView> for SessionSettings {
+    fn from(view: &SessionSettingsView) -> Self {
+        Self { view: view.clone() }
+    }
+}
+
+#[Object]
+impl SessionSettings {
+    async fn session_lifetime_hours(&self) -> u32 {
+        self.view.session_lifetime_hours
+    }
+
+    async fn session_lifetime_hours_range(&self) -> IntRange {
+        SESSION_LIFETIME_HOURS_RANGE.into()
+    }
+
+    async fn elevated_authentication_lifetime_minutes(&self) -> u32 {
+        self.view.elevated_authentication_lifetime_minutes
+    }
+
+    async fn elevated_authentication_lifetime_minutes_range(&self) -> IntRange {
+        ELEVATED_AUTHENTICATION_LIFETIME_MINUTES_RANGE.into()
+    }
+
+    async fn recent_authentication_lifetime_minutes(&self) -> u32 {
+        self.view.recent_authentication_lifetime_minutes
+    }
+
+    async fn recent_authentication_lifetime_minutes_range(&self) -> IntRange {
+        RECENT_AUTHENTICATION_LIFETIME_MINUTES_RANGE.into()
+    }
+
+    async fn login_lifetime_minutes(&self) -> u32 {
+        self.view.login_lifetime_minutes
+    }
+
+    async fn login_lifetime_minutes_range(&self) -> IntRange {
+        LOGIN_LIFETIME_MINUTES_RANGE.into()
+    }
+
+    /// UUID optimistic-lock version of this section.
+    async fn version(&self) -> Uuid {
+        self.view.version
+    }
+}
+
 #[derive(Clone, InputObject)]
 pub(crate) struct UpdateProtocolSettingsInput {
     pub oauth_version: ClientOAuthVersion,
@@ -266,6 +381,10 @@ pub(crate) struct UpdateProtocolSettingsInput {
     pub device_authorization_request_lifetime_seconds: i32,
     pub device_authorization_polling_interval_seconds: i32,
     pub dynamic_registration_enabled: bool,
+    pub access_token_lifetime_seconds: i32,
+    pub id_token_lifetime_seconds: i32,
+    pub refresh_token_lifetime_days: i32,
+    pub authorization_code_lifetime_seconds: i32,
     pub expected_version: Uuid,
     #[graphql(validator(chars_max_length = 255))]
     pub client_mutation_id: Option<String>,
@@ -287,7 +406,21 @@ pub(crate) struct UpdateAuthenticationSettingsInput {
     pub registration_enabled: bool,
     pub password_max_age_days: u32,
     pub password_history_count: u32,
+    pub password_min_length: u32,
+    pub max_failed_attempts: u32,
+    pub lockout_duration_minutes: u32,
     pub password_hashing: PasswordHashingInput,
+    pub expected_version: Uuid,
+    #[graphql(validator(chars_max_length = 255))]
+    pub client_mutation_id: Option<String>,
+}
+
+#[derive(Clone, InputObject)]
+pub(crate) struct UpdateSessionSettingsInput {
+    pub session_lifetime_hours: u32,
+    pub elevated_authentication_lifetime_minutes: u32,
+    pub recent_authentication_lifetime_minutes: u32,
+    pub login_lifetime_minutes: u32,
     pub expected_version: Uuid,
     #[graphql(validator(chars_max_length = 255))]
     pub client_mutation_id: Option<String>,

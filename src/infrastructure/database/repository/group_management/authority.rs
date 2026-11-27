@@ -9,8 +9,8 @@ use std::collections::BTreeSet;
 use chrono::Utc;
 use identity_application::{
     authorization::{
-        CurrentManagementAuthority, DEFAULT_RECENT_AAL2_TTL, ManagementAuthorizationError,
-        ManagementAuthorizationRequest, ManagementTarget, evaluate_management_authority,
+        CurrentManagementAuthority, ManagementAuthorizationError, ManagementAuthorizationRequest,
+        ManagementTarget, evaluate_management_authority,
     },
     rbac::{GroupEntityKind, GroupManagementRepositoryError, RbacManagementAuthority},
 };
@@ -25,6 +25,7 @@ use super::support::{Binds, corrupt, not_found, storage};
 
 use crate::database::repository::management_authority::{
     ManagementAuthorityCheckError, lock_and_load_user_authority, lock_and_recheck_issuing_client,
+    recent_authentication_ttl,
 };
 
 fn map_authority_check(error: ManagementAuthorityCheckError) -> GroupManagementRepositoryError {
@@ -63,6 +64,7 @@ pub(crate) async fn recheck_group_authority(
         effective_delegation_permissions(&current.permissions, &authority.token_scopes);
     let current = CurrentManagementAuthority::UserPermissions(current);
     let policy_version = policy_fingerprint();
+    let recent_aal2_ttl = recent_authentication_ttl(txn).await;
     evaluate_management_authority(&ManagementAuthorizationRequest {
         actor: &authority.actor,
         token_scopes: &authority.token_scopes,
@@ -73,7 +75,7 @@ pub(crate) async fn recheck_group_authority(
         credential_client_boundary: Some(authority.client_policy_version),
         current_policy_version: policy_version,
         now: Utc::now(),
-        recent_aal2_ttl: DEFAULT_RECENT_AAL2_TTL,
+        recent_aal2_ttl,
     })
     .map_err(GroupManagementRepositoryError::Authorization)?;
     Ok(permissions)

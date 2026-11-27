@@ -2,12 +2,14 @@ import type {
   ConsoleInstanceSettingsQuery,
   UpdateAuthenticationSettingsInput,
   UpdateProtocolSettingsInput,
+  UpdateSessionSettingsInput,
 } from '#/generated/graphql'
 import type { MessageKey } from '#/lib/i18n'
 
 export type InstanceSettings = NonNullable<ConsoleInstanceSettingsQuery['instanceSettings']>
 export type ProtocolSettings = InstanceSettings['protocol']
 export type AuthenticationSettings = InstanceSettings['authentication']
+export type SessionSettings = InstanceSettings['session']
 
 export interface SettingRange {
   min: number
@@ -42,12 +44,20 @@ export interface ProtocolDraft {
   deviceAuthorizationRequestLifetimeSeconds: string
   deviceAuthorizationPollingIntervalSeconds: string
   dynamicRegistrationEnabled: boolean
+  accessTokenLifetimeSeconds: string
+  idTokenLifetimeSeconds: string
+  refreshTokenLifetimeDays: string
+  authorizationCodeLifetimeSeconds: string
 }
 
 export type ProtocolNumberField =
   | 'pushedAuthorizationRequestLifetimeSeconds'
   | 'deviceAuthorizationRequestLifetimeSeconds'
   | 'deviceAuthorizationPollingIntervalSeconds'
+  | 'accessTokenLifetimeSeconds'
+  | 'idTokenLifetimeSeconds'
+  | 'refreshTokenLifetimeDays'
+  | 'authorizationCodeLifetimeSeconds'
 
 export function protocolDraft(settings: ProtocolSettings): ProtocolDraft {
   return {
@@ -63,6 +73,10 @@ export function protocolDraft(settings: ProtocolSettings): ProtocolDraft {
       settings.deviceAuthorizationPollingIntervalSeconds,
     ),
     dynamicRegistrationEnabled: settings.dynamicRegistrationEnabled,
+    accessTokenLifetimeSeconds: String(settings.accessTokenLifetimeSeconds),
+    idTokenLifetimeSeconds: String(settings.idTokenLifetimeSeconds),
+    refreshTokenLifetimeDays: String(settings.refreshTokenLifetimeDays),
+    authorizationCodeLifetimeSeconds: String(settings.authorizationCodeLifetimeSeconds),
   }
 }
 
@@ -73,6 +87,10 @@ const protocolRanges: Record<ProtocolNumberField, (settings: ProtocolSettings) =
     settings.deviceAuthorizationRequestLifetimeRange,
   deviceAuthorizationPollingIntervalSeconds: (settings) =>
     settings.deviceAuthorizationPollingIntervalRange,
+  accessTokenLifetimeSeconds: (settings) => settings.accessTokenLifetimeRange,
+  idTokenLifetimeSeconds: (settings) => settings.idTokenLifetimeRange,
+  refreshTokenLifetimeDays: (settings) => settings.refreshTokenLifetimeDaysRange,
+  authorizationCodeLifetimeSeconds: (settings) => settings.authorizationCodeLifetimeRange,
 }
 
 export function protocolRange(settings: ProtocolSettings, field: ProtocolNumberField) {
@@ -102,6 +120,10 @@ export function protocolInput(
       deviceAuthorizationRequestLifetimeSeconds: values.deviceAuthorizationRequestLifetimeSeconds!,
       deviceAuthorizationPollingIntervalSeconds: values.deviceAuthorizationPollingIntervalSeconds!,
       dynamicRegistrationEnabled: draft.dynamicRegistrationEnabled,
+      accessTokenLifetimeSeconds: values.accessTokenLifetimeSeconds!,
+      idTokenLifetimeSeconds: values.idTokenLifetimeSeconds!,
+      refreshTokenLifetimeDays: values.refreshTokenLifetimeDays!,
+      authorizationCodeLifetimeSeconds: values.authorizationCodeLifetimeSeconds!,
       expectedVersion: settings.version,
     },
   }
@@ -115,6 +137,9 @@ export interface AuthenticationDraft {
   registrationEnabled: boolean
   passwordMaxAgeDays: string
   passwordHistoryCount: string
+  passwordMinLength: string
+  maxFailedAttempts: string
+  lockoutDurationMinutes: string
   timeCost: string
   memoryCostKib: string
   parallelism: string
@@ -127,6 +152,9 @@ export type HashingField =
   | 'parallelism'
   | 'passwordMaxAgeDays'
   | 'passwordHistoryCount'
+  | 'passwordMinLength'
+  | 'maxFailedAttempts'
+  | 'lockoutDurationMinutes'
 
 export function authenticationDraft(settings: AuthenticationSettings): AuthenticationDraft {
   return {
@@ -137,6 +165,9 @@ export function authenticationDraft(settings: AuthenticationSettings): Authentic
     registrationEnabled: settings.registrationEnabled,
     passwordMaxAgeDays: String(settings.passwordMaxAgeDays),
     passwordHistoryCount: String(settings.passwordHistoryCount),
+    passwordMinLength: String(settings.passwordMinLength),
+    maxFailedAttempts: String(settings.maxFailedAttempts),
+    lockoutDurationMinutes: String(settings.lockoutDurationMinutes),
     timeCost: String(settings.passwordHashing.timeCost),
     memoryCostKib: String(settings.passwordHashing.memoryCostKib),
     parallelism: String(settings.passwordHashing.parallelism),
@@ -146,6 +177,9 @@ export function authenticationDraft(settings: AuthenticationSettings): Authentic
 export function hashingRange(settings: AuthenticationSettings, field: HashingField): SettingRange {
   if (field === 'passwordMaxAgeDays') return settings.passwordMaxAgeDaysRange
   if (field === 'passwordHistoryCount') return settings.passwordHistoryCountRange
+  if (field === 'passwordMinLength') return settings.passwordMinLengthRange
+  if (field === 'maxFailedAttempts') return settings.maxFailedAttemptsRange
+  if (field === 'lockoutDurationMinutes') return settings.lockoutDurationMinutesRange
   const hashing = settings.passwordHashing
   return field === 'timeCost'
     ? hashing.timeCostRange
@@ -168,6 +202,9 @@ export function authenticationInput(
     'parallelism',
     'passwordMaxAgeDays',
     'passwordHistoryCount',
+    'passwordMinLength',
+    'maxFailedAttempts',
+    'lockoutDurationMinutes',
   ] as const) {
     const parsed = parseWholeNumber(draft[field], hashingRange(settings, field))
     if ('error' in parsed) errors[field] = parsed.error
@@ -183,11 +220,74 @@ export function authenticationInput(
       registrationEnabled: draft.registrationEnabled,
       passwordMaxAgeDays: values.passwordMaxAgeDays!,
       passwordHistoryCount: values.passwordHistoryCount!,
+      passwordMinLength: values.passwordMinLength!,
+      maxFailedAttempts: values.maxFailedAttempts!,
+      lockoutDurationMinutes: values.lockoutDurationMinutes!,
       passwordHashing: {
         timeCost: values.timeCost!,
         memoryCostKib: values.memoryCostKib!,
         parallelism: values.parallelism!,
       },
+      expectedVersion: settings.version,
+    },
+  }
+}
+
+export interface SessionDraft {
+  sessionLifetimeHours: string
+  elevatedAuthenticationLifetimeMinutes: string
+  recentAuthenticationLifetimeMinutes: string
+  loginLifetimeMinutes: string
+}
+
+export type SessionNumberField =
+  | 'sessionLifetimeHours'
+  | 'elevatedAuthenticationLifetimeMinutes'
+  | 'recentAuthenticationLifetimeMinutes'
+  | 'loginLifetimeMinutes'
+
+export function sessionDraft(settings: SessionSettings): SessionDraft {
+  return {
+    sessionLifetimeHours: String(settings.sessionLifetimeHours),
+    elevatedAuthenticationLifetimeMinutes: String(settings.elevatedAuthenticationLifetimeMinutes),
+    recentAuthenticationLifetimeMinutes: String(settings.recentAuthenticationLifetimeMinutes),
+    loginLifetimeMinutes: String(settings.loginLifetimeMinutes),
+  }
+}
+
+const sessionRanges: Record<SessionNumberField, (settings: SessionSettings) => SettingRange> = {
+  sessionLifetimeHours: (settings) => settings.sessionLifetimeHoursRange,
+  elevatedAuthenticationLifetimeMinutes: (settings) =>
+    settings.elevatedAuthenticationLifetimeMinutesRange,
+  recentAuthenticationLifetimeMinutes: (settings) =>
+    settings.recentAuthenticationLifetimeMinutesRange,
+  loginLifetimeMinutes: (settings) => settings.loginLifetimeMinutesRange,
+}
+
+export function sessionRange(settings: SessionSettings, field: SessionNumberField) {
+  return sessionRanges[field](settings)
+}
+
+export function sessionInput(
+  settings: SessionSettings,
+  draft: SessionDraft,
+):
+  | { input: Omit<UpdateSessionSettingsInput, 'clientMutationId'> }
+  | { errors: Partial<Record<SessionNumberField, FieldError>> } {
+  const errors: Partial<Record<SessionNumberField, FieldError>> = {}
+  const values: Partial<Record<SessionNumberField, number>> = {}
+  for (const field of Object.keys(sessionRanges) as SessionNumberField[]) {
+    const parsed = parseWholeNumber(draft[field], sessionRange(settings, field))
+    if ('error' in parsed) errors[field] = parsed.error
+    else values[field] = parsed.value
+  }
+  if (Object.keys(errors).length) return { errors }
+  return {
+    input: {
+      sessionLifetimeHours: values.sessionLifetimeHours!,
+      elevatedAuthenticationLifetimeMinutes: values.elevatedAuthenticationLifetimeMinutes!,
+      recentAuthenticationLifetimeMinutes: values.recentAuthenticationLifetimeMinutes!,
+      loginLifetimeMinutes: values.loginLifetimeMinutes!,
       expectedVersion: settings.version,
     },
   }

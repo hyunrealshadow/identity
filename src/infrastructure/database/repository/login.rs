@@ -1,9 +1,8 @@
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 use identity_domain::audit::{AuditAction, AuditActor, AuditFailureReason, AuditRecord};
 use identity_domain::auth::{
-    AuthenticationContextClass, LOGIN_EXPIRY, LoginFailureReason, LoginStatus, SessionOid,
-    SessionStatus,
+    AuthenticationContextClass, LoginFailureReason, LoginStatus, SessionOid, SessionStatus,
     challenge::ChallengeBinding,
     model::Login,
     repository::{LoginRepository, LoginRepositoryError},
@@ -245,6 +244,7 @@ impl LoginRepository for LoginRepositoryImpl {
         client_oid: Uuid,
         client_authorization_oid: Uuid,
         requested_acr_values: &[AuthenticationContextClass],
+        expires_at: DateTime<Utc>,
     ) -> Result<Login, LoginRepositoryError> {
         let client = ClientEntity::find()
             .filter(ClientColumn::Oid.eq(client_oid))
@@ -261,8 +261,6 @@ impl LoginRepository for LoginRepositoryImpl {
             .ok_or(LoginRepositoryError::UserNotFound)?;
 
         let now = Utc::now();
-        let expiry_duration =
-            Duration::from_std(LOGIN_EXPIRY).unwrap_or_else(|_| Duration::minutes(5));
         let active = login::ActiveModel {
             oid: Set(Uuid::new_v4()),
             client_id: Set(client.id),
@@ -273,7 +271,7 @@ impl LoginRepository for LoginRepositoryImpl {
             requested_acr_values: Set(serde_json::json!(requested_acr_values)),
             amr: Set(serde_json::json!([])),
             created_at: Set(now.into()),
-            expires_at: Set((now + expiry_duration).into()),
+            expires_at: Set(expires_at.into()),
             ..Default::default()
         };
         let transaction = self

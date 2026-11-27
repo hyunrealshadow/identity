@@ -25,13 +25,10 @@ use crate::{
             AppError,
             codes::{authorize_http, common},
         },
-        setting::AppSettings,
+        setting::{AppSettings, SessionSettings},
     },
     controllers::response::redirect_to_response,
-    domain::auth::{
-        SESSION_EXPIRY,
-        model::{ActiveSession, SessionOid},
-    },
+    domain::auth::model::{ActiveSession, SessionOid},
     infrastructure::AppState,
 };
 
@@ -185,11 +182,22 @@ pub async fn parse_session_cookie(ctx: &AppState, headers: &HeaderMap) -> Vec<Se
 
 /// Build the `Set-Cookie` header value for the sessions cookie.
 ///
-pub fn build_session_cookie_from_protected_ids(protected_ids: &[String]) -> String {
+pub fn session_cookie_max_age_secs(ctx: &AppState) -> u64 {
+    ctx.services()
+        .settings()
+        .snapshot()
+        .section::<SessionSettings>()
+        .session_lifetime()
+        .as_secs()
+}
+
+pub fn build_session_cookie_from_protected_ids(
+    protected_ids: &[String],
+    max_age_secs: u64,
+) -> String {
     let json = to_string(protected_ids).unwrap_or_else(|_| "[]".to_owned());
-    let max_age = SESSION_EXPIRY.as_secs();
     format!(
-        "{OP_SESSION_COOKIE_NAME}={json}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age={max_age}"
+        "{OP_SESSION_COOKIE_NAME}={json}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age={max_age_secs}"
     )
 }
 
@@ -198,7 +206,10 @@ pub async fn build_session_cookie(ctx: &AppState, oids: &[SessionOid]) -> Result
     for oid in oids {
         protected_ids.push(protect_session_id(ctx, *oid).await?);
     }
-    Ok(build_session_cookie_from_protected_ids(&protected_ids))
+    Ok(build_session_cookie_from_protected_ids(
+        &protected_ids,
+        session_cookie_max_age_secs(ctx),
+    ))
 }
 
 pub async fn build_selected_session_cookie(
@@ -222,7 +233,10 @@ pub async fn build_selected_session_cookie(
     protected_session_ids.extend(entries.into_iter().map(|entry| entry.protected_session_id));
 
     Ok(SelectedSessionCookie {
-        header: build_session_cookie_from_protected_ids(&protected_session_ids),
+        header: build_session_cookie_from_protected_ids(
+            &protected_session_ids,
+            session_cookie_max_age_secs(ctx),
+        ),
         protected_session_id,
     })
 }
@@ -239,7 +253,10 @@ pub async fn build_op_session_cookie_with_selected_id(
     let mut protected_session_ids = Vec::with_capacity(entries.len() + 1);
     protected_session_ids.push(protected_session_id.to_owned());
     protected_session_ids.extend(entries.into_iter().map(|entry| entry.protected_session_id));
-    build_session_cookie_from_protected_ids(&protected_session_ids)
+    build_session_cookie_from_protected_ids(
+        &protected_session_ids,
+        session_cookie_max_age_secs(ctx),
+    )
 }
 
 pub async fn build_selected_session_state(
@@ -590,7 +607,10 @@ mod tests {
 
     #[test]
     fn build_session_cookie_is_always_secure_and_cross_site() {
-        let cookie = build_session_cookie_from_protected_ids(&[Uuid::nil().to_string()]);
+        let cookie = build_session_cookie_from_protected_ids(
+            &[Uuid::nil().to_string()],
+            crate::domain::auth::SESSION_EXPIRY.as_secs(),
+        );
 
         assert!(cookie.starts_with("sessions="));
         assert!(cookie.contains("; HttpOnly; Secure; SameSite=None;"));

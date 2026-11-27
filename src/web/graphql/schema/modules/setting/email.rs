@@ -11,10 +11,15 @@ use identity_application::{
     setting::{
         SmtpSecurity as AppSmtpSecurity, Xoauth2Grant as AppXoauth2Grant,
         email::{
+            EMAIL_LOGIN_MAX_SENDS_RANGE, EMAIL_PASSWORD_RESET_LIFETIME_MINUTES_RANGE,
+            EMAIL_REGISTRATION_LIFETIME_MINUTES_RANGE, EMAIL_RESEND_INTERVAL_SECONDS_RANGE,
+            EMAIL_SIGN_IN_CODE_LIFETIME_MINUTES_RANGE, EMAIL_USER_INVITATION_LIFETIME_DAYS_RANGE,
+            EMAIL_VERIFICATION_LIFETIME_HOURS_RANGE, EMAIL_VERIFICATION_MAX_SENDS_RANGE,
+            EMAIL_VERIFICATION_SEND_WINDOW_HOURS_RANGE,
             EmailAuthenticationInput as AppEmailAuthenticationInput,
             EmailAuthenticationMethod as AppEmailAuthenticationMethod, EmailAuthenticationView,
-            EmailDeliveryView, EmailSettingsView, EmailTemplateDraft, EmailTemplateView,
-            SMTP_PORT_RANGE,
+            EmailDeliveryView, EmailPolicyView, EmailSettingsView, EmailTemplateDraft,
+            EmailTemplateView, SMTP_PORT_RANGE,
         },
     },
 };
@@ -220,6 +225,13 @@ impl EmailSettings {
         }
     }
 
+    /// Lifetimes, resend cadence, and send limits for outbound system emails.
+    async fn policy(&self) -> EmailPolicySettings {
+        EmailPolicySettings {
+            view: self.view.policy.clone(),
+        }
+    }
+
     /// Every kind of email, with its template in each supported locale.
     async fn templates(&self) -> Vec<EmailTemplate> {
         self.view
@@ -279,6 +291,106 @@ impl EmailDeliverySettings {
     async fn version(&self) -> Uuid {
         self.view.version
     }
+}
+
+pub(crate) struct EmailPolicySettings {
+    view: EmailPolicyView,
+}
+
+#[Object]
+impl EmailPolicySettings {
+    async fn sign_in_code_lifetime_minutes(&self) -> u32 {
+        self.view.sign_in_code_lifetime_minutes
+    }
+
+    async fn sign_in_code_lifetime_minutes_range(&self) -> IntRange {
+        EMAIL_SIGN_IN_CODE_LIFETIME_MINUTES_RANGE.into()
+    }
+
+    async fn password_reset_lifetime_minutes(&self) -> u32 {
+        self.view.password_reset_lifetime_minutes
+    }
+
+    async fn password_reset_lifetime_minutes_range(&self) -> IntRange {
+        EMAIL_PASSWORD_RESET_LIFETIME_MINUTES_RANGE.into()
+    }
+
+    async fn registration_lifetime_minutes(&self) -> u32 {
+        self.view.registration_lifetime_minutes
+    }
+
+    async fn registration_lifetime_minutes_range(&self) -> IntRange {
+        EMAIL_REGISTRATION_LIFETIME_MINUTES_RANGE.into()
+    }
+
+    async fn email_verification_lifetime_hours(&self) -> u32 {
+        self.view.email_verification_lifetime_hours
+    }
+
+    async fn email_verification_lifetime_hours_range(&self) -> IntRange {
+        EMAIL_VERIFICATION_LIFETIME_HOURS_RANGE.into()
+    }
+
+    async fn user_invitation_lifetime_days(&self) -> u32 {
+        self.view.user_invitation_lifetime_days
+    }
+
+    async fn user_invitation_lifetime_days_range(&self) -> IntRange {
+        EMAIL_USER_INVITATION_LIFETIME_DAYS_RANGE.into()
+    }
+
+    async fn resend_interval_seconds(&self) -> u32 {
+        self.view.resend_interval_seconds
+    }
+
+    async fn resend_interval_seconds_range(&self) -> IntRange {
+        EMAIL_RESEND_INTERVAL_SECONDS_RANGE.into()
+    }
+
+    async fn login_max_sends(&self) -> u32 {
+        self.view.login_max_sends
+    }
+
+    async fn login_max_sends_range(&self) -> IntRange {
+        EMAIL_LOGIN_MAX_SENDS_RANGE.into()
+    }
+
+    async fn verification_max_sends(&self) -> u32 {
+        self.view.verification_max_sends
+    }
+
+    async fn verification_max_sends_range(&self) -> IntRange {
+        EMAIL_VERIFICATION_MAX_SENDS_RANGE.into()
+    }
+
+    async fn verification_send_window_hours(&self) -> u32 {
+        self.view.verification_send_window_hours
+    }
+
+    async fn verification_send_window_hours_range(&self) -> IntRange {
+        EMAIL_VERIFICATION_SEND_WINDOW_HOURS_RANGE.into()
+    }
+
+    /// UUID optimistic-lock version of this section.
+    async fn version(&self) -> Uuid {
+        self.view.version
+    }
+}
+
+#[derive(Clone, InputObject)]
+pub(crate) struct UpdateEmailPolicySettingsInput {
+    pub sign_in_code_lifetime_minutes: u32,
+    pub password_reset_lifetime_minutes: u32,
+    pub registration_lifetime_minutes: u32,
+    pub email_verification_lifetime_hours: u32,
+    pub user_invitation_lifetime_days: u32,
+    pub resend_interval_seconds: u32,
+    pub login_max_sends: u32,
+    pub verification_max_sends: u32,
+    pub verification_send_window_hours: u32,
+    pub expected_version: Uuid,
+    #[graphql(validator(chars_max_length = 255))]
+    pub client_mutation_id: Option<String>,
 }
 
 /// SMTP authentication. Secrets are reported only as stored or not.

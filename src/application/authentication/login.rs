@@ -8,7 +8,10 @@ use crate::{
     authentication::{password::PasswordHasher, totp::TotpVerifier},
     error::{AppError, codes::auth},
     observability::{EventSink, NoopEventSink},
-    setting::{IdentifierEnumerationAllowedSetting, SettingsSource},
+    setting::{
+        IdentifierEnumerationAllowedSetting, LockoutDurationMinutesSetting,
+        MaxFailedAttemptsSetting, SettingsSource,
+    },
     user::{
         UserOid,
         model::{CredentialType, User},
@@ -538,8 +541,62 @@ fn combine_amr(login: &Login, additional: &[&str], expect_first_factor: bool) ->
     amr
 }
 
-fn failed_attempt_lock_until() -> DateTime<Utc> {
-    Utc::now() + Duration::from_std(LOCK_DURATION).unwrap_or_else(|_| Duration::seconds(900))
+impl LoginService {
+    pub(super) fn max_failed_attempts(&self) -> i32 {
+        let max_attempts = self.settings.snapshot().get::<MaxFailedAttemptsSetting>();
+        i32::try_from(max_attempts)
+            .unwrap_or(MAX_FAILED_ATTEMPTS)
+            .max(1)
+    }
+
+    pub(super) fn failed_attempt_lock_until(&self) -> DateTime<Utc> {
+        let minutes = self
+            .settings
+            .snapshot()
+            .get::<LockoutDurationMinutesSetting>();
+        let lock_duration = Duration::try_minutes(i64::from(minutes)).unwrap_or_else(|| {
+            Duration::from_std(LOCK_DURATION).unwrap_or_else(|_| Duration::seconds(900))
+        });
+        Utc::now() + lock_duration
+    }
+
+    pub(super) fn validate_passkey_login(&self, login: &Login) -> Result<(), AppError> {
+        validate_passkey_login_with_limit(login, self.max_failed_attempts())
+    }
+}
+
+fn validate_passkey_login_with_limit(
+    login: &Login,
+    max_failed_attempts: i32,
+) -> Result<(), AppError> {
+    if login.expires_at <= Utc::now() {
+        return Err(auth::error::LoginExpired.into());
+    }
+    // Passkey options would list the account's credentials.
+    if login.concealed_identifier().is_some() {
+        return Err(auth::error::InvalidLoginState.into());
+    }
+    // A `phr` enrollment may still be completed with an existing passkey.
+    let enrolling_passkey =
+        login.status == LoginStatus::MFA_ENROLLMENT_REQUIRED && requires_phishing_resistance(login);
+    if !(enrolling_passkey
+        || matches!(
+            login.status,
+            LoginStatus::IDENTIFIER_VERIFIED | LoginStatus::MFA_REQUIRED
+        ))
+        || login.user_oid.is_none()
+    {
+        return Err(auth::error::InvalidLoginState.into());
+    }
+    if login.failed_attempts >= max_failed_attempts {
+        return Err(auth::error::TooManyAttempts.into());
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn validate_passkey_login(login: &Login) -> Result<(), AppError> {
+    validate_passkey_login_with_limit(login, MAX_FAILED_ATTEMPTS)
 }
 
 /// The user's ordering preference selects a valid path; it never bypasses a factor.
@@ -591,30 +648,4 @@ pub fn preferred_credential_type(
     has(CredentialType::Passkey)
         .then_some(CredentialType::Passkey)
         .or_else(|| has(CredentialType::EmailOtp).then_some(CredentialType::EmailOtp))
-}
-
-fn validate_passkey_login(login: &Login) -> Result<(), AppError> {
-    if login.expires_at <= Utc::now() {
-        return Err(auth::error::LoginExpired.into());
-    }
-    // Passkey options would list the account's credentials.
-    if login.concealed_identifier().is_some() {
-        return Err(auth::error::InvalidLoginState.into());
-    }
-    // A `phr` enrollment may still be completed with an existing passkey.
-    let enrolling_passkey =
-        login.status == LoginStatus::MFA_ENROLLMENT_REQUIRED && requires_phishing_resistance(login);
-    if !(enrolling_passkey
-        || matches!(
-            login.status,
-            LoginStatus::IDENTIFIER_VERIFIED | LoginStatus::MFA_REQUIRED
-        ))
-        || login.user_oid.is_none()
-    {
-        return Err(auth::error::InvalidLoginState.into());
-    }
-    if login.failed_attempts >= MAX_FAILED_ATTEMPTS {
-        return Err(auth::error::TooManyAttempts.into());
-    }
-    Ok(())
 }

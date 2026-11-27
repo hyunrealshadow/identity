@@ -364,7 +364,8 @@ impl TokenService {
                     claims: None,
                     management: refresh_data.management.clone(),
                 }),
-                Utc::now() + Duration::hours(1),
+                Utc::now()
+                    + Duration::seconds(self.token_lifetimes().access_token_lifetime_seconds),
             )
             .await
             .map_err(token::error::SignAccessTokenFailed::map_source())?;
@@ -515,7 +516,8 @@ impl TokenService {
             id_token,
             refresh_token: Some(refresh_token),
             token_type: TokenType::Bearer,
-            expires_in: 3600,
+            expires_in: i32::try_from(self.token_lifetimes().access_token_lifetime_seconds.max(1))
+                .unwrap_or(3_600),
             scope,
         })
     }
@@ -560,7 +562,7 @@ impl TokenService {
             .create(
                 client_oid,
                 ClientAuthorizationData::RefreshToken(data),
-                Utc::now() + Duration::days(30),
+                Utc::now() + Duration::days(self.token_lifetimes().refresh_token_lifetime_days),
             )
             .await
             .map_err(token::error::StoreRefreshFailed::map_source())?;

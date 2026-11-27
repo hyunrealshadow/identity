@@ -1,14 +1,10 @@
-use super::{
-    ChallengeOutcome, LoginService, SessionContext, combine_amr, failed_attempt_lock_until,
-    validate_passkey_login,
-};
+use super::{ChallengeOutcome, LoginService, SessionContext, combine_amr};
 use crate::{
     authentication::passkey::PasskeyOptions,
     error::{AppError, codes::auth},
 };
 use identity_domain::auth::{
-    AMR_MFA, AMR_PASSKEY, AuthenticationContextClass, LoginFailureReason, LoginStatus,
-    MAX_FAILED_ATTEMPTS, model::Login,
+    AMR_MFA, AMR_PASSKEY, AuthenticationContextClass, LoginFailureReason, LoginStatus, model::Login,
 };
 use uuid::Uuid;
 
@@ -16,7 +12,7 @@ impl LoginService {
     /// Account-bound challenges are unavailable until identifier verification.
     pub async fn passkey_options(&self, login_oid: Uuid) -> Result<PasskeyOptions, AppError> {
         let login = self.prepare_challenge(login_oid).await?;
-        validate_passkey_login(&login)?;
+        self.validate_passkey_login(&login)?;
         let user = self
             .get_user(login.user_oid.ok_or(auth::error::InvalidLoginState)?.into())
             .await?;
@@ -36,7 +32,7 @@ impl LoginService {
         assertion: &str,
         ctx: SessionContext,
     ) -> Result<ChallengeOutcome, AppError> {
-        validate_passkey_login(&login)?;
+        self.validate_passkey_login(&login)?;
         let user = self
             .get_user(login.user_oid.ok_or(auth::error::InvalidLoginState)?.into())
             .await?;
@@ -54,8 +50,8 @@ impl LoginService {
             self.user_repo
                 .increment_failed_attempts(
                     user.oid,
-                    MAX_FAILED_ATTEMPTS,
-                    failed_attempt_lock_until(),
+                    self.max_failed_attempts(),
+                    self.failed_attempt_lock_until(),
                 )
                 .await?;
             return Err(error);

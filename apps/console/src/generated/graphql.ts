@@ -107,9 +107,11 @@ export type AuditAction =
   | 'SESSION_REUSE'
   | 'SESSION_REVOKE'
   | 'SETTING_AUTHENTICATION_UPDATE'
+  | 'SETTING_EMAIL_POLICY_UPDATE'
   | 'SETTING_EMAIL_TEMPLATE_UPDATE'
   | 'SETTING_EMAIL_UPDATE'
   | 'SETTING_PROTOCOL_UPDATE'
+  | 'SETTING_SESSION_UPDATE'
   | 'SIGN_IN'
   | 'TOKEN_REPLAY'
   | 'TOKEN_REVOKE'
@@ -828,9 +830,12 @@ export type UpdateAuthenticationSettingsInput = {
   emailSignInEnabled: boolean;
   expectedVersion: string;
   identifierEnumerationAllowed: boolean;
+  lockoutDurationMinutes: number;
+  maxFailedAttempts: number;
   passwordHashing: PasswordHashingInput;
   passwordHistoryCount: number;
   passwordMaxAgeDays: number;
+  passwordMinLength: number;
   passwordResetEnabled: boolean;
   registrationEnabled: boolean;
 };
@@ -861,6 +866,20 @@ export type UpdateEmailDeliverySettingsInput = {
   senderName?: string | null | undefined;
 };
 
+export type UpdateEmailPolicySettingsInput = {
+  clientMutationId?: string | null | undefined;
+  emailVerificationLifetimeHours: number;
+  expectedVersion: string;
+  loginMaxSends: number;
+  passwordResetLifetimeMinutes: number;
+  registrationLifetimeMinutes: number;
+  resendIntervalSeconds: number;
+  signInCodeLifetimeMinutes: number;
+  userInvitationLifetimeDays: number;
+  verificationMaxSends: number;
+  verificationSendWindowHours: number;
+};
+
 /**
  * Replace one template with an operator's own, or with `content: null` use
  * the built-in template again.
@@ -884,13 +903,17 @@ export type UpdateGroupInput = {
 };
 
 export type UpdateProtocolSettingsInput = {
+  accessTokenLifetimeSeconds: number;
+  authorizationCodeLifetimeSeconds: number;
   clientMutationId?: string | null | undefined;
   deviceAuthorizationPollingIntervalSeconds: number;
   deviceAuthorizationRequestLifetimeSeconds: number;
   dynamicRegistrationEnabled: boolean;
   expectedVersion: string;
+  idTokenLifetimeSeconds: number;
   oauthVersion: ClientOAuthVersion;
   pushedAuthorizationRequestLifetimeSeconds: number;
+  refreshTokenLifetimeDays: number;
   requirePushedAuthorizationRequests: boolean;
 };
 
@@ -914,6 +937,15 @@ export type UpdateScopeInput = {
   name?: string | null | undefined;
   names?: Array<ScopeDescriptionInput> | null | undefined;
   reason?: string;
+};
+
+export type UpdateSessionSettingsInput = {
+  clientMutationId?: string | null | undefined;
+  elevatedAuthenticationLifetimeMinutes: number;
+  expectedVersion: string;
+  loginLifetimeMinutes: number;
+  recentAuthenticationLifetimeMinutes: number;
+  sessionLifetimeHours: number;
 };
 
 export type UpdateUserInput = {
@@ -1297,14 +1329,21 @@ export type ConsoleUpdateEmailDeliverySettingsMutationVariables = Exact<{
 }>;
 
 
-export type ConsoleUpdateEmailDeliverySettingsMutation = { updateEmailDeliverySettings: { clientMutationId: string | null, settings: { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, identifierEnumerationAllowed: boolean, emailSignInEnabled: boolean, passwordResetEnabled: boolean, registrationEnabled: boolean, passwordMaxAgeDays: number, passwordHistoryCount: number, version: string, passwordMaxAgeDaysRange: { min: number, max: number }, passwordHistoryCountRange: { min: number, max: number }, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } }, email: { delivery: { enabled: boolean, host: string, port: number, security: SmtpSecurity, senderAddress: string, senderName: string | null, configured: boolean, version: string, portRange: { min: number, max: number }, authentication: { method: EmailAuthenticationMethod, username: string | null, passwordSet: boolean, tokenEndpoint: string | null, clientId: string | null, clientSecretSet: boolean, grant: Xoauth2Grant | null, refreshTokenSet: boolean, scope: string | null } }, templates: Array<{ kind: EmailTemplateKind, variables: Array<string>, previewScenarios: Array<EmailTemplatePreviewScenario>, customized: boolean, version: string, content: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> }, builtIn: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> } }> } } | null } };
+export type ConsoleUpdateEmailDeliverySettingsMutation = { updateEmailDeliverySettings: { clientMutationId: string | null, settings: { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, accessTokenLifetimeSeconds: number, idTokenLifetimeSeconds: number, refreshTokenLifetimeDays: number, authorizationCodeLifetimeSeconds: number, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number }, accessTokenLifetimeRange: { min: number, max: number }, idTokenLifetimeRange: { min: number, max: number }, refreshTokenLifetimeDaysRange: { min: number, max: number }, authorizationCodeLifetimeRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, identifierEnumerationAllowed: boolean, emailSignInEnabled: boolean, passwordResetEnabled: boolean, registrationEnabled: boolean, passwordMaxAgeDays: number, passwordHistoryCount: number, passwordMinLength: number, maxFailedAttempts: number, lockoutDurationMinutes: number, version: string, passwordMaxAgeDaysRange: { min: number, max: number }, passwordHistoryCountRange: { min: number, max: number }, passwordMinLengthRange: { min: number, max: number }, maxFailedAttemptsRange: { min: number, max: number }, lockoutDurationMinutesRange: { min: number, max: number }, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } }, session: { sessionLifetimeHours: number, elevatedAuthenticationLifetimeMinutes: number, recentAuthenticationLifetimeMinutes: number, loginLifetimeMinutes: number, version: string, sessionLifetimeHoursRange: { min: number, max: number }, elevatedAuthenticationLifetimeMinutesRange: { min: number, max: number }, recentAuthenticationLifetimeMinutesRange: { min: number, max: number }, loginLifetimeMinutesRange: { min: number, max: number } }, email: { delivery: { enabled: boolean, host: string, port: number, security: SmtpSecurity, senderAddress: string, senderName: string | null, configured: boolean, version: string, portRange: { min: number, max: number }, authentication: { method: EmailAuthenticationMethod, username: string | null, passwordSet: boolean, tokenEndpoint: string | null, clientId: string | null, clientSecretSet: boolean, grant: Xoauth2Grant | null, refreshTokenSet: boolean, scope: string | null } }, policy: { signInCodeLifetimeMinutes: number, passwordResetLifetimeMinutes: number, registrationLifetimeMinutes: number, emailVerificationLifetimeHours: number, userInvitationLifetimeDays: number, resendIntervalSeconds: number, loginMaxSends: number, verificationMaxSends: number, verificationSendWindowHours: number, version: string, signInCodeLifetimeMinutesRange: { min: number, max: number }, passwordResetLifetimeMinutesRange: { min: number, max: number }, registrationLifetimeMinutesRange: { min: number, max: number }, emailVerificationLifetimeHoursRange: { min: number, max: number }, userInvitationLifetimeDaysRange: { min: number, max: number }, resendIntervalSecondsRange: { min: number, max: number }, loginMaxSendsRange: { min: number, max: number }, verificationMaxSendsRange: { min: number, max: number }, verificationSendWindowHoursRange: { min: number, max: number } }, templates: Array<{ kind: EmailTemplateKind, variables: Array<string>, previewScenarios: Array<EmailTemplatePreviewScenario>, customized: boolean, version: string, content: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> }, builtIn: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> } }> } } | null } };
+
+export type ConsoleUpdateEmailPolicySettingsMutationVariables = Exact<{
+  input: UpdateEmailPolicySettingsInput;
+}>;
+
+
+export type ConsoleUpdateEmailPolicySettingsMutation = { updateEmailPolicySettings: { clientMutationId: string | null, settings: { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, accessTokenLifetimeSeconds: number, idTokenLifetimeSeconds: number, refreshTokenLifetimeDays: number, authorizationCodeLifetimeSeconds: number, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number }, accessTokenLifetimeRange: { min: number, max: number }, idTokenLifetimeRange: { min: number, max: number }, refreshTokenLifetimeDaysRange: { min: number, max: number }, authorizationCodeLifetimeRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, identifierEnumerationAllowed: boolean, emailSignInEnabled: boolean, passwordResetEnabled: boolean, registrationEnabled: boolean, passwordMaxAgeDays: number, passwordHistoryCount: number, passwordMinLength: number, maxFailedAttempts: number, lockoutDurationMinutes: number, version: string, passwordMaxAgeDaysRange: { min: number, max: number }, passwordHistoryCountRange: { min: number, max: number }, passwordMinLengthRange: { min: number, max: number }, maxFailedAttemptsRange: { min: number, max: number }, lockoutDurationMinutesRange: { min: number, max: number }, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } }, session: { sessionLifetimeHours: number, elevatedAuthenticationLifetimeMinutes: number, recentAuthenticationLifetimeMinutes: number, loginLifetimeMinutes: number, version: string, sessionLifetimeHoursRange: { min: number, max: number }, elevatedAuthenticationLifetimeMinutesRange: { min: number, max: number }, recentAuthenticationLifetimeMinutesRange: { min: number, max: number }, loginLifetimeMinutesRange: { min: number, max: number } }, email: { delivery: { enabled: boolean, host: string, port: number, security: SmtpSecurity, senderAddress: string, senderName: string | null, configured: boolean, version: string, portRange: { min: number, max: number }, authentication: { method: EmailAuthenticationMethod, username: string | null, passwordSet: boolean, tokenEndpoint: string | null, clientId: string | null, clientSecretSet: boolean, grant: Xoauth2Grant | null, refreshTokenSet: boolean, scope: string | null } }, policy: { signInCodeLifetimeMinutes: number, passwordResetLifetimeMinutes: number, registrationLifetimeMinutes: number, emailVerificationLifetimeHours: number, userInvitationLifetimeDays: number, resendIntervalSeconds: number, loginMaxSends: number, verificationMaxSends: number, verificationSendWindowHours: number, version: string, signInCodeLifetimeMinutesRange: { min: number, max: number }, passwordResetLifetimeMinutesRange: { min: number, max: number }, registrationLifetimeMinutesRange: { min: number, max: number }, emailVerificationLifetimeHoursRange: { min: number, max: number }, userInvitationLifetimeDaysRange: { min: number, max: number }, resendIntervalSecondsRange: { min: number, max: number }, loginMaxSendsRange: { min: number, max: number }, verificationMaxSendsRange: { min: number, max: number }, verificationSendWindowHoursRange: { min: number, max: number } }, templates: Array<{ kind: EmailTemplateKind, variables: Array<string>, previewScenarios: Array<EmailTemplatePreviewScenario>, customized: boolean, version: string, content: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> }, builtIn: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> } }> } } | null } };
 
 export type ConsoleUpdateEmailTemplateMutationVariables = Exact<{
   input: UpdateEmailTemplateInput;
 }>;
 
 
-export type ConsoleUpdateEmailTemplateMutation = { updateEmailTemplate: { clientMutationId: string | null, settings: { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, identifierEnumerationAllowed: boolean, emailSignInEnabled: boolean, passwordResetEnabled: boolean, registrationEnabled: boolean, passwordMaxAgeDays: number, passwordHistoryCount: number, version: string, passwordMaxAgeDaysRange: { min: number, max: number }, passwordHistoryCountRange: { min: number, max: number }, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } }, email: { delivery: { enabled: boolean, host: string, port: number, security: SmtpSecurity, senderAddress: string, senderName: string | null, configured: boolean, version: string, portRange: { min: number, max: number }, authentication: { method: EmailAuthenticationMethod, username: string | null, passwordSet: boolean, tokenEndpoint: string | null, clientId: string | null, clientSecretSet: boolean, grant: Xoauth2Grant | null, refreshTokenSet: boolean, scope: string | null } }, templates: Array<{ kind: EmailTemplateKind, variables: Array<string>, previewScenarios: Array<EmailTemplatePreviewScenario>, customized: boolean, version: string, content: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> }, builtIn: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> } }> } } | null } };
+export type ConsoleUpdateEmailTemplateMutation = { updateEmailTemplate: { clientMutationId: string | null, settings: { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, accessTokenLifetimeSeconds: number, idTokenLifetimeSeconds: number, refreshTokenLifetimeDays: number, authorizationCodeLifetimeSeconds: number, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number }, accessTokenLifetimeRange: { min: number, max: number }, idTokenLifetimeRange: { min: number, max: number }, refreshTokenLifetimeDaysRange: { min: number, max: number }, authorizationCodeLifetimeRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, identifierEnumerationAllowed: boolean, emailSignInEnabled: boolean, passwordResetEnabled: boolean, registrationEnabled: boolean, passwordMaxAgeDays: number, passwordHistoryCount: number, passwordMinLength: number, maxFailedAttempts: number, lockoutDurationMinutes: number, version: string, passwordMaxAgeDaysRange: { min: number, max: number }, passwordHistoryCountRange: { min: number, max: number }, passwordMinLengthRange: { min: number, max: number }, maxFailedAttemptsRange: { min: number, max: number }, lockoutDurationMinutesRange: { min: number, max: number }, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } }, session: { sessionLifetimeHours: number, elevatedAuthenticationLifetimeMinutes: number, recentAuthenticationLifetimeMinutes: number, loginLifetimeMinutes: number, version: string, sessionLifetimeHoursRange: { min: number, max: number }, elevatedAuthenticationLifetimeMinutesRange: { min: number, max: number }, recentAuthenticationLifetimeMinutesRange: { min: number, max: number }, loginLifetimeMinutesRange: { min: number, max: number } }, email: { delivery: { enabled: boolean, host: string, port: number, security: SmtpSecurity, senderAddress: string, senderName: string | null, configured: boolean, version: string, portRange: { min: number, max: number }, authentication: { method: EmailAuthenticationMethod, username: string | null, passwordSet: boolean, tokenEndpoint: string | null, clientId: string | null, clientSecretSet: boolean, grant: Xoauth2Grant | null, refreshTokenSet: boolean, scope: string | null } }, policy: { signInCodeLifetimeMinutes: number, passwordResetLifetimeMinutes: number, registrationLifetimeMinutes: number, emailVerificationLifetimeHours: number, userInvitationLifetimeDays: number, resendIntervalSeconds: number, loginMaxSends: number, verificationMaxSends: number, verificationSendWindowHours: number, version: string, signInCodeLifetimeMinutesRange: { min: number, max: number }, passwordResetLifetimeMinutesRange: { min: number, max: number }, registrationLifetimeMinutesRange: { min: number, max: number }, emailVerificationLifetimeHoursRange: { min: number, max: number }, userInvitationLifetimeDaysRange: { min: number, max: number }, resendIntervalSecondsRange: { min: number, max: number }, loginMaxSendsRange: { min: number, max: number }, verificationMaxSendsRange: { min: number, max: number }, verificationSendWindowHoursRange: { min: number, max: number } }, templates: Array<{ kind: EmailTemplateKind, variables: Array<string>, previewScenarios: Array<EmailTemplatePreviewScenario>, customized: boolean, version: string, content: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> }, builtIn: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> } }> } } | null } };
 
 export type ConsoleSendTestEmailMutationVariables = Exact<{
   input: SendTestEmailInput;
@@ -1371,28 +1410,35 @@ export type ConsoleSigningKeyAlgorithmsQueryVariables = Exact<{ [key: string]: n
 
 export type ConsoleSigningKeyAlgorithmsQuery = { signingKeyAlgorithms: Array<{ algorithm: SigningAlgorithm, keyAlgorithm: KeyAlgorithm, keyName: string }> };
 
-export type ConsoleInstanceSettingsFieldsFragment = { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, identifierEnumerationAllowed: boolean, emailSignInEnabled: boolean, passwordResetEnabled: boolean, registrationEnabled: boolean, passwordMaxAgeDays: number, passwordHistoryCount: number, version: string, passwordMaxAgeDaysRange: { min: number, max: number }, passwordHistoryCountRange: { min: number, max: number }, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } }, email: { delivery: { enabled: boolean, host: string, port: number, security: SmtpSecurity, senderAddress: string, senderName: string | null, configured: boolean, version: string, portRange: { min: number, max: number }, authentication: { method: EmailAuthenticationMethod, username: string | null, passwordSet: boolean, tokenEndpoint: string | null, clientId: string | null, clientSecretSet: boolean, grant: Xoauth2Grant | null, refreshTokenSet: boolean, scope: string | null } }, templates: Array<{ kind: EmailTemplateKind, variables: Array<string>, previewScenarios: Array<EmailTemplatePreviewScenario>, customized: boolean, version: string, content: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> }, builtIn: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> } }> } };
+export type ConsoleInstanceSettingsFieldsFragment = { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, accessTokenLifetimeSeconds: number, idTokenLifetimeSeconds: number, refreshTokenLifetimeDays: number, authorizationCodeLifetimeSeconds: number, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number }, accessTokenLifetimeRange: { min: number, max: number }, idTokenLifetimeRange: { min: number, max: number }, refreshTokenLifetimeDaysRange: { min: number, max: number }, authorizationCodeLifetimeRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, identifierEnumerationAllowed: boolean, emailSignInEnabled: boolean, passwordResetEnabled: boolean, registrationEnabled: boolean, passwordMaxAgeDays: number, passwordHistoryCount: number, passwordMinLength: number, maxFailedAttempts: number, lockoutDurationMinutes: number, version: string, passwordMaxAgeDaysRange: { min: number, max: number }, passwordHistoryCountRange: { min: number, max: number }, passwordMinLengthRange: { min: number, max: number }, maxFailedAttemptsRange: { min: number, max: number }, lockoutDurationMinutesRange: { min: number, max: number }, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } }, session: { sessionLifetimeHours: number, elevatedAuthenticationLifetimeMinutes: number, recentAuthenticationLifetimeMinutes: number, loginLifetimeMinutes: number, version: string, sessionLifetimeHoursRange: { min: number, max: number }, elevatedAuthenticationLifetimeMinutesRange: { min: number, max: number }, recentAuthenticationLifetimeMinutesRange: { min: number, max: number }, loginLifetimeMinutesRange: { min: number, max: number } }, email: { delivery: { enabled: boolean, host: string, port: number, security: SmtpSecurity, senderAddress: string, senderName: string | null, configured: boolean, version: string, portRange: { min: number, max: number }, authentication: { method: EmailAuthenticationMethod, username: string | null, passwordSet: boolean, tokenEndpoint: string | null, clientId: string | null, clientSecretSet: boolean, grant: Xoauth2Grant | null, refreshTokenSet: boolean, scope: string | null } }, policy: { signInCodeLifetimeMinutes: number, passwordResetLifetimeMinutes: number, registrationLifetimeMinutes: number, emailVerificationLifetimeHours: number, userInvitationLifetimeDays: number, resendIntervalSeconds: number, loginMaxSends: number, verificationMaxSends: number, verificationSendWindowHours: number, version: string, signInCodeLifetimeMinutesRange: { min: number, max: number }, passwordResetLifetimeMinutesRange: { min: number, max: number }, registrationLifetimeMinutesRange: { min: number, max: number }, emailVerificationLifetimeHoursRange: { min: number, max: number }, userInvitationLifetimeDaysRange: { min: number, max: number }, resendIntervalSecondsRange: { min: number, max: number }, loginMaxSendsRange: { min: number, max: number }, verificationMaxSendsRange: { min: number, max: number }, verificationSendWindowHoursRange: { min: number, max: number } }, templates: Array<{ kind: EmailTemplateKind, variables: Array<string>, previewScenarios: Array<EmailTemplatePreviewScenario>, customized: boolean, version: string, content: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> }, builtIn: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> } }> } };
 
 export type ConsoleLocalizedEmailTemplateFieldsFragment = { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> };
 
 export type ConsoleInstanceSettingsQueryVariables = Exact<{ [key: string]: never; }>;
 
 
-export type ConsoleInstanceSettingsQuery = { instanceSettings: { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, identifierEnumerationAllowed: boolean, emailSignInEnabled: boolean, passwordResetEnabled: boolean, registrationEnabled: boolean, passwordMaxAgeDays: number, passwordHistoryCount: number, version: string, passwordMaxAgeDaysRange: { min: number, max: number }, passwordHistoryCountRange: { min: number, max: number }, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } }, email: { delivery: { enabled: boolean, host: string, port: number, security: SmtpSecurity, senderAddress: string, senderName: string | null, configured: boolean, version: string, portRange: { min: number, max: number }, authentication: { method: EmailAuthenticationMethod, username: string | null, passwordSet: boolean, tokenEndpoint: string | null, clientId: string | null, clientSecretSet: boolean, grant: Xoauth2Grant | null, refreshTokenSet: boolean, scope: string | null } }, templates: Array<{ kind: EmailTemplateKind, variables: Array<string>, previewScenarios: Array<EmailTemplatePreviewScenario>, customized: boolean, version: string, content: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> }, builtIn: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> } }> } } | null };
+export type ConsoleInstanceSettingsQuery = { instanceSettings: { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, accessTokenLifetimeSeconds: number, idTokenLifetimeSeconds: number, refreshTokenLifetimeDays: number, authorizationCodeLifetimeSeconds: number, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number }, accessTokenLifetimeRange: { min: number, max: number }, idTokenLifetimeRange: { min: number, max: number }, refreshTokenLifetimeDaysRange: { min: number, max: number }, authorizationCodeLifetimeRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, identifierEnumerationAllowed: boolean, emailSignInEnabled: boolean, passwordResetEnabled: boolean, registrationEnabled: boolean, passwordMaxAgeDays: number, passwordHistoryCount: number, passwordMinLength: number, maxFailedAttempts: number, lockoutDurationMinutes: number, version: string, passwordMaxAgeDaysRange: { min: number, max: number }, passwordHistoryCountRange: { min: number, max: number }, passwordMinLengthRange: { min: number, max: number }, maxFailedAttemptsRange: { min: number, max: number }, lockoutDurationMinutesRange: { min: number, max: number }, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } }, session: { sessionLifetimeHours: number, elevatedAuthenticationLifetimeMinutes: number, recentAuthenticationLifetimeMinutes: number, loginLifetimeMinutes: number, version: string, sessionLifetimeHoursRange: { min: number, max: number }, elevatedAuthenticationLifetimeMinutesRange: { min: number, max: number }, recentAuthenticationLifetimeMinutesRange: { min: number, max: number }, loginLifetimeMinutesRange: { min: number, max: number } }, email: { delivery: { enabled: boolean, host: string, port: number, security: SmtpSecurity, senderAddress: string, senderName: string | null, configured: boolean, version: string, portRange: { min: number, max: number }, authentication: { method: EmailAuthenticationMethod, username: string | null, passwordSet: boolean, tokenEndpoint: string | null, clientId: string | null, clientSecretSet: boolean, grant: Xoauth2Grant | null, refreshTokenSet: boolean, scope: string | null } }, policy: { signInCodeLifetimeMinutes: number, passwordResetLifetimeMinutes: number, registrationLifetimeMinutes: number, emailVerificationLifetimeHours: number, userInvitationLifetimeDays: number, resendIntervalSeconds: number, loginMaxSends: number, verificationMaxSends: number, verificationSendWindowHours: number, version: string, signInCodeLifetimeMinutesRange: { min: number, max: number }, passwordResetLifetimeMinutesRange: { min: number, max: number }, registrationLifetimeMinutesRange: { min: number, max: number }, emailVerificationLifetimeHoursRange: { min: number, max: number }, userInvitationLifetimeDaysRange: { min: number, max: number }, resendIntervalSecondsRange: { min: number, max: number }, loginMaxSendsRange: { min: number, max: number }, verificationMaxSendsRange: { min: number, max: number }, verificationSendWindowHoursRange: { min: number, max: number } }, templates: Array<{ kind: EmailTemplateKind, variables: Array<string>, previewScenarios: Array<EmailTemplatePreviewScenario>, customized: boolean, version: string, content: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> }, builtIn: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> } }> } } | null };
 
 export type ConsoleUpdateProtocolSettingsMutationVariables = Exact<{
   input: UpdateProtocolSettingsInput;
 }>;
 
 
-export type ConsoleUpdateProtocolSettingsMutation = { updateProtocolSettings: { clientMutationId: string | null, settings: { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, identifierEnumerationAllowed: boolean, emailSignInEnabled: boolean, passwordResetEnabled: boolean, registrationEnabled: boolean, passwordMaxAgeDays: number, passwordHistoryCount: number, version: string, passwordMaxAgeDaysRange: { min: number, max: number }, passwordHistoryCountRange: { min: number, max: number }, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } }, email: { delivery: { enabled: boolean, host: string, port: number, security: SmtpSecurity, senderAddress: string, senderName: string | null, configured: boolean, version: string, portRange: { min: number, max: number }, authentication: { method: EmailAuthenticationMethod, username: string | null, passwordSet: boolean, tokenEndpoint: string | null, clientId: string | null, clientSecretSet: boolean, grant: Xoauth2Grant | null, refreshTokenSet: boolean, scope: string | null } }, templates: Array<{ kind: EmailTemplateKind, variables: Array<string>, previewScenarios: Array<EmailTemplatePreviewScenario>, customized: boolean, version: string, content: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> }, builtIn: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> } }> } } | null } };
+export type ConsoleUpdateProtocolSettingsMutation = { updateProtocolSettings: { clientMutationId: string | null, settings: { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, accessTokenLifetimeSeconds: number, idTokenLifetimeSeconds: number, refreshTokenLifetimeDays: number, authorizationCodeLifetimeSeconds: number, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number }, accessTokenLifetimeRange: { min: number, max: number }, idTokenLifetimeRange: { min: number, max: number }, refreshTokenLifetimeDaysRange: { min: number, max: number }, authorizationCodeLifetimeRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, identifierEnumerationAllowed: boolean, emailSignInEnabled: boolean, passwordResetEnabled: boolean, registrationEnabled: boolean, passwordMaxAgeDays: number, passwordHistoryCount: number, passwordMinLength: number, maxFailedAttempts: number, lockoutDurationMinutes: number, version: string, passwordMaxAgeDaysRange: { min: number, max: number }, passwordHistoryCountRange: { min: number, max: number }, passwordMinLengthRange: { min: number, max: number }, maxFailedAttemptsRange: { min: number, max: number }, lockoutDurationMinutesRange: { min: number, max: number }, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } }, session: { sessionLifetimeHours: number, elevatedAuthenticationLifetimeMinutes: number, recentAuthenticationLifetimeMinutes: number, loginLifetimeMinutes: number, version: string, sessionLifetimeHoursRange: { min: number, max: number }, elevatedAuthenticationLifetimeMinutesRange: { min: number, max: number }, recentAuthenticationLifetimeMinutesRange: { min: number, max: number }, loginLifetimeMinutesRange: { min: number, max: number } }, email: { delivery: { enabled: boolean, host: string, port: number, security: SmtpSecurity, senderAddress: string, senderName: string | null, configured: boolean, version: string, portRange: { min: number, max: number }, authentication: { method: EmailAuthenticationMethod, username: string | null, passwordSet: boolean, tokenEndpoint: string | null, clientId: string | null, clientSecretSet: boolean, grant: Xoauth2Grant | null, refreshTokenSet: boolean, scope: string | null } }, policy: { signInCodeLifetimeMinutes: number, passwordResetLifetimeMinutes: number, registrationLifetimeMinutes: number, emailVerificationLifetimeHours: number, userInvitationLifetimeDays: number, resendIntervalSeconds: number, loginMaxSends: number, verificationMaxSends: number, verificationSendWindowHours: number, version: string, signInCodeLifetimeMinutesRange: { min: number, max: number }, passwordResetLifetimeMinutesRange: { min: number, max: number }, registrationLifetimeMinutesRange: { min: number, max: number }, emailVerificationLifetimeHoursRange: { min: number, max: number }, userInvitationLifetimeDaysRange: { min: number, max: number }, resendIntervalSecondsRange: { min: number, max: number }, loginMaxSendsRange: { min: number, max: number }, verificationMaxSendsRange: { min: number, max: number }, verificationSendWindowHoursRange: { min: number, max: number } }, templates: Array<{ kind: EmailTemplateKind, variables: Array<string>, previewScenarios: Array<EmailTemplatePreviewScenario>, customized: boolean, version: string, content: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> }, builtIn: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> } }> } } | null } };
 
 export type ConsoleUpdateAuthenticationSettingsMutationVariables = Exact<{
   input: UpdateAuthenticationSettingsInput;
 }>;
 
 
-export type ConsoleUpdateAuthenticationSettingsMutation = { updateAuthenticationSettings: { clientMutationId: string | null, settings: { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, identifierEnumerationAllowed: boolean, emailSignInEnabled: boolean, passwordResetEnabled: boolean, registrationEnabled: boolean, passwordMaxAgeDays: number, passwordHistoryCount: number, version: string, passwordMaxAgeDaysRange: { min: number, max: number }, passwordHistoryCountRange: { min: number, max: number }, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } }, email: { delivery: { enabled: boolean, host: string, port: number, security: SmtpSecurity, senderAddress: string, senderName: string | null, configured: boolean, version: string, portRange: { min: number, max: number }, authentication: { method: EmailAuthenticationMethod, username: string | null, passwordSet: boolean, tokenEndpoint: string | null, clientId: string | null, clientSecretSet: boolean, grant: Xoauth2Grant | null, refreshTokenSet: boolean, scope: string | null } }, templates: Array<{ kind: EmailTemplateKind, variables: Array<string>, previewScenarios: Array<EmailTemplatePreviewScenario>, customized: boolean, version: string, content: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> }, builtIn: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> } }> } } | null } };
+export type ConsoleUpdateAuthenticationSettingsMutation = { updateAuthenticationSettings: { clientMutationId: string | null, settings: { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, accessTokenLifetimeSeconds: number, idTokenLifetimeSeconds: number, refreshTokenLifetimeDays: number, authorizationCodeLifetimeSeconds: number, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number }, accessTokenLifetimeRange: { min: number, max: number }, idTokenLifetimeRange: { min: number, max: number }, refreshTokenLifetimeDaysRange: { min: number, max: number }, authorizationCodeLifetimeRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, identifierEnumerationAllowed: boolean, emailSignInEnabled: boolean, passwordResetEnabled: boolean, registrationEnabled: boolean, passwordMaxAgeDays: number, passwordHistoryCount: number, passwordMinLength: number, maxFailedAttempts: number, lockoutDurationMinutes: number, version: string, passwordMaxAgeDaysRange: { min: number, max: number }, passwordHistoryCountRange: { min: number, max: number }, passwordMinLengthRange: { min: number, max: number }, maxFailedAttemptsRange: { min: number, max: number }, lockoutDurationMinutesRange: { min: number, max: number }, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } }, session: { sessionLifetimeHours: number, elevatedAuthenticationLifetimeMinutes: number, recentAuthenticationLifetimeMinutes: number, loginLifetimeMinutes: number, version: string, sessionLifetimeHoursRange: { min: number, max: number }, elevatedAuthenticationLifetimeMinutesRange: { min: number, max: number }, recentAuthenticationLifetimeMinutesRange: { min: number, max: number }, loginLifetimeMinutesRange: { min: number, max: number } }, email: { delivery: { enabled: boolean, host: string, port: number, security: SmtpSecurity, senderAddress: string, senderName: string | null, configured: boolean, version: string, portRange: { min: number, max: number }, authentication: { method: EmailAuthenticationMethod, username: string | null, passwordSet: boolean, tokenEndpoint: string | null, clientId: string | null, clientSecretSet: boolean, grant: Xoauth2Grant | null, refreshTokenSet: boolean, scope: string | null } }, policy: { signInCodeLifetimeMinutes: number, passwordResetLifetimeMinutes: number, registrationLifetimeMinutes: number, emailVerificationLifetimeHours: number, userInvitationLifetimeDays: number, resendIntervalSeconds: number, loginMaxSends: number, verificationMaxSends: number, verificationSendWindowHours: number, version: string, signInCodeLifetimeMinutesRange: { min: number, max: number }, passwordResetLifetimeMinutesRange: { min: number, max: number }, registrationLifetimeMinutesRange: { min: number, max: number }, emailVerificationLifetimeHoursRange: { min: number, max: number }, userInvitationLifetimeDaysRange: { min: number, max: number }, resendIntervalSecondsRange: { min: number, max: number }, loginMaxSendsRange: { min: number, max: number }, verificationMaxSendsRange: { min: number, max: number }, verificationSendWindowHoursRange: { min: number, max: number } }, templates: Array<{ kind: EmailTemplateKind, variables: Array<string>, previewScenarios: Array<EmailTemplatePreviewScenario>, customized: boolean, version: string, content: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> }, builtIn: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> } }> } } | null } };
+
+export type ConsoleUpdateSessionSettingsMutationVariables = Exact<{
+  input: UpdateSessionSettingsInput;
+}>;
+
+
+export type ConsoleUpdateSessionSettingsMutation = { updateSessionSettings: { clientMutationId: string | null, settings: { general: { issuer: string | null, loginUrl: string | null, consoleUrl: string | null, initializedAt: string | null }, protocol: { oauthVersion: ClientOAuthVersion, requirePushedAuthorizationRequests: boolean, pushedAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationRequestLifetimeSeconds: number, deviceAuthorizationPollingIntervalSeconds: number, dynamicRegistrationEnabled: boolean, accessTokenLifetimeSeconds: number, idTokenLifetimeSeconds: number, refreshTokenLifetimeDays: number, authorizationCodeLifetimeSeconds: number, version: string, pushedAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationRequestLifetimeRange: { min: number, max: number }, deviceAuthorizationPollingIntervalRange: { min: number, max: number }, accessTokenLifetimeRange: { min: number, max: number }, idTokenLifetimeRange: { min: number, max: number }, refreshTokenLifetimeDaysRange: { min: number, max: number }, authorizationCodeLifetimeRange: { min: number, max: number } }, authentication: { breachedPasswordCheckEnabled: boolean, identifierEnumerationAllowed: boolean, emailSignInEnabled: boolean, passwordResetEnabled: boolean, registrationEnabled: boolean, passwordMaxAgeDays: number, passwordHistoryCount: number, passwordMinLength: number, maxFailedAttempts: number, lockoutDurationMinutes: number, version: string, passwordMaxAgeDaysRange: { min: number, max: number }, passwordHistoryCountRange: { min: number, max: number }, passwordMinLengthRange: { min: number, max: number }, maxFailedAttemptsRange: { min: number, max: number }, lockoutDurationMinutesRange: { min: number, max: number }, passwordHashing: { timeCost: number, memoryCostKib: number, parallelism: number, timeCostRange: { min: number, max: number }, memoryCostKibRange: { min: number, max: number }, parallelismRange: { min: number, max: number } } }, session: { sessionLifetimeHours: number, elevatedAuthenticationLifetimeMinutes: number, recentAuthenticationLifetimeMinutes: number, loginLifetimeMinutes: number, version: string, sessionLifetimeHoursRange: { min: number, max: number }, elevatedAuthenticationLifetimeMinutesRange: { min: number, max: number }, recentAuthenticationLifetimeMinutesRange: { min: number, max: number }, loginLifetimeMinutesRange: { min: number, max: number } }, email: { delivery: { enabled: boolean, host: string, port: number, security: SmtpSecurity, senderAddress: string, senderName: string | null, configured: boolean, version: string, portRange: { min: number, max: number }, authentication: { method: EmailAuthenticationMethod, username: string | null, passwordSet: boolean, tokenEndpoint: string | null, clientId: string | null, clientSecretSet: boolean, grant: Xoauth2Grant | null, refreshTokenSet: boolean, scope: string | null } }, policy: { signInCodeLifetimeMinutes: number, passwordResetLifetimeMinutes: number, registrationLifetimeMinutes: number, emailVerificationLifetimeHours: number, userInvitationLifetimeDays: number, resendIntervalSeconds: number, loginMaxSends: number, verificationMaxSends: number, verificationSendWindowHours: number, version: string, signInCodeLifetimeMinutesRange: { min: number, max: number }, passwordResetLifetimeMinutesRange: { min: number, max: number }, registrationLifetimeMinutesRange: { min: number, max: number }, emailVerificationLifetimeHoursRange: { min: number, max: number }, userInvitationLifetimeDaysRange: { min: number, max: number }, resendIntervalSecondsRange: { min: number, max: number }, loginMaxSendsRange: { min: number, max: number }, verificationMaxSendsRange: { min: number, max: number }, verificationSendWindowHoursRange: { min: number, max: number } }, templates: Array<{ kind: EmailTemplateKind, variables: Array<string>, previewScenarios: Array<EmailTemplatePreviewScenario>, customized: boolean, version: string, content: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> }, builtIn: { default: { subject: string, html: string }, translations: Array<{ locale: string, content: { subject: string, html: string } }> } }> } } | null } };
 
 export type ConsoleUserRolesQueryVariables = Exact<{
   userId: string | number;
@@ -2003,6 +2049,26 @@ export const ConsoleInstanceSettingsFieldsFragmentDoc = new TypedDocumentString(
       max
     }
     dynamicRegistrationEnabled
+    accessTokenLifetimeSeconds
+    accessTokenLifetimeRange {
+      min
+      max
+    }
+    idTokenLifetimeSeconds
+    idTokenLifetimeRange {
+      min
+      max
+    }
+    refreshTokenLifetimeDays
+    refreshTokenLifetimeDaysRange {
+      min
+      max
+    }
+    authorizationCodeLifetimeSeconds
+    authorizationCodeLifetimeRange {
+      min
+      max
+    }
     version
   }
   authentication {
@@ -2018,6 +2084,21 @@ export const ConsoleInstanceSettingsFieldsFragmentDoc = new TypedDocumentString(
     }
     passwordHistoryCount
     passwordHistoryCountRange {
+      min
+      max
+    }
+    passwordMinLength
+    passwordMinLengthRange {
+      min
+      max
+    }
+    maxFailedAttempts
+    maxFailedAttemptsRange {
+      min
+      max
+    }
+    lockoutDurationMinutes
+    lockoutDurationMinutesRange {
       min
       max
     }
@@ -2037,6 +2118,29 @@ export const ConsoleInstanceSettingsFieldsFragmentDoc = new TypedDocumentString(
         min
         max
       }
+    }
+    version
+  }
+  session {
+    sessionLifetimeHours
+    sessionLifetimeHoursRange {
+      min
+      max
+    }
+    elevatedAuthenticationLifetimeMinutes
+    elevatedAuthenticationLifetimeMinutesRange {
+      min
+      max
+    }
+    recentAuthenticationLifetimeMinutes
+    recentAuthenticationLifetimeMinutesRange {
+      min
+      max
+    }
+    loginLifetimeMinutes
+    loginLifetimeMinutesRange {
+      min
+      max
     }
     version
   }
@@ -2064,6 +2168,54 @@ export const ConsoleInstanceSettingsFieldsFragmentDoc = new TypedDocumentString(
         scope
       }
       configured
+      version
+    }
+    policy {
+      signInCodeLifetimeMinutes
+      signInCodeLifetimeMinutesRange {
+        min
+        max
+      }
+      passwordResetLifetimeMinutes
+      passwordResetLifetimeMinutesRange {
+        min
+        max
+      }
+      registrationLifetimeMinutes
+      registrationLifetimeMinutesRange {
+        min
+        max
+      }
+      emailVerificationLifetimeHours
+      emailVerificationLifetimeHoursRange {
+        min
+        max
+      }
+      userInvitationLifetimeDays
+      userInvitationLifetimeDaysRange {
+        min
+        max
+      }
+      resendIntervalSeconds
+      resendIntervalSecondsRange {
+        min
+        max
+      }
+      loginMaxSends
+      loginMaxSendsRange {
+        min
+        max
+      }
+      verificationMaxSends
+      verificationMaxSendsRange {
+        min
+        max
+      }
+      verificationSendWindowHours
+      verificationSendWindowHoursRange {
+        min
+        max
+      }
       version
     }
     templates {
@@ -2931,6 +3083,26 @@ export const ConsoleUpdateEmailDeliverySettingsDocument = new TypedDocumentStrin
       max
     }
     dynamicRegistrationEnabled
+    accessTokenLifetimeSeconds
+    accessTokenLifetimeRange {
+      min
+      max
+    }
+    idTokenLifetimeSeconds
+    idTokenLifetimeRange {
+      min
+      max
+    }
+    refreshTokenLifetimeDays
+    refreshTokenLifetimeDaysRange {
+      min
+      max
+    }
+    authorizationCodeLifetimeSeconds
+    authorizationCodeLifetimeRange {
+      min
+      max
+    }
     version
   }
   authentication {
@@ -2946,6 +3118,21 @@ export const ConsoleUpdateEmailDeliverySettingsDocument = new TypedDocumentStrin
     }
     passwordHistoryCount
     passwordHistoryCountRange {
+      min
+      max
+    }
+    passwordMinLength
+    passwordMinLengthRange {
+      min
+      max
+    }
+    maxFailedAttempts
+    maxFailedAttemptsRange {
+      min
+      max
+    }
+    lockoutDurationMinutes
+    lockoutDurationMinutesRange {
       min
       max
     }
@@ -2965,6 +3152,29 @@ export const ConsoleUpdateEmailDeliverySettingsDocument = new TypedDocumentStrin
         min
         max
       }
+    }
+    version
+  }
+  session {
+    sessionLifetimeHours
+    sessionLifetimeHoursRange {
+      min
+      max
+    }
+    elevatedAuthenticationLifetimeMinutes
+    elevatedAuthenticationLifetimeMinutesRange {
+      min
+      max
+    }
+    recentAuthenticationLifetimeMinutes
+    recentAuthenticationLifetimeMinutesRange {
+      min
+      max
+    }
+    loginLifetimeMinutes
+    loginLifetimeMinutesRange {
+      min
+      max
     }
     version
   }
@@ -2992,6 +3202,54 @@ export const ConsoleUpdateEmailDeliverySettingsDocument = new TypedDocumentStrin
         scope
       }
       configured
+      version
+    }
+    policy {
+      signInCodeLifetimeMinutes
+      signInCodeLifetimeMinutesRange {
+        min
+        max
+      }
+      passwordResetLifetimeMinutes
+      passwordResetLifetimeMinutesRange {
+        min
+        max
+      }
+      registrationLifetimeMinutes
+      registrationLifetimeMinutesRange {
+        min
+        max
+      }
+      emailVerificationLifetimeHours
+      emailVerificationLifetimeHoursRange {
+        min
+        max
+      }
+      userInvitationLifetimeDays
+      userInvitationLifetimeDaysRange {
+        min
+        max
+      }
+      resendIntervalSeconds
+      resendIntervalSecondsRange {
+        min
+        max
+      }
+      loginMaxSends
+      loginMaxSendsRange {
+        min
+        max
+      }
+      verificationMaxSends
+      verificationMaxSendsRange {
+        min
+        max
+      }
+      verificationSendWindowHours
+      verificationSendWindowHoursRange {
+        min
+        max
+      }
       version
     }
     templates {
@@ -3022,6 +3280,238 @@ fragment ConsoleLocalizedEmailTemplateFields on LocalizedEmailTemplate {
     }
   }
 }`) as unknown as TypedDocumentString<ConsoleUpdateEmailDeliverySettingsMutation, ConsoleUpdateEmailDeliverySettingsMutationVariables>;
+export const ConsoleUpdateEmailPolicySettingsDocument = new TypedDocumentString(`
+    mutation ConsoleUpdateEmailPolicySettings($input: UpdateEmailPolicySettingsInput!) {
+  updateEmailPolicySettings(input: $input) {
+    clientMutationId
+    settings {
+      ...ConsoleInstanceSettingsFields
+    }
+  }
+}
+    fragment ConsoleInstanceSettingsFields on InstanceSettings {
+  general {
+    issuer
+    loginUrl
+    consoleUrl
+    initializedAt
+  }
+  protocol {
+    oauthVersion
+    requirePushedAuthorizationRequests
+    pushedAuthorizationRequestLifetimeSeconds
+    pushedAuthorizationRequestLifetimeRange {
+      min
+      max
+    }
+    deviceAuthorizationRequestLifetimeSeconds
+    deviceAuthorizationRequestLifetimeRange {
+      min
+      max
+    }
+    deviceAuthorizationPollingIntervalSeconds
+    deviceAuthorizationPollingIntervalRange {
+      min
+      max
+    }
+    dynamicRegistrationEnabled
+    accessTokenLifetimeSeconds
+    accessTokenLifetimeRange {
+      min
+      max
+    }
+    idTokenLifetimeSeconds
+    idTokenLifetimeRange {
+      min
+      max
+    }
+    refreshTokenLifetimeDays
+    refreshTokenLifetimeDaysRange {
+      min
+      max
+    }
+    authorizationCodeLifetimeSeconds
+    authorizationCodeLifetimeRange {
+      min
+      max
+    }
+    version
+  }
+  authentication {
+    breachedPasswordCheckEnabled
+    identifierEnumerationAllowed
+    emailSignInEnabled
+    passwordResetEnabled
+    registrationEnabled
+    passwordMaxAgeDays
+    passwordMaxAgeDaysRange {
+      min
+      max
+    }
+    passwordHistoryCount
+    passwordHistoryCountRange {
+      min
+      max
+    }
+    passwordMinLength
+    passwordMinLengthRange {
+      min
+      max
+    }
+    maxFailedAttempts
+    maxFailedAttemptsRange {
+      min
+      max
+    }
+    lockoutDurationMinutes
+    lockoutDurationMinutesRange {
+      min
+      max
+    }
+    passwordHashing {
+      timeCost
+      timeCostRange {
+        min
+        max
+      }
+      memoryCostKib
+      memoryCostKibRange {
+        min
+        max
+      }
+      parallelism
+      parallelismRange {
+        min
+        max
+      }
+    }
+    version
+  }
+  session {
+    sessionLifetimeHours
+    sessionLifetimeHoursRange {
+      min
+      max
+    }
+    elevatedAuthenticationLifetimeMinutes
+    elevatedAuthenticationLifetimeMinutesRange {
+      min
+      max
+    }
+    recentAuthenticationLifetimeMinutes
+    recentAuthenticationLifetimeMinutesRange {
+      min
+      max
+    }
+    loginLifetimeMinutes
+    loginLifetimeMinutesRange {
+      min
+      max
+    }
+    version
+  }
+  email {
+    delivery {
+      enabled
+      host
+      port
+      portRange {
+        min
+        max
+      }
+      security
+      senderAddress
+      senderName
+      authentication {
+        method
+        username
+        passwordSet
+        tokenEndpoint
+        clientId
+        clientSecretSet
+        grant
+        refreshTokenSet
+        scope
+      }
+      configured
+      version
+    }
+    policy {
+      signInCodeLifetimeMinutes
+      signInCodeLifetimeMinutesRange {
+        min
+        max
+      }
+      passwordResetLifetimeMinutes
+      passwordResetLifetimeMinutesRange {
+        min
+        max
+      }
+      registrationLifetimeMinutes
+      registrationLifetimeMinutesRange {
+        min
+        max
+      }
+      emailVerificationLifetimeHours
+      emailVerificationLifetimeHoursRange {
+        min
+        max
+      }
+      userInvitationLifetimeDays
+      userInvitationLifetimeDaysRange {
+        min
+        max
+      }
+      resendIntervalSeconds
+      resendIntervalSecondsRange {
+        min
+        max
+      }
+      loginMaxSends
+      loginMaxSendsRange {
+        min
+        max
+      }
+      verificationMaxSends
+      verificationMaxSendsRange {
+        min
+        max
+      }
+      verificationSendWindowHours
+      verificationSendWindowHoursRange {
+        min
+        max
+      }
+      version
+    }
+    templates {
+      kind
+      variables
+      previewScenarios
+      customized
+      version
+      content {
+        ...ConsoleLocalizedEmailTemplateFields
+      }
+      builtIn {
+        ...ConsoleLocalizedEmailTemplateFields
+      }
+    }
+  }
+}
+fragment ConsoleLocalizedEmailTemplateFields on LocalizedEmailTemplate {
+  default {
+    subject
+    html
+  }
+  translations {
+    locale
+    content {
+      subject
+      html
+    }
+  }
+}`) as unknown as TypedDocumentString<ConsoleUpdateEmailPolicySettingsMutation, ConsoleUpdateEmailPolicySettingsMutationVariables>;
 export const ConsoleUpdateEmailTemplateDocument = new TypedDocumentString(`
     mutation ConsoleUpdateEmailTemplate($input: UpdateEmailTemplateInput!) {
   updateEmailTemplate(input: $input) {
@@ -3057,6 +3547,26 @@ export const ConsoleUpdateEmailTemplateDocument = new TypedDocumentString(`
       max
     }
     dynamicRegistrationEnabled
+    accessTokenLifetimeSeconds
+    accessTokenLifetimeRange {
+      min
+      max
+    }
+    idTokenLifetimeSeconds
+    idTokenLifetimeRange {
+      min
+      max
+    }
+    refreshTokenLifetimeDays
+    refreshTokenLifetimeDaysRange {
+      min
+      max
+    }
+    authorizationCodeLifetimeSeconds
+    authorizationCodeLifetimeRange {
+      min
+      max
+    }
     version
   }
   authentication {
@@ -3072,6 +3582,21 @@ export const ConsoleUpdateEmailTemplateDocument = new TypedDocumentString(`
     }
     passwordHistoryCount
     passwordHistoryCountRange {
+      min
+      max
+    }
+    passwordMinLength
+    passwordMinLengthRange {
+      min
+      max
+    }
+    maxFailedAttempts
+    maxFailedAttemptsRange {
+      min
+      max
+    }
+    lockoutDurationMinutes
+    lockoutDurationMinutesRange {
       min
       max
     }
@@ -3091,6 +3616,29 @@ export const ConsoleUpdateEmailTemplateDocument = new TypedDocumentString(`
         min
         max
       }
+    }
+    version
+  }
+  session {
+    sessionLifetimeHours
+    sessionLifetimeHoursRange {
+      min
+      max
+    }
+    elevatedAuthenticationLifetimeMinutes
+    elevatedAuthenticationLifetimeMinutesRange {
+      min
+      max
+    }
+    recentAuthenticationLifetimeMinutes
+    recentAuthenticationLifetimeMinutesRange {
+      min
+      max
+    }
+    loginLifetimeMinutes
+    loginLifetimeMinutesRange {
+      min
+      max
     }
     version
   }
@@ -3118,6 +3666,54 @@ export const ConsoleUpdateEmailTemplateDocument = new TypedDocumentString(`
         scope
       }
       configured
+      version
+    }
+    policy {
+      signInCodeLifetimeMinutes
+      signInCodeLifetimeMinutesRange {
+        min
+        max
+      }
+      passwordResetLifetimeMinutes
+      passwordResetLifetimeMinutesRange {
+        min
+        max
+      }
+      registrationLifetimeMinutes
+      registrationLifetimeMinutesRange {
+        min
+        max
+      }
+      emailVerificationLifetimeHours
+      emailVerificationLifetimeHoursRange {
+        min
+        max
+      }
+      userInvitationLifetimeDays
+      userInvitationLifetimeDaysRange {
+        min
+        max
+      }
+      resendIntervalSeconds
+      resendIntervalSecondsRange {
+        min
+        max
+      }
+      loginMaxSends
+      loginMaxSendsRange {
+        min
+        max
+      }
+      verificationMaxSends
+      verificationMaxSendsRange {
+        min
+        max
+      }
+      verificationSendWindowHours
+      verificationSendWindowHoursRange {
+        min
+        max
+      }
       version
     }
     templates {
@@ -3353,6 +3949,26 @@ export const ConsoleInstanceSettingsDocument = new TypedDocumentString(`
       max
     }
     dynamicRegistrationEnabled
+    accessTokenLifetimeSeconds
+    accessTokenLifetimeRange {
+      min
+      max
+    }
+    idTokenLifetimeSeconds
+    idTokenLifetimeRange {
+      min
+      max
+    }
+    refreshTokenLifetimeDays
+    refreshTokenLifetimeDaysRange {
+      min
+      max
+    }
+    authorizationCodeLifetimeSeconds
+    authorizationCodeLifetimeRange {
+      min
+      max
+    }
     version
   }
   authentication {
@@ -3368,6 +3984,21 @@ export const ConsoleInstanceSettingsDocument = new TypedDocumentString(`
     }
     passwordHistoryCount
     passwordHistoryCountRange {
+      min
+      max
+    }
+    passwordMinLength
+    passwordMinLengthRange {
+      min
+      max
+    }
+    maxFailedAttempts
+    maxFailedAttemptsRange {
+      min
+      max
+    }
+    lockoutDurationMinutes
+    lockoutDurationMinutesRange {
       min
       max
     }
@@ -3387,6 +4018,29 @@ export const ConsoleInstanceSettingsDocument = new TypedDocumentString(`
         min
         max
       }
+    }
+    version
+  }
+  session {
+    sessionLifetimeHours
+    sessionLifetimeHoursRange {
+      min
+      max
+    }
+    elevatedAuthenticationLifetimeMinutes
+    elevatedAuthenticationLifetimeMinutesRange {
+      min
+      max
+    }
+    recentAuthenticationLifetimeMinutes
+    recentAuthenticationLifetimeMinutesRange {
+      min
+      max
+    }
+    loginLifetimeMinutes
+    loginLifetimeMinutesRange {
+      min
+      max
     }
     version
   }
@@ -3414,6 +4068,54 @@ export const ConsoleInstanceSettingsDocument = new TypedDocumentString(`
         scope
       }
       configured
+      version
+    }
+    policy {
+      signInCodeLifetimeMinutes
+      signInCodeLifetimeMinutesRange {
+        min
+        max
+      }
+      passwordResetLifetimeMinutes
+      passwordResetLifetimeMinutesRange {
+        min
+        max
+      }
+      registrationLifetimeMinutes
+      registrationLifetimeMinutesRange {
+        min
+        max
+      }
+      emailVerificationLifetimeHours
+      emailVerificationLifetimeHoursRange {
+        min
+        max
+      }
+      userInvitationLifetimeDays
+      userInvitationLifetimeDaysRange {
+        min
+        max
+      }
+      resendIntervalSeconds
+      resendIntervalSecondsRange {
+        min
+        max
+      }
+      loginMaxSends
+      loginMaxSendsRange {
+        min
+        max
+      }
+      verificationMaxSends
+      verificationMaxSendsRange {
+        min
+        max
+      }
+      verificationSendWindowHours
+      verificationSendWindowHoursRange {
+        min
+        max
+      }
       version
     }
     templates {
@@ -3479,6 +4181,26 @@ export const ConsoleUpdateProtocolSettingsDocument = new TypedDocumentString(`
       max
     }
     dynamicRegistrationEnabled
+    accessTokenLifetimeSeconds
+    accessTokenLifetimeRange {
+      min
+      max
+    }
+    idTokenLifetimeSeconds
+    idTokenLifetimeRange {
+      min
+      max
+    }
+    refreshTokenLifetimeDays
+    refreshTokenLifetimeDaysRange {
+      min
+      max
+    }
+    authorizationCodeLifetimeSeconds
+    authorizationCodeLifetimeRange {
+      min
+      max
+    }
     version
   }
   authentication {
@@ -3494,6 +4216,21 @@ export const ConsoleUpdateProtocolSettingsDocument = new TypedDocumentString(`
     }
     passwordHistoryCount
     passwordHistoryCountRange {
+      min
+      max
+    }
+    passwordMinLength
+    passwordMinLengthRange {
+      min
+      max
+    }
+    maxFailedAttempts
+    maxFailedAttemptsRange {
+      min
+      max
+    }
+    lockoutDurationMinutes
+    lockoutDurationMinutesRange {
       min
       max
     }
@@ -3513,6 +4250,29 @@ export const ConsoleUpdateProtocolSettingsDocument = new TypedDocumentString(`
         min
         max
       }
+    }
+    version
+  }
+  session {
+    sessionLifetimeHours
+    sessionLifetimeHoursRange {
+      min
+      max
+    }
+    elevatedAuthenticationLifetimeMinutes
+    elevatedAuthenticationLifetimeMinutesRange {
+      min
+      max
+    }
+    recentAuthenticationLifetimeMinutes
+    recentAuthenticationLifetimeMinutesRange {
+      min
+      max
+    }
+    loginLifetimeMinutes
+    loginLifetimeMinutesRange {
+      min
+      max
     }
     version
   }
@@ -3540,6 +4300,54 @@ export const ConsoleUpdateProtocolSettingsDocument = new TypedDocumentString(`
         scope
       }
       configured
+      version
+    }
+    policy {
+      signInCodeLifetimeMinutes
+      signInCodeLifetimeMinutesRange {
+        min
+        max
+      }
+      passwordResetLifetimeMinutes
+      passwordResetLifetimeMinutesRange {
+        min
+        max
+      }
+      registrationLifetimeMinutes
+      registrationLifetimeMinutesRange {
+        min
+        max
+      }
+      emailVerificationLifetimeHours
+      emailVerificationLifetimeHoursRange {
+        min
+        max
+      }
+      userInvitationLifetimeDays
+      userInvitationLifetimeDaysRange {
+        min
+        max
+      }
+      resendIntervalSeconds
+      resendIntervalSecondsRange {
+        min
+        max
+      }
+      loginMaxSends
+      loginMaxSendsRange {
+        min
+        max
+      }
+      verificationMaxSends
+      verificationMaxSendsRange {
+        min
+        max
+      }
+      verificationSendWindowHours
+      verificationSendWindowHoursRange {
+        min
+        max
+      }
       version
     }
     templates {
@@ -3605,6 +4413,26 @@ export const ConsoleUpdateAuthenticationSettingsDocument = new TypedDocumentStri
       max
     }
     dynamicRegistrationEnabled
+    accessTokenLifetimeSeconds
+    accessTokenLifetimeRange {
+      min
+      max
+    }
+    idTokenLifetimeSeconds
+    idTokenLifetimeRange {
+      min
+      max
+    }
+    refreshTokenLifetimeDays
+    refreshTokenLifetimeDaysRange {
+      min
+      max
+    }
+    authorizationCodeLifetimeSeconds
+    authorizationCodeLifetimeRange {
+      min
+      max
+    }
     version
   }
   authentication {
@@ -3620,6 +4448,21 @@ export const ConsoleUpdateAuthenticationSettingsDocument = new TypedDocumentStri
     }
     passwordHistoryCount
     passwordHistoryCountRange {
+      min
+      max
+    }
+    passwordMinLength
+    passwordMinLengthRange {
+      min
+      max
+    }
+    maxFailedAttempts
+    maxFailedAttemptsRange {
+      min
+      max
+    }
+    lockoutDurationMinutes
+    lockoutDurationMinutesRange {
       min
       max
     }
@@ -3639,6 +4482,29 @@ export const ConsoleUpdateAuthenticationSettingsDocument = new TypedDocumentStri
         min
         max
       }
+    }
+    version
+  }
+  session {
+    sessionLifetimeHours
+    sessionLifetimeHoursRange {
+      min
+      max
+    }
+    elevatedAuthenticationLifetimeMinutes
+    elevatedAuthenticationLifetimeMinutesRange {
+      min
+      max
+    }
+    recentAuthenticationLifetimeMinutes
+    recentAuthenticationLifetimeMinutesRange {
+      min
+      max
+    }
+    loginLifetimeMinutes
+    loginLifetimeMinutesRange {
+      min
+      max
     }
     version
   }
@@ -3666,6 +4532,54 @@ export const ConsoleUpdateAuthenticationSettingsDocument = new TypedDocumentStri
         scope
       }
       configured
+      version
+    }
+    policy {
+      signInCodeLifetimeMinutes
+      signInCodeLifetimeMinutesRange {
+        min
+        max
+      }
+      passwordResetLifetimeMinutes
+      passwordResetLifetimeMinutesRange {
+        min
+        max
+      }
+      registrationLifetimeMinutes
+      registrationLifetimeMinutesRange {
+        min
+        max
+      }
+      emailVerificationLifetimeHours
+      emailVerificationLifetimeHoursRange {
+        min
+        max
+      }
+      userInvitationLifetimeDays
+      userInvitationLifetimeDaysRange {
+        min
+        max
+      }
+      resendIntervalSeconds
+      resendIntervalSecondsRange {
+        min
+        max
+      }
+      loginMaxSends
+      loginMaxSendsRange {
+        min
+        max
+      }
+      verificationMaxSends
+      verificationMaxSendsRange {
+        min
+        max
+      }
+      verificationSendWindowHours
+      verificationSendWindowHoursRange {
+        min
+        max
+      }
       version
     }
     templates {
@@ -3696,6 +4610,238 @@ fragment ConsoleLocalizedEmailTemplateFields on LocalizedEmailTemplate {
     }
   }
 }`) as unknown as TypedDocumentString<ConsoleUpdateAuthenticationSettingsMutation, ConsoleUpdateAuthenticationSettingsMutationVariables>;
+export const ConsoleUpdateSessionSettingsDocument = new TypedDocumentString(`
+    mutation ConsoleUpdateSessionSettings($input: UpdateSessionSettingsInput!) {
+  updateSessionSettings(input: $input) {
+    clientMutationId
+    settings {
+      ...ConsoleInstanceSettingsFields
+    }
+  }
+}
+    fragment ConsoleInstanceSettingsFields on InstanceSettings {
+  general {
+    issuer
+    loginUrl
+    consoleUrl
+    initializedAt
+  }
+  protocol {
+    oauthVersion
+    requirePushedAuthorizationRequests
+    pushedAuthorizationRequestLifetimeSeconds
+    pushedAuthorizationRequestLifetimeRange {
+      min
+      max
+    }
+    deviceAuthorizationRequestLifetimeSeconds
+    deviceAuthorizationRequestLifetimeRange {
+      min
+      max
+    }
+    deviceAuthorizationPollingIntervalSeconds
+    deviceAuthorizationPollingIntervalRange {
+      min
+      max
+    }
+    dynamicRegistrationEnabled
+    accessTokenLifetimeSeconds
+    accessTokenLifetimeRange {
+      min
+      max
+    }
+    idTokenLifetimeSeconds
+    idTokenLifetimeRange {
+      min
+      max
+    }
+    refreshTokenLifetimeDays
+    refreshTokenLifetimeDaysRange {
+      min
+      max
+    }
+    authorizationCodeLifetimeSeconds
+    authorizationCodeLifetimeRange {
+      min
+      max
+    }
+    version
+  }
+  authentication {
+    breachedPasswordCheckEnabled
+    identifierEnumerationAllowed
+    emailSignInEnabled
+    passwordResetEnabled
+    registrationEnabled
+    passwordMaxAgeDays
+    passwordMaxAgeDaysRange {
+      min
+      max
+    }
+    passwordHistoryCount
+    passwordHistoryCountRange {
+      min
+      max
+    }
+    passwordMinLength
+    passwordMinLengthRange {
+      min
+      max
+    }
+    maxFailedAttempts
+    maxFailedAttemptsRange {
+      min
+      max
+    }
+    lockoutDurationMinutes
+    lockoutDurationMinutesRange {
+      min
+      max
+    }
+    passwordHashing {
+      timeCost
+      timeCostRange {
+        min
+        max
+      }
+      memoryCostKib
+      memoryCostKibRange {
+        min
+        max
+      }
+      parallelism
+      parallelismRange {
+        min
+        max
+      }
+    }
+    version
+  }
+  session {
+    sessionLifetimeHours
+    sessionLifetimeHoursRange {
+      min
+      max
+    }
+    elevatedAuthenticationLifetimeMinutes
+    elevatedAuthenticationLifetimeMinutesRange {
+      min
+      max
+    }
+    recentAuthenticationLifetimeMinutes
+    recentAuthenticationLifetimeMinutesRange {
+      min
+      max
+    }
+    loginLifetimeMinutes
+    loginLifetimeMinutesRange {
+      min
+      max
+    }
+    version
+  }
+  email {
+    delivery {
+      enabled
+      host
+      port
+      portRange {
+        min
+        max
+      }
+      security
+      senderAddress
+      senderName
+      authentication {
+        method
+        username
+        passwordSet
+        tokenEndpoint
+        clientId
+        clientSecretSet
+        grant
+        refreshTokenSet
+        scope
+      }
+      configured
+      version
+    }
+    policy {
+      signInCodeLifetimeMinutes
+      signInCodeLifetimeMinutesRange {
+        min
+        max
+      }
+      passwordResetLifetimeMinutes
+      passwordResetLifetimeMinutesRange {
+        min
+        max
+      }
+      registrationLifetimeMinutes
+      registrationLifetimeMinutesRange {
+        min
+        max
+      }
+      emailVerificationLifetimeHours
+      emailVerificationLifetimeHoursRange {
+        min
+        max
+      }
+      userInvitationLifetimeDays
+      userInvitationLifetimeDaysRange {
+        min
+        max
+      }
+      resendIntervalSeconds
+      resendIntervalSecondsRange {
+        min
+        max
+      }
+      loginMaxSends
+      loginMaxSendsRange {
+        min
+        max
+      }
+      verificationMaxSends
+      verificationMaxSendsRange {
+        min
+        max
+      }
+      verificationSendWindowHours
+      verificationSendWindowHoursRange {
+        min
+        max
+      }
+      version
+    }
+    templates {
+      kind
+      variables
+      previewScenarios
+      customized
+      version
+      content {
+        ...ConsoleLocalizedEmailTemplateFields
+      }
+      builtIn {
+        ...ConsoleLocalizedEmailTemplateFields
+      }
+    }
+  }
+}
+fragment ConsoleLocalizedEmailTemplateFields on LocalizedEmailTemplate {
+  default {
+    subject
+    html
+  }
+  translations {
+    locale
+    content {
+      subject
+      html
+    }
+  }
+}`) as unknown as TypedDocumentString<ConsoleUpdateSessionSettingsMutation, ConsoleUpdateSessionSettingsMutationVariables>;
 export const ConsoleUserRolesDocument = new TypedDocumentString(`
     query ConsoleUserRoles($userId: ID!, $source: AuthorizationSource, $enabled: Boolean, $orderBy: UserRoleOrder, $first: Int, $after: String, $last: Int, $before: String) {
   user(id: $userId) {

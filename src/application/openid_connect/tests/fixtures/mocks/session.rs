@@ -33,6 +33,7 @@ mock! {
             expected_user_oid: Uuid,
             acr: AuthenticationContextClass,
             acr_expires_at: DateTime<Utc>,
+            expires_at: DateTime<Utc>,
             amr: &[String],
         ) -> Result<Session, SessionRepositoryError>;
         async fn touch_active_by_oid(

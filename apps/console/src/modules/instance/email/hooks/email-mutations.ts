@@ -4,15 +4,19 @@ import {
   ConsoleInstanceSettingsDocument,
   ConsoleSendTestEmailDocument,
   ConsoleUpdateEmailDeliverySettingsDocument,
+  ConsoleUpdateEmailPolicySettingsDocument,
   ConsoleUpdateEmailTemplateDocument,
   type ConsoleSendTestEmailMutation,
   type ConsoleSendTestEmailMutationVariables,
   type ConsoleUpdateEmailDeliverySettingsMutation,
   type ConsoleUpdateEmailDeliverySettingsMutationVariables,
+  type ConsoleUpdateEmailPolicySettingsMutation,
+  type ConsoleUpdateEmailPolicySettingsMutationVariables,
   type ConsoleUpdateEmailTemplateMutation,
   type ConsoleUpdateEmailTemplateMutationVariables,
   type SendTestEmailInput,
   type UpdateEmailDeliverySettingsInput,
+  type UpdateEmailPolicySettingsInput,
   type UpdateEmailTemplateInput,
 } from '#/generated/graphql'
 import { nextClientMutationId } from '#/lib/graphql/mutation-id'
@@ -28,6 +32,16 @@ export function useEmailMutations() {
           ConsoleUpdateEmailDeliverySettingsMutationVariables
         >(
           ConsoleUpdateEmailDeliverySettingsDocument,
+          { input: { ...input, clientMutationId: nextClientMutationId() } },
+          [ConsoleInstanceSettingsDocument],
+        )
+      },
+      updatePolicy(input: Omit<UpdateEmailPolicySettingsInput, 'clientMutationId'>) {
+        return request<
+          ConsoleUpdateEmailPolicySettingsMutation,
+          ConsoleUpdateEmailPolicySettingsMutationVariables
+        >(
+          ConsoleUpdateEmailPolicySettingsDocument,
           { input: { ...input, clientMutationId: nextClientMutationId() } },
           [ConsoleInstanceSettingsDocument],
         )

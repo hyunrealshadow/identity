@@ -133,6 +133,8 @@ pub(super) async fn recheck_authority(
     } else {
         ManagementTarget::instance()
     };
+    let recent_aal2_ttl =
+        crate::database::repository::management_authority::recent_authentication_ttl(txn).await;
     evaluate_management_authority(&ManagementAuthorizationRequest {
         actor: &authority.actor,
         token_scopes: &authority.token_scopes,
@@ -143,7 +145,7 @@ pub(super) async fn recheck_authority(
         credential_client_boundary: Some(authority.client_policy_version),
         current_policy_version: policy_version,
         now: Utc::now(),
-        recent_aal2_ttl: DEFAULT_RECENT_AAL2_TTL,
+        recent_aal2_ttl,
     })
     .map(|_| ())
     .map_err(map_authorization)

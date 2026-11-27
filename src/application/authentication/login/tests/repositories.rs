@@ -228,6 +228,9 @@ impl SessionRepository for TestSessionRepo {
                     input.user_oid,
                     input.acr.unwrap(),
                     input.acr_expires_at.unwrap(),
+                    input
+                        .expires_at
+                        .unwrap_or_else(|| Utc::now() + Duration::days(7)),
                     &input.amr,
                 )
                 .await
@@ -279,6 +282,7 @@ impl SessionRepository for TestSessionRepo {
         expected_user_oid: Uuid,
         acr: AuthenticationContextClass,
         acr_expires_at: DateTime<Utc>,
+        expires_at: DateTime<Utc>,
         amr: &[String],
     ) -> Result<Session, SessionRepositoryError> {
         Ok(Session {
@@ -294,7 +298,7 @@ impl SessionRepository for TestSessionRepo {
             user_agent: None,
             ip_address: None,
             last_active_at: Some(Utc::now()),
-            expires_at: None,
+            expires_at: Some(expires_at),
             revoked_at: None,
             created_at: Utc::now(),
             acr: Some(acr.to_owned()),
@@ -385,6 +389,7 @@ impl LoginRepository for TestLoginRepo {
         _client_oid: Uuid,
         _client_authorization_oid: Uuid,
         _requested_acr_values: &[AuthenticationContextClass],
+        _expires_at: DateTime<Utc>,
     ) -> Result<Login, LoginRepositoryError> {
         Err(LoginRepositoryError::LoginNotFound)
     }

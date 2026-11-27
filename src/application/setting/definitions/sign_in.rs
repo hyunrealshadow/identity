@@ -30,6 +30,33 @@ impl SettingDefinition for EmailSignInEnabledSetting {
     }
 }
 
+/// Consecutive failed attempts before locking an account or ending an OTP
+/// login flow.
+pub struct MaxFailedAttemptsSetting;
+
+impl SettingDefinition for MaxFailedAttemptsSetting {
+    type Value = u32;
+
+    const KEY: &'static str = "auth.login.max_failed_attempts";
+
+    fn default_value() -> Self::Value {
+        5
+    }
+}
+
+/// Minutes an account stays locked after reaching the failed-attempt limit.
+pub struct LockoutDurationMinutesSetting;
+
+impl SettingDefinition for LockoutDurationMinutesSetting {
+    type Value = u32;
+
+    const KEY: &'static str = "auth.login.lockout_duration_minutes";
+
+    fn default_value() -> Self::Value {
+        15
+    }
+}
+
 /// Whether someone who forgot their password may replace it from the
 /// sign-in flow with a one-time link sent to the account's verified email
 /// address. Offered only while email delivery is configured.

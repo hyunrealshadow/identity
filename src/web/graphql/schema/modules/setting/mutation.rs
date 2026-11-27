@@ -4,10 +4,11 @@ use identity_application::{
     setting::{
         email::{
             SendTestEmailCommand, SendTestEmailTemplate, UpdateEmailDeliveryCommand,
-            UpdateEmailTemplateCommand,
+            UpdateEmailPolicyCommand, UpdateEmailTemplateCommand,
         },
         management::{
-            PasswordHashingView, UpdateAuthenticationSettingsCommand, UpdateProtocolSettingsCommand,
+            PasswordHashingView, UpdateAuthenticationSettingsCommand,
+            UpdateProtocolSettingsCommand, UpdateSessionSettingsCommand,
         },
     },
 };
@@ -16,10 +17,11 @@ use identity_domain::authorization::ManagementScope;
 use super::{
     email::{
         SendTestEmailInput, SendTestEmailPayload, UpdateEmailDeliverySettingsInput,
-        UpdateEmailTemplateInput,
+        UpdateEmailPolicySettingsInput, UpdateEmailTemplateInput,
     },
     types::{
         InstanceSettingsPayload, UpdateAuthenticationSettingsInput, UpdateProtocolSettingsInput,
+        UpdateSessionSettingsInput,
     },
 };
 use crate::graphql::schema::{
@@ -66,6 +68,14 @@ impl SettingMutation {
                             input.device_authorization_polling_interval_seconds,
                         ),
                         dynamic_registration_enabled: input.dynamic_registration_enabled,
+                        access_token_lifetime_seconds: i64::from(
+                            input.access_token_lifetime_seconds,
+                        ),
+                        id_token_lifetime_seconds: i64::from(input.id_token_lifetime_seconds),
+                        refresh_token_lifetime_days: i64::from(input.refresh_token_lifetime_days),
+                        authorization_code_lifetime_seconds: i64::from(
+                            input.authorization_code_lifetime_seconds,
+                        ),
                         expected_version: input.expected_version,
                         client_mutation_id: input.client_mutation_id,
                     },
@@ -107,11 +117,53 @@ impl SettingMutation {
                         registration_enabled: input.registration_enabled,
                         password_max_age_days: input.password_max_age_days,
                         password_history_count: input.password_history_count,
+                        password_min_length: input.password_min_length,
+                        max_failed_attempts: input.max_failed_attempts,
+                        lockout_duration_minutes: input.lockout_duration_minutes,
                         password_hashing: PasswordHashingView {
                             time_cost: hashing.time_cost,
                             memory_cost_kib: hashing.memory_cost_kib,
                             parallelism: hashing.parallelism,
                         },
+                        expected_version: input.expected_version,
+                        client_mutation_id: input.client_mutation_id,
+                    },
+                )
+                .await
+        }
+        .await
+        .map_err(|error| app_error(ctx, error))?;
+        Ok(InstanceSettingsPayload::new(result, client_mutation_id))
+    }
+
+    /// Replace session, recent authentication freshness, and sign-in flow
+    /// lifetimes. Applies to newly issued sessions and new checks.
+    #[graphql(
+        guard = "ManagementGuard::new(ManagementScope::SettingsWrite, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::SettingsWrite))
+    )]
+    async fn update_session_settings(
+        &self,
+        ctx: &Context<'_>,
+        input: UpdateSessionSettingsInput,
+    ) -> Result<InstanceSettingsPayload> {
+        let request = request_context(ctx)?;
+        let client_mutation_id = input.client_mutation_id.clone();
+        let result = async {
+            let authority = request_authority(request).await?;
+            request
+                .state
+                .services()
+                .instance_setting()
+                .update_session(
+                    &authority,
+                    UpdateSessionSettingsCommand {
+                        session_lifetime_hours: input.session_lifetime_hours,
+                        elevated_authentication_lifetime_minutes: input
+                            .elevated_authentication_lifetime_minutes,
+                        recent_authentication_lifetime_minutes: input
+                            .recent_authentication_lifetime_minutes,
+                        login_lifetime_minutes: input.login_lifetime_minutes,
                         expected_version: input.expected_version,
                         client_mutation_id: input.client_mutation_id,
                     },
@@ -152,6 +204,48 @@ impl SettingMutation {
                         sender_address: input.sender_address,
                         sender_name: input.sender_name,
                         authentication: input.authentication.into(),
+                        expected_version: input.expected_version,
+                        client_mutation_id: input.client_mutation_id,
+                    },
+                )
+                .await
+        }
+        .await
+        .map_err(|error| app_error(ctx, error))?;
+        Ok(InstanceSettingsPayload::new(result, client_mutation_id))
+    }
+
+    /// Replace system email link/code lifetimes, resend interval, and send
+    /// limits. Applies to newly sent emails and new checks.
+    #[graphql(
+        guard = "ManagementGuard::new(ManagementScope::SettingsWrite, ManagementTarget::instance())",
+        directive = access::apply(ManagementGuard::policy(ManagementScope::SettingsWrite))
+    )]
+    async fn update_email_policy_settings(
+        &self,
+        ctx: &Context<'_>,
+        input: UpdateEmailPolicySettingsInput,
+    ) -> Result<InstanceSettingsPayload> {
+        let request = request_context(ctx)?;
+        let client_mutation_id = input.client_mutation_id.clone();
+        let result = async {
+            let authority = request_authority(request).await?;
+            request
+                .state
+                .services()
+                .instance_setting()
+                .update_email_policy(
+                    &authority,
+                    UpdateEmailPolicyCommand {
+                        sign_in_code_lifetime_minutes: input.sign_in_code_lifetime_minutes,
+                        password_reset_lifetime_minutes: input.password_reset_lifetime_minutes,
+                        registration_lifetime_minutes: input.registration_lifetime_minutes,
+                        email_verification_lifetime_hours: input.email_verification_lifetime_hours,
+                        user_invitation_lifetime_days: input.user_invitation_lifetime_days,
+                        resend_interval_seconds: input.resend_interval_seconds,
+                        login_max_sends: input.login_max_sends,
+                        verification_max_sends: input.verification_max_sends,
+                        verification_send_window_hours: input.verification_send_window_hours,
                         expected_version: input.expected_version,
                         client_mutation_id: input.client_mutation_id,
                     },

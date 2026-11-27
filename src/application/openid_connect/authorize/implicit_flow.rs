@@ -148,7 +148,15 @@ impl AuthorizeService {
             None
         };
 
-        let expires_in = if access_token.is_some() { 3600u64 } else { 0 };
+        let expires_in = if access_token.is_some() {
+            self.provider_service
+                .openid_connect_settings()
+                .tokens
+                .access_token_lifetime_seconds
+                .max(1) as u64
+        } else {
+            0
+        };
 
         let (id_key_id, id_key_pem, id_token_alg) = self
             .load_id_token_signing_key_impl(
@@ -360,7 +368,14 @@ impl AuthorizeService {
         if let Some(ref access_token) = access_token {
             fragment.append_pair("access_token", access_token);
             fragment.append_pair("token_type", "Bearer");
-            fragment.append_pair("expires_in", "3600");
+            let expires_in = self
+                .provider_service
+                .openid_connect_settings()
+                .tokens
+                .access_token_lifetime_seconds
+                .max(1)
+                .to_string();
+            fragment.append_pair("expires_in", &expires_in);
             fragment.append_pair("scope", &request.scope);
         }
         fragment.append_pair("state", &request.state);
@@ -397,7 +412,13 @@ impl AuthorizeService {
             .create(
                 client_id,
                 ClientAuthorizationData::AccessToken(data),
-                Utc::now() + Duration::hours(1),
+                Utc::now()
+                    + Duration::seconds(
+                        self.provider_service
+                            .openid_connect_settings()
+                            .tokens
+                            .access_token_lifetime_seconds,
+                    ),
             )
             .await
             .map_err(authorize::error::StoreCodeFailed::map_source())?;

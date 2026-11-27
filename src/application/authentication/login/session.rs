@@ -1,12 +1,12 @@
 use super::{ChallengeOutcome, LoginService, SessionContext, requires_phishing_resistance};
 use crate::{
     error::{AppError, codes::auth},
+    setting::SessionSettings,
     user::model::User,
 };
 use chrono::{DateTime, Duration, Utc};
 use identity_domain::auth::{
-    AuthenticationContextClass, ELEVATED_AUTHENTICATION_TTL, LoginStatus,
-    RECENT_AUTHENTICATION_TTL, SESSION_EXPIRY,
+    AuthenticationContextClass, LoginStatus,
     model::{Login, Session},
     repository::CreateSessionInput,
 };
@@ -107,10 +107,16 @@ impl LoginService {
                 })
             }
         };
+        let session_settings = self.settings.snapshot().section::<SessionSettings>();
         let now = Utc::now();
-        let expires_at =
-            now + Duration::from_std(SESSION_EXPIRY).unwrap_or_else(|_| Duration::days(7));
-        let acr_expires_at = Some(authentication_context_expires_at(acr));
+        let expires_at = now
+            + Duration::from_std(session_settings.session_lifetime())
+                .unwrap_or_else(|_| Duration::days(7));
+        let acr_expires_at = Some(authentication_context_expires_at(
+            acr,
+            &session_settings,
+            now,
+        ));
         Ok(self
             .session_repo
             .complete_authentication(
@@ -151,11 +157,15 @@ impl LoginService {
     }
 }
 
-fn authentication_context_expires_at(acr: AuthenticationContextClass) -> DateTime<Utc> {
+fn authentication_context_expires_at(
+    acr: AuthenticationContextClass,
+    settings: &SessionSettings,
+    now: DateTime<Utc>,
+) -> DateTime<Utc> {
     let ttl = if acr.is_multi_factor() {
-        ELEVATED_AUTHENTICATION_TTL
+        settings.elevated_authentication_lifetime()
     } else {
-        RECENT_AUTHENTICATION_TTL
+        settings.recent_authentication_lifetime()
     };
-    Utc::now() + Duration::from_std(ttl).unwrap_or_else(|_| Duration::minutes(5))
+    now + Duration::from_std(ttl).unwrap_or_else(|_| Duration::minutes(5))
 }

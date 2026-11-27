@@ -163,9 +163,11 @@ impl EmailVerificationRepository for MemoryVerifications {
                 email: request.email,
                 email_normalized: request.email_normalized,
                 sent_at: request.now,
-                expires_at: request.now + chrono::Duration::hours(24),
+                expires_at: request.expires_at,
             },
-            resend_available_at: request.now + chrono::Duration::seconds(60),
+            resend_available_at: request.now
+                + chrono::Duration::from_std(request.delivery.resend_interval)
+                    .unwrap_or_else(|_| chrono::Duration::seconds(60)),
         })
     }
 

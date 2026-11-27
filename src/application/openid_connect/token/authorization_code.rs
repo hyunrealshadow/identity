@@ -451,6 +451,7 @@ impl TokenService {
             };
         let client_id_str =
             identity_domain::openid_connect::identifier::client_id(record.client_oid);
+        let lifetimes = self.token_lifetimes();
         let access_token_record = self
             .client_authorization_repo
             .create(
@@ -469,7 +470,7 @@ impl TokenService {
                     claims: data.claims.clone(),
                     management: data.management.clone(),
                 }),
-                Utc::now() + Duration::hours(1),
+                Utc::now() + Duration::seconds(lifetimes.access_token_lifetime_seconds),
             )
             .await
             .map_err(token::error::SignAccessTokenFailed::map_source())?;
@@ -598,7 +599,8 @@ impl TokenService {
             id_token,
             refresh_token: refresh_token.map(|(_, token)| token),
             token_type: TokenType::Bearer,
-            expires_in: 3600,
+            expires_in: i32::try_from(lifetimes.access_token_lifetime_seconds.max(1))
+                .unwrap_or(3_600),
             scope: selection.scope,
         })
     }

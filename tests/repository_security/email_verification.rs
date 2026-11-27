@@ -11,8 +11,8 @@ use identity_domain::{
     user::{
         UserOid,
         email_verification::{
-            EmailVerificationAdmission, EmailVerificationOutcome, EmailVerificationRepository,
-            EmailVerificationRequest, MAX_EMAIL_VERIFICATION_SENDS,
+            EMAIL_VERIFICATION_DELIVERY, EmailVerificationAdmission, EmailVerificationOutcome,
+            EmailVerificationRepository, EmailVerificationRequest, MAX_EMAIL_VERIFICATION_SENDS,
         },
         repository::UserIdentifierUpdate,
     },
@@ -45,6 +45,7 @@ async fn insert_user(db: &DatabaseConnection, email: &str, verified: bool) -> Us
 }
 
 fn request(user: UserOid, email: &str, token: &str) -> EmailVerificationRequest {
+    let now = Utc::now();
     EmailVerificationRequest {
         user_oid: user,
         email: email.to_owned(),
@@ -58,9 +59,11 @@ fn request(user: UserOid, email: &str, token: &str) -> EmailVerificationRequest 
                 subject: "Verify".to_owned(),
                 html: format!("link-{token}"),
             },
-            expires_at: Utc::now() + Duration::hours(24),
+            expires_at: now + Duration::hours(24),
         },
-        now: Utc::now(),
+        now,
+        expires_at: now + Duration::hours(24),
+        delivery: EMAIL_VERIFICATION_DELIVERY,
     }
 }
 

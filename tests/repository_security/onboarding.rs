@@ -387,7 +387,15 @@ async fn registration_creates_a_verified_account_and_binds_its_login_once() {
               SELECT '{relation}',id,'authorization_request','{{}}'::jsonb,now()+interval '1 hour' FROM client WHERE oid='{client}';
         "#)).await;
         let logins = LoginRepositoryImpl::new(db.clone());
-        let login = logins.create_pending(client, relation, &[]).await.unwrap();
+        let login = logins
+            .create_pending(
+                client,
+                relation,
+                &[],
+                Utc::now() + ChronoDuration::minutes(5),
+            )
+            .await
+            .unwrap();
         let challenges = ChallengeRepositoryImpl::new(db.clone());
         let registrations = RegistrationRepositoryImpl::new(db.clone());
 

@@ -10,6 +10,15 @@ mutation ConsoleUpdateEmailDeliverySettings($input: UpdateEmailDeliverySettingsI
   }
 }
 
+mutation ConsoleUpdateEmailPolicySettings($input: UpdateEmailPolicySettingsInput!) {
+  updateEmailPolicySettings(input: $input) {
+    clientMutationId
+    settings {
+      ...ConsoleInstanceSettingsFields
+    }
+  }
+}
+
 mutation ConsoleUpdateEmailTemplate($input: UpdateEmailTemplateInput!) {
   updateEmailTemplate(input: $input) {
     clientMutationId

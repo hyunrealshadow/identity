@@ -1,7 +1,7 @@
 use super::AuthorizeService;
 use crate::error::codes::auth;
 use crate::error::{AppError, codes::authorize};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use identity_domain::{
     auth::{AuthenticationContextClass, LoginStatus, SessionOid, model::Login},
     client_authorization::{SelectionSource, StoredAuthorizationRequest},
@@ -19,15 +19,27 @@ pub struct ContinueContext {
 }
 
 impl AuthorizeService {
+    fn pending_login_expires_at(&self) -> DateTime<Utc> {
+        let lifetime = self.provider_service.session_settings().login_lifetime();
+        let duration = Duration::from_std(lifetime).unwrap_or_else(|_| Duration::minutes(5));
+        Utc::now() + duration
+    }
+
     pub async fn create_login_flow(
         &self,
         client_oid: Uuid,
         authorization_request_id: Uuid,
         requested_acr_values: &[AuthenticationContextClass],
     ) -> Result<String, AppError> {
+        let expires_at = self.pending_login_expires_at();
         let login = self
             .login_repo
-            .create_pending(client_oid, authorization_request_id, requested_acr_values)
+            .create_pending(
+                client_oid,
+                authorization_request_id,
+                requested_acr_values,
+                expires_at,
+            )
             .await
             .map_err(authorize::error::StoreLoginFailed::map_source())?;
 
@@ -110,12 +122,14 @@ impl AuthorizeService {
         context: &ContinueContext,
         reauthentication: Option<(Uuid, SessionOid)>,
     ) -> Result<String, AppError> {
+        let expires_at = self.pending_login_expires_at();
         let login = self
             .login_repo
             .create_pending(
                 context.login.client_oid,
                 context.login.client_authorization_oid,
                 &context.login.requested_acr_values,
+                expires_at,
             )
             .await
             .map_err(authorize::error::StoreLoginFailed::map_source())?;

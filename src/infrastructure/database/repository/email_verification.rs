@@ -3,16 +3,16 @@
 //! concurrent requests, links, and address changes are serialized.
 
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 use identity_domain::{
     audit::{AuditAction, AuditActor, AuditRecord},
     auth::challenge::{ChallengePurpose, DeliveryDecision},
     user::{
         UserOid,
         email_verification::{
-            EMAIL_VERIFICATION_DELIVERY, EMAIL_VERIFICATION_TTL, EmailVerification,
-            EmailVerificationAdmission, EmailVerificationOutcome, EmailVerificationRepository,
-            EmailVerificationRepositoryError, EmailVerificationRequest,
+            EmailVerification, EmailVerificationAdmission, EmailVerificationOutcome,
+            EmailVerificationRepository, EmailVerificationRepositoryError,
+            EmailVerificationRequest,
         },
     },
 };
@@ -68,10 +68,6 @@ fn query_failed(
     error: impl std::error::Error + Send + Sync + 'static,
 ) -> EmailVerificationRepositoryError {
     EmailVerificationRepositoryError::QueryFailed(Box::new(error))
-}
-
-fn duration(value: std::time::Duration) -> Duration {
-    Duration::from_std(value).unwrap_or(Duration::MAX)
 }
 
 fn to_domain(row: &Verification, user_oid: Uuid) -> EmailVerification {
@@ -152,7 +148,7 @@ impl EmailVerificationRepository for EmailVerificationRepositoryImpl {
             .map_err(query_failed)?;
         // The interval and limit apply to the account, whichever address
         // each email went to.
-        let counter = match EMAIL_VERIFICATION_DELIVERY.admit(
+        let counter = match request.delivery.admit(
             existing.as_ref().and_then(Verification::counter).as_ref(),
             now,
         ) {
@@ -175,7 +171,7 @@ impl EmailVerificationRepository for EmailVerificationRepositoryImpl {
                 token_digest: &request.token_digest,
                 counter,
                 state: &state,
-                expires_at: now + duration(EMAIL_VERIFICATION_TTL),
+                expires_at: request.expires_at,
             },
         )
         .await
@@ -188,7 +184,7 @@ impl EmailVerificationRepository for EmailVerificationRepositoryImpl {
         txn.commit().await.map_err(query_failed)?;
         Ok(EmailVerificationAdmission::Admitted {
             verification: to_domain(&model, account.oid),
-            resend_available_at: EMAIL_VERIFICATION_DELIVERY.resend_available_at(&counter),
+            resend_available_at: request.delivery.resend_available_at(&counter),
         })
     }
 

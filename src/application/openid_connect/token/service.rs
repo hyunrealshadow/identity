@@ -122,4 +122,8 @@ impl TokenService {
         );
         self
     }
+
+    pub(super) fn token_lifetimes(&self) -> crate::setting::TokenLifetimeSettings {
+        self.provider_service.openid_connect_settings().tokens
+    }
 }

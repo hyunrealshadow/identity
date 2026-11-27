@@ -3,9 +3,8 @@ use std::sync::Arc;
 
 use async_graphql::{Context, Object, Result, SimpleObject};
 use chrono::{DateTime, Utc};
-use identity_domain::auth::{
-    AuthenticationContextClass, RECENT_AUTHENTICATION_TTL, authentication_is_fresh,
-};
+use identity_application::setting::SessionSettings;
+use identity_domain::auth::{AuthenticationContextClass, authentication_is_fresh};
 
 use crate::graphql::schema::{
     authorization::{EffectivePermissionsProvider, EffectivePermissionsView, request_context},
@@ -46,10 +45,19 @@ impl AuthorizationQuery {
             .claims
             .acr
             .is_some_and(|acr| acr.satisfies(AuthenticationContextClass::MultiFactor));
+        let recent_ttl = request
+            .state
+            .services()
+            .settings()
+            .snapshot()
+            .section::<SessionSettings>()
+            .recent_authentication_lifetime()
+            .as_secs();
         let recent = aal2
-            && request.claims.auth_time.is_some_and(|auth_time| {
-                authentication_is_fresh(auth_time, now, RECENT_AUTHENTICATION_TTL.as_secs())
-            });
+            && request
+                .claims
+                .auth_time
+                .is_some_and(|auth_time| authentication_is_fresh(auth_time, now, recent_ttl));
         let auth_time = request
             .claims
             .auth_time

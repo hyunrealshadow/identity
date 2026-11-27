@@ -3,8 +3,8 @@
 use chrono::Utc;
 use identity_application::{
     authorization::{
-        CurrentManagementAuthority, DEFAULT_RECENT_AAL2_TTL, ManagementAuthorizationError,
-        ManagementAuthorizationRequest, ManagementTarget, evaluate_management_authority,
+        CurrentManagementAuthority, ManagementAuthorizationError, ManagementAuthorizationRequest,
+        ManagementTarget, evaluate_management_authority,
     },
     rbac::{RbacManagementAuthority, RbacManagementRepositoryError},
 };
@@ -22,7 +22,7 @@ use crate::database::repository::{
     authorization_lifecycle,
     management_authority::{
         ManagementAuthorityCheckError, lock_and_load_user_authority,
-        lock_and_recheck_issuing_client,
+        lock_and_recheck_issuing_client, recent_authentication_ttl,
     },
 };
 
@@ -107,6 +107,7 @@ pub(crate) async fn recheck_authority(
     } else {
         ManagementTarget::instance()
     };
+    let recent_aal2_ttl = recent_authentication_ttl(txn).await;
     evaluate_management_authority(&ManagementAuthorizationRequest {
         actor: &authority.actor,
         token_scopes: &authority.token_scopes,
@@ -117,7 +118,7 @@ pub(crate) async fn recheck_authority(
         credential_client_boundary: Some(authority.client_policy_version),
         current_policy_version: policy_version,
         now: Utc::now(),
-        recent_aal2_ttl: DEFAULT_RECENT_AAL2_TTL,
+        recent_aal2_ttl,
     })
     .map_err(RbacManagementRepositoryError::Authorization)?;
     current.ok_or(RbacManagementRepositoryError::Authorization(

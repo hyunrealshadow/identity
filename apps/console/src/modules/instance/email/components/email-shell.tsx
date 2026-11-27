@@ -1,5 +1,5 @@
 import { Outlet, useMatch, useRouterState } from '@tanstack/react-router'
-import { FileText, Send } from 'lucide-react'
+import { FileText, Send, SlidersHorizontal } from 'lucide-react'
 
 import { PageHeader } from '#/components/page-header'
 import { useTranslator } from '#/lib/i18n'
@@ -7,8 +7,9 @@ import { ConsoleWorkspaceGate } from '#/components/workspace-gate'
 import { SectionTabs, type SectionTab } from '../../components/section-tabs'
 import { InstanceSettingsProvider } from '../../settings/components/instance-settings-context'
 
-const tabs: ReadonlyArray<SectionTab<'/email' | '/email/templates'>> = [
+const tabs: ReadonlyArray<SectionTab<'/email' | '/email/policies' | '/email/templates'>> = [
   { to: '/email', label: 'emailTabDelivery', icon: Send },
+  { to: '/email/policies', label: 'emailTabPolicies', icon: SlidersHorizontal },
   { to: '/email/templates', label: 'emailTabTemplates', icon: FileText },
 ]
 

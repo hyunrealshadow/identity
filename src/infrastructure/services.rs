@@ -245,7 +245,8 @@ impl AppServices {
             management_access: ManagementAccessService::new(
                 authorization.clone(),
                 oauth_resource_repo.clone(),
-            ),
+            )
+            .with_settings(settings.store()),
             passkey: passkey.clone(),
             login: LoginService::new(
                 Arc::new(UserRepositoryImpl::new(db.clone())),

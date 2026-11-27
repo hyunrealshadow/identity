@@ -1,6 +1,11 @@
 //! Shared transactional row-locking checks for management authority.
 
-use identity_application::authorization::ManagementAuthorizationError;
+use std::time::Duration;
+
+use identity_application::{
+    authorization::{DEFAULT_RECENT_AAL2_TTL, ManagementAuthorizationError},
+    setting::SessionSettings,
+};
 use identity_domain::{
     authorization::{PolicyVersion, authority::UserPermissionAuthority},
     user::UserOid,
@@ -8,7 +13,7 @@ use identity_domain::{
 use sea_orm::{ConnectionTrait, DatabaseTransaction, DbBackend, DbErr, Statement};
 use uuid::Uuid;
 
-use super::authorization::load_user_permission_authority;
+use super::{authorization::load_user_permission_authority, setting::read_section};
 use crate::database::client_authorization_boundary;
 
 pub(crate) enum ManagementAuthorityCheckError {
@@ -71,4 +76,11 @@ pub(crate) async fn lock_and_load_user_authority(
         return Ok(None);
     }
     load_user_permission_authority(txn, user_oid).await
+}
+
+pub(crate) async fn recent_authentication_ttl<C: ConnectionTrait>(db: &C) -> Duration {
+    read_section::<SessionSettings, _>(db)
+        .await
+        .map(|settings| settings.recent_authentication_lifetime())
+        .unwrap_or(DEFAULT_RECENT_AAL2_TTL)
 }

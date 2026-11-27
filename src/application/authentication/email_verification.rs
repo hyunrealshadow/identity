@@ -12,9 +12,8 @@ use chrono::{DateTime, Duration, Utc};
 use identity_domain::user::{
     User, UserOid,
     email_verification::{
-        EMAIL_VERIFICATION_RESEND_INTERVAL, EMAIL_VERIFICATION_TTL, EmailVerification,
-        EmailVerificationAdmission, EmailVerificationOutcome, EmailVerificationRepository,
-        EmailVerificationRequest,
+        EmailVerification, EmailVerificationAdmission, EmailVerificationOutcome,
+        EmailVerificationRepository, EmailVerificationRequest,
     },
     repository::UserIdentifierUpdate,
 };
@@ -32,7 +31,10 @@ use crate::{
         codes::{account, common},
     },
     observability::{BusinessEvent, EventValue},
-    setting::{AppSettings, EmailDeliverySettings, EmailTemplatesSetting, SettingsSource},
+    setting::{
+        AppSettings, EmailDeliverySettings, EmailPolicySettings, EmailTemplatesSetting,
+        SettingsSource,
+    },
 };
 
 /// Login route that confirms a verification link.
@@ -181,9 +183,13 @@ impl AccountService {
             .pending(user_oid, Utc::now())
             .await
             .map_err(AppError::internal)?;
+        let resend_interval = dependencies
+            .settings
+            .snapshot()
+            .section::<EmailPolicySettings>()
+            .resend_interval();
         Ok(pending.map(|verification| PendingEmailVerification {
-            resend_available_at: verification.sent_at
-                + duration(EMAIL_VERIFICATION_RESEND_INTERVAL),
+            resend_available_at: verification.sent_at + duration(resend_interval),
             verification,
         }))
     }
@@ -297,9 +303,11 @@ impl AccountService {
             return Err(account::error::EmailVerificationUnavailable.into());
         };
         let snapshot = dependencies.settings.snapshot();
+        let email_policy = snapshot.section::<EmailPolicySettings>();
         let link_prefix = verification_link_prefix(&snapshot.section::<AppSettings>())?;
         let LinkToken { token, digest } = LinkToken::generate();
         let now = Utc::now();
+        let expires_at = now + duration(email_policy.email_verification_lifetime());
         let changes_email = email_normalized != user.email_normalized;
         let locales: Vec<&str> = user
             .locale
@@ -316,13 +324,13 @@ impl AccountService {
                 name: Some(&user.name),
                 locales: &locales,
             },
-            now + duration(EMAIL_VERIFICATION_TTL),
+            expires_at,
             |locale| {
                 json!({
                     "link": format!("{link_prefix}{token}"),
                     "email": email,
                     "changes_email": changes_email,
-                    "expires_in_hours": duration(EMAIL_VERIFICATION_TTL).num_hours(),
+                    "expires_in_hours": i64::from(email_policy.email_verification_lifetime_hours),
                     "user": { "name": user.name, "email": user.email },
                     "locale": locale,
                 })
@@ -339,6 +347,8 @@ impl AccountService {
                 token_digest: digest,
                 message,
                 now,
+                expires_at,
+                delivery: email_policy.verification_delivery_policy(),
             })
             .await
             .map_err(AppError::internal)?;

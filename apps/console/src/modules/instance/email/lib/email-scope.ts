@@ -7,6 +7,7 @@ import { useWorkspace, type EffectivePermissions } from '#/lib/workspace'
 export function emailScope(permissions: EffectivePermissions | null | undefined) {
   return {
     deliveryWrite: fieldAffordance(permissions, 'mutation', 'updateEmailDeliverySettings'),
+    policyWrite: fieldAffordance(permissions, 'mutation', 'updateEmailPolicySettings'),
     templateWrite: fieldAffordance(permissions, 'mutation', 'updateEmailTemplate'),
     testEmail: fieldAffordance(permissions, 'mutation', 'sendTestEmail'),
     preview: fieldAffordance(permissions, 'query', 'emailTemplatePreview'),

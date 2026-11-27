@@ -232,7 +232,9 @@ enum AuditAction {
 	KEY_REVOKE
 	SETTING_PROTOCOL_UPDATE
 	SETTING_AUTHENTICATION_UPDATE
+	SETTING_SESSION_UPDATE
 	SETTING_EMAIL_UPDATE
+	SETTING_EMAIL_POLICY_UPDATE
 	SETTING_EMAIL_TEMPLATE_UPDATE
 	ACCOUNT_PROFILE_UPDATE
 	ACCOUNT_IDENTIFIER_UPDATE
@@ -551,6 +553,12 @@ type AuthenticationSettings {
 	"""
 	passwordHistoryCount: Int!
 	passwordHistoryCountRange: IntRange!
+	passwordMinLength: Int!
+	passwordMinLengthRange: IntRange!
+	maxFailedAttempts: Int!
+	maxFailedAttemptsRange: IntRange!
+	lockoutDurationMinutes: Int!
+	lockoutDurationMinutesRange: IntRange!
 	"""
 	Argon2id cost for newly stored password hashes.
 	"""
@@ -1390,11 +1398,40 @@ enum EmailDeliveryStatus {
 	FAILED
 }
 
+type EmailPolicySettings {
+	signInCodeLifetimeMinutes: Int!
+	signInCodeLifetimeMinutesRange: IntRange!
+	passwordResetLifetimeMinutes: Int!
+	passwordResetLifetimeMinutesRange: IntRange!
+	registrationLifetimeMinutes: Int!
+	registrationLifetimeMinutesRange: IntRange!
+	emailVerificationLifetimeHours: Int!
+	emailVerificationLifetimeHoursRange: IntRange!
+	userInvitationLifetimeDays: Int!
+	userInvitationLifetimeDaysRange: IntRange!
+	resendIntervalSeconds: Int!
+	resendIntervalSecondsRange: IntRange!
+	loginMaxSends: Int!
+	loginMaxSendsRange: IntRange!
+	verificationMaxSends: Int!
+	verificationMaxSendsRange: IntRange!
+	verificationSendWindowHours: Int!
+	verificationSendWindowHoursRange: IntRange!
+	"""
+	UUID optimistic-lock version of this section.
+	"""
+	version: UUID!
+}
+
 type EmailSettings {
 	"""
 	The SMTP server email is sent through.
 	"""
 	delivery: EmailDeliverySettings!
+	"""
+	Lifetimes, resend cadence, and send limits for outbound system emails.
+	"""
+	policy: EmailPolicySettings!
 	"""
 	Every kind of email, with its template in each supported locale.
 	"""
@@ -1832,6 +1869,7 @@ type InstanceSettings {
 	general: GeneralSettings!
 	protocol: ProtocolSettings!
 	authentication: AuthenticationSettings!
+	session: SessionSettings!
 	"""
 	Email delivery and the templates of the email this instance sends.
 	"""
@@ -2148,10 +2186,20 @@ type MutationRoot {
 	"""
 	updateAuthenticationSettings(input: UpdateAuthenticationSettingsInput!): InstanceSettingsPayload! @access(policy: {scopes: ["management.setting.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
 	"""
+	Replace session, recent authentication freshness, and sign-in flow
+	lifetimes. Applies to newly issued sessions and new checks.
+	"""
+	updateSessionSettings(input: UpdateSessionSettingsInput!): InstanceSettingsPayload! @access(policy: {scopes: ["management.setting.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	"""
 	Replace how email is sent. Secrets left out keep their stored value
 	while the authentication method stays the same.
 	"""
 	updateEmailDeliverySettings(input: UpdateEmailDeliverySettingsInput!): InstanceSettingsPayload! @access(policy: {scopes: ["management.setting.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
+	"""
+	Replace system email link/code lifetimes, resend interval, and send
+	limits. Applies to newly sent emails and new checks.
+	"""
+	updateEmailPolicySettings(input: UpdateEmailPolicySettingsInput!): InstanceSettingsPayload! @access(policy: {scopes: ["management.setting.write"], authentication: RECENT_AAL2, maxAge: 300, elevatedMaxAge: null, userOnly: true, runtime: true})
 	"""
 	Replace one email template in the given locales; every other locale
 	uses its built-in template. Each template is rendered with sample
@@ -2270,6 +2318,14 @@ type ProtocolSettings {
 	Whether anyone may register a client at the registration endpoint.
 	"""
 	dynamicRegistrationEnabled: Boolean!
+	accessTokenLifetimeSeconds: Int!
+	accessTokenLifetimeRange: IntRange!
+	idTokenLifetimeSeconds: Int!
+	idTokenLifetimeRange: IntRange!
+	refreshTokenLifetimeDays: Int!
+	refreshTokenLifetimeDaysRange: IntRange!
+	authorizationCodeLifetimeSeconds: Int!
+	authorizationCodeLifetimeRange: IntRange!
 	"""
 	UUID optimistic-lock version of this section.
 	"""
@@ -2869,6 +2925,21 @@ type SessionEdge {
 	cursor: String!
 }
 
+type SessionSettings {
+	sessionLifetimeHours: Int!
+	sessionLifetimeHoursRange: IntRange!
+	elevatedAuthenticationLifetimeMinutes: Int!
+	elevatedAuthenticationLifetimeMinutesRange: IntRange!
+	recentAuthenticationLifetimeMinutes: Int!
+	recentAuthenticationLifetimeMinutesRange: IntRange!
+	loginLifetimeMinutes: Int!
+	loginLifetimeMinutesRange: IntRange!
+	"""
+	UUID optimistic-lock version of this section.
+	"""
+	version: UUID!
+}
+
 input SetClientScopesInput {
 	clientId: ID!
 	scopes: [ClientScopeAssignmentInput!]!
@@ -2983,6 +3054,9 @@ input UpdateAuthenticationSettingsInput {
 	registrationEnabled: Boolean!
 	passwordMaxAgeDays: Int!
 	passwordHistoryCount: Int!
+	passwordMinLength: Int!
+	maxFailedAttempts: Int!
+	lockoutDurationMinutes: Int!
 	passwordHashing: PasswordHashingInput!
 	expectedVersion: UUID!
 	clientMutationId: String
@@ -3031,6 +3105,20 @@ type UpdateEmailPayload {
 	once followed.
 	"""
 	verification: EmailVerificationRequest
+	clientMutationId: String
+}
+
+input UpdateEmailPolicySettingsInput {
+	signInCodeLifetimeMinutes: Int!
+	passwordResetLifetimeMinutes: Int!
+	registrationLifetimeMinutes: Int!
+	emailVerificationLifetimeHours: Int!
+	userInvitationLifetimeDays: Int!
+	resendIntervalSeconds: Int!
+	loginMaxSends: Int!
+	verificationMaxSends: Int!
+	verificationSendWindowHours: Int!
+	expectedVersion: UUID!
 	clientMutationId: String
 }
 
@@ -3090,6 +3178,10 @@ input UpdateProtocolSettingsInput {
 	deviceAuthorizationRequestLifetimeSeconds: Int!
 	deviceAuthorizationPollingIntervalSeconds: Int!
 	dynamicRegistrationEnabled: Boolean!
+	accessTokenLifetimeSeconds: Int!
+	idTokenLifetimeSeconds: Int!
+	refreshTokenLifetimeDays: Int!
+	authorizationCodeLifetimeSeconds: Int!
 	expectedVersion: UUID!
 	clientMutationId: String
 }
@@ -3121,6 +3213,15 @@ input UpdateScopeInput {
 	descriptions: [ScopeDescriptionInput!]
 	expectedVersion: UUID!
 	reason: String! = ""
+	clientMutationId: String
+}
+
+input UpdateSessionSettingsInput {
+	sessionLifetimeHours: Int!
+	elevatedAuthenticationLifetimeMinutes: Int!
+	recentAuthenticationLifetimeMinutes: Int!
+	loginLifetimeMinutes: Int!
+	expectedVersion: UUID!
 	clientMutationId: String
 }
 

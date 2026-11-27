@@ -49,12 +49,13 @@ impl LoginService {
         new_password: &str,
     ) -> Result<PreparedPassword, AppError> {
         let user = self.get_user(user_oid).await?;
-        password_policy::validate_password(
+        let snapshot = self.settings.snapshot();
+        password_policy::validate_password_for_settings(
+            &snapshot,
             new_password,
             &[&user.name, &user.email],
             "new_password",
         )?;
-        let snapshot = self.settings.snapshot();
         password_policy::validate_breached_password(
             self.breach_checker.as_ref(),
             &snapshot,

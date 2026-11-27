@@ -1,5 +1,8 @@
-//! Email delivery and email template settings.
+//! Email delivery, email policy, and email template settings.
 
+use std::time::Duration;
+
+use identity_domain::auth::challenge::DeliveryPolicy;
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -182,5 +185,229 @@ impl SettingDefinition for EmailTemplatesSetting {
             }
         }
         Ok(())
+    }
+}
+
+/// Lifetimes, resend cadence, and send limits for outbound system emails.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct EmailPolicySettings {
+    pub sign_in_code_lifetime_minutes: u32,
+    pub password_reset_lifetime_minutes: u32,
+    pub registration_lifetime_minutes: u32,
+    pub email_verification_lifetime_hours: u32,
+    pub user_invitation_lifetime_days: u32,
+    pub resend_interval_seconds: u32,
+    pub login_max_sends: u32,
+    pub verification_max_sends: u32,
+    pub verification_send_window_hours: u32,
+}
+
+impl Default for EmailPolicySettings {
+    fn default() -> Self {
+        Self {
+            sign_in_code_lifetime_minutes: 10,
+            password_reset_lifetime_minutes: 15,
+            registration_lifetime_minutes: 15,
+            email_verification_lifetime_hours: 24,
+            user_invitation_lifetime_days: 7,
+            resend_interval_seconds: 60,
+            login_max_sends: 5,
+            verification_max_sends: 5,
+            verification_send_window_hours: 24,
+        }
+    }
+}
+
+impl EmailPolicySettings {
+    #[must_use]
+    pub const fn sign_in_code_lifetime(&self) -> Duration {
+        Duration::from_secs(self.sign_in_code_lifetime_minutes as u64 * 60)
+    }
+
+    #[must_use]
+    pub const fn password_reset_lifetime(&self) -> Duration {
+        Duration::from_secs(self.password_reset_lifetime_minutes as u64 * 60)
+    }
+
+    #[must_use]
+    pub const fn registration_lifetime(&self) -> Duration {
+        Duration::from_secs(self.registration_lifetime_minutes as u64 * 60)
+    }
+
+    #[must_use]
+    pub const fn email_verification_lifetime(&self) -> Duration {
+        Duration::from_secs(self.email_verification_lifetime_hours as u64 * 3_600)
+    }
+
+    #[must_use]
+    pub const fn user_invitation_lifetime(&self) -> Duration {
+        Duration::from_secs(self.user_invitation_lifetime_days as u64 * 86_400)
+    }
+
+    #[must_use]
+    pub const fn resend_interval(&self) -> Duration {
+        Duration::from_secs(self.resend_interval_seconds as u64)
+    }
+
+    #[must_use]
+    pub fn login_delivery_policy(&self) -> DeliveryPolicy {
+        DeliveryPolicy {
+            resend_interval: self.resend_interval(),
+            max_sends: Some(i32::try_from(self.login_max_sends).unwrap_or(5)),
+            window: None,
+        }
+    }
+
+    #[must_use]
+    pub fn verification_delivery_policy(&self) -> DeliveryPolicy {
+        DeliveryPolicy {
+            resend_interval: self.resend_interval(),
+            max_sends: Some(i32::try_from(self.verification_max_sends).unwrap_or(5)),
+            window: Some(Duration::from_secs(
+                u64::from(self.verification_send_window_hours) * 3_600,
+            )),
+        }
+    }
+
+    #[must_use]
+    pub const fn invitation_delivery_policy(&self) -> DeliveryPolicy {
+        DeliveryPolicy {
+            resend_interval: self.resend_interval(),
+            max_sends: None,
+            window: None,
+        }
+    }
+}
+
+impl SettingSection for EmailPolicySettings {
+    const PREFIX: &'static str = "email.policy";
+    const OBJECT_FIELDS: &'static [&'static str] = &[];
+
+    fn validate(&self) -> Result<(), SettingValidationError> {
+        if !(1..=60).contains(&self.sign_in_code_lifetime_minutes) {
+            return Err(SettingValidationError::new(
+                "sign-in code lifetime must be between 1 and 60 minutes",
+            ));
+        }
+        if !(5..=120).contains(&self.password_reset_lifetime_minutes) {
+            return Err(SettingValidationError::new(
+                "password reset link lifetime must be between 5 and 120 minutes",
+            ));
+        }
+        if !(5..=120).contains(&self.registration_lifetime_minutes) {
+            return Err(SettingValidationError::new(
+                "registration link lifetime must be between 5 and 120 minutes",
+            ));
+        }
+        if !(1..=168).contains(&self.email_verification_lifetime_hours) {
+            return Err(SettingValidationError::new(
+                "email verification link lifetime must be between 1 and 168 hours",
+            ));
+        }
+        if !(1..=30).contains(&self.user_invitation_lifetime_days) {
+            return Err(SettingValidationError::new(
+                "user invitation lifetime must be between 1 and 30 days",
+            ));
+        }
+        if !(15..=600).contains(&self.resend_interval_seconds) {
+            return Err(SettingValidationError::new(
+                "email resend interval must be between 15 and 600 seconds",
+            ));
+        }
+        if !(1..=20).contains(&self.login_max_sends) {
+            return Err(SettingValidationError::new(
+                "maximum emails per sign-in flow must be between 1 and 20",
+            ));
+        }
+        if !(1..=20).contains(&self.verification_max_sends) {
+            return Err(SettingValidationError::new(
+                "maximum verification emails per window must be between 1 and 20",
+            ));
+        }
+        if !(1..=168).contains(&self.verification_send_window_hours) {
+            return Err(SettingValidationError::new(
+                "verification send window must be between 1 and 168 hours",
+            ));
+        }
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn email_policy_defaults_and_durations_match_baseline() {
+        let policy = EmailPolicySettings::default();
+        assert!(policy.validate().is_ok());
+        assert_eq!(policy.sign_in_code_lifetime(), Duration::from_secs(10 * 60));
+        assert_eq!(
+            policy.password_reset_lifetime(),
+            Duration::from_secs(15 * 60)
+        );
+        assert_eq!(policy.registration_lifetime(), Duration::from_secs(15 * 60));
+        assert_eq!(
+            policy.email_verification_lifetime(),
+            Duration::from_secs(24 * 3_600)
+        );
+        assert_eq!(
+            policy.user_invitation_lifetime(),
+            Duration::from_secs(7 * 86_400)
+        );
+        assert_eq!(policy.resend_interval(), Duration::from_secs(60));
+        assert_eq!(policy.login_delivery_policy().max_sends, Some(5));
+        assert_eq!(
+            policy.verification_delivery_policy().window,
+            Some(Duration::from_secs(24 * 3_600))
+        );
+        assert_eq!(policy.invitation_delivery_policy().max_sends, None);
+    }
+
+    #[test]
+    fn email_policy_rejects_out_of_bounds_values() {
+        let valid = EmailPolicySettings::default();
+        let invalid_cases = [
+            EmailPolicySettings {
+                sign_in_code_lifetime_minutes: 0,
+                ..valid
+            },
+            EmailPolicySettings {
+                password_reset_lifetime_minutes: 4,
+                ..valid
+            },
+            EmailPolicySettings {
+                registration_lifetime_minutes: 121,
+                ..valid
+            },
+            EmailPolicySettings {
+                email_verification_lifetime_hours: 169,
+                ..valid
+            },
+            EmailPolicySettings {
+                user_invitation_lifetime_days: 31,
+                ..valid
+            },
+            EmailPolicySettings {
+                resend_interval_seconds: 14,
+                ..valid
+            },
+            EmailPolicySettings {
+                login_max_sends: 21,
+                ..valid
+            },
+            EmailPolicySettings {
+                verification_max_sends: 0,
+                ..valid
+            },
+            EmailPolicySettings {
+                verification_send_window_hours: 0,
+                ..valid
+            },
+        ];
+        for invalid in invalid_cases {
+            assert!(invalid.validate().is_err());
+        }
     }
 }

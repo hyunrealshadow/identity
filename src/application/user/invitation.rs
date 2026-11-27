@@ -23,7 +23,9 @@ use super::{Password, User, UserOid};
 use crate::{
     authentication::{
         password::{PasswordHasher, run_password_hashing},
-        password_policy::{BreachedPasswordChecker, validate_breached_password, validate_password},
+        password_policy::{
+            BreachedPasswordChecker, validate_breached_password, validate_password_for_settings,
+        },
     },
     email::{
         EmailRecipient, EmailTemplateKind, EmailTemplateRenderer, LinkToken, OutboundEmail,
@@ -35,8 +37,8 @@ use crate::{
     },
     observability::{BusinessEvent, EventSink, NoopEventSink},
     setting::{
-        AppSettings, EmailDeliverySettings, EmailTemplatesSetting, PasswordHashSetting,
-        SettingsSource,
+        AppSettings, EmailDeliverySettings, EmailPolicySettings, EmailTemplatesSetting,
+        PasswordHashSetting, SettingsSource,
     },
 };
 
@@ -76,10 +78,6 @@ pub struct InvitationIssue {
     pub recipient_normalized: String,
     pub sent_at: DateTime<Utc>,
     pub expires_at: DateTime<Utc>,
-}
-
-fn ttl() -> chrono::Duration {
-    chrono::Duration::from_std(USER_INVITATION_TTL).unwrap_or_else(|_| chrono::Duration::days(7))
 }
 
 /// Outcome of accepting an invitation.
@@ -149,9 +147,12 @@ impl InvitationDelivery {
         now: DateTime<Utc>,
     ) -> Result<InvitationIssue, AppError> {
         let snapshot = self.settings.snapshot();
+        let email_policy = snapshot.section::<EmailPolicySettings>();
+        let lifetime = chrono::Duration::from_std(email_policy.user_invitation_lifetime())
+            .unwrap_or_else(|_| chrono::Duration::days(7));
         let link_prefix = invitation_link_prefix(&snapshot.section::<AppSettings>())?;
         let LinkToken { token, digest } = LinkToken::generate();
-        let expires_at = now + ttl();
+        let expires_at = now + lifetime;
         let locales: Vec<&str> = invitee.locale.into_iter().collect();
         let email = render_templated_email(
             self.renderer.as_ref(),
@@ -166,7 +167,7 @@ impl InvitationDelivery {
             |locale| {
                 json!({
                     "link": format!("{link_prefix}{token}"),
-                    "expires_in_days": ttl().num_days(),
+                    "expires_in_days": i64::from(email_policy.user_invitation_lifetime_days),
                     "user": { "name": invitee.name, "email": invitee.email },
                     "locale": locale,
                 })
@@ -268,8 +269,13 @@ impl InvitationService {
 
     async fn accept_inner(&self, token: &str, password: &str) -> Result<(), AppError> {
         let user = self.matching_user(token).await?;
-        validate_password(password, &[&user.name, &user.email], "new_password")?;
         let snapshot = self.settings.snapshot();
+        validate_password_for_settings(
+            &snapshot,
+            password,
+            &[&user.name, &user.email],
+            "new_password",
+        )?;
         validate_breached_password(
             self.breach_checker.as_ref(),
             &snapshot,

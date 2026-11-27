@@ -538,6 +538,7 @@ mod tests {
             _expected_user_oid: Uuid,
             _acr: AuthenticationContextClass,
             _acr_expires_at: DateTime<Utc>,
+            _expires_at: DateTime<Utc>,
             _amr: &[String],
         ) -> Result<Session, SessionRepositoryError> {
             Err(SessionRepositoryError::ReauthenticateFailed(Box::new(

@@ -227,6 +227,7 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
             user,
             AuthenticationContextClass::MultiFactor,
             Utc::now() + ChronoDuration::hours(1),
+            Utc::now() + ChronoDuration::days(7),
             &["pwd".to_owned()],
         )
         .await
@@ -263,7 +264,15 @@ async fn postgres_password_revocation_and_audit_are_atomic() {
     // Login state transitions are protocol steps, not audit facts; only a
     // failed attempt is, as an anonymous sign-in failure against the account.
     let logins = LoginRepositoryImpl::new(db.clone());
-    let login = logins.create_pending(client, relation, &[]).await.unwrap();
+    let login = logins
+        .create_pending(
+            client,
+            relation,
+            &[],
+            Utc::now() + ChronoDuration::minutes(5),
+        )
+        .await
+        .unwrap();
     logins.bind_user(login.oid, user).await.unwrap();
     logins
         .update_status(login.oid, LoginStatus::MFA_REQUIRED, None, None)
@@ -961,7 +970,15 @@ async fn concealed_identifier_binding_persists_without_an_account_and_resets() {
 
         // No account matched: the interaction still advances and keeps only
         // the identifier as entered.
-        let unknown = logins.create_pending(client, relation, &[]).await.unwrap();
+        let unknown = logins
+            .create_pending(
+                client,
+                relation,
+                &[],
+                Utc::now() + ChronoDuration::minutes(5),
+            )
+            .await
+            .unwrap();
         let bound = logins
             .bind_concealed_identifier(unknown.oid, "nobody@example.test", None)
             .await
@@ -1006,7 +1023,15 @@ async fn concealed_identifier_binding_persists_without_an_account_and_resets() {
         assert_eq!(reset.submitted_identifier, None);
 
         // A matched account is bound alongside the identifier.
-        let known = logins.create_pending(client, relation, &[]).await.unwrap();
+        let known = logins
+            .create_pending(
+                client,
+                relation,
+                &[],
+                Utc::now() + ChronoDuration::minutes(5),
+            )
+            .await
+            .unwrap();
         logins
             .bind_concealed_identifier(known.oid, "typed-name", Some(user))
             .await
@@ -1070,7 +1095,15 @@ async fn email_code_admission_is_atomic_and_independent_of_the_account() {
                 expires_at: Utc::now() + ChronoDuration::minutes(10),
             })
         };
-        let login = logins.create_pending(client, relation, &[]).await.unwrap();
+        let login = logins
+        .create_pending(
+            client,
+            relation,
+            &[],
+            Utc::now() + ChronoDuration::minutes(5),
+        )
+        .await
+        .unwrap();
         let context = DeliveryChallengeContext {
             user_oid: None,
             binding: ChallengeBinding::Login(login.oid),
@@ -1242,7 +1275,15 @@ async fn email_code_admission_is_atomic_and_independent_of_the_account() {
             ),
         )
         .await;
-        let switch_login = logins.create_pending(client, relation, &[]).await.unwrap();
+        let switch_login = logins
+            .create_pending(
+                client,
+                relation,
+                &[],
+                Utc::now() + ChronoDuration::minutes(5),
+            )
+            .await
+            .unwrap();
         logins.bind_user(switch_login.oid, switch_user).await.unwrap();
         let switch_now = Utc::now();
         let switch_ctx = DeliveryChallengeContext {

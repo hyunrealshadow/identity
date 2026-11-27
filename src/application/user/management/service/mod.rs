@@ -25,7 +25,9 @@ use crate::{
     authentication::{
         hash::PasswordHasher,
         password::run_password_hashing,
-        password_policy::{BreachedPasswordChecker, validate_breached_password, validate_password},
+        password_policy::{
+            BreachedPasswordChecker, validate_breached_password, validate_password_for_settings,
+        },
     },
     data_protection::DataProtector,
     error::{
@@ -34,10 +36,11 @@ use crate::{
     },
     observability::{BusinessEvent, EventSink, EventValue, NoopEventSink, error_outcome},
     pagination::{PaginationError, RawPageArgs, validate_page_arguments},
-    setting::{PasswordHashSetting, PasswordHistoryCountSetting, SettingsSource},
+    setting::{
+        EmailPolicySettings, PasswordHashSetting, PasswordHistoryCountSetting, SettingsSource,
+    },
     user::invitation::{
-        InvitationDelivery, Invitee, USER_INVITATION_DELIVERY, UserInvitationRepository,
-        UserInvitationStatus,
+        InvitationDelivery, Invitee, UserInvitationRepository, UserInvitationStatus,
     },
     user::management::{
         cursor::{NormalizedFilter, decode_cursor, encode_cursors},
@@ -178,12 +181,17 @@ impl UserManagementService {
             },
             now,
         )?;
+        let delivery = self
+            .settings
+            .snapshot()
+            .section::<EmailPolicySettings>()
+            .invitation_delivery_policy();
         let outcome = self
             .repository
             .send_user_invitation(SendUserInvitationTransaction {
                 user_oid: command.user_oid,
                 invitation: issue,
-                delivery: USER_INVITATION_DELIVERY,
+                delivery,
                 authority: (*authority).clone(),
             })
             .await
@@ -542,15 +550,21 @@ impl UserManagementService {
 
         let (password, invitation) = match (command.password, command.send_invitation) {
             (Some(password), false) => {
-                validate_password(password.as_str(), &[&username, &email], "password")?;
+                let snapshot = self.settings.snapshot();
+                validate_password_for_settings(
+                    &snapshot,
+                    password.as_str(),
+                    &[&username, &email],
+                    "password",
+                )?;
                 validate_breached_password(
                     self.breach_checker.as_ref(),
-                    &self.settings.snapshot(),
+                    &snapshot,
                     password.as_str(),
                     "password",
                 )
                 .await?;
-                let hash_options = self.settings.snapshot().get::<PasswordHashSetting>();
+                let hash_options = snapshot.get::<PasswordHashSetting>();
                 let hasher = Arc::clone(&self.password_hasher);
                 let password = password.into_inner();
                 let password =

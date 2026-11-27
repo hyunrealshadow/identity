@@ -1,10 +1,11 @@
 use identity_application::setting::{
     BreachedPasswordCheckEnabledSetting, ConsoleClientIdSetting, ConsoleDomainSetting,
-    DomainSetting, EmailDeliverySettings, EmailSignInEnabledSetting, EmailTemplatesSetting,
-    IdentifierEnumerationAllowedSetting, InstallationSettings, LoginClientIdSetting,
-    LoginDomainSetting, OpenIdConnectSettings, PasswordHashSetting, PasswordHistoryCountSetting,
-    PasswordMaxAgeDaysSetting, PasswordResetEnabledSetting, RegistrationEnabledSetting,
-    SettingRegistry,
+    DomainSetting, EmailDeliverySettings, EmailPolicySettings, EmailSignInEnabledSetting,
+    EmailTemplatesSetting, IdentifierEnumerationAllowedSetting, InstallationSettings,
+    LockoutDurationMinutesSetting, LoginClientIdSetting, LoginDomainSetting,
+    MaxFailedAttemptsSetting, OpenIdConnectSettings, PasswordHashSetting,
+    PasswordHistoryCountSetting, PasswordMaxAgeDaysSetting, PasswordMinLengthSetting,
+    PasswordResetEnabledSetting, RegistrationEnabledSetting, SessionSettings, SettingRegistry,
 };
 
 /// Settings persisted by this application, shared by the runtime loader and
@@ -19,13 +20,18 @@ pub(crate) fn setting_registry() -> SettingRegistry {
         .register::<RegistrationEnabledSetting>()
         .register::<PasswordMaxAgeDaysSetting>()
         .register::<PasswordHistoryCountSetting>()
+        .register::<PasswordMinLengthSetting>()
+        .register::<MaxFailedAttemptsSetting>()
+        .register::<LockoutDurationMinutesSetting>()
         .register::<EmailTemplatesSetting>()
         .register::<DomainSetting>()
         .register::<LoginDomainSetting>()
         .register::<ConsoleDomainSetting>()
         .register::<LoginClientIdSetting>()
         .register::<ConsoleClientIdSetting>()
+        .register_section::<SessionSettings>()
         .register_section::<InstallationSettings>()
         .register_section::<OpenIdConnectSettings>()
         .register_section::<EmailDeliverySettings>()
+        .register_section::<EmailPolicySettings>()
 }

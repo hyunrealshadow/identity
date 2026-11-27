@@ -13,7 +13,7 @@ import {
 } from '@identity/ui/components/select'
 import { Skeleton } from '@identity/ui/components/skeleton'
 import { Switch } from '@identity/ui/components/switch'
-import { createContext, useContext, useId, type ReactNode } from 'react'
+import { Children, createContext, useContext, useId, type ReactNode } from 'react'
 
 /** Row padding inside a {@link SettingsGroup}; compact matches table cells. */
 const SettingsDensity = createContext<'comfortable' | 'compact'>('comfortable')
@@ -94,6 +94,7 @@ export function SettingsRow({
 }) {
   const heading = label || description || icon || action
   const compact = useContext(SettingsDensity) === 'compact'
+  const hasChildren = Children.toArray(children).length > 0
   return (
     <div className={compact ? 'px-3 py-2' : 'px-5 py-4'}>
       {heading ? (
@@ -115,7 +116,7 @@ export function SettingsRow({
           {action ? <div className="shrink-0">{action}</div> : null}
         </div>
       ) : null}
-      {children ? <div className={heading ? 'mt-3' : undefined}>{children}</div> : null}
+      {hasChildren ? <div className={heading ? 'mt-3' : undefined}>{children}</div> : null}
     </div>
   )
 }

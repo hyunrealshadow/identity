@@ -103,7 +103,8 @@ impl TokenService {
             input.resources.iter().map(String::as_str).collect()
         });
         payload.set_issued_at(&now);
-        payload.set_expires_at(&(now + Duration::from_secs(3600)));
+        let ttl_seconds = self.token_lifetimes().access_token_lifetime_seconds.max(1) as u64;
+        payload.set_expires_at(&(now + Duration::from_secs(ttl_seconds)));
         payload.set_jwt_id(input.token_id);
         payload
             .set_claim(JwtClaimNames::CLIENT_ID, Some(json!(input.client_id)))
@@ -177,7 +178,8 @@ impl TokenService {
         );
         payload.set_audience(vec![input.audience]);
         payload.set_issued_at(&now);
-        payload.set_expires_at(&(now + Duration::from_secs(3600)));
+        let ttl_seconds = self.token_lifetimes().id_token_lifetime_seconds.max(1) as u64;
+        payload.set_expires_at(&(now + Duration::from_secs(ttl_seconds)));
         payload
             .set_claim(
                 JwtClaimNames::AZP,

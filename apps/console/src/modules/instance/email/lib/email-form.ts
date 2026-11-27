@@ -4,14 +4,21 @@ import type {
   EmailTemplatePreviewScenario,
   SmtpSecurity,
   UpdateEmailDeliverySettingsInput,
+  UpdateEmailPolicySettingsInput,
   UpdateEmailTemplateInput,
   Xoauth2Grant,
 } from '#/generated/graphql'
 import type { MessageKey } from '#/lib/i18n'
-import { parseWholeNumber, type FieldError, type InstanceSettings } from '../../settings/lib/settings-form'
+import {
+  parseWholeNumber,
+  type FieldError,
+  type InstanceSettings,
+  type SettingRange,
+} from '../../settings/lib/settings-form'
 
 export type EmailSettings = InstanceSettings['email']
 export type EmailDelivery = EmailSettings['delivery']
+export type EmailPolicy = EmailSettings['policy']
 export type EmailTemplate = EmailSettings['templates'][number]
 export type LocalizedEmailTemplate = EmailTemplate['content']
 
@@ -398,4 +405,78 @@ export function templateFieldErrors(
     result[key] = { ...result[key], [part]: message }
   }
   return result
+}
+
+export interface EmailPolicyDraft {
+  signInCodeLifetimeMinutes: string
+  passwordResetLifetimeMinutes: string
+  registrationLifetimeMinutes: string
+  emailVerificationLifetimeHours: string
+  userInvitationLifetimeDays: string
+  resendIntervalSeconds: string
+  loginMaxSends: string
+  verificationMaxSends: string
+  verificationSendWindowHours: string
+}
+
+export type EmailPolicyNumberField = keyof EmailPolicyDraft
+
+export function emailPolicyDraft(policy: EmailPolicy): EmailPolicyDraft {
+  return {
+    signInCodeLifetimeMinutes: String(policy.signInCodeLifetimeMinutes),
+    passwordResetLifetimeMinutes: String(policy.passwordResetLifetimeMinutes),
+    registrationLifetimeMinutes: String(policy.registrationLifetimeMinutes),
+    emailVerificationLifetimeHours: String(policy.emailVerificationLifetimeHours),
+    userInvitationLifetimeDays: String(policy.userInvitationLifetimeDays),
+    resendIntervalSeconds: String(policy.resendIntervalSeconds),
+    loginMaxSends: String(policy.loginMaxSends),
+    verificationMaxSends: String(policy.verificationMaxSends),
+    verificationSendWindowHours: String(policy.verificationSendWindowHours),
+  }
+}
+
+const emailPolicyRanges: Record<EmailPolicyNumberField, (policy: EmailPolicy) => SettingRange> = {
+  signInCodeLifetimeMinutes: (policy) => policy.signInCodeLifetimeMinutesRange,
+  passwordResetLifetimeMinutes: (policy) => policy.passwordResetLifetimeMinutesRange,
+  registrationLifetimeMinutes: (policy) => policy.registrationLifetimeMinutesRange,
+  emailVerificationLifetimeHours: (policy) => policy.emailVerificationLifetimeHoursRange,
+  userInvitationLifetimeDays: (policy) => policy.userInvitationLifetimeDaysRange,
+  resendIntervalSeconds: (policy) => policy.resendIntervalSecondsRange,
+  loginMaxSends: (policy) => policy.loginMaxSendsRange,
+  verificationMaxSends: (policy) => policy.verificationMaxSendsRange,
+  verificationSendWindowHours: (policy) => policy.verificationSendWindowHoursRange,
+}
+
+export function emailPolicyRange(policy: EmailPolicy, field: EmailPolicyNumberField): SettingRange {
+  return emailPolicyRanges[field](policy)
+}
+
+export function emailPolicyInput(
+  policy: EmailPolicy,
+  draft: EmailPolicyDraft,
+):
+  | { input: Omit<UpdateEmailPolicySettingsInput, 'clientMutationId'> }
+  | { errors: Partial<Record<EmailPolicyNumberField, FieldError>> } {
+  const errors: Partial<Record<EmailPolicyNumberField, FieldError>> = {}
+  const values: Partial<Record<EmailPolicyNumberField, number>> = {}
+  for (const field of Object.keys(emailPolicyRanges) as EmailPolicyNumberField[]) {
+    const parsed = parseWholeNumber(draft[field], emailPolicyRange(policy, field))
+    if ('error' in parsed) errors[field] = parsed.error
+    else values[field] = parsed.value
+  }
+  if (Object.keys(errors).length) return { errors }
+  return {
+    input: {
+      signInCodeLifetimeMinutes: values.signInCodeLifetimeMinutes!,
+      passwordResetLifetimeMinutes: values.passwordResetLifetimeMinutes!,
+      registrationLifetimeMinutes: values.registrationLifetimeMinutes!,
+      emailVerificationLifetimeHours: values.emailVerificationLifetimeHours!,
+      userInvitationLifetimeDays: values.userInvitationLifetimeDays!,
+      resendIntervalSeconds: values.resendIntervalSeconds!,
+      loginMaxSends: values.loginMaxSends!,
+      verificationMaxSends: values.verificationMaxSends!,
+      verificationSendWindowHours: values.verificationSendWindowHours!,
+      expectedVersion: policy.version,
+    },
+  }
 }

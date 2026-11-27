@@ -24,6 +24,26 @@ fragment ConsoleInstanceSettingsFields on InstanceSettings {
       max
     }
     dynamicRegistrationEnabled
+    accessTokenLifetimeSeconds
+    accessTokenLifetimeRange {
+      min
+      max
+    }
+    idTokenLifetimeSeconds
+    idTokenLifetimeRange {
+      min
+      max
+    }
+    refreshTokenLifetimeDays
+    refreshTokenLifetimeDaysRange {
+      min
+      max
+    }
+    authorizationCodeLifetimeSeconds
+    authorizationCodeLifetimeRange {
+      min
+      max
+    }
     version
   }
   authentication {
@@ -39,6 +59,21 @@ fragment ConsoleInstanceSettingsFields on InstanceSettings {
     }
     passwordHistoryCount
     passwordHistoryCountRange {
+      min
+      max
+    }
+    passwordMinLength
+    passwordMinLengthRange {
+      min
+      max
+    }
+    maxFailedAttempts
+    maxFailedAttemptsRange {
+      min
+      max
+    }
+    lockoutDurationMinutes
+    lockoutDurationMinutesRange {
       min
       max
     }
@@ -58,6 +93,29 @@ fragment ConsoleInstanceSettingsFields on InstanceSettings {
         min
         max
       }
+    }
+    version
+  }
+  session {
+    sessionLifetimeHours
+    sessionLifetimeHoursRange {
+      min
+      max
+    }
+    elevatedAuthenticationLifetimeMinutes
+    elevatedAuthenticationLifetimeMinutesRange {
+      min
+      max
+    }
+    recentAuthenticationLifetimeMinutes
+    recentAuthenticationLifetimeMinutesRange {
+      min
+      max
+    }
+    loginLifetimeMinutes
+    loginLifetimeMinutesRange {
+      min
+      max
     }
     version
   }
@@ -85,6 +143,54 @@ fragment ConsoleInstanceSettingsFields on InstanceSettings {
         scope
       }
       configured
+      version
+    }
+    policy {
+      signInCodeLifetimeMinutes
+      signInCodeLifetimeMinutesRange {
+        min
+        max
+      }
+      passwordResetLifetimeMinutes
+      passwordResetLifetimeMinutesRange {
+        min
+        max
+      }
+      registrationLifetimeMinutes
+      registrationLifetimeMinutesRange {
+        min
+        max
+      }
+      emailVerificationLifetimeHours
+      emailVerificationLifetimeHoursRange {
+        min
+        max
+      }
+      userInvitationLifetimeDays
+      userInvitationLifetimeDaysRange {
+        min
+        max
+      }
+      resendIntervalSeconds
+      resendIntervalSecondsRange {
+        min
+        max
+      }
+      loginMaxSends
+      loginMaxSendsRange {
+        min
+        max
+      }
+      verificationMaxSends
+      verificationMaxSendsRange {
+        min
+        max
+      }
+      verificationSendWindowHours
+      verificationSendWindowHoursRange {
+        min
+        max
+      }
       version
     }
     templates {
@@ -134,6 +240,15 @@ mutation ConsoleUpdateProtocolSettings($input: UpdateProtocolSettingsInput!) {
 
 mutation ConsoleUpdateAuthenticationSettings($input: UpdateAuthenticationSettingsInput!) {
   updateAuthenticationSettings(input: $input) {
+    clientMutationId
+    settings {
+      ...ConsoleInstanceSettingsFields
+    }
+  }
+}
+
+mutation ConsoleUpdateSessionSettings($input: UpdateSessionSettingsInput!) {
+  updateSessionSettings(input: $input) {
     clientMutationId
     settings {
       ...ConsoleInstanceSettingsFields

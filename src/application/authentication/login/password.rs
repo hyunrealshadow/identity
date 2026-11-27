@@ -1,7 +1,4 @@
-use super::{
-    ChallengeOutcome, LoginService, SessionContext, combine_amr, failed_attempt_lock_until,
-    requires_second_factor,
-};
+use super::{ChallengeOutcome, LoginService, SessionContext, combine_amr, requires_second_factor};
 use crate::{
     authentication::password::{HashOptions, VerifyResult, run_password_hashing},
     error::{AppError, codes::auth},
@@ -11,8 +8,7 @@ use crate::{
     },
 };
 use identity_domain::auth::{
-    AMR_PASSWORD, AuthenticationContextClass, LoginFailureReason, LoginStatus, MAX_FAILED_ATTEMPTS,
-    model::Login,
+    AMR_PASSWORD, AuthenticationContextClass, LoginFailureReason, LoginStatus, model::Login,
 };
 use std::sync::Arc;
 use tracing::error;
@@ -64,16 +60,17 @@ impl LoginService {
                     )
                     .await?;
 
+                let max_failed_attempts = self.max_failed_attempts();
                 let new_attempts = self
                     .user_repo
                     .increment_failed_attempts(
                         user.oid,
-                        MAX_FAILED_ATTEMPTS,
-                        failed_attempt_lock_until(),
+                        max_failed_attempts,
+                        self.failed_attempt_lock_until(),
                     )
                     .await?;
 
-                if new_attempts >= MAX_FAILED_ATTEMPTS {
+                if new_attempts >= max_failed_attempts {
                     return Err(auth::error::UserLocked.into());
                 }
                 Err(auth::error::InvalidCredential.into())
@@ -139,8 +136,8 @@ impl LoginService {
                 self.user_repo
                     .increment_failed_attempts(
                         user.oid,
-                        MAX_FAILED_ATTEMPTS,
-                        failed_attempt_lock_until(),
+                        self.max_failed_attempts(),
+                        self.failed_attempt_lock_until(),
                     )
                     .await?;
             }

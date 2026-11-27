@@ -178,6 +178,7 @@ pub trait SessionRepository: Send + Sync {
         expected_user_oid: Uuid,
         acr: AuthenticationContextClass,
         acr_expires_at: DateTime<Utc>,
+        expires_at: DateTime<Utc>,
         amr: &[String],
     ) -> Result<Session, SessionRepositoryError>;
 
@@ -212,6 +213,7 @@ pub trait LoginRepository: Send + Sync {
         client_oid: Uuid,
         client_authorization_oid: Uuid,
         requested_acr_values: &[AuthenticationContextClass],
+        expires_at: DateTime<Utc>,
     ) -> Result<Login, LoginRepositoryError>;
 
     /// Atomically bind a resolved user to a newly-created login and transition

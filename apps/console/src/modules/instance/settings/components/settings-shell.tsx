@@ -1,5 +1,5 @@
 import { Outlet, useRouterState } from '@tanstack/react-router'
-import { Globe, KeyRound, LockKeyhole, ShieldCheck, SlidersHorizontal } from 'lucide-react'
+import { Clock, Globe, KeyRound, LockKeyhole, ShieldCheck, SlidersHorizontal } from 'lucide-react'
 
 import { PageHeader } from '#/components/page-header'
 import { useTranslator } from '#/lib/i18n'
@@ -11,6 +11,7 @@ type SettingsPath =
   | '/settings'
   | '/settings/protocol'
   | '/settings/authentication'
+  | '/settings/session'
   | '/settings/signing-keys'
   | '/settings/encryption-keys'
 
@@ -28,6 +29,7 @@ const tabs: ReadonlyArray<
     icon: ShieldCheck,
     read: 'settings',
   },
+  { to: '/settings/session', label: 'settingsTabSession', icon: Clock, read: 'settings' },
   { to: '/settings/signing-keys', label: 'settingsTabSigningKeys', icon: KeyRound, read: 'keys' },
   {
     to: '/settings/encryption-keys',

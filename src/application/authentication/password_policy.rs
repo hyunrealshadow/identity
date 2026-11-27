@@ -4,7 +4,7 @@ use crate::{
         AppError,
         codes::{auth, common},
     },
-    setting::{BreachedPasswordCheckEnabledSetting, SettingsSnapshot},
+    setting::{BreachedPasswordCheckEnabledSetting, PasswordMinLengthSetting, SettingsSnapshot},
 };
 use async_trait::async_trait;
 use tracing::Span;
@@ -51,9 +51,34 @@ pub fn validate_password(
     identifiers: &[&str],
     field: &str,
 ) -> Result<(), AppError> {
+    validate_password_with_min_length(password, identifiers, field, MIN_PASSWORD_CHARACTERS)
+}
+
+pub fn validate_password_for_settings(
+    settings: &SettingsSnapshot,
+    password: &str,
+    identifiers: &[&str],
+    field: &str,
+) -> Result<(), AppError> {
+    let min_length = usize::try_from(settings.get::<PasswordMinLengthSetting>())
+        .unwrap_or(MIN_PASSWORD_CHARACTERS)
+        .clamp(1, MAX_PASSWORD_CHARACTERS);
+    validate_password_with_min_length(password, identifiers, field, min_length)
+}
+
+pub fn validate_password_with_min_length(
+    password: &str,
+    identifiers: &[&str],
+    field: &str,
+    min_length: usize,
+) -> Result<(), AppError> {
+    let min_length = min_length.clamp(1, MAX_PASSWORD_CHARACTERS);
     let length = password.chars().count();
-    if length < MIN_PASSWORD_CHARACTERS {
-        return Err(password_error(auth::error::PasswordTooShort, field));
+    if length < min_length {
+        return Err(password_error(
+            auth::error::PasswordTooShort::new(min_length),
+            field,
+        ));
     }
     if length > MAX_PASSWORD_CHARACTERS {
         return Err(password_error(auth::error::PasswordTooLong, field));
@@ -184,5 +209,19 @@ mod tests {
         assert!(validate("Alice-wonderland-903!", &["alice@example.test"]).is_err());
         assert!(validate("longusername12", &["longusername13"]).is_err());
         assert!(validate("a varied pass phrase", &["alice@example.test"]).is_ok());
+    }
+
+    #[test]
+    fn enforces_configured_minimum_length_and_reports_min() {
+        let settings = SettingsSnapshot::default().with::<PasswordMinLengthSetting>(16);
+        let err = validate_password_for_settings(&settings, "fifteen-chars1!", &[], "new_password")
+            .unwrap_err();
+        let validation = err.validation().expect("validation error");
+        assert_eq!(validation.fields()[0].code(), 11013);
+        assert_eq!(validation.fields()[0].params().get("min"), Some("16"));
+        assert!(
+            validate_password_for_settings(&settings, "sixteen-chars-12", &[], "new_password")
+                .is_ok()
+        );
     }
 }

@@ -15,8 +15,8 @@ use uuid::Uuid;
 use validator::ValidateEmail;
 
 use super::{
-    EmailDeliverySettings, EmailSecret, EmailTemplatesSetting, SettingChanges, SmtpAuthentication,
-    SmtpSecurity, Xoauth2Grant, Xoauth2Settings,
+    EmailDeliverySettings, EmailPolicySettings, EmailSecret, EmailTemplatesSetting, SettingChanges,
+    SmtpAuthentication, SmtpSecurity, Xoauth2Grant, Xoauth2Settings,
     management::{
         InstanceSettingSection, InstanceSettingService, InstanceSettingsState,
         InstanceSettingsView, SettingRange, map_repository_error, validate_client_mutation_id,
@@ -41,6 +41,20 @@ pub const SMTP_PORT_RANGE: SettingRange = SettingRange {
     min: 1,
     max: 65_535,
 };
+pub const EMAIL_SIGN_IN_CODE_LIFETIME_MINUTES_RANGE: SettingRange =
+    SettingRange { min: 1, max: 60 };
+pub const EMAIL_PASSWORD_RESET_LIFETIME_MINUTES_RANGE: SettingRange =
+    SettingRange { min: 5, max: 120 };
+pub const EMAIL_REGISTRATION_LIFETIME_MINUTES_RANGE: SettingRange =
+    SettingRange { min: 5, max: 120 };
+pub const EMAIL_VERIFICATION_LIFETIME_HOURS_RANGE: SettingRange = SettingRange { min: 1, max: 168 };
+pub const EMAIL_USER_INVITATION_LIFETIME_DAYS_RANGE: SettingRange =
+    SettingRange { min: 1, max: 30 };
+pub const EMAIL_RESEND_INTERVAL_SECONDS_RANGE: SettingRange = SettingRange { min: 15, max: 600 };
+pub const EMAIL_LOGIN_MAX_SENDS_RANGE: SettingRange = SettingRange { min: 1, max: 20 };
+pub const EMAIL_VERIFICATION_MAX_SENDS_RANGE: SettingRange = SettingRange { min: 1, max: 20 };
+pub const EMAIL_VERIFICATION_SEND_WINDOW_HOURS_RANGE: SettingRange =
+    SettingRange { min: 1, max: 168 };
 const MAX_HOST_LENGTH: usize = 253;
 const MAX_FIELD_LENGTH: usize = 2_048;
 const MAX_SECRET_LENGTH: usize = 8_192;
@@ -139,14 +153,30 @@ pub struct EmailTemplateView {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct EmailPolicyView {
+    pub sign_in_code_lifetime_minutes: u32,
+    pub password_reset_lifetime_minutes: u32,
+    pub registration_lifetime_minutes: u32,
+    pub email_verification_lifetime_hours: u32,
+    pub user_invitation_lifetime_days: u32,
+    pub resend_interval_seconds: u32,
+    pub login_max_sends: u32,
+    pub verification_max_sends: u32,
+    pub verification_send_window_hours: u32,
+    pub version: Uuid,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EmailSettingsView {
     pub delivery: EmailDeliveryView,
+    pub policy: EmailPolicyView,
     pub templates: Vec<EmailTemplateView>,
 }
 
 impl From<&InstanceSettingsState> for EmailSettingsView {
     fn from(state: &InstanceSettingsState) -> Self {
         let delivery = &state.email_delivery;
+        let policy = &state.email_policy;
         Self {
             delivery: EmailDeliveryView {
                 enabled: delivery.enabled,
@@ -158,6 +188,18 @@ impl From<&InstanceSettingsState> for EmailSettingsView {
                 authentication: EmailAuthenticationView::from(&delivery.authentication),
                 configured: delivery.is_configured(),
                 version: InstanceSettingSection::Email.version(state),
+            },
+            policy: EmailPolicyView {
+                sign_in_code_lifetime_minutes: policy.sign_in_code_lifetime_minutes,
+                password_reset_lifetime_minutes: policy.password_reset_lifetime_minutes,
+                registration_lifetime_minutes: policy.registration_lifetime_minutes,
+                email_verification_lifetime_hours: policy.email_verification_lifetime_hours,
+                user_invitation_lifetime_days: policy.user_invitation_lifetime_days,
+                resend_interval_seconds: policy.resend_interval_seconds,
+                login_max_sends: policy.login_max_sends,
+                verification_max_sends: policy.verification_max_sends,
+                verification_send_window_hours: policy.verification_send_window_hours,
+                version: InstanceSettingSection::EmailPolicy.version(state),
             },
             templates: EmailTemplateKind::iter()
                 .map(|kind| {
@@ -294,6 +336,21 @@ pub struct UpdateEmailDeliveryCommand {
     pub sender_address: String,
     pub sender_name: Option<String>,
     pub authentication: EmailAuthenticationInput,
+    pub expected_version: Uuid,
+    pub client_mutation_id: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub struct UpdateEmailPolicyCommand {
+    pub sign_in_code_lifetime_minutes: u32,
+    pub password_reset_lifetime_minutes: u32,
+    pub registration_lifetime_minutes: u32,
+    pub email_verification_lifetime_hours: u32,
+    pub user_invitation_lifetime_days: u32,
+    pub resend_interval_seconds: u32,
+    pub login_max_sends: u32,
+    pub verification_max_sends: u32,
+    pub verification_send_window_hours: u32,
     pub expected_version: Uuid,
     pub client_mutation_id: Option<String>,
 }
@@ -565,6 +622,74 @@ impl InstanceSettingService {
         }
         .await;
         self.emit(InstanceSettingSection::Email, &result);
+        result
+    }
+
+    #[tracing::instrument(skip_all, name = "setting.email_policy.update")]
+    pub async fn update_email_policy(
+        &self,
+        authority: &RbacManagementAuthority,
+        command: UpdateEmailPolicyCommand,
+    ) -> Result<InstanceSettingsView, AppError> {
+        let result = async {
+            validate_client_mutation_id(command.client_mutation_id.as_deref())?;
+            EMAIL_SIGN_IN_CODE_LIFETIME_MINUTES_RANGE.check(
+                i64::from(command.sign_in_code_lifetime_minutes),
+                "sign_in_code_lifetime_minutes",
+            )?;
+            EMAIL_PASSWORD_RESET_LIFETIME_MINUTES_RANGE.check(
+                i64::from(command.password_reset_lifetime_minutes),
+                "password_reset_lifetime_minutes",
+            )?;
+            EMAIL_REGISTRATION_LIFETIME_MINUTES_RANGE.check(
+                i64::from(command.registration_lifetime_minutes),
+                "registration_lifetime_minutes",
+            )?;
+            EMAIL_VERIFICATION_LIFETIME_HOURS_RANGE.check(
+                i64::from(command.email_verification_lifetime_hours),
+                "email_verification_lifetime_hours",
+            )?;
+            EMAIL_USER_INVITATION_LIFETIME_DAYS_RANGE.check(
+                i64::from(command.user_invitation_lifetime_days),
+                "user_invitation_lifetime_days",
+            )?;
+            EMAIL_RESEND_INTERVAL_SECONDS_RANGE.check(
+                i64::from(command.resend_interval_seconds),
+                "resend_interval_seconds",
+            )?;
+            EMAIL_LOGIN_MAX_SENDS_RANGE
+                .check(i64::from(command.login_max_sends), "login_max_sends")?;
+            EMAIL_VERIFICATION_MAX_SENDS_RANGE.check(
+                i64::from(command.verification_max_sends),
+                "verification_max_sends",
+            )?;
+            EMAIL_VERIFICATION_SEND_WINDOW_HOURS_RANGE.check(
+                i64::from(command.verification_send_window_hours),
+                "verification_send_window_hours",
+            )?;
+            let next = EmailPolicySettings {
+                sign_in_code_lifetime_minutes: command.sign_in_code_lifetime_minutes,
+                password_reset_lifetime_minutes: command.password_reset_lifetime_minutes,
+                registration_lifetime_minutes: command.registration_lifetime_minutes,
+                email_verification_lifetime_hours: command.email_verification_lifetime_hours,
+                user_invitation_lifetime_days: command.user_invitation_lifetime_days,
+                resend_interval_seconds: command.resend_interval_seconds,
+                login_max_sends: command.login_max_sends,
+                verification_max_sends: command.verification_max_sends,
+                verification_send_window_hours: command.verification_send_window_hours,
+            };
+            let build =
+                move |_: &InstanceSettingsState| Ok(SettingChanges::default().set_section(&next)?);
+            self.write(
+                authority,
+                InstanceSettingSection::EmailPolicy,
+                command.expected_version,
+                Box::new(build),
+            )
+            .await
+        }
+        .await;
+        self.emit(InstanceSettingSection::EmailPolicy, &result);
         result
     }
 

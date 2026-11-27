@@ -1,14 +1,12 @@
 use super::{
     ChallengeOutcome, LoginService, SessionContext, can_challenge_second_factor, combine_amr,
-    failed_attempt_lock_until,
 };
 use crate::{
     error::{AppError, codes::auth},
     user::model::{CredentialData, CredentialType, OtpCredentialData},
 };
 use identity_domain::auth::{
-    AMR_MFA, AMR_OTP, LoginFailureReason, LoginStatus, MAX_FAILED_ATTEMPTS, MAX_OTP_ATTEMPTS,
-    model::Login,
+    AMR_MFA, AMR_OTP, LoginFailureReason, LoginStatus, MAX_OTP_ATTEMPTS, model::Login,
 };
 use tracing::error;
 use uuid::Uuid;
@@ -76,16 +74,17 @@ impl LoginService {
                 .login_repo
                 .increment_failed_attempts(login.oid, Some(LoginFailureReason::InvalidOtp))
                 .await?;
+            let max_failed_attempts = self.max_failed_attempts();
             let user_attempts = self
                 .user_repo
                 .increment_failed_attempts(
                     user.oid,
-                    MAX_FAILED_ATTEMPTS,
-                    failed_attempt_lock_until(),
+                    max_failed_attempts,
+                    self.failed_attempt_lock_until(),
                 )
                 .await?;
 
-            if login_attempts >= MAX_OTP_ATTEMPTS || user_attempts >= MAX_FAILED_ATTEMPTS {
+            if login_attempts >= MAX_OTP_ATTEMPTS || user_attempts >= max_failed_attempts {
                 self.fail_login_for_too_many_otp_attempts(login.oid).await;
                 return Err(auth::error::TooManyAttempts.into());
             }

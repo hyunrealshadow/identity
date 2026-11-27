@@ -19,7 +19,8 @@ use crate::{
         shared::{
             ActiveSessionEntry, SessionCookieEntry, append_set_cookie,
             build_session_cookie_from_protected_ids, generate_csp_nonce,
-            load_op_active_session_entries, parse_op_session_cookie, unprotect_session_id,
+            load_op_active_session_entries, parse_op_session_cookie, session_cookie_max_age_secs,
+            unprotect_session_id,
         },
     },
     views::openid::{FrontChannelNotificationView, LogoutPageData},
@@ -50,13 +51,17 @@ impl From<LogoutParams> for RpInitiatedLogoutRequest {
     }
 }
 
-pub fn session_cookie_without(entries: &[SessionCookieEntry], revoked: SessionOid) -> String {
+pub fn session_cookie_without(
+    entries: &[SessionCookieEntry],
+    revoked: SessionOid,
+    max_age_secs: u64,
+) -> String {
     let remaining = entries
         .iter()
         .filter(|entry| entry.session_oid != revoked)
         .map(|entry| entry.protected_session_id.clone())
         .collect::<Vec<_>>();
-    build_session_cookie_from_protected_ids(&remaining)
+    build_session_cookie_from_protected_ids(&remaining, max_age_secs)
 }
 
 pub async fn redirect_or_page_response(
@@ -286,8 +291,10 @@ async fn execute_logout(depot: &mut Depot) -> WebResult<()> {
         .rp_initiated_logout(request)
         .await?;
 
-    let set_cookie = session_to_revoke
-        .map(|(session_oid, _)| session_cookie_without(&session_entries, session_oid));
+    let max_age_secs = session_cookie_max_age_secs(&ctx);
+    let set_cookie = session_to_revoke.map(|(session_oid, _)| {
+        session_cookie_without(&session_entries, session_oid, max_age_secs)
+    });
 
     depot.insert_typed(LogoutResponse {
         outcome,
@@ -404,7 +411,11 @@ mod tests {
             },
         ];
 
-        let cookie = session_cookie_without(&entries, SessionOid(first));
+        let cookie = session_cookie_without(
+            &entries,
+            SessionOid(first),
+            crate::domain::auth::SESSION_EXPIRY.as_secs(),
+        );
 
         assert!(!cookie.contains(&first.to_string()));
         assert!(!cookie.contains("protected-first"));

@@ -15,8 +15,8 @@ use identity_application::user::{
 };
 use identity_application::{
     authorization::{
-        CurrentManagementAuthority, DEFAULT_RECENT_AAL2_TTL, ManagementAuthorizationError,
-        ManagementAuthorizationRequest, ManagementTarget, evaluate_management_authority,
+        CurrentManagementAuthority, ManagementAuthorizationError, ManagementAuthorizationRequest,
+        ManagementTarget, evaluate_management_authority,
     },
     user::management::{
         CreateUserTransaction, SendUserInvitationTransaction, UpdateUserTransaction, UserFilter,

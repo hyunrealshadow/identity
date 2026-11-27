@@ -37,7 +37,9 @@ export function AuthenticationSettingsPage() {
   if (!settings) {
     return (
       <div className="space-y-6" aria-busy="true">
-        <SettingsGroupSkeleton rows={['switch', 'switch']} />
+        <SettingsGroupSkeleton rows={['switch', 'switch', 'switch', 'switch']} />
+        <SettingsGroupSkeleton rows={['control', 'control']} />
+        <SettingsGroupSkeleton rows={['switch', 'control', 'control', 'control']} />
         <SettingsGroupSkeleton rows={['control', 'control', 'control']} description />
       </div>
     )
@@ -262,6 +264,21 @@ function AuthenticationSettingsForm({ settings }: { settings: AuthenticationSett
           </SettingsRow>
         </SettingsGroup>
 
+        <SettingsGroup title={t('settingsLockoutSection')}>
+          {hashingRow(
+            'maxFailedAttempts',
+            'settingsMaxFailedAttempts',
+            'settingsMaxFailedAttemptsHint',
+            'settingsUnitAttempts',
+          )}
+          {hashingRow(
+            'lockoutDurationMinutes',
+            'settingsLockoutDuration',
+            'settingsLockoutDurationHint',
+            'settingsUnitMinutes',
+          )}
+        </SettingsGroup>
+
         <SettingsGroup title={t('settingsPasswordPolicySection')}>
           <SettingsRow
             label={t('settingsBreachedPasswordCheck')}
@@ -275,6 +292,12 @@ function AuthenticationSettingsForm({ settings }: { settings: AuthenticationSett
               />
             }
           />
+          {hashingRow(
+            'passwordMinLength',
+            'settingsPasswordMinLength',
+            'settingsPasswordMinLengthHint',
+            'settingsUnitCharacters',
+          )}
           {hashingRow(
             'passwordMaxAgeDays',
             'settingsPasswordMaxAge',

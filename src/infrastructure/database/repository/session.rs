@@ -1,9 +1,9 @@
 use async_trait::async_trait;
-use chrono::{DateTime, Duration, Utc};
+use chrono::{DateTime, Utc};
 use identity_domain::audit::{AuditAction, AuditActor, AuditRecord};
 use identity_domain::{
     auth::{
-        AuthenticationContextClass, SESSION_EXPIRY, SessionOid, SessionStatus,
+        AuthenticationContextClass, SessionOid, SessionStatus,
         challenge::ChallengeBinding,
         model::{ActiveSession, Session, effective_acr},
         repository::{
@@ -405,6 +405,7 @@ impl SessionRepository for SessionRepositoryImpl {
         expected_user_oid: Uuid,
         acr: AuthenticationContextClass,
         acr_expires_at: DateTime<Utc>,
+        expires_at: DateTime<Utc>,
         amr: &[String],
     ) -> Result<Session, SessionRepositoryError> {
         let transaction = self
@@ -440,9 +441,7 @@ impl SessionRepository for SessionRepositoryImpl {
         let mut active: session::ActiveModel = session_model.into();
         active.last_active_at = Set(now.into());
         active.authenticated_at = Set(Some(now.into()));
-        active.expires_at = Set((now
-            + Duration::from_std(SESSION_EXPIRY).unwrap_or_else(|_| Duration::days(7)))
-        .into());
+        active.expires_at = Set(expires_at.into());
         active.acr = Set(Some(acr.to_string()));
         active.acr_expires_at = Set(Some(acr_expires_at.into()));
         active.amr = Set(json!(amr));
@@ -658,12 +657,14 @@ mod tests {
             .into_connection();
         let repo = SessionRepositoryImpl::new(db);
         let started = Utc::now();
+        let lifetime = Duration::from_std(SESSION_EXPIRY).unwrap();
         let renewed = repo
             .reauthenticate_by_oid(
                 oid,
                 owner,
                 AuthenticationContextClass::SingleFactor,
                 started + Duration::hours(1),
+                started + lifetime,
                 &[AMR_PASSWORD.to_owned()],
             )
             .await
@@ -736,6 +737,7 @@ mod tests {
                     owner,
                     AuthenticationContextClass::SingleFactor,
                     Utc::now() + Duration::hours(1),
+                    Utc::now() + Duration::days(7),
                     &[],
                 )
                 .await;

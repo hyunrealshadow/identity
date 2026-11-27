@@ -21,7 +21,10 @@ use super::policy::{
     CurrentManagementAuthority, DEFAULT_RECENT_AAL2_TTL, ManagementAuthorizationRequest,
     ManagementTarget, ManagementTargetKind, evaluate_management_authority,
 };
-use crate::error::{AppError, codes::common};
+use crate::{
+    error::{AppError, codes::common},
+    setting::{SessionSettings, SettingsSource},
+};
 
 /// Who holds the access token: a signed-in user, or a client acting for itself.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -50,6 +53,7 @@ pub struct EffectiveManagementPermissions {
 pub struct ManagementAccessService {
     authority: Arc<dyn ManagementAuthorityRepository>,
     resources: Arc<dyn OAuthResourceRepository>,
+    settings: Option<Arc<dyn SettingsSource>>,
 }
 
 impl ManagementAccessService {
@@ -60,7 +64,25 @@ impl ManagementAccessService {
         Self {
             authority,
             resources,
+            settings: None,
         }
+    }
+
+    pub fn with_settings(mut self, settings: Arc<dyn SettingsSource>) -> Self {
+        self.settings = Some(settings);
+        self
+    }
+
+    fn recent_aal2_ttl(&self) -> std::time::Duration {
+        self.settings
+            .as_ref()
+            .map(|settings| {
+                settings
+                    .snapshot()
+                    .section::<SessionSettings>()
+                    .recent_authentication_lifetime()
+            })
+            .unwrap_or(DEFAULT_RECENT_AAL2_TTL)
     }
 
     /// Live authority of `principal`; `None` when it no longer exists.
@@ -117,7 +139,7 @@ impl ManagementAccessService {
             credential_client_boundary: None,
             current_policy_version: policy_version,
             now: Utc::now(),
-            recent_aal2_ttl: DEFAULT_RECENT_AAL2_TTL,
+            recent_aal2_ttl: self.recent_aal2_ttl(),
         })?;
         Ok(())
     }
@@ -167,7 +189,7 @@ impl ManagementAccessService {
                     credential_client_boundary: None,
                     current_policy_version: policy_version,
                     now: Utc::now(),
-                    recent_aal2_ttl: DEFAULT_RECENT_AAL2_TTL,
+                    recent_aal2_ttl: self.recent_aal2_ttl(),
                 })
                 .is_ok()
             })

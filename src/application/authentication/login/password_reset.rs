@@ -16,7 +16,7 @@
 use chrono::{DateTime, Duration, Utc};
 use identity_domain::{
     auth::{
-        EMAIL_CODE_RESEND_INTERVAL, LOGIN_EMAIL_DELIVERY, LoginStatus, PASSWORD_RESET_TTL,
+        LoginStatus,
         challenge::{
             ChallengeBinding, ChallengeContext, ChallengeMethod, ChallengePurpose,
             DeliveryChallengeAdmission, DeliveryChallengeContext, DeliveryChallengeRequest,
@@ -37,7 +37,8 @@ use crate::{
     error::{AppError, codes::auth},
     observability::{BusinessEvent, EventValue},
     setting::{
-        EmailDeliverySettings, EmailTemplatesSetting, PasswordResetEnabledSetting, SettingsSnapshot,
+        EmailDeliverySettings, EmailPolicySettings, EmailTemplatesSetting,
+        PasswordResetEnabledSetting, SettingsSnapshot,
     },
     user::{CredentialType, UserOid, repository::PasswordReplacementKind},
 };
@@ -67,12 +68,8 @@ struct PasswordResetVerifier {
     link: String,
 }
 
-fn interval() -> Duration {
-    Duration::from_std(EMAIL_CODE_RESEND_INTERVAL).unwrap_or_else(|_| Duration::seconds(60))
-}
-
-fn ttl() -> Duration {
-    Duration::from_std(PASSWORD_RESET_TTL).unwrap_or_else(|_| Duration::minutes(15))
+fn reset_duration(value: std::time::Duration, fallback: Duration) -> Duration {
+    Duration::from_std(value).unwrap_or(fallback)
 }
 
 fn challenge_context(user_oid: Uuid, login_oid: Uuid) -> ChallengeContext {
@@ -162,7 +159,14 @@ impl LoginService {
                 ChallengePurpose::PasswordReset,
             )
             .await?;
-        Ok(status.map(|status| status.sent_at + interval()))
+        let resend_interval = reset_duration(
+            self.settings
+                .snapshot()
+                .section::<EmailPolicySettings>()
+                .resend_interval(),
+            Duration::seconds(60),
+        );
+        Ok(status.map(|status| status.sent_at + resend_interval))
     }
 
     /// Email a password reset link for a login waiting for its first factor.
@@ -218,10 +222,15 @@ impl LoginService {
             (None, None)
         };
 
-        let expires_at = now + ttl();
+        let snapshot = self.settings.snapshot();
+        let email_policy = snapshot.section::<EmailPolicySettings>();
+        let lifetime = reset_duration(
+            email_policy.password_reset_lifetime(),
+            Duration::minutes(15),
+        );
+        let expires_at = now + lifetime;
         let (email, render_failed) = match recipient.as_ref().zip(token.as_ref()) {
             Some((user, token)) => {
-                let snapshot = self.settings.snapshot();
                 let locales: Vec<&str> = user
                     .locale
                     .as_deref()
@@ -241,7 +250,7 @@ impl LoginService {
                     |locale| {
                         json!({
                             "link": format!("{}{}", request.link_prefix, token),
-                            "expires_in_minutes": ttl().num_minutes(),
+                            "expires_in_minutes": lifetime.num_minutes(),
                             "user": { "name": user.name, "email": user.email },
                             "locale": locale,
                         })
@@ -274,7 +283,7 @@ impl LoginService {
                 },
                 DeliveryChallengeRequest {
                     now,
-                    policy: LOGIN_EMAIL_DELIVERY,
+                    policy: email_policy.login_delivery_policy(),
                     code_expires_at: expires_at,
                     required_login_status: Some(LoginStatus::IDENTIFIER_VERIFIED),
                     verifier: if render_failed { None } else { verifier },

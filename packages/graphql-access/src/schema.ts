@@ -738,6 +738,26 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "Boolean",
           "policies": []
         },
+        "lockoutDurationMinutes": {
+          "name": "lockoutDurationMinutes",
+          "returnType": "Int",
+          "policies": []
+        },
+        "lockoutDurationMinutesRange": {
+          "name": "lockoutDurationMinutesRange",
+          "returnType": "IntRange",
+          "policies": []
+        },
+        "maxFailedAttempts": {
+          "name": "maxFailedAttempts",
+          "returnType": "Int",
+          "policies": []
+        },
+        "maxFailedAttemptsRange": {
+          "name": "maxFailedAttemptsRange",
+          "returnType": "IntRange",
+          "policies": []
+        },
         "passwordHashing": {
           "name": "passwordHashing",
           "returnType": "PasswordHashing",
@@ -760,6 +780,16 @@ export const schemaMetadata: SchemaMetadata = {
         },
         "passwordMaxAgeDaysRange": {
           "name": "passwordMaxAgeDaysRange",
+          "returnType": "IntRange",
+          "policies": []
+        },
+        "passwordMinLength": {
+          "name": "passwordMinLength",
+          "returnType": "Int",
+          "policies": []
+        },
+        "passwordMinLengthRange": {
+          "name": "passwordMinLengthRange",
           "returnType": "IntRange",
           "policies": []
         },
@@ -1990,6 +2020,108 @@ export const schemaMetadata: SchemaMetadata = {
         }
       }
     },
+    "EmailPolicySettings": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "emailVerificationLifetimeHours": {
+          "name": "emailVerificationLifetimeHours",
+          "returnType": "Int",
+          "policies": []
+        },
+        "emailVerificationLifetimeHoursRange": {
+          "name": "emailVerificationLifetimeHoursRange",
+          "returnType": "IntRange",
+          "policies": []
+        },
+        "loginMaxSends": {
+          "name": "loginMaxSends",
+          "returnType": "Int",
+          "policies": []
+        },
+        "loginMaxSendsRange": {
+          "name": "loginMaxSendsRange",
+          "returnType": "IntRange",
+          "policies": []
+        },
+        "passwordResetLifetimeMinutes": {
+          "name": "passwordResetLifetimeMinutes",
+          "returnType": "Int",
+          "policies": []
+        },
+        "passwordResetLifetimeMinutesRange": {
+          "name": "passwordResetLifetimeMinutesRange",
+          "returnType": "IntRange",
+          "policies": []
+        },
+        "registrationLifetimeMinutes": {
+          "name": "registrationLifetimeMinutes",
+          "returnType": "Int",
+          "policies": []
+        },
+        "registrationLifetimeMinutesRange": {
+          "name": "registrationLifetimeMinutesRange",
+          "returnType": "IntRange",
+          "policies": []
+        },
+        "resendIntervalSeconds": {
+          "name": "resendIntervalSeconds",
+          "returnType": "Int",
+          "policies": []
+        },
+        "resendIntervalSecondsRange": {
+          "name": "resendIntervalSecondsRange",
+          "returnType": "IntRange",
+          "policies": []
+        },
+        "signInCodeLifetimeMinutes": {
+          "name": "signInCodeLifetimeMinutes",
+          "returnType": "Int",
+          "policies": []
+        },
+        "signInCodeLifetimeMinutesRange": {
+          "name": "signInCodeLifetimeMinutesRange",
+          "returnType": "IntRange",
+          "policies": []
+        },
+        "userInvitationLifetimeDays": {
+          "name": "userInvitationLifetimeDays",
+          "returnType": "Int",
+          "policies": []
+        },
+        "userInvitationLifetimeDaysRange": {
+          "name": "userInvitationLifetimeDaysRange",
+          "returnType": "IntRange",
+          "policies": []
+        },
+        "verificationMaxSends": {
+          "name": "verificationMaxSends",
+          "returnType": "Int",
+          "policies": []
+        },
+        "verificationMaxSendsRange": {
+          "name": "verificationMaxSendsRange",
+          "returnType": "IntRange",
+          "policies": []
+        },
+        "verificationSendWindowHours": {
+          "name": "verificationSendWindowHours",
+          "returnType": "Int",
+          "policies": []
+        },
+        "verificationSendWindowHoursRange": {
+          "name": "verificationSendWindowHoursRange",
+          "returnType": "IntRange",
+          "policies": []
+        },
+        "version": {
+          "name": "version",
+          "returnType": "UUID",
+          "policies": []
+        }
+      }
+    },
     "EmailSettings": {
       "kind": "OBJECT",
       "interfaces": [],
@@ -1998,6 +2130,11 @@ export const schemaMetadata: SchemaMetadata = {
         "delivery": {
           "name": "delivery",
           "returnType": "EmailDeliverySettings",
+          "policies": []
+        },
+        "policy": {
+          "name": "policy",
+          "returnType": "EmailPolicySettings",
           "policies": []
         },
         "templates": {
@@ -2831,6 +2968,11 @@ export const schemaMetadata: SchemaMetadata = {
         "protocol": {
           "name": "protocol",
           "returnType": "ProtocolSettings",
+          "policies": []
+        },
+        "session": {
+          "name": "session",
+          "returnType": "SessionSettings",
           "policies": []
         }
       }
@@ -4101,6 +4243,21 @@ export const schemaMetadata: SchemaMetadata = {
             }
           ]
         },
+        "updateEmailPolicySettings": {
+          "name": "updateEmailPolicySettings",
+          "returnType": "InstanceSettingsPayload",
+          "policies": [
+            {
+              "scopes": [
+                "management.setting.write"
+              ],
+              "authentication": "RECENT_AAL2",
+              "userOnly": true,
+              "runtime": true,
+              "maxAge": 300
+            }
+          ]
+        },
         "updateEmailTemplate": {
           "name": "updateEmailTemplate",
           "returnType": "InstanceSettingsPayload",
@@ -4221,6 +4378,21 @@ export const schemaMetadata: SchemaMetadata = {
               "authentication": "AAL2",
               "userOnly": false,
               "runtime": true
+            }
+          ]
+        },
+        "updateSessionSettings": {
+          "name": "updateSessionSettings",
+          "returnType": "InstanceSettingsPayload",
+          "policies": [
+            {
+              "scopes": [
+                "management.setting.write"
+              ],
+              "authentication": "RECENT_AAL2",
+              "userOnly": true,
+              "runtime": true,
+              "maxAge": 300
             }
           ]
         },
@@ -4371,6 +4543,26 @@ export const schemaMetadata: SchemaMetadata = {
       "interfaces": [],
       "possibleTypes": [],
       "fields": {
+        "accessTokenLifetimeRange": {
+          "name": "accessTokenLifetimeRange",
+          "returnType": "IntRange",
+          "policies": []
+        },
+        "accessTokenLifetimeSeconds": {
+          "name": "accessTokenLifetimeSeconds",
+          "returnType": "Int",
+          "policies": []
+        },
+        "authorizationCodeLifetimeRange": {
+          "name": "authorizationCodeLifetimeRange",
+          "returnType": "IntRange",
+          "policies": []
+        },
+        "authorizationCodeLifetimeSeconds": {
+          "name": "authorizationCodeLifetimeSeconds",
+          "returnType": "Int",
+          "policies": []
+        },
         "deviceAuthorizationPollingIntervalRange": {
           "name": "deviceAuthorizationPollingIntervalRange",
           "returnType": "IntRange",
@@ -4396,6 +4588,16 @@ export const schemaMetadata: SchemaMetadata = {
           "returnType": "Boolean",
           "policies": []
         },
+        "idTokenLifetimeRange": {
+          "name": "idTokenLifetimeRange",
+          "returnType": "IntRange",
+          "policies": []
+        },
+        "idTokenLifetimeSeconds": {
+          "name": "idTokenLifetimeSeconds",
+          "returnType": "Int",
+          "policies": []
+        },
         "oauthVersion": {
           "name": "oauthVersion",
           "returnType": "ClientOAuthVersion",
@@ -4409,6 +4611,16 @@ export const schemaMetadata: SchemaMetadata = {
         "pushedAuthorizationRequestLifetimeSeconds": {
           "name": "pushedAuthorizationRequestLifetimeSeconds",
           "returnType": "Int",
+          "policies": []
+        },
+        "refreshTokenLifetimeDays": {
+          "name": "refreshTokenLifetimeDays",
+          "returnType": "Int",
+          "policies": []
+        },
+        "refreshTokenLifetimeDaysRange": {
+          "name": "refreshTokenLifetimeDaysRange",
+          "returnType": "IntRange",
           "policies": []
         },
         "requirePushedAuthorizationRequests": {
@@ -5829,6 +6041,58 @@ export const schemaMetadata: SchemaMetadata = {
         "node": {
           "name": "node",
           "returnType": "Session",
+          "policies": []
+        }
+      }
+    },
+    "SessionSettings": {
+      "kind": "OBJECT",
+      "interfaces": [],
+      "possibleTypes": [],
+      "fields": {
+        "elevatedAuthenticationLifetimeMinutes": {
+          "name": "elevatedAuthenticationLifetimeMinutes",
+          "returnType": "Int",
+          "policies": []
+        },
+        "elevatedAuthenticationLifetimeMinutesRange": {
+          "name": "elevatedAuthenticationLifetimeMinutesRange",
+          "returnType": "IntRange",
+          "policies": []
+        },
+        "loginLifetimeMinutes": {
+          "name": "loginLifetimeMinutes",
+          "returnType": "Int",
+          "policies": []
+        },
+        "loginLifetimeMinutesRange": {
+          "name": "loginLifetimeMinutesRange",
+          "returnType": "IntRange",
+          "policies": []
+        },
+        "recentAuthenticationLifetimeMinutes": {
+          "name": "recentAuthenticationLifetimeMinutes",
+          "returnType": "Int",
+          "policies": []
+        },
+        "recentAuthenticationLifetimeMinutesRange": {
+          "name": "recentAuthenticationLifetimeMinutesRange",
+          "returnType": "IntRange",
+          "policies": []
+        },
+        "sessionLifetimeHours": {
+          "name": "sessionLifetimeHours",
+          "returnType": "Int",
+          "policies": []
+        },
+        "sessionLifetimeHoursRange": {
+          "name": "sessionLifetimeHoursRange",
+          "returnType": "IntRange",
+          "policies": []
+        },
+        "version": {
+          "name": "version",
+          "returnType": "UUID",
           "policies": []
         }
       }

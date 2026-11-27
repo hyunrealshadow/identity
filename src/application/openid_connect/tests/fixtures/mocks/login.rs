@@ -64,6 +64,7 @@ impl LoginRepository for MockLoginRepository {
         client_oid: Uuid,
         client_authorization_oid: Uuid,
         requested_acr_values: &[AuthenticationContextClass],
+        expires_at: chrono::DateTime<Utc>,
     ) -> Result<Login, LoginRepositoryError> {
         self.create_pending_calls
             .lock()
@@ -81,6 +82,7 @@ impl LoginRepository for MockLoginRepository {
         login.client_oid = client_oid;
         login.client_authorization_oid = client_authorization_oid;
         login.requested_acr_values = requested_acr_values.to_vec();
+        login.expires_at = expires_at;
         Ok(login)
     }
 

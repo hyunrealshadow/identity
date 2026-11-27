@@ -22,10 +22,12 @@ import { Route as AppclientManagementClientsNewRouteImport } from './routes/_app
 import { Route as AppclientManagementResourcesIndexRouteImport } from './routes/_app/(client-management)/resources/index'
 import { Route as AppclientManagementResourcesResourceIdRouteRouteImport } from './routes/_app/(client-management)/resources/$resourceId/route'
 import { Route as AppinstanceEmailIndexRouteImport } from './routes/_app/(instance)/email/index'
+import { Route as AppinstanceEmailPoliciesRouteImport } from './routes/_app/(instance)/email/policies'
 import { Route as AppinstanceSettingsIndexRouteImport } from './routes/_app/(instance)/settings/index'
 import { Route as AppinstanceSettingsAuthenticationRouteImport } from './routes/_app/(instance)/settings/authentication'
 import { Route as AppinstanceSettingsEncryptionKeysRouteImport } from './routes/_app/(instance)/settings/encryption-keys'
 import { Route as AppinstanceSettingsProtocolRouteImport } from './routes/_app/(instance)/settings/protocol'
+import { Route as AppinstanceSettingsSessionRouteImport } from './routes/_app/(instance)/settings/session'
 import { Route as AppinstanceSettingsSigningKeysRouteImport } from './routes/_app/(instance)/settings/signing-keys'
 import { Route as AppuserManagementGroupsIndexRouteImport } from './routes/_app/(user-management)/groups/index'
 import { Route as AppuserManagementGroupsGroupIdRouteRouteImport } from './routes/_app/(user-management)/groups/$groupId/route'
@@ -133,6 +135,12 @@ const AppinstanceEmailIndexRoute = AppinstanceEmailIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppinstanceEmailRouteRoute,
 } as any)
+const AppinstanceEmailPoliciesRoute =
+  AppinstanceEmailPoliciesRouteImport.update({
+    id: '/policies',
+    path: '/policies',
+    getParentRoute: () => AppinstanceEmailRouteRoute,
+  } as any)
 const AppinstanceSettingsIndexRoute =
   AppinstanceSettingsIndexRouteImport.update({
     id: '/',
@@ -155,6 +163,12 @@ const AppinstanceSettingsProtocolRoute =
   AppinstanceSettingsProtocolRouteImport.update({
     id: '/protocol',
     path: '/protocol',
+    getParentRoute: () => AppinstanceSettingsRouteRoute,
+  } as any)
+const AppinstanceSettingsSessionRoute =
+  AppinstanceSettingsSessionRouteImport.update({
+    id: '/session',
+    path: '/session',
     getParentRoute: () => AppinstanceSettingsRouteRoute,
   } as any)
 const AppinstanceSettingsSigningKeysRoute =
@@ -382,9 +396,11 @@ export interface FileRoutesByFullPath {
   '/roles/$roleId': typeof AppuserManagementRolesRoleIdRouteRouteWithChildren
   '/users/$userId': typeof AppuserManagementUsersUserIdRouteRouteWithChildren
   '/clients/new': typeof AppclientManagementClientsNewRoute
+  '/email/policies': typeof AppinstanceEmailPoliciesRoute
   '/settings/authentication': typeof AppinstanceSettingsAuthenticationRoute
   '/settings/encryption-keys': typeof AppinstanceSettingsEncryptionKeysRoute
   '/settings/protocol': typeof AppinstanceSettingsProtocolRoute
+  '/settings/session': typeof AppinstanceSettingsSessionRoute
   '/settings/signing-keys': typeof AppinstanceSettingsSigningKeysRoute
   '/groups/new': typeof AppuserManagementGroupsNewRoute
   '/roles/new': typeof AppuserManagementRolesNewRoute
@@ -428,9 +444,11 @@ export interface FileRoutesByTo {
   '/logout': typeof LogoutRoute
   '/': typeof AppdashboardIndexRoute
   '/clients/new': typeof AppclientManagementClientsNewRoute
+  '/email/policies': typeof AppinstanceEmailPoliciesRoute
   '/settings/authentication': typeof AppinstanceSettingsAuthenticationRoute
   '/settings/encryption-keys': typeof AppinstanceSettingsEncryptionKeysRoute
   '/settings/protocol': typeof AppinstanceSettingsProtocolRoute
+  '/settings/session': typeof AppinstanceSettingsSessionRoute
   '/settings/signing-keys': typeof AppinstanceSettingsSigningKeysRoute
   '/groups/new': typeof AppuserManagementGroupsNewRoute
   '/roles/new': typeof AppuserManagementRolesNewRoute
@@ -483,9 +501,11 @@ export interface FileRoutesById {
   '/_app/(user-management)/roles/$roleId': typeof AppuserManagementRolesRoleIdRouteRouteWithChildren
   '/_app/(user-management)/users/$userId': typeof AppuserManagementUsersUserIdRouteRouteWithChildren
   '/_app/(client-management)/clients/new': typeof AppclientManagementClientsNewRoute
+  '/_app/(instance)/email/policies': typeof AppinstanceEmailPoliciesRoute
   '/_app/(instance)/settings/authentication': typeof AppinstanceSettingsAuthenticationRoute
   '/_app/(instance)/settings/encryption-keys': typeof AppinstanceSettingsEncryptionKeysRoute
   '/_app/(instance)/settings/protocol': typeof AppinstanceSettingsProtocolRoute
+  '/_app/(instance)/settings/session': typeof AppinstanceSettingsSessionRoute
   '/_app/(instance)/settings/signing-keys': typeof AppinstanceSettingsSigningKeysRoute
   '/_app/(user-management)/groups/new': typeof AppuserManagementGroupsNewRoute
   '/_app/(user-management)/roles/new': typeof AppuserManagementRolesNewRoute
@@ -538,9 +558,11 @@ export interface FileRouteTypes {
     | '/roles/$roleId'
     | '/users/$userId'
     | '/clients/new'
+    | '/email/policies'
     | '/settings/authentication'
     | '/settings/encryption-keys'
     | '/settings/protocol'
+    | '/settings/session'
     | '/settings/signing-keys'
     | '/groups/new'
     | '/roles/new'
@@ -584,9 +606,11 @@ export interface FileRouteTypes {
     | '/logout'
     | '/'
     | '/clients/new'
+    | '/email/policies'
     | '/settings/authentication'
     | '/settings/encryption-keys'
     | '/settings/protocol'
+    | '/settings/session'
     | '/settings/signing-keys'
     | '/groups/new'
     | '/roles/new'
@@ -638,9 +662,11 @@ export interface FileRouteTypes {
     | '/_app/(user-management)/roles/$roleId'
     | '/_app/(user-management)/users/$userId'
     | '/_app/(client-management)/clients/new'
+    | '/_app/(instance)/email/policies'
     | '/_app/(instance)/settings/authentication'
     | '/_app/(instance)/settings/encryption-keys'
     | '/_app/(instance)/settings/protocol'
+    | '/_app/(instance)/settings/session'
     | '/_app/(instance)/settings/signing-keys'
     | '/_app/(user-management)/groups/new'
     | '/_app/(user-management)/roles/new'
@@ -779,6 +805,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppinstanceEmailIndexRouteImport
       parentRoute: typeof AppinstanceEmailRouteRoute
     }
+    '/_app/(instance)/email/policies': {
+      id: '/_app/(instance)/email/policies'
+      path: '/policies'
+      fullPath: '/email/policies'
+      preLoaderRoute: typeof AppinstanceEmailPoliciesRouteImport
+      parentRoute: typeof AppinstanceEmailRouteRoute
+    }
     '/_app/(instance)/settings/': {
       id: '/_app/(instance)/settings/'
       path: '/'
@@ -805,6 +838,13 @@ declare module '@tanstack/react-router' {
       path: '/protocol'
       fullPath: '/settings/protocol'
       preLoaderRoute: typeof AppinstanceSettingsProtocolRouteImport
+      parentRoute: typeof AppinstanceSettingsRouteRoute
+    }
+    '/_app/(instance)/settings/session': {
+      id: '/_app/(instance)/settings/session'
+      path: '/session'
+      fullPath: '/settings/session'
+      preLoaderRoute: typeof AppinstanceSettingsSessionRouteImport
       parentRoute: typeof AppinstanceSettingsRouteRoute
     }
     '/_app/(instance)/settings/signing-keys': {
@@ -1056,12 +1096,14 @@ declare module '@tanstack/react-router' {
 }
 
 interface AppinstanceEmailRouteRouteChildren {
+  AppinstanceEmailPoliciesRoute: typeof AppinstanceEmailPoliciesRoute
   AppinstanceEmailIndexRoute: typeof AppinstanceEmailIndexRoute
   AppinstanceEmailTemplatesKindRoute: typeof AppinstanceEmailTemplatesKindRoute
   AppinstanceEmailTemplatesIndexRoute: typeof AppinstanceEmailTemplatesIndexRoute
 }
 
 const AppinstanceEmailRouteRouteChildren: AppinstanceEmailRouteRouteChildren = {
+  AppinstanceEmailPoliciesRoute: AppinstanceEmailPoliciesRoute,
   AppinstanceEmailIndexRoute: AppinstanceEmailIndexRoute,
   AppinstanceEmailTemplatesKindRoute: AppinstanceEmailTemplatesKindRoute,
   AppinstanceEmailTemplatesIndexRoute: AppinstanceEmailTemplatesIndexRoute,
@@ -1076,6 +1118,7 @@ interface AppinstanceSettingsRouteRouteChildren {
   AppinstanceSettingsAuthenticationRoute: typeof AppinstanceSettingsAuthenticationRoute
   AppinstanceSettingsEncryptionKeysRoute: typeof AppinstanceSettingsEncryptionKeysRoute
   AppinstanceSettingsProtocolRoute: typeof AppinstanceSettingsProtocolRoute
+  AppinstanceSettingsSessionRoute: typeof AppinstanceSettingsSessionRoute
   AppinstanceSettingsSigningKeysRoute: typeof AppinstanceSettingsSigningKeysRoute
   AppinstanceSettingsIndexRoute: typeof AppinstanceSettingsIndexRoute
 }
@@ -1087,6 +1130,7 @@ const AppinstanceSettingsRouteRouteChildren: AppinstanceSettingsRouteRouteChildr
     AppinstanceSettingsEncryptionKeysRoute:
       AppinstanceSettingsEncryptionKeysRoute,
     AppinstanceSettingsProtocolRoute: AppinstanceSettingsProtocolRoute,
+    AppinstanceSettingsSessionRoute: AppinstanceSettingsSessionRoute,
     AppinstanceSettingsSigningKeysRoute: AppinstanceSettingsSigningKeysRoute,
     AppinstanceSettingsIndexRoute: AppinstanceSettingsIndexRoute,
   }

@@ -19,7 +19,7 @@ use async_trait::async_trait;
 use chrono::{DateTime, Duration, Utc};
 use identity_domain::{
     auth::{
-        EMAIL_CODE_RESEND_INTERVAL, LOGIN_EMAIL_DELIVERY, LoginStatus, REGISTRATION_LINK_TTL,
+        LoginStatus,
         challenge::{
             AuthenticationChallenge, ChallengeBinding, ChallengeMethod, ChallengePurpose,
             DeliveryChallengeAdmission, DeliveryChallengeContext, DeliveryChallengeRequest,
@@ -39,7 +39,7 @@ use crate::{
     authentication::{
         account::{validate_email, validate_username},
         password::run_password_hashing,
-        password_policy::{validate_breached_password, validate_password},
+        password_policy::{validate_breached_password, validate_password_for_settings},
     },
     email::{EmailRecipient, EmailTemplateKind, LinkToken, link_matches, render_templated_email},
     error::{
@@ -48,7 +48,7 @@ use crate::{
     },
     observability::{BusinessEvent, EventValue},
     setting::{
-        EmailDeliverySettings, EmailTemplatesSetting, PasswordHashSetting,
+        EmailDeliverySettings, EmailPolicySettings, EmailTemplatesSetting, PasswordHashSetting,
         RegistrationEnabledSetting, SettingsSnapshot,
     },
     user::Password,
@@ -128,12 +128,8 @@ struct RegistrationVerifier {
     email_normalized: String,
 }
 
-fn interval() -> Duration {
-    Duration::from_std(EMAIL_CODE_RESEND_INTERVAL).unwrap_or_else(|_| Duration::seconds(60))
-}
-
-fn ttl() -> Duration {
-    Duration::from_std(REGISTRATION_LINK_TTL).unwrap_or_else(|_| Duration::minutes(15))
+fn registration_duration(value: std::time::Duration, fallback: Duration) -> Duration {
+    Duration::from_std(value).unwrap_or(fallback)
 }
 
 /// Whether self-registration is turned on and email can be sent.
@@ -202,7 +198,14 @@ impl LoginService {
                 ChallengePurpose::Registration,
             )
             .await?;
-        Ok(status.map(|status| status.sent_at + interval()))
+        let resend_interval = registration_duration(
+            self.settings
+                .snapshot()
+                .section::<EmailPolicySettings>()
+                .resend_interval(),
+            Duration::seconds(60),
+        );
+        Ok(status.map(|status| status.sent_at + resend_interval))
     }
 
     /// Email a registration link, or a notice when the address already has
@@ -253,10 +256,13 @@ impl LoginService {
         })
         .map_err(AppError::internal)?;
 
-        let expires_at = now + ttl();
+        let snapshot = self.settings.snapshot();
+        let email_policy = snapshot.section::<EmailPolicySettings>();
+        let lifetime =
+            registration_duration(email_policy.registration_lifetime(), Duration::minutes(15));
+        let expires_at = now + lifetime;
         let link = token.map(|token| format!("{}{}", request.link_prefix, token));
         let locales: Vec<&str> = request.locales.iter().map(String::as_str).collect();
-        let snapshot = self.settings.snapshot();
         // A notice or a link, depending on whether the address has an
         // account; the answer is the same either way.
         let (email, render_failed) = match render_templated_email(
@@ -274,7 +280,7 @@ impl LoginService {
                     "link": link,
                     "email": value,
                     "account_exists": link.is_none(),
-                    "expires_in_minutes": ttl().num_minutes(),
+                    "expires_in_minutes": lifetime.num_minutes(),
                     "locale": locale,
                 })
             },
@@ -297,7 +303,7 @@ impl LoginService {
                 },
                 DeliveryChallengeRequest {
                     now,
-                    policy: LOGIN_EMAIL_DELIVERY,
+                    policy: email_policy.login_delivery_policy(),
                     code_expires_at: expires_at,
                     required_login_status: Some(LoginStatus::CREATED),
                     verifier: if render_failed { None } else { Some(verifier) },
@@ -384,8 +390,13 @@ impl LoginService {
         else {
             return Err(account::error::UsernameInvalid.with_field("username"));
         };
-        validate_password(password, &[&username, &verifier.email], "new_password")?;
         let snapshot = self.settings.snapshot();
+        validate_password_for_settings(
+            &snapshot,
+            password,
+            &[&username, &verifier.email],
+            "new_password",
+        )?;
         validate_breached_password(
             self.breach_checker.as_ref(),
             &snapshot,

@@ -64,6 +64,8 @@ pub struct EmailVerificationRequest {
     /// The message with the link, queued only if the send is admitted.
     pub message: OutboundEmail,
     pub now: DateTime<Utc>,
+    pub expires_at: DateTime<Utc>,
+    pub delivery: DeliveryPolicy,
 }
 
 /// Outcome of an atomic verification admission.

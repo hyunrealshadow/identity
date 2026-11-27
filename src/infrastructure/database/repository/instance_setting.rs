@@ -13,10 +13,11 @@ use identity_application::{
     rbac::RbacManagementRepositoryError,
     setting::{
         AppSettings, BreachedPasswordCheckEnabledSetting, EmailDeliverySettings,
-        EmailSignInEnabledSetting, EmailTemplatesSetting, IdentifierEnumerationAllowedSetting,
-        InstallationSettings, OpenIdConnectSettings, PasswordHashSetting,
-        PasswordHistoryCountSetting, PasswordMaxAgeDaysSetting, PasswordResetEnabledSetting,
-        RegistrationEnabledSetting,
+        EmailPolicySettings, EmailSignInEnabledSetting, EmailTemplatesSetting,
+        IdentifierEnumerationAllowedSetting, InstallationSettings, LockoutDurationMinutesSetting,
+        MaxFailedAttemptsSetting, OpenIdConnectSettings, PasswordHashSetting,
+        PasswordHistoryCountSetting, PasswordMaxAgeDaysSetting, PasswordMinLengthSetting,
+        PasswordResetEnabledSetting, RegistrationEnabledSetting, SessionSettings,
         email::{
             email_delivery_audit_values, email_delivery_secrets_changed,
             email_template_audit_values,
@@ -81,6 +82,7 @@ async fn load_state<C: ConnectionTrait>(
         app: snapshot.section::<AppSettings>(),
         installation: snapshot.section::<InstallationSettings>(),
         openid_connect: snapshot.section::<OpenIdConnectSettings>(),
+        session: snapshot.section::<SessionSettings>(),
         password_hash: snapshot.get::<PasswordHashSetting>(),
         breached_password_check_enabled: snapshot.get::<BreachedPasswordCheckEnabledSetting>(),
         identifier_enumeration_allowed: snapshot.get::<IdentifierEnumerationAllowedSetting>(),
@@ -89,7 +91,11 @@ async fn load_state<C: ConnectionTrait>(
         registration_enabled: snapshot.get::<RegistrationEnabledSetting>(),
         password_max_age_days: snapshot.get::<PasswordMaxAgeDaysSetting>(),
         password_history_count: snapshot.get::<PasswordHistoryCountSetting>(),
+        password_min_length: snapshot.get::<PasswordMinLengthSetting>(),
+        max_failed_attempts: snapshot.get::<MaxFailedAttemptsSetting>(),
+        lockout_duration_minutes: snapshot.get::<LockoutDurationMinutesSetting>(),
         email_delivery: snapshot.section::<EmailDeliverySettings>(),
+        email_policy: snapshot.section::<EmailPolicySettings>(),
         email_templates: snapshot.get::<EmailTemplatesSetting>(),
     })
 }
@@ -145,6 +151,9 @@ impl InstanceSettingRepository for InstanceSettingRepositoryImpl {
                     &next.authentication_values(),
                 );
             }
+            InstanceSettingSection::Session => {
+                audited.diff(AuditField::Settings, &current.session, &next.session);
+            }
             InstanceSettingSection::Email => {
                 audited.diff(
                     AuditField::Settings,
@@ -154,6 +163,13 @@ impl InstanceSettingRepository for InstanceSettingRepositoryImpl {
                 if email_delivery_secrets_changed(&current.email_delivery, &next.email_delivery) {
                     audited.secret(AuditField::Password);
                 }
+            }
+            InstanceSettingSection::EmailPolicy => {
+                audited.diff(
+                    AuditField::Settings,
+                    &current.email_policy,
+                    &next.email_policy,
+                );
             }
             InstanceSettingSection::EmailTemplate(kind) => {
                 audited.diff(

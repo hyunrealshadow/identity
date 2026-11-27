@@ -2,7 +2,10 @@ use std::result::Result as StdResult;
 
 use async_graphql::{Context, Guard, Result};
 use chrono::Utc;
-use identity_application::error::{AppError, StepUpChallenge, codes::graphql};
+use identity_application::{
+    error::{AppError, StepUpChallenge, codes::graphql},
+    setting::SessionSettings,
+};
 use identity_domain::{
     auth::{AuthenticationContextClass, authentication_is_fresh},
     openid_connect::ApiScope,
@@ -113,7 +116,19 @@ impl Guard for RecentAuthenticationGuard {
     async fn check(&self, ctx: &Context<'_>) -> Result<()> {
         let request = request_context(ctx)?;
         let now = Utc::now().timestamp();
-        let max_age = self.policy().max_age.unwrap_or_default() as u64;
+        let session_settings = request
+            .state
+            .services()
+            .settings()
+            .snapshot()
+            .section::<SessionSettings>();
+        let max_age = if self.required_acr.is_some_and(|acr| acr.is_multi_factor()) {
+            session_settings
+                .elevated_authentication_lifetime()
+                .as_secs()
+        } else {
+            session_settings.recent_authentication_lifetime().as_secs()
+        };
         let fresh = request
             .claims
             .auth_time

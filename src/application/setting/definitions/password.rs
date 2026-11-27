@@ -32,6 +32,19 @@ impl SettingDefinition for PasswordMaxAgeDaysSetting {
     }
 }
 
+/// Minimum length in characters for newly set passwords.
+pub struct PasswordMinLengthSetting;
+
+impl SettingDefinition for PasswordMinLengthSetting {
+    type Value = u32;
+
+    const KEY: &'static str = "auth.password.min_length";
+
+    fn default_value() -> Self::Value {
+        12
+    }
+}
+
 /// How many of an account's most recent passwords, the current one included,
 /// a new password may not repeat. `0` turns the check off.
 pub struct PasswordHistoryCountSetting;

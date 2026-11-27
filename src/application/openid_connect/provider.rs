@@ -252,6 +252,16 @@ impl OpenIdProviderService {
         Ok(scopes)
     }
 
+    pub fn openid_connect_settings(&self) -> OpenIdConnectSettings {
+        self.settings.snapshot().section::<OpenIdConnectSettings>()
+    }
+
+    pub fn session_settings(&self) -> crate::setting::SessionSettings {
+        self.settings
+            .snapshot()
+            .section::<crate::setting::SessionSettings>()
+    }
+
     pub fn with_key_repo(mut self, key_repo: Arc<dyn KeyRepository>) -> Self {
         self.key_repo = Some(key_repo);
         self

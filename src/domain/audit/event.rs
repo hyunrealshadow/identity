@@ -289,7 +289,9 @@ audit_actions! {
     KeyRevoke => Management, Key;
     SettingProtocolUpdate => Management, Setting;
     SettingAuthenticationUpdate => Management, Setting;
+    SettingSessionUpdate => Management, Setting;
     SettingEmailUpdate => Management, Setting;
+    SettingEmailPolicyUpdate => Management, Setting;
     SettingEmailTemplateUpdate => Management, Setting;
     AccountProfileUpdate => Account, User;
     AccountIdentifierUpdate => Account, User;

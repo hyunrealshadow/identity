@@ -8,9 +8,11 @@ export type SectionPath =
   | '/settings'
   | '/settings/protocol'
   | '/settings/authentication'
+  | '/settings/session'
   | '/settings/signing-keys'
   | '/settings/encryption-keys'
   | '/email'
+  | '/email/policies'
   | '/email/templates'
 
 export interface SectionTab<Path extends SectionPath = SectionPath> {

@@ -249,7 +249,9 @@
     "name": "PasswordTooShort",
     "kind": "validation",
     "fluentKey": "E11013",
-    "requiredParams": [],
+    "requiredParams": [
+      "min"
+    ],
     "optionalParams": [],
     "module": "auth"
   },

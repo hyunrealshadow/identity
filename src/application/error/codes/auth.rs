@@ -14,7 +14,7 @@ define_error_codes! {
         SessionExpired = 11010 { kind: Unauthorized },
         SessionRevoked = 11011 { kind: Unauthorized },
         IdentifierRequired = 11012 { kind: Validation },
-        PasswordTooShort = 11013 { kind: Validation },
+        PasswordTooShort = 11013 { kind: Validation, required: [min] },
         PasswordUnchanged = 11014 { kind: Validation },
         TotpAlreadyEnabled = 11015 { kind: Conflict },
         TotpNotEnabled = 11016 { kind: Conflict },
